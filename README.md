@@ -5,6 +5,8 @@ This was put together from some combination of [MBM](https://github.com/mlfounda
 ## Quickstart
 .
 
+See `./examples` for specific examples.
+
 ### Running on SageMaker
 To install SageMaker,
 ```
@@ -63,6 +65,7 @@ todos:
 [x] sagemaker launcher
 - check why the number of checkpoints isn't ways the same as what's indicated
 - check that inference didn't break while making changes + check vlm inference
+- double check webdataset speed if it's faster to conver to tensor inside the pipeline or return lists then convert outside
 
 Known bugs / improvements
 - speed up pretokenized huggingface? 

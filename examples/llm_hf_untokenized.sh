@@ -1,0 +1,16 @@
+~/anaconda3/envs/vla2/bin/torchrun --nproc_per_node=8 --nnodes=1 lbm2/main.py \
+--model Qwen/Qwen2.5-0.5B \
+--model-type transformer_hf \
+--fsdp \
+--fsdp-use-orig-params \
+--fsdp-limit-all-gathers \
+--dataset-type webdataset \
+--dataset-manifest s3://tri-ml-datasets/scratch/sedrick.keh/synthetic-untokenized/manifest.jsonl \
+--dataset-modality text_untokenized \
+--vocab-size 151936 \
+--tokenizer Qwen/Qwen2.5-0.5B \
+--total-train-samples 90_000 \
+--per-gpu-batch-size 8 \
+--global-batch-size 512 \
+--disable-wandb \
+--remote-sync s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/transformer_11m \

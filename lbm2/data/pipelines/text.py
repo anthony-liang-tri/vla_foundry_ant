@@ -1,3 +1,4 @@
+import torch
 import webdataset as wds
 from data.pipelines.base import BaseWebDatasetPipeline
 from data.utils import deterministic_shuffle, log_and_continue
@@ -26,9 +27,9 @@ class TextPipeline(BaseWebDatasetPipeline):
             wds.split_by_worker,
             wds.tarfile_to_samples(handler=log_and_continue),
             wds.decode(handler=log_and_continue),
-            # wds.to_tuple("json.gz", handler=log_and_continue),
             wds.map(lambda sample: {"input_ids": sample["json.gz"]}, handler=log_and_continue),
             wds.select(lambda x: filter_lt_seqlen(self.data_configs.seq_len, x["input_ids"])),
             wds.batched(self.batch_size, partial=False),
+            wds.map(lambda batch: {"input_ids": torch.LongTensor(batch["input_ids"])}),
         ]
         return pipeline

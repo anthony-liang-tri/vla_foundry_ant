@@ -11,6 +11,7 @@ def batch_tokenize(batch, tokenizer, seq_len):
         padding='max_length',
         truncation=True,
         max_length=seq_len+1,  # +1 because next token prediction
+        return_tensors='pt',
     )
     return tokenized['input_ids'], tokenized['attention_mask']
 

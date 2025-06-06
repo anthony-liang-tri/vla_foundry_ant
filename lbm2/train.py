@@ -63,11 +63,10 @@ def train_one_checkpoint(
         if has_data < cfg.distributed.world_size:      # Not all gpus have data
             break
 
-        # input_ids = torch.LongTensor(batch['input_ids']).to(device)
         input_ids = batch['input_ids'].to(device)
-        image = batch['pixel_values'].to(device)
-        # image = torch.Tensor(batch['pixel_values']).to(device) if 'pixel_values' in batch else None
-        attention_mask = torch.LongTensor(batch['attention_mask']).to(device) if 'attention_mask' in batch else None
+        image = batch['pixel_values'].to(device) if 'pixel_values' in batch else None
+        attention_mask = batch['attention_mask'].to(device) if 'attention_mask' in batch else None
+ 
         data_time_m.update(time.time() - end)
         optimizer.zero_grad()
 

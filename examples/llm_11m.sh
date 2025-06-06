@@ -1,0 +1,13 @@
+~/anaconda3/envs/vla3/bin/torchrun --nproc_per_node=8 --nnodes=1 lbm2/main.py \
+--model transformer_11m \
+--fsdp \
+--fsdp-use-orig-params \
+--fsdp-limit-all-gathers \
+--dataset-type webdataset \
+--dataset-manifest s3://tri-ml-datasets/openlm/dcnlp/datasets/tri-hero-run1_cc_v4_resiliparse_rw_v2_bff_minngram13_10shards_all_fasttext_OH_eli5_vs_rw_v2_bigram_200k_train_0.11-starcoder-math_datasets/manifest.jsonl \
+--dataset-modality text \
+--total-train-samples 14_000_000 \
+--num-checkpoints 5 \
+--per-gpu-batch-size 8 \
+--global-batch-size 512 \
+--disable-wandb \
