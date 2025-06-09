@@ -64,7 +64,7 @@ todos / thought dump:
 - tokenized dataset creation script
 [x] sagemaker launcher
 - check why the number of checkpoints isn't ways the same as what's indicated
-- check that inference didn't break while making changes + check vlm inference
+[x] check that inference didn't break while making changes + check vlm inference
 - double check webdataset speed if it's faster to conver to tensor inside the pipeline or return lists then convert outside
 - double check fp 16 bf 16
 - precompute masks if static
@@ -75,9 +75,10 @@ todos / thought dump:
 - user-specified processor instead of loading from existing
 - log which tar files are used in which checkpoints
 - support processors beyond just pali gemma
-- vlm inference
+[x] vlm inference
 - action pipeline
 - diffusion policy simple implementation
+- kv cache for inference
 
 Known bugs / improvements
 - speed up pretokenized huggingface? 

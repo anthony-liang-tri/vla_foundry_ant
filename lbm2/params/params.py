@@ -68,11 +68,11 @@ def load_params_from_json(params_path):
     
     return Params(
         name=raw["name"],
-        data=DataParams(**filter_missing(DataParams, raw["data"])),
-        distributed=DistributedParams(**filter_missing(DistributedParams, raw["distributed"])),
-        experiment=ExperimentParams(**filter_missing(ExperimentParams, raw["experiment"])),
-        model=ModelParams(**filter_missing(ModelParams, raw["model"])),
-        vit=ViTParams(**filter_missing(ViTParams, raw["vit"])),
+        data=DataParams(**filter_missing(DataParams, raw.get('data', {}))),
+        distributed=DistributedParams(**filter_missing(DistributedParams, raw.get('distributed', {}))),
+        experiment=ExperimentParams(**filter_missing(ExperimentParams, raw.get('experiment', {}))),
+        model=ModelParams(**filter_missing(ModelParams, raw.get('model', {}))),
+        vit=ViTParams(**filter_missing(ViTParams, raw.get('vit', {}))),
     )
 
 def handle_listtype_params(cfg):

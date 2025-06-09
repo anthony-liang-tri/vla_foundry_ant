@@ -68,3 +68,24 @@ class VLM(nn.Module):
         logits, _ = self.transformer(input_embeds=inputs_embeds, attention_mask=attention_mask)
         return logits, _
 
+    def generate(self, input_ids, image, attention_mask, max_new_tokens=20):
+        # Add batch dimension if needed
+        if input_ids.dim() == 1:
+            input_ids = input_ids.unsqueeze(0)
+            attention_mask = attention_mask.unsqueeze(0)
+            
+        generated = input_ids.clone()
+        attn_mask = attention_mask.clone()
+
+        for _ in range(max_new_tokens):
+            outputs, _ = self.forward(input_ids=generated, image=image, attention_mask=attn_mask)
+            last_output = outputs[:, -1, :]
+            next_token = torch.argmax(last_output, dim=-1, keepdim=True)
+            generated = torch.cat([generated, next_token], dim=-1)
+
+            # Update attention mask: 1 for non-padding tokens
+            next_token_mask = torch.ones_like(next_token, dtype=attn_mask.dtype)
+            attn_mask = torch.cat([attn_mask, next_token_mask], dim=-1)
+            #Note: You could enable the generation to break earlier than max_new_tokens when it detects a eos token, but this does not work in batched generation (output tensors need to have the same size)    
+        
+        return generated
