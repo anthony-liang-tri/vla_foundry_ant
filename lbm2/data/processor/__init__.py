@@ -1,4 +1,3 @@
-from data.processor.image_transforms import *
 from transformers import AutoProcessor
 
 
