@@ -1,6 +1,6 @@
 # lbm2
 
-This was put together from some combination of [MBM](https://github.com/mlfoundations/mbm) and [nanoVLM](https://github.com/huggingface/nanoVLM/tree/main).
+This was put together from some combination of [MBM](https://github.com/TRI-ML/mbm) and [nanoVLM](https://github.com/huggingface/nanoVLM/tree/main).
 
 ## Quickstart
 .
@@ -70,6 +70,8 @@ todos / thought dump:
 - precompute masks if static
 - text intermediate layer as parameter
 - maybe support processor_configs instead of merging into data/model/vit?
+- load siglip weights
+- load paligemma weights
 
 Known bugs / improvements
 - speed up pretokenized huggingface? 
