@@ -207,6 +207,7 @@ def train_one_checkpoint(
                     "tokens_per_second_per_gpu": tokens_per_second_per_gpu,
                     "lr": optimizer.param_groups[0]["lr"],
                     "tokens": (step + 1) * cfg.experiment.global_batch_size * cfg.data.seq_len,
+                    "samples": (step + 1) * cfg.experiment.global_batch_size,
                     "expected_steps_epoch": dataloader.dataloader.num_batches,
                     "seen_steps_epoch": batch_count,
                 }
@@ -214,7 +215,7 @@ def train_one_checkpoint(
                 for name, val in log_data.items():
                     name = "train/" + name
                     if cfg.experiment.wandb:
-                        wandb.log({name: val, "step": step, "tokens": log_data["tokens"]})
+                        wandb.log({name: val, "step": step, "tokens": log_data["tokens"], "samples": log_data["samples"]})
 
                 # resetting batch / data time meters per log window
                 batch_time_m.reset()
