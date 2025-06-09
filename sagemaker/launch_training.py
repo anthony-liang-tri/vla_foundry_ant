@@ -16,6 +16,7 @@ from lbm2.params.data_params import DataParams, add_data_params
 from lbm2.params.distributed_params import DistributedParams, add_distributed_params
 from lbm2.params.experiment_params import ExperimentParams, add_experiment_params
 from lbm2.params.model_params import ModelParams, add_model_params
+from lbm2.params.extra.vit_params import ViTParams, add_vit_params
 
 NAME = "lbm2"
 INSTANCE_MAPPER = {
@@ -94,6 +95,7 @@ def parse_args():
     add_distributed_params(parser)
     add_experiment_params(parser)
     add_model_params(parser)
+    add_vit_params(parser)
     args = parser.parse_args()
     return args
 
@@ -103,7 +105,7 @@ def main():
 
     # Check this first to avoid waiting for Docker build.
     hyperparameters = {}
-    for paramgroup in [DataParams, DistributedParams, ExperimentParams, ModelParams]:
+    for paramgroup in [DataParams, DistributedParams, ExperimentParams, ModelParams, ViTParams]:
         for i in fields(paramgroup):
             if i.name in args:
                 if getattr(args, i.name) is False or getattr(args, i.name) is None:
@@ -198,7 +200,7 @@ def main():
         max_run=5 * 24 * 60 * 60,
         input_mode="FastFile",
         environment=environment,
-        keep_alive_period_in_seconds=30 * 60,    # 30 minutes
+        keep_alive_period_in_seconds=5 * 60,    # 30 minutes
         tags=[
             {"Key": "tri.project", "Value": "MM:PJ-0077"},
             {"Key": "tri.owner.email", "Value": f"{args.user}@tri.global"},

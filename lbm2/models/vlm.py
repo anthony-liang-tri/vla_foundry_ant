@@ -21,13 +21,13 @@ class ModalityProjector(nn.Module):
 
     # https://github.com/huggingface/smollm/blob/main/vision/m4/models/vllama3/modeling_vllama3.py#L1281
     def pixel_shuffle(self, x):
-        bsz, seq, embed_dim = x.size()
+        bsz, seq, embed_dim = x.size()      # x shape [bsz, 16*16, embed_dim]
         seq_root = int(seq**0.5)
         assert seq_root**2 == seq # Sequence length must be a perfect square for pixel shuffle
         assert seq_root % self.scale_factor == 0 # Sequence root must be divisible by scale factor
 
         height = width = seq_root
-        x = x.view(bsz, height, width, embed_dim)
+        x = x.view(bsz, height, width, embed_dim)       # [bsz, 16, 16, embed_dim]
         h_out = height // self.scale_factor
         w_out = width // self.scale_factor
         
@@ -50,23 +50,21 @@ class VLM(nn.Module):
         self.vit = vit
         self.transformer = transformer
         self.projection = ModalityProjector(model_configs)
+        if model_configs.processor is not None:
+            from data.processor import get_processor
+            processor = get_processor(model_configs.processor, model_configs)
+            self.image_token_id = processor.image_token_id
 
     def forward(self, input_ids, image, attention_mask=None, targets=None):
         # image shape [bsz, 3, image_size, image_size]
+        # input_ids and attention_mask should already allot tokens for the image
         image_embd = self.vit(image)        
         image_embd = self.projection(image_embd)
-        token_embd = self.transformer.embeddings(input_ids)
+        token_embd = self.transformer.embeddings(input_ids).to(image_embd.dtype)
+        special_image_mask = (input_ids == self.image_token_id).unsqueeze(-1)
+        special_image_mask = special_image_mask.expand_as(token_embd).to(token_embd.device)
+        inputs_embeds = token_embd.masked_scatter(special_image_mask, image_embd)
 
-        # Adjust attention mask to account for image tokens
-        if attention_mask is not None:
-            # Create mask of 1s for image tokens (all image tokens should be attended to)
-            batch_size = image_embd.size(0)
-            img_seq_len = image_embd.size(1)
-            image_attention_mask = torch.ones((batch_size, img_seq_len), device=attention_mask.device, dtype=attention_mask.dtype)
-            
-            # Combine image and token attention masks
-            attention_mask = torch.cat((image_attention_mask, attention_mask), dim=1)
-
-        logits, _ = self.transformer(input_embeds=token_embd, attention_mask=attention_mask) # Not logits yet, but easier to return like this
+        logits, _ = self.transformer(input_embeds=inputs_embeds, attention_mask=attention_mask)
         return logits, _
 

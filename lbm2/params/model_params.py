@@ -118,6 +118,7 @@ class ModelParams:
     weight_tying: bool
 
     # These are defined in the add_params of other files but we use them here
+    processor: str
     vit_interpolation_mode: str
     vit_hidden_dim: int
     vit_inter_dim: int

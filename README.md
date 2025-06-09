@@ -30,7 +30,7 @@ pip install install/sagemaker-2.240.1.dev0.tar
 - seeds, reproducibility
 
 
-todos:
+todos / thought dump:
 - check optimizer scaler
 [x] load multiple datasets
 - load dataset from path instead of manifest
@@ -66,6 +66,10 @@ todos:
 - check why the number of checkpoints isn't ways the same as what's indicated
 - check that inference didn't break while making changes + check vlm inference
 - double check webdataset speed if it's faster to conver to tensor inside the pipeline or return lists then convert outside
+- double check fp 16 bf 16
+- precompute masks if static
+- text intermediate layer as parameter
+- maybe support processor_configs instead of merging into data/model/vit?
 
 Known bugs / improvements
 - speed up pretokenized huggingface? 

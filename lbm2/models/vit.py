@@ -30,7 +30,8 @@ class ViTPatchEmbeddings(nn.Module):
 
 
     def forward(self, x):
-        x = self.conv(x)  # extract patches
+        # x shape [bsz, 3, 224, 224]
+        x = self.conv(x)  # extract patches     shape [bsz, hidden_dim, 224 // patch_size, 224 // patch_size]
         x = x.flatten(2)  # flatten the patches into a single dimension
         x = x.transpose(1, 2)  # transpose to (batch_size, num_patches, hidden_dim)
 

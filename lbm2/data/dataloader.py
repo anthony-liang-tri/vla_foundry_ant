@@ -22,11 +22,21 @@ class DataInfo:
     sampler: DistributedSampler = None
     shared_checkpoint_counter: SharedCheckpointCounter = None
 
+    pad_token_id: int = None
+    image_token_id: int = None
+
     def set_checkpoint_num(self, checkpoint_num):
         if self.shared_checkpoint_counter is not None:
             self.shared_checkpoint_counter.set_value(checkpoint_num)
         if self.sampler is not None and isinstance(self.sampler, DistributedSampler):
             self.sampler.set_checkpoint_num(checkpoint_num)
+
+    def fill_token_ids_if_available(self, processor, vit_configs):
+        if processor is not None:
+            from data.processor import get_processor
+            processor = get_processor(processor, vit_configs)
+            self.pad_token_id = processor.tokenizer.pad_token_id
+            self.image_token_id = processor.image_token_id
 
 
 def get_wds_dataloader(datastrings, num_samples_per_dataset, checkpoint_num, cfg):
@@ -67,7 +77,9 @@ def get_wds_dataloader(datastrings, num_samples_per_dataset, checkpoint_num, cfg
     dataloader.num_batches = num_batches
     dataloader.num_samples = num_samples
 
-    return DataInfo(dataloader=dataloader, shared_checkpoint_counter=shared_checkpoint_counter)
+    dataloader = DataInfo(dataloader=dataloader, shared_checkpoint_counter=shared_checkpoint_counter)
+    dataloader.fill_token_ids_if_available(cfg.data.processor, cfg.vit)
+    return dataloader
 
 
 def get_synthetic_dataset(data_configs, distributed_configs, checkpoint_num, tokenizer, floor):

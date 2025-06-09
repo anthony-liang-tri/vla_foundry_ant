@@ -33,27 +33,24 @@ class ImageCaptionPipeline(BaseWebDatasetPipeline):
             wds.decode("pilrgb", handler=log_and_continue),
             wds.select(filter_no_caption_or_no_image),
             wds.rename(image="jpg;png;jpeg;webp", text="txt"),
-            # wds.map(lambda sample: {
-            #     **sample,
-            #     "text": self.processor.processor.apply_chat_template([
-            #         {
-            #             "role": "user",
-            #             "content": [
-            #                 {"type": "image"},
-            #                 {"type": "text", "text": sample["text"]}
-            #             ]
-            #         }
-            #     ])
-            # }),
+            wds.map(lambda sample: {
+                **sample,
+                "text": "<image> " + sample["text"]
+            }),
             wds.batched(self.batch_size, partial=False),
-            wds.map(
-                lambda sample: self.processor(sample['image'], sample['text'])
-            ),
+            wds.map(lambda sample: self.processor(
+                sample['image'], 
+                sample['text'], 
+                return_tensors='pt',
+                padding='max_length',
+                padding_side='right',
+                max_length=self.data_configs.seq_len+1,
+            )),
             wds.map(lambda sample: {
                 "input_ids": sample["input_ids"],
+                "attention_mask": sample["attention_mask"],
                 "pixel_values": sample["pixel_values"],
             }),
-            
         ]
         return pipeline
 

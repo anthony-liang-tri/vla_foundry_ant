@@ -88,6 +88,10 @@ def train_one_checkpoint(
                 forward_time_m.update(time.time() - forward_start)
 
                 targets = targets.long()
+                if image is not None:
+                    ignore_mask = (targets == dataloader.pad_token_id) | (targets == dataloader.image_token_id)
+                    targets = targets.masked_fill(ignore_mask, -100)
+                
                 total_lm_loss = loss(logits.reshape(-1, cfg.model.vocab_size), targets.reshape(-1))
                 total_loss = total_lm_loss
 
@@ -122,6 +126,10 @@ def train_one_checkpoint(
                         forward_total_time += time.time() - forward_start
 
                         targets_ii = targets_ii.long()
+                        if image is not None:
+                            ignore_mask = (targets_ii == dataloader.pad_token_id) | (targets_ii == dataloader.image_token_id)
+                            targets_ii = targets_ii.masked_fill(ignore_mask, -100)
+
                         local_loss = (
                             loss(logits.reshape(-1, cfg.model.vocab_size), targets_ii.reshape(-1))
                             * (inputs_ii.shape[0] / input_ids.shape[0])
