@@ -70,7 +70,7 @@ todos / thought dump:
 - precompute masks if static
 - text intermediate layer as parameter
 - maybe support processor_configs instead of merging into data/model/vit?
-- load siglip weights
+[x] load siglip weights
 - load paligemma weights
 - user-specified processor instead of loading from existing
 - log which tar files are used in which checkpoints
@@ -79,7 +79,9 @@ todos / thought dump:
 - action pipeline
 - diffusion policy simple implementation
 - kv cache for inference
+- allow for freezing parts of the VLM
 
 Known bugs / improvements
 - speed up pretokenized huggingface? 
 - torchcompile for accum_freq > 1
+- speed up vlm mask computation inside forward loop

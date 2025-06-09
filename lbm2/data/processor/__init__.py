@@ -10,6 +10,9 @@ class CustomTransform:
 
 def get_processor(processor, vit_configs):
     if processor is not None:
-        return AutoProcessor.from_pretrained(processor, use_fast=True)
+        processor = AutoProcessor.from_pretrained(processor, use_fast=True)
+        if vit_configs.vit_img_num_tokens is not None:
+            processor.image_seq_length = vit_configs.vit_img_num_tokens
+        return processor
     else:
         raise ValueError(f"CustomTransform not yet supported. Use an existing HF transform.")

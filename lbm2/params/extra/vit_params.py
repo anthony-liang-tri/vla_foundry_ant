@@ -3,6 +3,10 @@ from dataclasses import dataclass, fields
 
 def add_vit_params(parser):
     parser.add_argument(
+        "--vit-pretrained",
+        type=str,
+    )
+    parser.add_argument(
         "--vit-interpolation-mode",
         type=str,
         default="bicubic",
@@ -26,6 +30,11 @@ def add_vit_params(parser):
         "--vit-img-size",
         type=int,
         default=384,
+    )
+    parser.add_argument(
+        "--vit-img-num-tokens",
+        type=int,
+        default=None,
     )
     parser.add_argument(
         "--vit-n-heads",
@@ -60,11 +69,13 @@ def add_vit_params(parser):
 
 @dataclass(frozen=True)
 class ViTParams:
+    vit_pretrained: str
     vit_interpolation_mode: str
     vit_hidden_dim: int
     vit_inter_dim: int
     vit_patch_size: int
     vit_img_size: int
+    vit_img_num_tokens: int
     vit_n_heads: int
     vit_dropout: float
     vit_n_layers: int

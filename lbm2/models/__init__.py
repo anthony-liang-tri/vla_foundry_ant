@@ -4,6 +4,7 @@ from pathlib import Path
 from models.transformer import Transformer, TransformerBlock
 from models.transformer_hf import TransformerHF
 from models.vit import ViT
+from models.vit_hf import ViTHF
 from models.vlm import VLM
 from models.vlm_hf import VLMHF
 
@@ -33,7 +34,10 @@ def create_model(model_configs):
         model = TransformerHF(model_configs)
     elif model_configs.model_type == "vlm":
         transformer = Transformer(model_configs)
-        vit = ViT(model_configs)
+        if model_configs.vit_pretrained is not None:
+            vit = ViTHF(model_configs)
+        else:
+            vit = ViT(model_configs)
         model = VLM(model_configs, transformer, vit)
     elif model_configs.model_type == "vlm_hf":
         model = VLMHF(model_configs)

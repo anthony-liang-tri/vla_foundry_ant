@@ -119,11 +119,13 @@ class ModelParams:
 
     # These are defined in the add_params of other files but we use them here
     processor: str
+    vit_pretrained: str
     vit_interpolation_mode: str
     vit_hidden_dim: int
     vit_inter_dim: int
     vit_patch_size: int
     vit_img_size: int
+    vit_img_num_tokens: int
     vit_n_heads: int
     vit_dropout: float
     vit_n_layers: int

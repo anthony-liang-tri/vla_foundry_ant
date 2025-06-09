@@ -59,9 +59,10 @@ class VLM(nn.Module):
         # image shape [bsz, 3, image_size, image_size]
         # input_ids and attention_mask should already allot tokens for the image
         image_embd = self.vit(image)        
-        image_embd = self.projection(image_embd)
+        image_embd = self.projection(image_embd)        # [bsz, 16*16, lm_hidden_dim]
         token_embd = self.transformer.embeddings(input_ids).to(image_embd.dtype)
         special_image_mask = (input_ids == self.image_token_id).unsqueeze(-1)
+        assert special_image_mask.sum().item() == image_embd.shape[0] * image_embd.shape[1]
         special_image_mask = special_image_mask.expand_as(token_embd).to(token_embd.device)
         inputs_embeds = token_embd.masked_scatter(special_image_mask, image_embd)
 
