@@ -72,6 +72,8 @@ todos / thought dump:
 - maybe support processor_configs instead of merging into data/model/vit?
 - load siglip weights
 - load paligemma weights
+- user-specified processor instead of loading from existing
+- log which tar files are used in which checkpoints
 
 Known bugs / improvements
 - speed up pretokenized huggingface? 
