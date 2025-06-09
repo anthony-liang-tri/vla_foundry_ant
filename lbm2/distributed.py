@@ -122,7 +122,7 @@ def wrap_fsdp_ddp(model, device, cfg):
         # from https://pytorch.org/blog/efficient-large-scale-training-with-pytorch/
         transformer_auto_wrapper_policy = functools.partial(
             transformer_auto_wrap_policy,
-            transformer_layer_cls=get_model_block(cfg.model.model_type),
+            transformer_layer_cls=get_model_block(cfg.model.model_type, cfg.model.model),
         )
         # tries to follow gopher...
         mp_policy = None

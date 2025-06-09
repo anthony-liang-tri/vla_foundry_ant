@@ -1,4 +1,5 @@
 import yaml
+import torch.nn as nn
 from pathlib import Path
 from models.transformer import Transformer, TransformerBlock
 from models.transformer_hf import TransformerHF
@@ -34,12 +35,17 @@ def create_model(model_configs):
     return model
 
 
-def get_model_block(model_type):
+def get_model_block(model_type, model_name):
     if model_type == "transformer":
         return {TransformerBlock} 
     elif model_type == "transformer_hf":
-        from transformers.models.qwen2.modeling_qwen2 import Qwen2DecoderLayer
-        return {Qwen2DecoderLayer}
+        from transformers import AutoConfig, AutoModelForCausalLM
+        config = AutoConfig.from_pretrained(model_name)
+        model = AutoModelForCausalLM.from_config(config)
+        for name, module in model.model.named_modules():
+            if isinstance(module, nn.ModuleList) and len(module) > 0:
+                return {type(module[0])}
+        raise ValueError("Could not find model block class.")
     elif model_type == "vlm":
         return {TransformerBlock}
     else:
