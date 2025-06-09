@@ -55,7 +55,7 @@ class VLM(nn.Module):
             processor = get_processor(model_configs.processor, model_configs)
             self.image_token_id = processor.image_token_id
 
-    def forward(self, input_ids, image, attention_mask=None, targets=None):
+    def forward(self, input_ids, image, attention_mask=None):
         # image shape [bsz, 3, image_size, image_size]
         # input_ids and attention_mask should already allot tokens for the image
         image_embd = self.vit(image)        

@@ -1,0 +1,17 @@
+~/anaconda3/envs/vla3/bin/torchrun --nproc_per_node=8 --nnodes=1 lbm2/main.py \
+--model google/paligemma-3b-pt-224 \
+--model-type vlm_hf \
+--processor google/paligemma-3b-pt-224 \
+--fsdp \
+--fsdp-use-orig-params \
+--fsdp-limit-all-gathers \
+--dataset-type webdataset \
+--dataset-manifest s3://tri-ml-datasets/datasets/datacompdr_1b/manifest.jsonl \
+--dataset-modality image_caption \
+--total-train-samples 14_000_000 \
+--num-checkpoints 5 \
+--per-gpu-batch-size 2 \
+--global-batch-size 64 \
+--seq-len 2048 \
+--remote-sync s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/vlm_paligemma_3b_hf \
+--disable-wandb
