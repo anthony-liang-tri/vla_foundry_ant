@@ -74,6 +74,10 @@ todos / thought dump:
 - load paligemma weights
 - user-specified processor instead of loading from existing
 - log which tar files are used in which checkpoints
+- support processors beyond just pali gemma
+- vlm inference
+- action pipeline
+- diffusion policy simple implementation
 
 Known bugs / improvements
 - speed up pretokenized huggingface? 
