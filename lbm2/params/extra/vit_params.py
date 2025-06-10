@@ -7,6 +7,10 @@ def add_vit_params(parser):
         type=str,
     )
     parser.add_argument(
+        "--vit-freeze",
+        action="store_true",
+    )
+    parser.add_argument(
         "--vit-interpolation-mode",
         type=str,
         default="bicubic",
@@ -70,6 +74,7 @@ def add_vit_params(parser):
 @dataclass(frozen=True)
 class ViTParams:
     vit_pretrained: str
+    vit_freeze: bool
     vit_interpolation_mode: str
     vit_hidden_dim: int
     vit_inter_dim: int

@@ -71,7 +71,7 @@ todos / thought dump:
 - text intermediate layer as parameter
 - maybe support processor_configs instead of merging into data/model/vit?
 [x] load siglip weights
-- load paligemma weights
+[x] load paligemma weights
 - user-specified processor instead of loading from existing
 - log which tar files are used in which checkpoints
 - support processors beyond just pali gemma
@@ -79,7 +79,8 @@ todos / thought dump:
 - action pipeline
 - diffusion policy simple implementation
 - kv cache for inference
-- allow for freezing parts of the VLM
+[x] allow for freezing parts of the VLM
+- prefix lm
 
 Known bugs / improvements
 - speed up pretokenized huggingface? 

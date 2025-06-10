@@ -38,6 +38,9 @@ def create_model(model_configs):
             vit = ViTHF(model_configs)
         else:
             vit = ViT(model_configs)
+        if model_configs.vit_freeze:
+            for param in vit.parameters():
+                param.requires_grad = False
         model = VLM(model_configs, transformer, vit)
     elif model_configs.model_type == "vlm_hf":
         model = VLMHF(model_configs)

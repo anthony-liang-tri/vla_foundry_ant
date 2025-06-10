@@ -120,6 +120,7 @@ class ModelParams:
     # These are defined in the add_params of other files but we use them here
     processor: str
     vit_pretrained: str
+    vit_freeze: bool
     vit_interpolation_mode: str
     vit_hidden_dim: int
     vit_inter_dim: int
