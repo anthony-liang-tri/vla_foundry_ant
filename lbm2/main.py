@@ -6,7 +6,6 @@ import logging
 import json
 from logger import setup_logging
 
-import atexit
 from params.params import get_params, get_args
 from utils import get_experiment_name
 from distributed import init_distributed_device, wrap_fsdp_ddp, is_master
@@ -14,9 +13,9 @@ from models import create_model
 from optimizer import create_optimizer, load_optimizer
 from scheduler import create_scheduler
 from losses import CrossEntropyLossWithZLoss
-from data.dataloader import get_wds_dataloader
+from data.dataloader import get_wds_dataloader, get_datastring_input
 from data.utils import load_data_chunks
-from file_utils import get_datastring_input, save_checkpoint, load_model_checkpoint, remote_sync
+from file_utils import save_checkpoint, load_model_checkpoint, remote_sync
 from train import train_one_checkpoint
 
 

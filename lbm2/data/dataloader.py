@@ -1,6 +1,9 @@
+import copy
+import logging
 import random
 import numpy as np
 import torch
+from typing import List, Optional
 from dataclasses import dataclass
 import webdataset as wds
 
@@ -8,6 +11,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from data.pipelines import create_wds_pipeline
 from data.utils import SharedCheckpointCounter
+from file_utils import get_metadata_file
 
 
 def seed_worker(worker_id):
@@ -82,23 +86,55 @@ def get_wds_dataloader(datastrings, num_samples_per_dataset, checkpoint_num, cfg
     return dataloader
 
 
-def get_synthetic_dataset(data_configs, distributed_configs, checkpoint_num, tokenizer, floor):
-    from data.datasets import SyntheticDataset
-    dataset = SyntheticDataset(seq_len=data_configs.seq_len, vocab_size=data_configs.vocab_size, dataset_size=data_configs.total_train_samples)
-    sampler = DistributedSampler(dataset) if distributed_configs.use_distributed else None
-    shuffle = sampler is None
+def get_datastring_input(
+    num_samples: int,
+    curr_shard_idx_per_dataset: int,
+    manifest_paths: str,
+    dataset_weighting: str,
+    num_workers_per_gpu: int,
+    world_size: int,
+    shard_shuffle_seed: Optional[int],
+):
+    manifests = [get_metadata_file(path, shard_shuffle_seed=shard_shuffle_seed) for path in manifest_paths]
+    if dataset_weighting is None:
+        dataset_weighting = [1 for i in range(len(manifests))]
+    
+    needed_samples_per_dataset = [int(np.ceil(dataset_weighting[i] * num_samples / sum(dataset_weighting))) for i in range(len(manifests))]
+    next_shard_idx_per_dataset = copy.deepcopy(curr_shard_idx_per_dataset)
+    shard_list_per_dataset = [[] for i in range(len(manifests))]
+    num_samples_list_per_dataset = [[] for i in range(len(manifests))]
+    total_num_workers = num_workers_per_gpu * world_size
 
-    per_gpu_batch_size = data_configs.global_batch_size // distributed_configs.world_size
-    dataloader = DataLoader(
-        dataset,
-        batch_size=per_gpu_batch_size,
-        shuffle=shuffle,
-        num_workers=data_configs.num_workers,
-        pin_memory=True,
-        sampler=sampler,
-        drop_last=True,
-    )
-    dataloader.num_samples = len(dataset)
-    dataloader.num_batches = len(dataloader)
+    for i in range(len(manifests)):
+        while len(shard_list_per_dataset[i]) < total_num_workers or sum(num_samples_list_per_dataset[i]) < needed_samples_per_dataset[i]:
+            if sum(num_samples_list_per_dataset[i]) >= needed_samples_per_dataset[i]:
+                logging.warning("num_samples requirement satisfied but not all workers have shards. Adding data to ensure each worker has a shard.")
+            try:
+                # Add shards incrementally
+                shard_idx = curr_shard_idx_per_dataset[i]
+                shard_list_per_dataset[i].append(manifests[i][shard_idx]["shard"])
+                num_samples_list_per_dataset[i].append(manifests[i][shard_idx]["num_sequences"])
+                curr_shard_idx_per_dataset[i] += 1
+            except IndexError as e:
+                logging.error("Number of shards requested for a single epoch is more than the number of shards available.")
+                raise e
 
-    return DataInfo(dataloader, sampler)
+    for i in range(len(manifests)):
+        # Ensure number of shards is a multiple of number of workers, so each worker has same number of shards.
+        idx_div = (len(shard_list_per_dataset[i]) // total_num_workers) * total_num_workers
+        shard_list_per_dataset[i] = shard_list_per_dataset[i][:idx_div]
+        num_samples_list_per_dataset[i] = num_samples_list_per_dataset[i][:idx_div]
+
+        # Put back unused shards.
+        next_shard_idx_per_dataset[i] += len(shard_list_per_dataset[i])
+
+    datastrings = []
+    for i, manifest_path in enumerate(manifest_paths):
+        shard_root_source = "/".join(manifest_path.split("/")[:-1]) + "/"
+        curr_datastring = shard_root_source + "{" + ",".join(shard_list_per_dataset[i]) + "}.tar"
+        if manifest_path.startswith("s3"):
+            curr_datastring = f"pipe:aws s3 cp {curr_datastring} -"
+        datastrings.append(curr_datastring)
+
+    num_samples_list_per_dataset = [sum(i) for i in num_samples_list_per_dataset]
+    return datastrings, num_samples_list_per_dataset, next_shard_idx_per_dataset
