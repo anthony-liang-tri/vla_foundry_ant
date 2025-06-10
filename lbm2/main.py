@@ -146,7 +146,7 @@ def main():
             curr_shard_idx_per_dataset = curr_shard_idx_per_dataset, 
             manifest_paths = cfg.data.dataset_manifest,
             dataset_weighting = cfg.data.dataset_weighting,
-            num_workers_per_gpu = 2,
+            num_workers_per_gpu = cfg.data.num_workers,
             world_size = cfg.distributed.world_size,
             shard_shuffle_seed = shard_shuffle_seed,
         )
