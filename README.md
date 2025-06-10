@@ -73,7 +73,7 @@ todos / thought dump:
 [x] load siglip weights
 [x] load paligemma weights
 - user-specified processor instead of loading from existing
-- log which tar files are used in which checkpoints
+[x] log which tar files are used in which checkpoints
 - support processors beyond just pali gemma
 [x] vlm inference
 - action pipeline

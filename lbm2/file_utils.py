@@ -230,6 +230,7 @@ def save_checkpoint(
     checkpoint_path, 
     model, 
     optimizer, 
+    datastrings, 
     curr_shard_idx_per_dataset, 
     samples_seen, 
     global_step, 
@@ -244,6 +245,7 @@ def save_checkpoint(
     checkpoint_dict = {
         "checkpoint_num": checkpoint_num,
         "state_dict": cpu_state if cfg.distributed.fsdp else model.state_dict(),
+        "datastrings": datastrings,
         "curr_shard_idx_per_dataset": curr_shard_idx_per_dataset,
         "samples_seen": samples_seen,
         "global_step": global_step,

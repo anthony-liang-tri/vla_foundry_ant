@@ -151,6 +151,8 @@ def main():
             world_size = cfg.distributed.world_size,
             shard_shuffle_seed = shard_shuffle_seed,
         )
+        if is_master(cfg):
+            logging.info(f"Now training on: {datastrings}")
         
         if cfg.distributed.use_distributed:
             all_datastrings = ["" for _ in range(cfg.distributed.world_size)]
@@ -174,7 +176,7 @@ def main():
         checkpoint_num += 1
         done_training = global_step >= total_steps
 
-        save_checkpoint(cfg, checkpoint_num, checkpoint_path, model, optimizer, curr_shard_idx_per_dataset, samples_seen, global_step, shard_shuffle_seed)
+        save_checkpoint(cfg, checkpoint_num, checkpoint_path, model, optimizer, datastrings, curr_shard_idx_per_dataset, samples_seen, global_step, shard_shuffle_seed)
         if is_master(cfg) and cfg.experiment.remote_sync:
             remote_sync(experiment_path, os.path.join(cfg.experiment.remote_sync, experiment_name))
 
