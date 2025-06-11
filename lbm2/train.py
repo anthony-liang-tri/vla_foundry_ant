@@ -81,20 +81,18 @@ def train_one_checkpoint(
             with autocast():
                 forward_start = time.time()
                 input_ids, attention_mask, targets = sample_chunk(input_ids, attention_mask, cfg.data.seq_len)
-                if image is not None:
-                    logits, _ = model(input_ids=input_ids, image=image, attention_mask=attention_mask)
-                else:
+                if cfg.model.model_type == "transformer" or cfg.model.model_type == "transformer_hf":
                     logits, _ = model(input_ids=input_ids, attention_mask=attention_mask)
-                forward_time_m.update(time.time() - forward_start)
-
-                targets = targets.long()
-                if image is not None:
+                    forward_time_m.update(time.time() - forward_start)
+                    targets = targets.long()
+                    total_loss = loss(logits.reshape(-1, cfg.model.vocab_size), targets.reshape(-1))
+                elif cfg.model.model_type == "vlm" or cfg.model.model_type == "vlm_hf":                    
+                    logits, _ = model(input_ids=input_ids, image=image, attention_mask=attention_mask)
+                    forward_time_m.update(time.time() - forward_start)
+                    targets = targets.long()
                     ignore_mask = (targets == dataloader.pad_token_id) | (targets == dataloader.image_token_id)
                     targets = targets.masked_fill(ignore_mask, -100)
-                
-                total_lm_loss = loss(logits.reshape(-1, cfg.model.vocab_size), targets.reshape(-1))
-                total_loss = total_lm_loss
-
+                    total_loss = loss(logits.reshape(-1, cfg.model.vocab_size), targets.reshape(-1))
             backward_start = time.time()
             total_loss.backward()
             backward_time_m.update(time.time() - backward_start)
@@ -120,20 +118,24 @@ def train_one_checkpoint(
                         targets_ii = targets[ii * cfg.experiment.per_gpu_batch_size : (ii + 1) * cfg.experiment.per_gpu_batch_size]
                         if image is not None:
                             images_ii = image[ii * cfg.experiment.per_gpu_batch_size : (ii + 1) * cfg.experiment.per_gpu_batch_size]
-                            logits, _ = model(input_ids=inputs_ii, image=images_ii, attention_mask=mask_ii)
-                        else:
+                        if cfg.model.model_type == "transformer" or cfg.model.model_type == "transformer_hf":
                             logits, _ = model(input_ids=inputs_ii, attention_mask=mask_ii)
-                        forward_total_time += time.time() - forward_start
-
-                        targets_ii = targets_ii.long()
-                        if image is not None:
+                            forward_total_time += time.time() - forward_start
+                            targets_ii = targets_ii.long()
+                            local_loss = (
+                                loss(logits.reshape(-1, cfg.model.vocab_size), targets_ii.reshape(-1))
+                                * (inputs_ii.shape[0] / input_ids.shape[0])
+                            )
+                        elif cfg.model.model_type == "vlm" or cfg.model.model_type == "vlm_hf":
+                            logits, _ = model(input_ids=inputs_ii, image=images_ii, attention_mask=mask_ii)
+                            forward_total_time += time.time() - forward_start
+                            targets_ii = targets_ii.long()
                             ignore_mask = (targets_ii == dataloader.pad_token_id) | (targets_ii == dataloader.image_token_id)
                             targets_ii = targets_ii.masked_fill(ignore_mask, -100)
-
-                        local_loss = (
-                            loss(logits.reshape(-1, cfg.model.vocab_size), targets_ii.reshape(-1))
-                            * (inputs_ii.shape[0] / input_ids.shape[0])
-                        )
+                            local_loss = (
+                                loss(logits.reshape(-1, cfg.model.vocab_size), targets_ii.reshape(-1))
+                                * (inputs_ii.shape[0] / input_ids.shape[0])
+                            )
                     backward_start = time.time()
                     local_loss.backward()
                     backward_total_time += time.time() - backward_start    
