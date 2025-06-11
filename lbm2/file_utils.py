@@ -54,7 +54,7 @@ def get_metadata_file(path, shard_shuffle_seed=None):
     of = fsspec.open(path, "rb")
     with of as f:
         out = f.read()
-    out = [json.loads(o) for o in out.decode("utf-8").split("\n")[:-1]]
+    out = [json.loads(o) for o in out.decode("utf-8").split("\n")]
     if shard_shuffle_seed is not None:
         rng_gen = np.random.default_rng(shard_shuffle_seed)
         rng_gen.shuffle(out)
@@ -72,7 +72,7 @@ def save_checkpoint(
     curr_shard_idx_per_dataset, 
     samples_seen, 
     global_step, 
-    shard_shuffle_seed,
+    shard_shuffle_seed_per_dataset,
 ):
     if cfg.distributed.fsdp:
         save_policy = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
@@ -87,7 +87,7 @@ def save_checkpoint(
         "curr_shard_idx_per_dataset": curr_shard_idx_per_dataset,
         "samples_seen": samples_seen,
         "global_step": global_step,
-        "shard_shuffle_seed": shard_shuffle_seed,
+        "shard_shuffle_seed_per_dataset": shard_shuffle_seed_per_dataset,
     }
     optimizer_dict = {
         "checkpoint_num": checkpoint_num,

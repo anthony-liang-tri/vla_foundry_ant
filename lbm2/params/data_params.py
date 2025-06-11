@@ -42,6 +42,10 @@ def add_data_params(parser):
         default=10000,
     )
     parser.add_argument(
+        "--allow-multiple-epochs",
+        action="store_true",
+    )
+    parser.add_argument(
         "--num-workers",
         type=int,
         default=1,
@@ -57,6 +61,7 @@ class DataParams:
     tokenizer: str
     processor: str
     total_train_samples: int
+    allow_multiple_epochs: bool
     num_workers: int
 
     # These are defined in the add_params of other files but we use them here

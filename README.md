@@ -34,12 +34,11 @@ todos / thought dump:
 - check optimizer scaler
 [x] load multiple datasets
 - load dataset from path instead of manifest
-- load dataset with sampling
 - indicate training based on num epochs
-- sampling with replacement
 [x] mixing datasets
 [x] mixing modalities
-- shard shuffle seed
+[x] shard shuffle seed
+[x] multiple epochs over the dataset
 - hf wrapper
 
 - double check reproducibility / randomness
@@ -86,3 +85,6 @@ Known bugs / improvements
 - speed up pretokenized huggingface? 
 - torchcompile for accum_freq > 1
 - speed up vlm mask computation inside forward loop
+
+Ideas that probably won't be implemented
+- sampling with replacement --> Our sampling without replacement is now working robustly across different scenarios so this seems unnecessary.

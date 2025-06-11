@@ -89,18 +89,20 @@ def get_wds_dataloader(datastrings, num_samples_per_dataset, checkpoint_num, cfg
 def get_datastring_input(
     num_samples: int,
     curr_shard_idx_per_dataset: int,
+    shard_shuffle_seed_per_dataset: int,
     manifest_paths: str,
     dataset_weighting: str,
+    allow_multiple_epochs: str,
     num_workers_per_gpu: int,
     world_size: int,
-    shard_shuffle_seed: Optional[int],
 ):
-    manifests = [get_metadata_file(path, shard_shuffle_seed=shard_shuffle_seed) for path in manifest_paths]
+    manifests = [get_metadata_file(path, shard_shuffle_seed=seed) for path, seed in zip(manifest_paths, shard_shuffle_seed_per_dataset)]
     if dataset_weighting is None:
         dataset_weighting = [1 for i in range(len(manifests))]
     
     needed_samples_per_dataset = [int(np.ceil(dataset_weighting[i] * num_samples / sum(dataset_weighting))) for i in range(len(manifests))]
     next_shard_idx_per_dataset = copy.deepcopy(curr_shard_idx_per_dataset)
+    next_shard_shuffle_seed_per_dataset = copy.deepcopy(shard_shuffle_seed_per_dataset)
     shard_list_per_dataset = [[] for i in range(len(manifests))]
     num_samples_list_per_dataset = [[] for i in range(len(manifests))]
     total_num_workers = num_workers_per_gpu * world_size
@@ -116,8 +118,15 @@ def get_datastring_input(
                 num_samples_list_per_dataset[i].append(manifests[i][shard_idx]["num_sequences"])
                 curr_shard_idx_per_dataset[i] += 1
             except IndexError as e:
-                logging.error("Number of shards requested for a single epoch is more than the number of shards available.")
-                raise e
+                if allow_multiple_epochs:
+                    # Reshuffle and set index back to 0
+                    shard_shuffle_seed_per_dataset[i] += 1
+                    manifests[i] = get_metadata_file(manifest_paths[i], shard_shuffle_seed=shard_shuffle_seed_per_dataset[i])
+                    curr_shard_idx_per_dataset[i] = 0
+                    continue
+                else:
+                    logging.error("Number of shards requested for a single epoch is more than the number of shards available. Consider using --allow-multiple-epochs.")
+                    raise e
 
     for i in range(len(manifests)):
         # Ensure number of shards is a multiple of number of workers, so each worker has same number of shards.
@@ -125,8 +134,10 @@ def get_datastring_input(
         shard_list_per_dataset[i] = shard_list_per_dataset[i][:idx_div]
         num_samples_list_per_dataset[i] = num_samples_list_per_dataset[i][:idx_div]
 
-        # Put back unused shards.
+        # Only add used shards. Put back unused shards.
         next_shard_idx_per_dataset[i] += len(shard_list_per_dataset[i])
+        next_shard_shuffle_seed_per_dataset[i] += next_shard_idx_per_dataset[i] // len(manifests[i])
+        next_shard_idx_per_dataset[i] = next_shard_idx_per_dataset[i] % len(manifests[i])
 
     datastrings = []
     for i, manifest_path in enumerate(manifest_paths):
@@ -137,4 +148,4 @@ def get_datastring_input(
         datastrings.append(curr_datastring)
 
     num_samples_list_per_dataset = [sum(i) for i in num_samples_list_per_dataset]
-    return datastrings, num_samples_list_per_dataset, next_shard_idx_per_dataset
+    return datastrings, num_samples_list_per_dataset, next_shard_idx_per_dataset, next_shard_shuffle_seed_per_dataset

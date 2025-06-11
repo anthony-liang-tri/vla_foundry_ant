@@ -126,6 +126,7 @@ def main():
     done_training = global_step >= total_steps
     checkpoint_num = start_checkpoint_num
     curr_shard_idx_per_dataset = [0 for dataset in range(len(cfg.data.dataset_manifest))]
+    shard_shuffle_seed_per_dataset = [shard_shuffle_seed for dataset in range(len(cfg.data.dataset_manifest))]
     samples_seen = 0
     if cfg.experiment.resume_from_checkpoint is not None and not cfg.experiment.resume_weights_only:
         curr_shard_idx_per_dataset, samples_seen = load_data_chunks(cfg.experiment.resume_from_checkpoint)
@@ -141,14 +142,15 @@ def main():
         #     curr_num_samples = cfg.experiment.checkpoint_num_samples
         
         samples_per_checkpoint = cfg.experiment.total_train_samples // cfg.experiment.num_checkpoints
-        datastrings, num_samples_per_dataset, curr_shard_idx_per_dataset = get_datastring_input(
+        datastrings, num_samples_per_dataset, curr_shard_idx_per_dataset, shard_shuffle_seed_per_dataset = get_datastring_input(
             num_samples = samples_per_checkpoint,
             curr_shard_idx_per_dataset = curr_shard_idx_per_dataset, 
+            shard_shuffle_seed_per_dataset = shard_shuffle_seed_per_dataset,
             manifest_paths = cfg.data.dataset_manifest,
             dataset_weighting = cfg.data.dataset_weighting,
+            allow_multiple_epochs = cfg.data.allow_multiple_epochs,
             num_workers_per_gpu = cfg.data.num_workers,
             world_size = cfg.distributed.world_size,
-            shard_shuffle_seed = shard_shuffle_seed,
         )
         if is_master(cfg):
             logging.info(f"Now training on: {datastrings}")
@@ -175,7 +177,7 @@ def main():
         checkpoint_num += 1
         done_training = global_step >= total_steps
 
-        save_checkpoint(cfg, checkpoint_num, checkpoint_path, model, optimizer, datastrings, curr_shard_idx_per_dataset, samples_seen, global_step, shard_shuffle_seed)
+        save_checkpoint(cfg, checkpoint_num, checkpoint_path, model, optimizer, datastrings, curr_shard_idx_per_dataset, samples_seen, global_step, shard_shuffle_seed_per_dataset)
         if is_master(cfg) and cfg.experiment.remote_sync:
             remote_sync(experiment_path, os.path.join(cfg.experiment.remote_sync, experiment_name))
 
