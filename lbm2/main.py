@@ -12,7 +12,7 @@ from distributed import init_distributed_device, wrap_fsdp_ddp, is_master
 from models import create_model
 from optimizer import create_optimizer, load_optimizer
 from scheduler import create_scheduler
-from losses import CrossEntropyLossWithZLoss
+from losses import get_loss_function
 from data.dataloader import get_wds_dataloader, get_datastring_input
 from data.utils import load_data_chunks, epochs_to_samples
 from file_utils import save_checkpoint, load_model_checkpoint, remote_sync
@@ -111,6 +111,7 @@ def main():
         load_optimizer(cfg.experiment.resume_from_checkpoint, cfg.distributed.fsdp, model, optimizer)
 
     scheduler = create_scheduler(cfg.experiment, optimizer)
+    loss = get_loss_function(cfg.experiment.loss_function, cfg.experiment)
 
     if cfg.experiment.wandb and is_master(cfg):
         import wandb
@@ -123,11 +124,6 @@ def main():
             config=vars(cfg),
         )
         logging.debug("Finished loading wandb.")
-
-    loss = torch.nn.CrossEntropyLoss()
-    if cfg.experiment.z_loss_coefficient != 0.0:
-        logging.info("Using CrossEntropyLossWithZLoss.")
-        loss = CrossEntropyLossWithZLoss(cfg.experiment.z_loss_coefficient)
 
     done_training = global_step >= total_steps
     checkpoint_num = start_checkpoint_num

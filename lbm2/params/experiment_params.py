@@ -87,6 +87,12 @@ def add_experiment_params(parser):
         default=1.0e-8
     )
     parser.add_argument(
+        "--loss-function",
+        type=str,
+        default="cross_entropy",
+        choices=["cross_entropy"]
+    )
+    parser.add_argument(
         "--z-loss-coefficient",
         type=float,
         default=0.0,
@@ -160,6 +166,7 @@ class ExperimentParams:
     beta1: float
     beta2: float
     eps: float
+    loss_function: str
     z_loss_coefficient: float
     grad_clip_norm: float
     grad_checkpointing: bool

@@ -80,6 +80,10 @@ todos / thought dump:
 - kv cache for inference
 [x] allow for freezing parts of the VLM
 - prefix lm
+- double check if siglip loading step is correct (specifically intermediate layers)
+- make attention implementation cleaner / more unified
+[x] loss selector
+- in train loop: get_loss to merge both forward and loss
 
 Known bugs / improvements
 - speed up pretokenized huggingface? 

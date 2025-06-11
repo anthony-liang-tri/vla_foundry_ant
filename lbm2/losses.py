@@ -19,3 +19,15 @@ class CrossEntropyLossWithZLoss(CrossEntropyLoss):
 
     def forward(self, input: Tensor, target: Tensor) -> Tensor:
         return super().forward(input, target) + self.eps * torch.square(torch.logsumexp(input, dim=-1)).mean()
+
+
+def get_loss_function(loss_function_type, experiment_configs):
+    if loss_function_type == "cross_entropy":
+        if experiment_configs.z_loss_coefficient != 0.0:
+            loss = CrossEntropyLossWithZLoss(experiment_configs.z_loss_coefficient)
+        else:
+            loss = torch.nn.CrossEntropyLoss()
+    else:
+        raise ValueError(f"Loss function {loss_function_type} not supported.")
+    
+    return loss
