@@ -54,7 +54,10 @@ def get_metadata_file(path, shard_shuffle_seed=None):
     of = fsspec.open(path, "rb")
     with of as f:
         out = f.read()
-    out = [json.loads(o) for o in out.decode("utf-8").split("\n")]
+    out_split = out.decode("utf-8").split("\n")
+    if len(out_split[-1]) == 0:
+        out_split = out_split[:-1]
+    out = [json.loads(o) for o in out_split]
     if shard_shuffle_seed is not None:
         rng_gen = np.random.default_rng(shard_shuffle_seed)
         rng_gen.shuffle(out)

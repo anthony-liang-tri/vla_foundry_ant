@@ -34,7 +34,7 @@ todos / thought dump:
 - check optimizer scaler
 [x] load multiple datasets
 - load dataset from path instead of manifest
-- indicate training based on num epochs
+[x] indicate training based on num epochs
 [x] mixing datasets
 [x] mixing modalities
 [x] shard shuffle seed
@@ -62,7 +62,7 @@ todos / thought dump:
 - tests to be able to test out each component individually
 - tokenized dataset creation script
 [x] sagemaker launcher
-- check why the number of checkpoints isn't ways the same as what's indicated
+[x] check why the number of checkpoints isn't ways the same as what's indicated
 [x] check that inference didn't break while making changes + check vlm inference
 - double check webdataset speed if it's faster to conver to tensor inside the pipeline or return lists then convert outside
 - double check fp 16 bf 16

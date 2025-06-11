@@ -39,7 +39,12 @@ def add_data_params(parser):
     parser.add_argument(
         "--total-train-samples",
         type=int,
-        default=10000,
+        default=None,
+    )
+    parser.add_argument(
+        "--num-epochs",
+        type=int,
+        default=None
     )
     parser.add_argument(
         "--allow-multiple-epochs",
@@ -61,6 +66,7 @@ class DataParams:
     tokenizer: str
     processor: str
     total_train_samples: int
+    num_epochs: int
     allow_multiple_epochs: bool
     num_workers: int
 

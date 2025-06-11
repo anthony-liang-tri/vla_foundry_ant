@@ -9,7 +9,7 @@
 --dataset-modality text_untokenized \
 --vocab-size 151936 \
 --tokenizer Qwen/Qwen2.5-0.5B \
---total-train-samples 90_000 \
+--num-epochs 1 \
 --per-gpu-batch-size 8 \
 --global-batch-size 512 \
 --disable-wandb \

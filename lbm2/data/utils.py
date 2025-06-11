@@ -3,7 +3,7 @@ import logging
 import webdataset as wds
 from torch.utils.data import get_worker_info
 from multiprocessing import Value
-from file_utils import pt_load
+from file_utils import pt_load, get_metadata_file
 
 
 class SharedCheckpointCounter:
@@ -71,3 +71,11 @@ class deterministic_shuffle(wds.PipelineStage):
 def load_data_chunks(resume_from_checkpoint):
     checkpoint = pt_load(resume_from_checkpoint, map_location="cpu")
     return checkpoint["curr_shard_idx_per_dataset"], checkpoint["samples_seen"]
+
+
+def epochs_to_samples(manifest_paths, num_epochs):
+    manifests = [get_metadata_file(path) for path in manifest_paths]
+    num_samples = 0
+    for m in manifests:
+        num_samples += sum(i['num_sequences'] for i in m)
+    return num_samples * num_epochs

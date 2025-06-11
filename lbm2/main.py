@@ -14,7 +14,7 @@ from optimizer import create_optimizer, load_optimizer
 from scheduler import create_scheduler
 from losses import CrossEntropyLossWithZLoss
 from data.dataloader import get_wds_dataloader, get_datastring_input
-from data.utils import load_data_chunks
+from data.utils import load_data_chunks, epochs_to_samples
 from file_utils import save_checkpoint, load_model_checkpoint, remote_sync
 from train import train_one_checkpoint
 
@@ -38,6 +38,12 @@ def main():
         assert len(cfg.data.dataset_manifest) == len(cfg.data.dataset_weighting)
     if cfg.distributed.fsdp and not cfg.distributed.use_distributed:
         raise ValueError(f"--fsdp can only be specified in distributed mode.")
+    if cfg.data.num_epochs is not None and cfg.data.total_train_samples is not None:
+        raise ValueError("Specify either num_epochs or total_train_samples, but not both")
+    if cfg.data.num_epochs is not None:
+        total_train_samples = epochs_to_samples(cfg.data.dataset_manifest, cfg.data.num_epochs)
+        object.__setattr__(cfg.data, 'total_train_samples', total_train_samples)
+        object.__setattr__(cfg.experiment, 'total_train_samples', total_train_samples)
     
     # Do this before logging to out.log
     # This populates cfg.model 
@@ -135,11 +141,6 @@ def main():
     while not done_training:
         if is_master(cfg):
             logging.info(f"Start checkpoint {checkpoint_num}")
-
-        # if cfg.experiment.checkpoint_strategy == "epoch":
-        #     pass
-        # elif cfg.experiment.checkpoint_strategy == "samples":
-        #     curr_num_samples = cfg.experiment.checkpoint_num_samples
         
         samples_per_checkpoint = cfg.experiment.total_train_samples // cfg.experiment.num_checkpoints
         datastrings, num_samples_per_dataset, curr_shard_idx_per_dataset, shard_shuffle_seed_per_dataset = get_datastring_input(
@@ -154,6 +155,8 @@ def main():
         )
         if is_master(cfg):
             logging.info(f"Now training on: {datastrings}")
+            logging.info(f"Samples: {samples_seen} / {cfg.experiment.total_train_samples}")
+            logging.info(f"Samples in this checkpoint: {num_samples_per_dataset}")
         
         if cfg.distributed.use_distributed:
             all_datastrings = ["" for _ in range(cfg.distributed.world_size)]

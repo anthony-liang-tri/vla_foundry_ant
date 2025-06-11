@@ -122,12 +122,6 @@ def add_experiment_params(parser):
         default=20,
     )
     parser.add_argument(
-        "--checkpoint-strategy",
-        type=str,
-        choices=['epoch', 'steps', 'samples'],
-        default='samples',
-    )
-    parser.add_argument(
         "--num-checkpoints",
         type=int,
         default=5,
@@ -173,7 +167,6 @@ class ExperimentParams:
     wandb: bool
     wandb_project_name: str
     log_every_n_steps: int
-    checkpoint_strategy: str
     num_checkpoints: int
     remote_sync: str
     resume_from_checkpoint: str
@@ -181,6 +174,7 @@ class ExperimentParams:
 
     # These are defined in the add_params of other files but we use them here
     total_train_samples: int
+    num_epochs: int
 
     @classmethod
     def from_args(cls, args):
