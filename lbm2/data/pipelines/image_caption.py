@@ -39,13 +39,13 @@ class ImageCaptionPipeline(BaseWebDatasetPipeline):
             }),
             wds.batched(self.batch_size, partial=False),
             wds.map(lambda sample: self.processor(
-                sample['image'], 
-                sample['text'], 
+                images=sample['image'], 
+                text=sample['text'], 
                 return_tensors='pt',
                 padding='max_length',
                 padding_side='right',
                 max_length=self.data_configs.seq_len+1,
-            )),
+            ), handler=log_and_continue),
             wds.map(lambda sample: {
                 "input_ids": sample["input_ids"],
                 "attention_mask": sample["attention_mask"],
