@@ -58,7 +58,7 @@ todos / thought dump:
 - double check if siglip loading step is correct (specifically intermediate layers)
 - make attention implementation cleaner / more unified
 [x] loss selector
-- in train loop: get_loss to merge both forward and loss
+- support distributed mode without FSDP
 
 Known bugs / improvements
 - speed up pretokenized huggingface? 
