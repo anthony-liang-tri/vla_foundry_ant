@@ -105,7 +105,7 @@ The dataset can be either local (not recommended) or on S3 (recommended). An exa
 During dataloading, the code will read `manifest.jsonl`, shuffle the rows, then select the appropriate number of tar files for the given number of training steps. 
 
 #### 2.1 Multiple Datasets
-Use the `--dataset-manifest` argument to indicate which dataset to use for training. To use more than one dataset, you can supply multiple manifests comma-separated. For example, `--dataset-manifest s3://tri-ml-datasets/datasets/datacompdr_1b/manifest.jsonl,s3://some-other-dataset/manifest.jsonl`. 
+Use the `--dataset-manifest` argument to indicate which dataset to use for training. To use more than one dataset, you can supply multiple comma-separated manifests. For example, `--dataset-manifest s3://tri-ml-datasets/datasets/datacompdr_1b/manifest.jsonl,s3://some-other-dataset/manifest.jsonl`. 
 
 Webdatasets also supports different dataset ratios. This is done through the `--dataset-weighting` argument. For example, `--dataset-weighting 0.4,0.6`.
 
@@ -138,7 +138,7 @@ for ckpt in range(num_checkpoints):
     save_checkpoint(model)
 ```
 - `create_model()` -- The [create_model](lbm2/models/__init__.py) function creates the appropriate model based on the `--model-type` argument and the other `cfg.model` arguments. 
-- `datastring` -- This is a string containing a list of the tar files to be loaded for the current checkpoint. A new datastring is created at the beginning of every checkpoint. If using multiple datasets, this is a list of comma-separated strings. An example is shown below.
+- `datastring` -- This is a string containing a list of the tar files to be loaded for the current checkpoint. A new datastring is created at the beginning of every checkpoint. If using multiple datasets, this is a list of comma-separated strings. A sample datastring is shown below.
 ```bash
 ['pipe:aws s3 cp s3://tri-ml-datasets/datasets/datacompdr_1b/{00000037,00000078,00000005,00000099,00000015,00000007,00000063}.tar -']
 ```
@@ -147,9 +147,12 @@ for ckpt in range(num_checkpoints):
 #### 5.1 Batch Size / Accumulation
 - Global batch size is important -- it's a key training hyperparameter.
 - Per gpu batch size is important -- it affects training speed.
-- Accumulation in itself is less important -- its key role is to make the math adds up when your per gpu batch size is not consistent with your global batch size.
+- Accumulation in itself is less important -- its key role is to make sure the math adds up when your per gpu batch size is not consistent with your global batch size.
 
 Given these, we support setting both the `--per-gpu-batch-size` (try as high as possible), as well as the `--global-batch-size`. Accumulation is computed automatically.
 
-### 6. Tests
+### 6. Logging
+Logging is done automatically to [wandb](wandb.ai). We use `samples_per_sec_per_gpu` as the main measure of speed. To disable logging, set the `--disable-wandb` flag.  
+
+### 7. Tests
 (todo)
