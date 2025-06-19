@@ -90,7 +90,7 @@ dataset_name/
 └── ...
 ```
 
-In the directory above, the `unique_name_or_has_1_...` files make up the first sample, the `unique_name_or_has_2_...` make up the second sample, and so on. Each tar file can have hundreds or thousands of samples. 
+In the directory above, the `unique_name_or_hash_1_...` files make up the first sample, the `unique_name_or_hash_2_...` files make up the second sample, and so on. Each tar file can have hundreds or thousands of samples. 
 
 The `manifest.jsonl` provides an overview of the tar files as follows:
 ```
@@ -102,7 +102,13 @@ The `manifest.jsonl` provides an overview of the tar files as follows:
 
 The dataset can be either local (not recommended) or on S3 (recommended). An example is `s3://tri-ml-datasets/datasets/datacompdr_1b/`.
 
-During dataloading, the code will read manifest.jsonl, shuffle the rows, then select the appropriate number of tar files for the given number of training steps. 
+During dataloading, the code will read `manifest.jsonl`, shuffle the rows, then select the appropriate number of tar files for the given number of training steps. 
+
+#### 2.1 Multiple Datasets
+Use the `--dataset-manifest` argument to indicate which dataset to use for training. To use more than one dataset, you can supply multiple manifests comma-separated. For example, `--dataset-manifest s3://tri-ml-datasets/datasets/datacompdr_1b/manifest.jsonl,s3://some-other-dataset/manifest.jsonl`. 
+
+Webdatasets also supports different dataset ratios. This is done through the `--dataset-weighting` argument. For example, `--dataset-weighting 0.4,0.6`.
+
 
 ### 3. Dataloading Pipeline
 We use [webdatasets](https://github.com/webdataset/webdataset) to load the data. Each modality (e.g., image+caption, interleaved, image+actions) has its own pipeline where all the processing steps are defined at a high-level. This involves steps like untarring, shuffling, batching, etc. An example is [lbm2/data/pipelines/image_caption.py](lbm2/data/pipelines/image_caption.py). 
@@ -120,5 +126,30 @@ ckpt = "s3://(path-here)/checkpoints/checkpoint_5.pt"
 load_model_checkpoint(model, ckpt, cfg.experiment.seed, cfg.distributed)
 ```
 
-### 5. Tests
+### 5. Training
+At a very high level, training logic is as follows:
+```python
+model = create_model(cfg)
+
+for ckpt in range(num_checkpoints):
+    datastring = get_datastring(cfg)
+    dataloader = get_dataloader(datastring)
+    train_one_checkpoint(model, dataloader)
+    save_checkpoint(model)
+```
+- `create_model()` -- The [create_model](lbm2/models/__init__.py) function creates the appropriate model based on the `--model-type` argument and the other `cfg.model` arguments. 
+- `datastring` -- This is a string containing a list of the tar files to be loaded for the current checkpoint. A new datastring is created at the beginning of every checkpoint. If using multiple datasets, this is a list of comma-separated strings. An example is shown below.
+```bash
+['pipe:aws s3 cp s3://tri-ml-datasets/datasets/datacompdr_1b/{00000037,00000078,00000005,00000099,00000015,00000007,00000063}.tar -']
+```
+- `train_one_checkpoint()` -- This is defined in [lbm2/train.py](lbm2/train.py). Operations such as model forward, model backward, and loss calculation happen in here.
+
+#### 5.1 Batch Size / Accumulation
+- Global batch size is important -- it's a key training hyperparameter.
+- Per gpu batch size is important -- it affects training speed.
+- Accumulation in itself is less important -- its key role is to make the math adds up when your per gpu batch size is not consistent with your global batch size.
+
+Given these, we support setting both the `--per-gpu-batch-size` (try as high as possible), as well as the `--global-batch-size`. Accumulation is computed automatically.
+
+### 6. Tests
 (todo)

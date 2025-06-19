@@ -178,7 +178,7 @@ def main():
 
     environment = {
         "SM_USE_RESERVED_CAPACITY": "1",
-        "WANDB_PROJECT": "sedrick",
+        "WANDB_PROJECT": "lbm2",
     }
     estimator = PyTorch(
         entry_point="lbm2/main.py",

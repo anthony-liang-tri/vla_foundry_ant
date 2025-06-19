@@ -120,7 +120,7 @@ def add_experiment_params(parser):
     parser.add_argument(
         "--wandb-project-name",
         type=str,
-        default="sedrick",
+        default="lbm2",
     )
     parser.add_argument(
         "--log-every-n-steps",
