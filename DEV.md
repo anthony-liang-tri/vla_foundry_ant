@@ -59,6 +59,8 @@ todos / thought dump:
 - make attention implementation cleaner / more unified
 [x] loss selector
 - support distributed mode without FSDP
+- fix naming
+- text-conditioned stable diffusion
 
 Known bugs / improvements
 - speed up pretokenized huggingface? 
