@@ -105,7 +105,7 @@ During dataloading, the code will read manifest.jsonl, shuffle the rows, then se
 ### 3. Dataloading Pipeline
 We use webdatasets to load. Each modality has its own pipeline where all the processing steps are defined at a high-level. This involves steps like untarring, shuffling, batching, etc. An example is [lbm2/data/pipelines/image_caption.py](lbm2/data/pipelines/image_caption.py). 
 
-You wil notice that in that file, there's a file, there is a `self.processor` class. This is where all the lower-level processing operations (e.g., normalization) are abstracted to. An example is [lbm2/data/processor/stable_diffusion_processor.py](lbm2/data/processor/stable_diffusion_processor.py).
+You wil notice that in that file, there's a file, there is a `self.processor` class. This is where all the lower-level processing operations (e.g., normalization) are abstracted to. An example is [lbm2/data/processor/stable_diffusion_processor.py](https://github.com/TRI-ML/lbm2/blob/sedrick/diffusion/lbm2/data/processor/stable_diffusion_processor.py).
 
 ### 4. Model Saving / Loading
 Models checkpoints are saved locally to the path in `cfg.experiment.save_path`. If `cfg.experiment.remote_sync` is set, then it will save to that path on s3 as well. Saves are done on every checkpoint. The number of checkpoints is determined by the `--num-checkpoints` argument, and the size of a checkpoint is equal to `--total-train-samples` divided by `--num-checkpoints`.
