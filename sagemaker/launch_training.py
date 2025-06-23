@@ -42,6 +42,7 @@ def get_image(user, profile="default", region="us-east-1"):
     account = subprocess.getoutput(
         f"aws --region {region} --profile {profile} sts get-caller-identity --query Account --output text"
     )
+    assert account.isdigit(), f"Invalid account value: {account}"
     docker_dir = Path(__file__).parent
     algorithm_name = f"{user}-{NAME}"
     dockerfile_base = docker_dir / "Dockerfile"
