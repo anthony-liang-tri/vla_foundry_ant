@@ -1,4 +1,4 @@
-~/anaconda3/envs/vla3/bin/torchrun --nproc_per_node=8 --nnodes=1 lbm2/main.py \
+.venv/bin/torchrun --nproc_per_node=8 --nnodes=1 lbm2/main.py \
 --model vlm_3b \
 --model-type vlm \
 --processor google/paligemma-3b-pt-224 \
