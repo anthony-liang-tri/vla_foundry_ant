@@ -1,4 +1,4 @@
-~/anaconda3/envs/vla2/bin/torchrun --nproc_per_node=8 --nnodes=1 lbm2/main.py \
+.venv/bin/torchrun --nproc_per_node=8 --nnodes=1 lbm2/main.py \
 --model Qwen/Qwen2.5-0.5B \
 --model-type transformer_hf \
 --fsdp \
