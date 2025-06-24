@@ -63,7 +63,9 @@ The sections below highlight several key design choices and functionalities of t
 ### 1. Param/Argument Structure
 Params are defined in the [lbm2/params](lbm2/params) folder. We use nested parameters with pure argparse. There is a high level `cfg` dataclass object in [lbm2/main.py](lbm2/main.py). This dataclass has attributes which are dataclasses themselves (e.g., `cfg.model`, `cfg.experiment`). Within `cfg.model` are the actual arguments like `cfg.model.hidden_dim`.
 
-All arguments are supplied using the standard argparse argument passing (i.e., `--argument-name`). The `parser.add_argument` for any given argument is defined only once, but the argument can be shared among multiple dataclasses by defining it as a class attribute. For example, we can have both `cfg.model.vocab_size` and `cfg.data.vocab_size`. To add a new argument, first select the appropriate dataclass, then (1) add the `parser.add_argument` lines, and (2) add the argument as an attribute to the class. 
+All arguments are supplied using the standard argparse argument passing (i.e., `--argument-name`). The `parser.add_argument` for any given argument is defined only once, but the argument can be shared among multiple dataclasses by defining it as a class attribute. For example, we can have both `cfg.model.vocab_size` and `cfg.data.vocab_size`. To make arguments easier to track, all arguments are present all the time, even though they are not used. For example, `cfg.model.vit_hidden_dim` will still exist even though the model is not a VLM. 
+
+To add a new argument, first select the appropriate dataclass, then (1) add the `parser.add_argument` lines, and (2) add the argument as an attribute to the class. Arguments are immutable by design, and we recommend working around this. Consider a situation where we want to dynamically compute `--total-train-samples` based on `--num-epochs`. Instead of setting `cfg.data.total_train_samples = X`, we recommand setting a new `total_train_samples` variable. If really necessary, `object.__setattr__` can be used to modify an immutable argument.
 
 
 ### 2. Data
