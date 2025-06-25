@@ -179,9 +179,9 @@ def get_attn_func(
         ), "must provide attn-activation, attn-seq-scalar, attn-seq-scalar-alpha"
         return partial(
             custom_attn,
-            attn_activation,
-            attn_seq_scalar,
-            alpha,
+            attn_activation=attn_activation,
+            attn_seq_scalar=attn_seq_scalar,
+            alpha=alpha,
         )
     else:
         raise ValueError(f"Unsupported attn-name: {attn_name}")

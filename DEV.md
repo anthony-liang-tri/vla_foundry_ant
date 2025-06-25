@@ -40,7 +40,7 @@ todos / thought dump:
 [x] check why the number of checkpoints isn't ways the same as what's indicated
 [x] check that inference didn't break while making changes + check vlm inference
 - double check webdataset speed if it's faster to conver to tensor inside the pipeline or return lists then convert outside
-- double check fp 16 bf 16
+- double check fp 16 bf 16. check that resuming the model maintains this. 
 - precompute masks if static
 - text intermediate layer as parameter
 - maybe support processor_configs instead of merging into data/model/vit?

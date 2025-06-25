@@ -12,7 +12,7 @@ cfg = load_params_from_json("s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/vl
 object.__setattr__(cfg.model, 'processor', 'google/paligemma-3b-pt-224')
 model = create_model(cfg.model)
 
-ckpt = "s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/vlm_paligemma_3b/2025_06_09-01_54_30-model_vlm-lr_0.0001-bsz_64/checkpoints/checkpoint_1.pt"
+ckpt = "s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/vlm_paligemma_3b/2025_06_09-01_54_30-model_vlm-lr_0.0001-bsz_64/checkpoints/checkpoint_2.pt"
 load_model_checkpoint(model, ckpt, cfg.experiment.seed, cfg.distributed)
 
 
