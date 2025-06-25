@@ -3,14 +3,13 @@
 This was put together from some combination of [MBM](https://github.com/TRI-ML/mbm) and [nanoVLM](https://github.com/huggingface/nanoVLM/tree/main).
 
 ## Installation
-
 We recommend using [uv](https://docs.astral.sh/uv/getting-started/installation/) for environment management. Please follow the uv documentation for installation. Once uv is installed, create a Python 3.10 virtual environment using uv and install the project dependencies with the command below:
-
 ```bash
-uv venv --python 3.10
-source .venv/bin/activate
-uv pip install -r requirements.txt
+uv sync
+uv pip install -e .
 ```
+The recommended workflow is to run scripts directly with `uv` via `uv run <script> <args>`.
+Alternatively, to activate the virtual env you can then run `source .venv/bin/activate` then proceed as usual (though should still use `uv` for package and depedendency management).
 
 ## Quickstart
 The main entrypoint is `lbm2/main.py`.
@@ -46,15 +45,24 @@ torchrun --nproc_per_node=8 --nnodes=1 lbm2/main.py \
 See `./examples` for more examples.
 
 ### Running on SageMaker
-To install SageMaker,
-```
-pip install install/sagemaker-2.240.1.dev0.tar
+Create a `secrets.env` file in the root directory:
+```bash
+WANDB_API_KEY=<your wandb key>
+HF_TOKEN=<your hf token>
 ```
 
-To launch something on SageMaker, the launch file is [sagemaker/launch_training.py](sagemaker/launch_training.py). Pass arguments in a similar way as you would for a local run. 
+To launch something on SageMaker, the launch file is [sagemaker/launch_training.py](sagemaker/launch_training.py).
+Pass arguments in a similar way as you would for a local run.
+Note that you have to run this with `uv run --group sagemaker`. This creates a temporary venv used in running the script
+where sagemaker is installed. The reason to do this is so that the local and sagemaker environments match
+(when sagemaker is installed it changes other dependencies).
 
 ```bash
-python sagemaker/launch_training.py --user your.user.name --instance-count 4 --instance-type p4de --insert-your-arguments-here
+uv run --group sagemaker sagemaker/launch_training.py \
+--user your.user.name \
+--instance-count 1 \
+--instance-type p4de \
+--insert-your-arguments-here
 ```
 
 ## Repo Structure and Implementation

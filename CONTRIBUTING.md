@@ -43,6 +43,38 @@ git commit --amend --no-edit
 git push -f origin
 ```
 
+## Updating requirements
+### Using `uv`
+See `uv` [docs](https://docs.astral.sh/uv/concepts/projects/dependencies/) for details.
+
+#### Adding a requirement
+```bash
+uv add <dep>
+# For example, here's adding httpx:
+uv add httpx
+# Or adding httpx with the version specified:
+# (This is also how you update the version).
+uv add "httpx>=0.20"
+```
+This adds the requirement to `pyproject.toml` and updates the `uv.lock` file.
+The `uv.lock` file tracks the exact versions of dependencies so that the build
+is reproducible across machines.
+After doing this you'll need to commit the updated `uv.lock` file to git.
+A lot of other functionality in pip also exists (e.g., system dependent requirements).
+Again, see the `uv` docs for details.
+
+#### Removing a requirement
+```bash
+uv remove <dep>
+# For example, here's removing httpx:
+uv remove httpx
+```
+Again, this updates `pyproject.toml` and `uv.lock`.
+After doing this you'll need to commit the updated `uv.lock` file to git.
+
+#### Generating the `uv.lock` file
+If the `uv.lock` file doesn't exist, it can be created by running `uv sync`.
+
 ## Guidelines
 1. Code should generally have test coverage.
 2. Code should generally be documented and follow the style guidelines below.
