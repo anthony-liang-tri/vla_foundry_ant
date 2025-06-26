@@ -26,7 +26,6 @@ jobs:
       run: |
         # Use `--frozen` to avoid updating the lockfile at all.
         uv sync --frozen
-        uv pip install -e .
 
     - name: Run tests
       run: |
