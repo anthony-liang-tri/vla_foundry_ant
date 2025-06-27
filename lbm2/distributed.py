@@ -117,12 +117,27 @@ def random_seed(seed=42, rank=0):
     np.random.seed(seed + rank)
     random.seed(seed + rank)
 
+def get_model_precision(cfg):
+    """
+    Determine the appropriate model precision based on distributed configuration.
+    Returns the dtype that should be used for model parameters.
+    """
+    if cfg.distributed.fsdp:
+        # FSDP handles precision through MixedPrecision policy
+        if cfg.distributed.fsdp_amp or cfg.distributed.fsdp_pure_bf16:
+            return torch.bfloat16
+        else:
+            return torch.float32  # Default FSDP precision
+    else:
+        # For DDP and single GPU, use bfloat16 by default to match FSDP behavior
+        return torch.bfloat16
+
 def wrap_fsdp_ddp(model, device, cfg):
     if cfg.distributed.fsdp:
         # from https://pytorch.org/blog/efficient-large-scale-training-with-pytorch/
         transformer_auto_wrapper_policy = functools.partial(
             transformer_auto_wrap_policy,
-            transformer_layer_cls=get_model_block(cfg.model.model_type, cfg.model.model),
+            transformer_layer_cls=get_model_block(cfg.model.model_type, cfg.model),
         )
         # tries to follow gopher...
         mp_policy = None

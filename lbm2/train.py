@@ -93,6 +93,10 @@ def train_one_checkpoint(
                     ignore_mask = (targets == dataloader.pad_token_id) | (targets == dataloader.image_token_id)
                     targets = targets.masked_fill(ignore_mask, -100)
                     total_loss = loss(logits.reshape(-1, cfg.model.vocab_size), targets.reshape(-1))
+                elif cfg.model.model_type == "stable_diffusion":
+                    noise = torch.randn_like(image)
+                    predicted_noise = model(input_ids=input_ids, image=image, attention_mask=attention_mask, noise=noise)
+                    total_loss = loss(predicted_noise, noise)
             backward_start = time.time()
             total_loss.backward()
             backward_time_m.update(time.time() - backward_start)
@@ -136,6 +140,10 @@ def train_one_checkpoint(
                                 loss(logits.reshape(-1, cfg.model.vocab_size), targets_ii.reshape(-1))
                                 * (inputs_ii.shape[0] / input_ids.shape[0])
                             )
+                        elif cfg.model.model_type == "stable_diffusion":
+                            noise = torch.randn_like(images_ii)
+                            predicted_noise = model(input_ids=inputs_ii, image=images_ii, attention_mask=mask_ii, noise=noise)
+                            local_loss = loss(predicted_noise, noise) * (inputs_ii.shape[0] / input_ids.shape[0])
                     backward_start = time.time()
                     local_loss.backward()
                     backward_total_time += time.time() - backward_start    

@@ -1,5 +1,6 @@
 from dataclasses import dataclass, fields
-    
+from typing import List
+
 
 def add_model_params(parser):
     parser.add_argument(
@@ -134,6 +135,16 @@ class ModelParams:
     vit_cls_flag: bool
     projector_pixel_shuffle_factor: int
 
+    diffusion_use_diffusers_unet: bool
+    diffusion_use_diffusers_scheduler: bool
+    diffusion_noise_scheduler_num_timesteps: int
+    diffusion_noise_scheduler_beta_start: int
+    diffusion_noise_scheduler_beta_end: int
+    diffusion_unet_in_channels: int
+    diffusion_unet_out_channels: int
+    diffusion_unet_time_emb_dim: int
+    diffusion_unet_text_emb_dim: int
+    diffusion_unet_channels: List[int]
 
     @classmethod
     def from_args(cls, args):

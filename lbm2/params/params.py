@@ -7,6 +7,7 @@ from params.distributed_params import DistributedParams, add_distributed_params
 from params.experiment_params import ExperimentParams, add_experiment_params
 from params.model_params import ModelParams, add_model_params
 from params.extra.vit_params import ViTParams, add_vit_params
+from params.extra.diffusion_params import DiffusionParams, add_diffusion_params
 
 
 @dataclass
@@ -19,6 +20,7 @@ class Params:
     
     # extra
     vit: ViTParams
+    diffusion: DiffusionParams
 
     def asdict(self):
         return asdict(self)
@@ -31,6 +33,7 @@ def get_args():
     add_experiment_params(parser)
     add_model_params(parser)
     add_vit_params(parser)
+    add_diffusion_params(parser)
     args = parser.parse_args()
     return args
 
@@ -42,6 +45,7 @@ def get_params(args):
         experiment=ExperimentParams.from_args(args),
         model=ModelParams.from_args(args),
         vit=ViTParams.from_args(args),
+        diffusion=DiffusionParams.from_args(args),
     )
     handle_listtype_params(cfg)
     return cfg
@@ -73,11 +77,18 @@ def load_params_from_json(params_path):
         experiment=ExperimentParams(**filter_missing(ExperimentParams, raw.get('experiment', {}))),
         model=ModelParams(**filter_missing(ModelParams, raw.get('model', {}))),
         vit=ViTParams(**filter_missing(ViTParams, raw.get('vit', {}))),
+        diffusion=DiffusionParams(**filter_missing(DiffusionParams, raw.get('diffusion', {}))),
     )
 
 def handle_listtype_params(cfg):
-    object.__setattr__(cfg.data, 'dataset_manifest', cfg.data.dataset_manifest.split(','))
-    object.__setattr__(cfg.data, 'dataset_modality', cfg.data.dataset_modality.split(','))
+    if cfg.data.dataset_manifest is not None:
+        object.__setattr__(cfg.data, 'dataset_manifest', cfg.data.dataset_manifest.split(','))
+    if cfg.data.dataset_modality is not None:
+        object.__setattr__(cfg.data, 'dataset_modality', cfg.data.dataset_modality.split(','))
     if cfg.data.dataset_weighting is not None:
         weighting = [float(i) for i in cfg.data.dataset_weighting.split(',')]
         object.__setattr__(cfg.data, 'dataset_weighting', weighting)
+    if cfg.diffusion.diffusion_unet_channels is not None:
+        unet_channels = [int(i) for i in cfg.diffusion.diffusion_unet_channels.split(',')]
+        object.__setattr__(cfg.diffusion, 'diffusion_unet_channels', unet_channels)
+        object.__setattr__(cfg.model, 'diffusion_unet_channels', unet_channels)

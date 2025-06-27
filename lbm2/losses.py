@@ -27,6 +27,8 @@ def get_loss_function(loss_function_type, experiment_configs):
             loss = CrossEntropyLossWithZLoss(experiment_configs.z_loss_coefficient)
         else:
             loss = torch.nn.CrossEntropyLoss()
+    elif loss_function_type == "mse":
+        loss = torch.nn.MSELoss()
     else:
         raise ValueError(f"Loss function {loss_function_type} not supported.")
     

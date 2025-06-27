@@ -1,0 +1,21 @@
+~/anaconda3/envs/vla3/bin/torchrun --nproc_per_node=8 --nnodes=1 lbm2/main.py \
+--model stable_diffusion \
+--model-type stable_diffusion \
+--processor stable_diffusion \
+--loss-function mse \
+--fsdp \
+--fsdp-use-orig-params \
+--fsdp-limit-all-gathers \
+--dataset-type webdataset \
+--dataset-manifest s3://tri-ml-datasets/datasets/datacompdr_1b/manifest.jsonl \
+--dataset-modality image_caption \
+--total-train-samples 500_000_000 \
+--num-checkpoints 10 \
+--per-gpu-batch-size 32 \
+--global-batch-size 2048 \
+--vit-img-size 128 \
+--lr 1e-4 \
+--lr-cooldown-end 1e-6 \
+--seq-len 64 \
+--remote-sync s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/stable_diffusion \
+--disable-wandb

@@ -17,6 +17,7 @@ from lbm2.params.distributed_params import DistributedParams, add_distributed_pa
 from lbm2.params.experiment_params import ExperimentParams, add_experiment_params
 from lbm2.params.model_params import ModelParams, add_model_params
 from lbm2.params.extra.vit_params import ViTParams, add_vit_params
+from lbm2.params.extra.diffusion_params import DiffusionParams, add_diffusion_params
 
 NAME = "lbm2"
 INSTANCE_MAPPER = {
@@ -97,6 +98,7 @@ def parse_args():
     add_experiment_params(parser)
     add_model_params(parser)
     add_vit_params(parser)
+    add_diffusion_params(parser)
     args = parser.parse_args()
     return args
 
@@ -106,7 +108,7 @@ def main():
 
     # Check this first to avoid waiting for Docker build.
     hyperparameters = {}
-    for paramgroup in [DataParams, DistributedParams, ExperimentParams, ModelParams, ViTParams]:
+    for paramgroup in [DataParams, DistributedParams, ExperimentParams, ModelParams, ViTParams, DiffusionParams]:
         for i in fields(paramgroup):
             if i.name in args:
                 if getattr(args, i.name) is False or getattr(args, i.name) is None:

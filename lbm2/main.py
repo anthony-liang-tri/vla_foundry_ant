@@ -8,7 +8,7 @@ from logger import setup_logging
 
 from params.params import get_params, get_args
 from utils import get_experiment_name
-from distributed import init_distributed_device, wrap_fsdp_ddp, is_master
+from distributed import init_distributed_device, wrap_fsdp_ddp, is_master, get_model_precision
 from models import create_model
 from optimizer import create_optimizer, load_optimizer
 from scheduler import create_scheduler
@@ -80,6 +80,8 @@ def main():
 
     if cfg.distributed.use_distributed:
         model = wrap_fsdp_ddp(model, device, cfg)
+    else:
+        model = model.to(device, dtype=get_model_precision(cfg))
 
     # optionally resume model from a checkpoint
     start_checkpoint_num, global_step = 0, 0

@@ -5,7 +5,6 @@ secrets.env
 wandb
 experiments
 outputs
-data
 results
 
 # System files

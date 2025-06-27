@@ -46,12 +46,10 @@ todos / thought dump:
 - maybe support processor_configs instead of merging into data/model/vit?
 [x] load siglip weights
 [x] load paligemma weights
-- user-specified processor instead of loading from existing
+[x] user-specified processor instead of loading from existing
 [x] log which tar files are used in which checkpoints
 - support processors beyond just pali gemma
 [x] vlm inference
-- action pipeline
-- diffusion policy simple implementation
 - kv cache for inference
 [x] allow for freezing parts of the VLM
 - prefix lm
@@ -60,7 +58,14 @@ todos / thought dump:
 [x] loss selector
 - support distributed mode without FSDP
 - fix naming
+
+Actions
+- action dataloader pipeline
+- diffusion policy implementation
+
+Diffusion
 - text-conditioned stable diffusion
+- flow matching
 
 Known bugs / improvements
 - speed up pretokenized huggingface? 

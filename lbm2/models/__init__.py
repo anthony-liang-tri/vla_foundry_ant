@@ -7,6 +7,11 @@ from models.vit import ViT
 from models.vit_hf import ViTHF
 from models.vlm import VLM
 from models.vlm_hf import VLMHF
+from models.diffusion.unet import UNet, ResnetBlock, SelfAttentionBlock, CrossAttentionBlock
+from models.diffusion.unet_diffusers import UNetDiffusers
+from models.diffusion.noise_scheduler import NoiseSchedulerDDPM
+from models.diffusion.noise_scheduler_diffusers import NoiseSchedulerDDPMDiffusers
+from models.diffusion.stable_diffusion import StableDiffusion
 
 
 def create_model(model_configs):
@@ -44,17 +49,27 @@ def create_model(model_configs):
         model = VLM(model_configs, transformer, vit)
     elif model_configs.model_type == "vlm_hf":
         model = VLMHF(model_configs)
+    elif model_configs.model_type == "stable_diffusion":
+        if model_configs.diffusion_use_diffusers_unet:
+            unet = UNetDiffusers(model_configs)
+        else:
+            unet = UNet(model_configs)
+        if model_configs.diffusion_use_diffusers_scheduler:
+            noise_scheduler = NoiseSchedulerDDPMDiffusers(model_configs)
+        else:
+            noise_scheduler = NoiseSchedulerDDPM(model_configs)
+        model = StableDiffusion(model_configs, noise_scheduler, unet)
     else:
         raise ValueError(f"{model_configs.model_type} not supported!")
     return model
 
 
-def get_model_block(model_type, model_name):
+def get_model_block(model_type, model_configs):
     if model_type == "transformer":
         return {TransformerBlock} 
     elif model_type == "transformer_hf":
         from transformers import AutoConfig, AutoModelForCausalLM
-        config = AutoConfig.from_pretrained(model_name)
+        config = AutoConfig.from_pretrained(model_configs.model)
         model = AutoModelForCausalLM.from_config(config)
         for name, module in model.model.named_modules():
             if isinstance(module, nn.ModuleList) and len(module) > 0:
@@ -64,7 +79,7 @@ def get_model_block(model_type, model_name):
         return {TransformerBlock}
     elif model_type == "vlm_hf":
         from transformers import AutoConfig, AutoModelForVision2Seq
-        config = AutoConfig.from_pretrained(model_name)
+        config = AutoConfig.from_pretrained(model_configs.model)
         model = AutoModelForVision2Seq.from_config(config)
         for attr in ["language_model", "text_model"]:
             if hasattr(model.model, attr):
@@ -72,5 +87,23 @@ def get_model_block(model_type, model_name):
                     if isinstance(module, nn.ModuleList) and len(module) > 0:
                         return {type(module[0])}
         raise ValueError("Could not find model block class.")
+    elif model_type == "stable_diffusion":
+        if model_configs.diffusion_use_diffusers_unet:
+            from diffusers.models.unets.unet_2d_blocks import (
+                DownBlock2D, 
+                UpBlock2D, 
+                UNetMidBlock2D,
+                AttnUpBlock2D,
+                AttnDownBlock2D,
+            )
+            return {
+                DownBlock2D,
+                UpBlock2D, 
+                UNetMidBlock2D,
+                AttnUpBlock2D,
+                AttnDownBlock2D,
+            }
+        else:
+            return {ResnetBlock, SelfAttentionBlock, CrossAttentionBlock}
     else:
         raise ValueError(f"get_model_block (used for FSDP) not supported for {model_type}")

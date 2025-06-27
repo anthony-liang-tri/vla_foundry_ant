@@ -90,7 +90,7 @@ def add_experiment_params(parser):
         "--loss-function",
         type=str,
         default="cross_entropy",
-        choices=["cross_entropy"]
+        choices=["cross_entropy", "mse"]
     )
     parser.add_argument(
         "--z-loss-coefficient",

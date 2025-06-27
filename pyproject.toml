@@ -19,6 +19,8 @@ dependencies = [
     "matplotlib",
     "ruff>=0.12.0",
     "pytest>=8.4.1",
+    "diffusers>=0.34.0",
+    "einops>=0.8.1",
 ]
 
 [dependency-groups]
