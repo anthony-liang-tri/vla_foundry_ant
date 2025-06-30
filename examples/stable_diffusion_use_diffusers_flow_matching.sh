@@ -1,0 +1,23 @@
+.venv/bin/torchrun --nproc_per_node=8 --nnodes=1 lbm2/main.py \
+--model stable_diffusion \
+--model-type stable_diffusion \
+--processor stable_diffusion \
+--diffusion-use-diffusers-unet \
+--diffusion-use-flow-matching-scheduler \
+--loss-function mse \
+--fsdp \
+--fsdp-use-orig-params \
+--fsdp-limit-all-gathers \
+--dataset-type webdataset \
+--dataset-manifest s3://tri-ml-datasets/datasets/datacompdr_1b/manifest.jsonl \
+--dataset-modality image_caption \
+--total-train-samples 50_000_000 \
+--num-checkpoints 10 \
+--per-gpu-batch-size 16 \
+--global-batch-size 1024 \
+--vit-img-size 128 \
+--lr 1e-3 \
+--lr-cooldown-end 1e-6 \
+--seq-len 64 \
+--remote-sync s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/stable_diffusion \
+--disable-wandb

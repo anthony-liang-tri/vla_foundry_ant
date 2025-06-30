@@ -137,6 +137,7 @@ class ModelParams:
 
     diffusion_use_diffusers_unet: bool
     diffusion_use_diffusers_scheduler: bool
+    diffusion_use_flow_matching_scheduler: bool
     diffusion_noise_scheduler_num_timesteps: int
     diffusion_noise_scheduler_beta_start: int
     diffusion_noise_scheduler_beta_end: int

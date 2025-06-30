@@ -13,3 +13,14 @@ class NoiseSchedulerDDPMDiffusers:
 
     def step(self, model_output, timestep, sample):
         return self.noise_scheduler.step(model_output, timestep, sample).prev_sample
+
+
+class FlowMatchingScheduler:
+    def __init__(self, model_configs):
+        self.num_timesteps = model_configs.diffusion_noise_scheduler_num_timesteps
+
+    def add_noise(self, x_start, noise, timesteps):
+        return x_start + timesteps.view(-1, 1, 1, 1)/self.num_timesteps * (noise - x_start)
+
+    def step(self, model_output, timestep, sample):
+        return sample - model_output/self.num_timesteps

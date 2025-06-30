@@ -11,7 +11,10 @@ def add_diffusion_params(parser):
         "--diffusion-use-diffusers-scheduler",
         action="store_true",
     )
-
+    parser.add_argument(
+        "--diffusion-use-flow-matching-scheduler",
+        action="store_true",
+    )
     parser.add_argument(
         "--diffusion-noise-scheduler-num-timesteps",
         type=int,
@@ -58,6 +61,7 @@ def add_diffusion_params(parser):
 class DiffusionParams:
     diffusion_use_diffusers_unet: bool
     diffusion_use_diffusers_scheduler: bool
+    diffusion_use_flow_matching_scheduler: bool
     diffusion_noise_scheduler_num_timesteps: int
     diffusion_noise_scheduler_beta_start: int
     diffusion_noise_scheduler_beta_end: int

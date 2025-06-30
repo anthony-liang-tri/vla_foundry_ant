@@ -11,6 +11,7 @@ from models.diffusion.unet import UNet, ResnetBlock, SelfAttentionBlock, CrossAt
 from models.diffusion.unet_diffusers import UNetDiffusers
 from models.diffusion.noise_scheduler import NoiseSchedulerDDPM
 from models.diffusion.noise_scheduler_diffusers import NoiseSchedulerDDPMDiffusers
+from models.diffusion.noise_scheduler_diffusers import FlowMatchingScheduler
 from models.diffusion.stable_diffusion import StableDiffusion
 
 
@@ -56,6 +57,8 @@ def create_model(model_configs):
             unet = UNet(model_configs)
         if model_configs.diffusion_use_diffusers_scheduler:
             noise_scheduler = NoiseSchedulerDDPMDiffusers(model_configs)
+        elif model_configs.diffusion_use_flow_matching_scheduler:
+            noise_scheduler = FlowMatchingScheduler(model_configs)
         else:
             noise_scheduler = NoiseSchedulerDDPM(model_configs)
         model = StableDiffusion(model_configs, noise_scheduler, unet)

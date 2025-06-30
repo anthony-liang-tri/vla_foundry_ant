@@ -96,6 +96,8 @@ def train_one_checkpoint(
                 elif cfg.model.model_type == "stable_diffusion":
                     noise = torch.randn_like(image)
                     predicted_noise = model(input_ids=input_ids, image=image, attention_mask=attention_mask, noise=noise)
+                    if getattr(cfg.model, "diffusion_use_flow_matching_scheduler", False):
+                        noise = noise - image # Predict the direction from image to noise
                     total_loss = loss(predicted_noise, noise)
             backward_start = time.time()
             total_loss.backward()
@@ -143,6 +145,8 @@ def train_one_checkpoint(
                         elif cfg.model.model_type == "stable_diffusion":
                             noise = torch.randn_like(images_ii)
                             predicted_noise = model(input_ids=inputs_ii, image=images_ii, attention_mask=mask_ii, noise=noise)
+                            if getattr(cfg.model, "diffusion_use_flow_matching_scheduler", False):
+                                noise = noise - images_ii # Predict the direction from image to noise
                             local_loss = loss(predicted_noise, noise) * (inputs_ii.shape[0] / input_ids.shape[0])
                     backward_start = time.time()
                     local_loss.backward()
