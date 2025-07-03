@@ -3,9 +3,9 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import torch
-from params.params import load_params_from_json
-from models import create_model
-from file_utils import load_model_checkpoint
+from lbm2.params.params import load_params_from_json
+from lbm2.models import create_model
+from lbm2.file_utils import load_model_checkpoint
 
 
 cfg = load_params_from_json("s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/vlm_paligemma_3b/2025_06_09-01_54_30-model_vlm-lr_0.0001-bsz_64/config.json")

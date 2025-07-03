@@ -1,13 +1,13 @@
 import argparse
 import logging
 from dataclasses import dataclass, asdict, fields
-from file_utils import json_load
-from params.data_params import DataParams, add_data_params
-from params.distributed_params import DistributedParams, add_distributed_params
-from params.experiment_params import ExperimentParams, add_experiment_params
-from params.model_params import ModelParams, add_model_params
-from params.extra.vit_params import ViTParams, add_vit_params
-from params.extra.diffusion_params import DiffusionParams, add_diffusion_params
+from lbm2.file_utils import json_load
+from lbm2.params.data_params import DataParams, add_data_params
+from lbm2.params.distributed_params import DistributedParams, add_distributed_params
+from lbm2.params.experiment_params import ExperimentParams, add_experiment_params
+from lbm2.params.model_params import ModelParams, add_model_params
+from lbm2.params.extra.vit_params import ViTParams, add_vit_params
+from lbm2.params.extra.diffusion_params import DiffusionParams, add_diffusion_params
 
 
 @dataclass

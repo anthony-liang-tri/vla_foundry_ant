@@ -2,10 +2,10 @@ import math
 import torch
 from torch import nn
 
-from norms import get_norm_class
-from positional_embedding import get_pos_embed
-from attention import get_attn_func
-from activations import get_feed_forward
+from lbm2.norms import get_norm_class
+from lbm2.positional_embedding import get_pos_embed
+from lbm2.attention import get_attn_func
+from lbm2.activations import get_feed_forward
         
 
 class CustomAttn(nn.Module):

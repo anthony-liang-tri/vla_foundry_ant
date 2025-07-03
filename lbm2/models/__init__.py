@@ -1,18 +1,18 @@
 import yaml
 import torch.nn as nn
 from pathlib import Path
-from models.transformer import Transformer, TransformerBlock
-from models.transformer_hf import TransformerHF
-from models.vit import ViT
-from models.vit_hf import ViTHF
-from models.vlm import VLM
-from models.vlm_hf import VLMHF
-from models.diffusion.unet import UNet, ResnetBlock, SelfAttentionBlock, CrossAttentionBlock
-from models.diffusion.unet_diffusers import UNetDiffusers
-from models.diffusion.noise_scheduler import NoiseSchedulerDDPM
-from models.diffusion.noise_scheduler_diffusers import NoiseSchedulerDDPMDiffusers
-from models.diffusion.noise_scheduler_diffusers import FlowMatchingScheduler
-from models.diffusion.stable_diffusion import StableDiffusion
+from lbm2.models.transformer import Transformer, TransformerBlock
+from lbm2.models.transformer_hf import TransformerHF
+from lbm2.models.vit import ViT
+from lbm2.models.vit_hf import ViTHF
+from lbm2.models.vlm import VLM
+from lbm2.models.vlm_hf import VLMHF
+from lbm2.models.diffusion.unet import UNet, ResnetBlock, SelfAttentionBlock, CrossAttentionBlock
+from lbm2.models.diffusion.unet_diffusers import UNetDiffusers
+from lbm2.models.diffusion.noise_scheduler import NoiseSchedulerDDPM
+from lbm2.models.diffusion.noise_scheduler_diffusers import NoiseSchedulerDDPMDiffusers
+from lbm2.models.diffusion.noise_scheduler_diffusers import FlowMatchingScheduler
+from lbm2.models.diffusion.stable_diffusion import StableDiffusion
 
 
 def create_model(model_configs):

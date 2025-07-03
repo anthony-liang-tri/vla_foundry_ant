@@ -1,9 +1,9 @@
 import webdataset as wds
 from itertools import islice
 
-from data.pipelines.text import TextPipeline
-from data.pipelines.text_untokenized import TextUntokenizedPipeline
-from data.pipelines.image_caption import ImageCaptionPipeline
+from lbm2.data.pipelines.text import TextPipeline
+from lbm2.data.pipelines.text_untokenized import TextUntokenizedPipeline
+from lbm2.data.pipelines.image_caption import ImageCaptionPipeline
 
 
 class FiniteDataPipeline(wds.DataPipeline):

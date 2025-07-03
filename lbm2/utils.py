@@ -1,6 +1,6 @@
 from pathlib import Path
 from datetime import datetime
-from distributed import broadcast_object
+from lbm2.distributed import broadcast_object
 
 def get_experiment_name(cfg):
     if cfg.name is None:

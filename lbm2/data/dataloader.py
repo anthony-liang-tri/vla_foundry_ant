@@ -9,9 +9,9 @@ import webdataset as wds
 
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
-from data.pipelines import create_wds_pipeline
-from data.utils import SharedCheckpointCounter
-from file_utils import get_metadata_file
+from lbm2.data.pipelines import create_wds_pipeline
+from lbm2.data.utils import SharedCheckpointCounter
+from lbm2.file_utils import get_metadata_file
 
 
 def seed_worker(worker_id):

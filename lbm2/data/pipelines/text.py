@@ -1,7 +1,7 @@
 import torch
 import webdataset as wds
-from data.pipelines.base import BaseWebDatasetPipeline
-from data.utils import deterministic_shuffle, log_and_continue
+from lbm2.data.pipelines.base import BaseWebDatasetPipeline
+from lbm2.data.utils import deterministic_shuffle, log_and_continue
 
 
 def filter_lt_seqlen(seq_len, x):

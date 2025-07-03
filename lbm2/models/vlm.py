@@ -51,7 +51,7 @@ class VLM(nn.Module):
         self.transformer = transformer
         self.projection = ModalityProjector(model_configs)
         if model_configs.processor is not None:
-            from data.processor import get_processor
+            from lbm2.data.processor import get_processor
             processor = get_processor(model_configs.processor, model_configs)
             self.image_token_id = processor.image_token_id
 

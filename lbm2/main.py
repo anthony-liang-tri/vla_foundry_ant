@@ -6,17 +6,17 @@ import logging
 import json
 from logger import setup_logging
 
-from params.params import get_params, get_args
-from utils import get_experiment_name
-from distributed import init_distributed_device, wrap_fsdp_ddp, is_master, get_model_precision
-from models import create_model
-from optimizer import create_optimizer, load_optimizer
-from scheduler import create_scheduler
-from losses import get_loss_function
-from data.dataloader import get_wds_dataloader, get_datastring_input
-from data.utils import load_data_chunks, epochs_to_samples
-from file_utils import save_checkpoint, load_model_checkpoint, remote_sync
-from train import train_one_checkpoint
+from lbm2.params.params import get_params, get_args
+from lbm2.utils import get_experiment_name
+from lbm2.distributed import init_distributed_device, wrap_fsdp_ddp, is_master, get_model_precision
+from lbm2.models import create_model
+from lbm2.optimizer import create_optimizer, load_optimizer
+from lbm2.scheduler import create_scheduler
+from lbm2.losses import get_loss_function
+from lbm2.data.dataloader import get_wds_dataloader, get_datastring_input
+from lbm2.data.utils import load_data_chunks, epochs_to_samples
+from lbm2.file_utils import save_checkpoint, load_model_checkpoint, remote_sync
+from lbm2.train import train_one_checkpoint
 
 
 def random_seed(seed=42, rank=0):

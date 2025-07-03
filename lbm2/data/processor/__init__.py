@@ -1,5 +1,5 @@
 from transformers import AutoProcessor
-from .stable_diffusion_processor import StableDiffusionProcessor
+from lbm2.data.processor.stable_diffusion_processor import StableDiffusionProcessor
 
 
 def get_processor(processor, vit_configs, **kwargs):

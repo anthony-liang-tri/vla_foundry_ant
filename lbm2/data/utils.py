@@ -3,7 +3,7 @@ import logging
 import webdataset as wds
 from torch.utils.data import get_worker_info
 from multiprocessing import Value
-from file_utils import pt_load, get_metadata_file
+from lbm2.file_utils import pt_load, get_metadata_file
 
 
 class SharedCheckpointCounter:

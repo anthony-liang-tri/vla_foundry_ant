@@ -1,6 +1,6 @@
 import logging
 from torch import optim
-from file_utils import pt_load
+from lbm2.file_utils import pt_load
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 
 

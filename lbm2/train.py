@@ -10,10 +10,10 @@ import torch.distributed as dist
 from torch.distributed.distributed_c10d import ReduceOp
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 
-from data.sampler import sample_chunk
-from distributed import is_master
-from precision import get_autocast
-from meters import AverageMeter
+from lbm2.data.sampler import sample_chunk
+from lbm2.distributed import is_master
+from lbm2.precision import get_autocast
+from lbm2.meters import AverageMeter
 
 
 def train_one_checkpoint(

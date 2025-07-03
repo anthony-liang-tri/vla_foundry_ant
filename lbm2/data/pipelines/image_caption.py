@@ -1,7 +1,7 @@
 import webdataset as wds
-from data.pipelines.base import BaseWebDatasetPipeline
-from data.utils import deterministic_shuffle, log_and_continue
-from data.processor import get_processor
+from lbm2.data.pipelines.base import BaseWebDatasetPipeline
+from lbm2.data.utils import deterministic_shuffle, log_and_continue
+from lbm2.data.processor import get_processor
 
 
 def filter_no_caption_or_no_image(sample):
