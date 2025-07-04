@@ -4,7 +4,7 @@ import numpy as np
 import random
 import logging
 import json
-from logger import setup_logging
+from lbm2.logger import setup_logging
 
 from lbm2.params.params import get_params, get_args
 from lbm2.utils import get_experiment_name

@@ -108,7 +108,7 @@ from torch.distributed.fsdp import (
     CPUOffload,
 )
 from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
-from models import get_model_block
+from lbm2.models import get_model_block
 import numpy as np
 import random
 
