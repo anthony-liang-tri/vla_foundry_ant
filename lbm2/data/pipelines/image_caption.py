@@ -1,14 +1,13 @@
 import webdataset as wds
+
 from lbm2.data.pipelines.base import BaseWebDatasetPipeline
-from lbm2.data.utils import deterministic_shuffle, log_and_continue
 from lbm2.data.processor import get_processor
+from lbm2.data.utils import deterministic_shuffle, log_and_continue
 
 
 def filter_no_caption_or_no_image(sample):
     has_caption = "txt" in sample
-    has_image = (
-        "png" in sample or "jpg" in sample or "jpeg" in sample or "webp" in sample
-    )
+    has_image = "png" in sample or "jpg" in sample or "jpeg" in sample or "webp" in sample
     return has_caption and has_image
 
 
@@ -32,24 +31,25 @@ class ImageCaptionPipeline(BaseWebDatasetPipeline):
             wds.decode("pilrgb", handler=log_and_continue),
             wds.select(filter_no_caption_or_no_image),
             wds.rename(image="jpg;png;jpeg;webp", text="txt"),
-            wds.map(lambda sample: {
-                **sample,
-                "text": "<image> " + sample["text"]
-            }),
+            wds.map(lambda sample: {**sample, "text": "<image> " + sample["text"]}),
             wds.batched(self.batch_size, partial=False),
-            wds.map(lambda sample: self.processor(
-                images=sample['image'], 
-                text=sample['text'], 
-                return_tensors='pt',
-                padding='max_length',
-                padding_side='right',
-                max_length=self.data_configs.seq_len+1,
-            ), handler=log_and_continue),
-            wds.map(lambda sample: {
-                "input_ids": sample["input_ids"],
-                "attention_mask": sample["attention_mask"],
-                "pixel_values": sample["pixel_values"],
-            }),
+            wds.map(
+                lambda sample: self.processor(
+                    images=sample["image"],
+                    text=sample["text"],
+                    return_tensors="pt",
+                    padding="max_length",
+                    padding_side="right",
+                    max_length=self.data_configs.seq_len + 1,
+                ),
+                handler=log_and_continue,
+            ),
+            wds.map(
+                lambda sample: {
+                    "input_ids": sample["input_ids"],
+                    "attention_mask": sample["attention_mask"],
+                    "pixel_values": sample["pixel_values"],
+                }
+            ),
         ]
         return pipeline
-

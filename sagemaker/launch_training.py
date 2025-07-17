@@ -1,19 +1,17 @@
-import argparse
 import os
 import subprocess
 import time
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-import draccus
 import boto3
-import sagemaker
-import yaml
-from sagemaker.pytorch import PyTorch
-from sagemaker.batch_queueing.queue import Queue
+import draccus
 
-from dataclasses import dataclass, field, fields
+import sagemaker
 from lbm2.params.train_experiment_params import TrainExperimentParams
+from sagemaker.batch_queueing.queue import Queue
+from sagemaker.pytorch import PyTorch
 
 NAME = "lbm2"
 INSTANCE_MAPPER = {
@@ -45,7 +43,7 @@ class SageMakerParams(TrainExperimentParams):
     instance_type: str = field(default="p4de")
 
     # SageMaker queue args
-    queue_name: str = field(default='ml')
+    queue_name: str = field(default="ml")
     priority: int = field(default=1)
 
     def __post_init__(self):
@@ -68,8 +66,10 @@ def get_image(user, profile="default", region="us-east-1"):
     dockerfile_base = docker_dir / "Dockerfile"
     fullname = f"{account}.dkr.ecr.{region}.amazonaws.com/{algorithm_name}:latest"
 
-    login_cmd = f"aws ecr get-login-password --region {region} --profile {profile} | docker login --username AWS --password-stdin"
-
+    login_cmd = (
+        f"aws ecr get-login-password --region {region} --profile {profile} | "
+        f"docker login --username AWS --password-stdin"
+    )
     print("Building container")
     commands = [
         # Log in to Sagemaker account to get image.
@@ -92,16 +92,23 @@ def get_image(user, profile="default", region="us-east-1"):
     return f"{account}.dkr.ecr.{region}.amazonaws.com/{algorithm_name}:latest"
 
 
-def main():    
+def main():
     args = draccus.parse(config_class=SageMakerParams)
 
     # Check this first to avoid waiting for Docker build.
     hyperparameters = {}
-    for (k, v) in args:
-        if k.startswith('data.') or k.startswith('distributed.') or k.startswith('hparams.') or k.startswith('model.'):
+    for k, v in args:
+        if k.startswith("data.") or k.startswith("distributed.") or k.startswith("hparams.") or k.startswith("model."):
             if v is None:
                 continue
-            if k == "distributed.use_distributed" or k == "distributed.world_size" or k == "distributed.rank" or k == "distributed.local_rank" or k == "distributed.device" or k == "hparams.world_size":
+            if (
+                k == "distributed.use_distributed"
+                or k == "distributed.world_size"
+                or k == "distributed.rank"
+                or k == "distributed.local_rank"
+                or k == "distributed.device"
+                or k == "hparams.world_size"
+            ):
                 continue
             hyperparameters[k] = v
         if k == "name" and v is not None:
@@ -111,19 +118,17 @@ def main():
 
     # We probably want wandb logging and S3 saving for sagemaker runs
     assert hyperparameters.get("remote_sync") is not None
-    assert hyperparameters.get("wandb") == True
+    assert hyperparameters.get("wandb")
 
     assert args.instance_type in INSTANCE_MAPPER
     if args.arn is None:
-        assert (
-            "SAGEMAKER_ARN" in os.environ
-        ), "Please specify --arn or set the SAGEMAKER_ARN environment variable"
+        assert "SAGEMAKER_ARN" in os.environ, "Please specify --arn or set the SAGEMAKER_ARN environment variable"
         object.__setattr__(args, "arn", os.environ["SAGEMAKER_ARN"])
 
     if args.s3_remote_sync is None:
-        assert (
-            "S3_REMOTE_SYNC" in os.environ
-        ), "Please specify --s3-remote-sync or set the S3_REMOTE_SYNC environment variable"
+        assert "S3_REMOTE_SYNC" in os.environ, (
+            "Please specify --s3-remote-sync or set the S3_REMOTE_SYNC environment variable"
+        )
         object.__setattr__(args, "s3_remote_sync", os.environ["S3_REMOTE_SYNC"])
         object.__setattr__(args, "s3_remote_sync", args.s3_remote_sync.replace("us-east-1", args.region))
 
@@ -141,6 +146,7 @@ def main():
 
     if args.local:
         from sagemaker.local import LocalSession
+
         sagemaker_session = LocalSession()
 
     role = args.arn
@@ -176,12 +182,12 @@ def main():
         "SM_USE_RESERVED_CAPACITY": "1",
         "WANDB_PROJECT": "lbm2",
     }
-    with open("secrets.env", 'r') as f:
+    with open("secrets.env", "r") as f:
         for line in f:
             line = line.strip()
-            if line and not line.startswith('#') and '=' in line:
-                key, value = line.split('=', 1)
-                environment[key.strip()] = value.strip().strip('"\'')
+            if line and not line.startswith("#") and "=" in line:
+                key, value = line.split("=", 1)
+                environment[key.strip()] = value.strip().strip("\"'")
 
     estimator = PyTorch(
         entry_point="lbm2/main.py",
@@ -203,7 +209,7 @@ def main():
         max_run=5 * 24 * 60 * 60,
         input_mode="FastFile",
         environment=environment,
-        keep_alive_period_in_seconds=5 * 60,    # 30 minutes
+        keep_alive_period_in_seconds=5 * 60,  # 30 minutes
         tags=[
             {"Key": "tri.project", "Value": "MM:PJ-0077"},
             {"Key": "tri.owner.email", "Value": f"{args.user}@tri.global"},
@@ -211,9 +217,9 @@ def main():
     )
 
     queue = Queue(
-        queue_name=QUEUE_MAPPER[args.region][INSTANCE_MAPPER[args.instance_type]].replace('ml', args.queue_name)
+        queue_name=QUEUE_MAPPER[args.region][INSTANCE_MAPPER[args.instance_type]].replace("ml", args.queue_name)
     )
-    queued_jobs = queue.map(
+    queue.map(
         estimator,
         inputs=[None],
         job_names=[job_name],

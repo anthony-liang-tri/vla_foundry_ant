@@ -13,6 +13,7 @@ class SwiGLU(nn.Module):
         x = F.silu(gate) * x
         return self.w3(x)
 
+
 def get_feed_forward(ffn_type, hidden_dim):
     if ffn_type == "swiglu":
         # this follows llama / lit llama -- go to multiple of 256
@@ -25,4 +26,3 @@ def get_feed_forward(ffn_type, hidden_dim):
         _ff_w2 = nn.Linear(ffn_hidden_dim, hidden_dim, bias=False)
         feed_forward = nn.Sequential(_ff_w1, nn.GELU(approximate="none"), _ff_w2)
     return feed_forward, ffn_hidden_dim
-

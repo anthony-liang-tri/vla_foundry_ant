@@ -1,5 +1,7 @@
 from dataclasses import dataclass, field
+
 from lbm2.params.base_params import BaseParams
+
 
 @dataclass(frozen=True)
 class HyperParams(BaseParams):
@@ -10,7 +12,7 @@ class HyperParams(BaseParams):
     seed: int = field(default=42)
     lr: float = field(default=1e-4)
     lr_scheduler: str = field(default="cosine")
-    warmup: str = field(default='0.1')
+    warmup: str = field(default="0.1")
     lr_cooldown_end: float = field(default=0.0)
     force_min_lr: float = field(default=0.0)
     optimizer: str = field(default="adamw")
@@ -34,4 +36,4 @@ class HyperParams(BaseParams):
         return self.global_batch_size // combined_batch_size
 
     def init_shared_attributes(self, cfg):
-        object.__setattr__(self, 'world_size', cfg.distributed.world_size)
+        object.__setattr__(self, "world_size", cfg.distributed.world_size)

@@ -3,6 +3,6 @@ class BaseWebDatasetPipeline:
         self.modality = modality
         self.data_configs = data_configs
         self.batch_size = batch_size
-        
+
     def create_pipeline(self, datastring, checkpoint_num):
-        raise NotImplementedError("Implemented in individual classes.") 
+        raise NotImplementedError("Implemented in individual classes.")

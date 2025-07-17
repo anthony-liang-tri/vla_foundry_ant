@@ -1,5 +1,6 @@
 import torch
 
+
 def sample_chunk(input_ids, attention_mask, seq_len):
     if input_ids.shape[1] == seq_len + 1:
         start_idx = 0

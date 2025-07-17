@@ -1,4 +1,3 @@
-import torch.nn as nn
 from diffusers import DDPMScheduler
 
 
@@ -20,7 +19,7 @@ class FlowMatchingScheduler:
         self.num_timesteps = model_configs.noise_scheduler.num_timesteps
 
     def add_noise(self, x_start, noise, timesteps):
-        return x_start + timesteps.view(-1, 1, 1, 1)/self.num_timesteps * (noise - x_start)
+        return x_start + timesteps.view(-1, 1, 1, 1) / self.num_timesteps * (noise - x_start)
 
     def step(self, model_output, timestep, sample):
-        return sample - model_output/self.num_timesteps
+        return sample - model_output / self.num_timesteps

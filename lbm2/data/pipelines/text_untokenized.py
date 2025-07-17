@@ -1,19 +1,20 @@
 import webdataset as wds
+
 from lbm2.data.pipelines.base import BaseWebDatasetPipeline
-from lbm2.data.utils import deterministic_shuffle, log_and_continue
 from lbm2.data.tokenizer import get_tokenizer
+from lbm2.data.utils import deterministic_shuffle, log_and_continue
 
 
 def batch_tokenize(batch, tokenizer, seq_len):
     texts = [item.decode("utf-8") if isinstance(item, bytes) else item for item in batch[0]]
     tokenized = tokenizer(
         texts,
-        padding='max_length',
+        padding="max_length",
         truncation=True,
-        max_length=seq_len+1,  # +1 because next token prediction
-        return_tensors='pt',
+        max_length=seq_len + 1,  # +1 because next token prediction
+        return_tensors="pt",
     )
-    return tokenized['input_ids'], tokenized['attention_mask']
+    return tokenized["input_ids"], tokenized["attention_mask"]
 
 
 class TextUntokenizedPipeline(BaseWebDatasetPipeline):
@@ -21,7 +22,7 @@ class TextUntokenizedPipeline(BaseWebDatasetPipeline):
         super().__init__(modality, data_configs, batch_size)
         self.tokenizer = get_tokenizer(data_configs.tokenizer)
         if self.tokenizer.pad_token is None:
-            self.tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+            self.tokenizer.add_special_tokens({"pad_token": "[PAD]"})
 
     def create_pipeline(self, datastring, checkpoint_num):
         pipeline = [

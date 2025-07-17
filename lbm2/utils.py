@@ -1,6 +1,7 @@
-from pathlib import Path
 from datetime import datetime
+
 from lbm2.distributed import broadcast_object
+
 
 def get_experiment_name(cfg):
     if cfg.name is None:
@@ -18,8 +19,8 @@ def get_experiment_name(cfg):
         )
     else:
         name = cfg.name
-    
+
     # sanitize model name for filesystem / uri use
     name.replace("/", "-")
-    object.__setattr__(cfg, 'name', name)
+    object.__setattr__(cfg, "name", name)
     return name

@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from transformers import CLIPTextModel
 from PIL import Image
 from tqdm import tqdm
 
@@ -22,16 +21,18 @@ class StableDiffusion(nn.Module):
         noisy_images = self.scheduler.add_noise(image, noise, timesteps)  # [bsz, channels, h, w]
         predicted_noise = self.unet(noisy_images, timesteps)  # [bsz, channels, h, w]
         return predicted_noise
-    
+
     @torch.no_grad()
     def generate(self, batch_size, device):
-        images = torch.randn(batch_size, self.unet.in_channels, self.model_configs.vit_img_size, self.model_configs.vit_img_size)
+        images = torch.randn(
+            batch_size, self.unet.in_channels, self.model_configs.vit_img_size, self.model_configs.vit_img_size
+        )
         images = images.to(device)
 
-        for t in tqdm(range(self.scheduler.num_timesteps-1, 0, -1)):
+        for t in tqdm(range(self.scheduler.num_timesteps - 1, 0, -1)):
             # 1. predict noise model_output
             model_output = self.unet(images, t)
-            
+
             # 2. compute previous image: x_t -> t_t-1
             images = self.scheduler.step(model_output, t, images)
 

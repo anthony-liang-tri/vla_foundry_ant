@@ -1,5 +1,5 @@
-from lbm2.positional_embedding.rotary import RotaryWithCast
 from lbm2.positional_embedding.none import identity_with_cast
+from lbm2.positional_embedding.rotary import RotaryWithCast
 
 
 def get_pos_embed(model_configs):

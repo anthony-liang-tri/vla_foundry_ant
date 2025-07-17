@@ -1,18 +1,19 @@
-import yaml
-import torch.nn as nn
 from pathlib import Path
+
+import torch.nn as nn
+import yaml
+
+from lbm2.models.diffusion.noise_scheduler import NoiseSchedulerDDPM
+from lbm2.models.diffusion.noise_scheduler_diffusers import FlowMatchingScheduler, NoiseSchedulerDDPMDiffusers
+from lbm2.models.diffusion.stable_diffusion import StableDiffusion
+from lbm2.models.diffusion.unet import CrossAttentionBlock, ResnetBlock, SelfAttentionBlock, UNet
+from lbm2.models.diffusion.unet_diffusers import UNetDiffusers
 from lbm2.models.transformer import Transformer, TransformerBlock
 from lbm2.models.transformer_hf import TransformerHF
 from lbm2.models.vit import ViT
 from lbm2.models.vit_hf import ViTHF
 from lbm2.models.vlm import VLM
 from lbm2.models.vlm_hf import VLMHF
-from lbm2.models.diffusion.unet import UNet, ResnetBlock, SelfAttentionBlock, CrossAttentionBlock
-from lbm2.models.diffusion.unet_diffusers import UNetDiffusers
-from lbm2.models.diffusion.noise_scheduler import NoiseSchedulerDDPM
-from lbm2.models.diffusion.noise_scheduler_diffusers import NoiseSchedulerDDPMDiffusers
-from lbm2.models.diffusion.noise_scheduler_diffusers import FlowMatchingScheduler
-from lbm2.models.diffusion.stable_diffusion import StableDiffusion
 
 
 def create_model(model_configs):
@@ -30,10 +31,7 @@ def create_model(model_configs):
     elif model_configs.type == "vlm_hf":
         model = VLMHF(model_configs)
     elif model_configs.type == "stable_diffusion":
-        if model_configs.use_diffusers_unet:
-            unet = UNetDiffusers(model_configs)
-        else:
-            unet = UNet(model_configs)
+        unet = UNetDiffusers(model_configs) if model_configs.use_diffusers_unet else UNet(model_configs)
         if model_configs.use_diffusers_scheduler:
             noise_scheduler = NoiseSchedulerDDPMDiffusers(model_configs)
         elif model_configs.use_flow_matching_scheduler:
@@ -48,12 +46,13 @@ def create_model(model_configs):
 
 def get_model_block(model_type, model_configs):
     if model_type == "transformer":
-        return {TransformerBlock} 
+        return {TransformerBlock}
     elif model_type == "transformer_hf":
         from transformers import AutoConfig, AutoModelForCausalLM
+
         config = AutoConfig.from_pretrained(model_configs.hf_pretrained)
         model = AutoModelForCausalLM.from_config(config)
-        for name, module in model.model.named_modules():
+        for _name, module in model.model.named_modules():
             if isinstance(module, nn.ModuleList) and len(module) > 0:
                 return {type(module[0])}
         raise ValueError("Could not find model block class.")
@@ -61,26 +60,28 @@ def get_model_block(model_type, model_configs):
         return {TransformerBlock}
     elif model_type == "vlm_hf":
         from transformers import AutoConfig, AutoModelForVision2Seq
+
         config = AutoConfig.from_pretrained(model_configs.hf_pretrained)
         model = AutoModelForVision2Seq.from_config(config)
         for attr in ["language_model", "text_model"]:
             if hasattr(model.model, attr):
-                for name, module in getattr(model.model, attr).named_modules():
+                for _name, module in getattr(model.model, attr).named_modules():
                     if isinstance(module, nn.ModuleList) and len(module) > 0:
                         return {type(module[0])}
         raise ValueError("Could not find model block class.")
     elif model_type == "stable_diffusion":
         if model_configs.use_diffusers_unet:
             from diffusers.models.unets.unet_2d_blocks import (
-                DownBlock2D, 
-                UpBlock2D, 
-                UNetMidBlock2D,
-                AttnUpBlock2D,
                 AttnDownBlock2D,
+                AttnUpBlock2D,
+                DownBlock2D,
+                UNetMidBlock2D,
+                UpBlock2D,
             )
+
             return {
                 DownBlock2D,
-                UpBlock2D, 
+                UpBlock2D,
                 UNetMidBlock2D,
                 AttnUpBlock2D,
                 AttnDownBlock2D,

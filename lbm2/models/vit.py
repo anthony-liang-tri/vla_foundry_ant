@@ -1,7 +1,6 @@
-import math
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+
 
 # https://github.com/huggingface/transformers/blob/main/src/transformers/models/siglip/modeling_siglip.py#L245
 class ViTPatchEmbeddings(nn.Module):
@@ -28,7 +27,6 @@ class ViTPatchEmbeddings(nn.Module):
         else:
             self.position_embedding = nn.Parameter(torch.rand(1, self.num_patches, self.embd_dim))
 
-
     def forward(self, x):
         # x shape [bsz, 3, 224, 224]
         x = self.conv(x)  # extract patches     shape [bsz, hidden_dim, 224 // patch_size, 224 // patch_size]
@@ -39,9 +37,10 @@ class ViTPatchEmbeddings(nn.Module):
         if self.cls_flag:
             cls_token = self.cls_token.expand(x.shape[0], -1, -1)
             x = torch.cat((cls_token, x), dim=1)
-        
+
         x = x + self.position_embedding
         return x
+
 
 # https://github.com/huggingface/transformers/blob/main/src/transformers/models/siglip/modeling_siglip.py#L381
 # https://github.com/karpathy/nanoGPT/blob/master/model.py#L29
@@ -73,23 +72,26 @@ class ViTMultiHeadAttention(nn.Module):
         v = v.view(B, T, self.n_heads, self.head_dim).transpose(1, 2)  # (B, n_heads, T, head_dim)
 
         y = torch.nn.functional.scaled_dot_product_attention(
-            q, k, v, 
+            q,
+            k,
+            v,
             attn_mask=None,
             dropout_p=self.dropout if self.training else 0.0,
-            is_causal=False # ViT attention is bidirectional
+            is_causal=False,  # ViT attention is bidirectional
         )
-        
+
         # Transpose back from [B, n_heads, T, head_dim] to [B, T, n_heads * head_dim] and combine all heads to [B, T, C]
-        y = y.transpose(1, 2).contiguous().view(B, T, C)  
+        y = y.transpose(1, 2).contiguous().view(B, T, C)
         y = self.out_proj(y)
         y = self.resid_dropout(y)
         return y
+
 
 # https://github.com/huggingface/transformers/blob/main/src/transformers/models/siglip/modeling_siglip.py#L453
 class ViTMLP(nn.Module):
     def __init__(self, model_configs):
         super().__init__()
-        self.activation_fn = nn.GELU(approximate='tanh')
+        self.activation_fn = nn.GELU(approximate="tanh")
         self.fc1 = nn.Linear(model_configs.vit_hidden_dim, model_configs.vit_inter_dim)
         self.fc2 = nn.Linear(model_configs.vit_inter_dim, model_configs.vit_hidden_dim)
         self.dropout = nn.Dropout(model_configs.vit_dropout)
@@ -101,7 +103,8 @@ class ViTMLP(nn.Module):
         x = self.dropout(x)
         return x
 
-# https://github.com/karpathy/nanoGPT/blob/master/model.py#L94    
+
+# https://github.com/karpathy/nanoGPT/blob/master/model.py#L94
 class ViTBlock(nn.Module):
     def __init__(self, model_configs):
         super().__init__()
@@ -109,12 +112,12 @@ class ViTBlock(nn.Module):
         self.attn = ViTMultiHeadAttention(model_configs)
         self.ln2 = nn.LayerNorm(model_configs.vit_hidden_dim, eps=model_configs.vit_ln_eps)
         self.mlp = ViTMLP(model_configs)
-    
+
     def forward(self, x):
         x = x + self.attn(self.ln1(x))
         x = x + self.mlp(self.ln2(x))
         return x
-    
+
 
 class ViT(nn.Module):
     def __init__(self, model_configs):
@@ -142,14 +145,11 @@ class ViT(nn.Module):
                 torch.nn.init.zeros_(module.bias)
 
     def forward(self, x):
-        x = self.patch_embedding(x) 
+        x = self.patch_embedding(x)
         x = self.dropout(x)
         for block in self.blocks:
             x = block(x)
 
-        if self.cls_flag:
-            x = self.layer_norm(x[:, 0])
-        else:
-            x = self.layer_norm(x)
-        
+        x = self.layer_norm(x[:, 0]) if self.cls_flag else self.layer_norm(x)
+
         return x

@@ -1,8 +1,23 @@
 # This is from open_clip.
+import functools
 import os
-import logging
+import random
+
+import numpy as np
 import torch
 import torch.distributed as dist
+from torch.distributed.fsdp import (
+    BackwardPrefetch,
+    CPUOffload,
+    MixedPrecision,
+    ShardingStrategy,
+)
+from torch.distributed.fsdp import (
+    FullyShardedDataParallel as FSDP,
+)
+from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
+
+from lbm2.models import get_model_block
 
 
 def is_global_master(cfg):
@@ -52,41 +67,34 @@ def world_info_from_env():
 def init_distributed_device(distributed_configs):
     # Distributed training = training on more than one GPU.
     # Works in both single and multi-node scenarios.
-    object.__setattr__(distributed_configs, 'use_distributed', False)       # bypass Frozen=True
-    object.__setattr__(distributed_configs, 'world_size', 1)
-    object.__setattr__(distributed_configs, 'rank', 0)
-    object.__setattr__(distributed_configs, 'local_rank', 0)
+    object.__setattr__(distributed_configs, "use_distributed", False)  # bypass Frozen=True
+    object.__setattr__(distributed_configs, "world_size", 1)
+    object.__setattr__(distributed_configs, "rank", 0)
+    object.__setattr__(distributed_configs, "local_rank", 0)
     if is_using_distributed():
         # DDP via torchrun, torch.distributed.launch
         # Note that this currently assumes that the world size is all gpus in a node.
         local_rank, _, _ = world_info_from_env()
-        object.__setattr__(distributed_configs, 'local_rank', local_rank)
+        object.__setattr__(distributed_configs, "local_rank", local_rank)
         torch.distributed.init_process_group(
-            backend=distributed_configs.dist_backend, 
-            init_method=distributed_configs.dist_url
+            backend=distributed_configs.dist_backend, init_method=distributed_configs.dist_url
         )
-        object.__setattr__(distributed_configs, 'world_size', torch.distributed.get_world_size())
-        object.__setattr__(distributed_configs, 'rank', torch.distributed.get_rank())
-        object.__setattr__(distributed_configs, 'use_distributed', True)
+        object.__setattr__(distributed_configs, "world_size", torch.distributed.get_world_size())
+        object.__setattr__(distributed_configs, "rank", torch.distributed.get_rank())
+        object.__setattr__(distributed_configs, "use_distributed", True)
 
     if torch.cuda.is_available():
-        if distributed_configs.use_distributed:
-            device = "cuda:%d" % distributed_configs.local_rank
-        else:
-            device = "cuda:0"
+        device = "cuda:%d" % distributed_configs.local_rank if distributed_configs.use_distributed else "cuda:0"
         torch.cuda.set_device(device)
     else:
         device = "cpu"
-    object.__setattr__(distributed_configs, 'device', device)
+    object.__setattr__(distributed_configs, "device", device)
     device = torch.device(device)
     return device
 
 
 def broadcast_object(cfg, obj, src=0):
-    if cfg.distributed.rank == src:
-        objects = [obj]
-    else:
-        objects = [None]
+    objects = [obj] if cfg.distributed.rank == src else [None]
     dist.broadcast_object_list(objects, src=src)
     return objects[0]
 
@@ -98,24 +106,11 @@ def all_gather_object(cfg, obj, dst=0):
     return objects
 
 
-# Add fsdp here:
-import functools
-from torch.distributed.fsdp import (
-    FullyShardedDataParallel as FSDP,
-    MixedPrecision,
-    BackwardPrefetch,
-    ShardingStrategy,
-    CPUOffload,
-)
-from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
-from lbm2.models import get_model_block
-import numpy as np
-import random
-
 def random_seed(seed=42, rank=0):
     torch.manual_seed(seed + rank)
     np.random.seed(seed + rank)
     random.seed(seed + rank)
+
 
 def get_model_precision(cfg):
     """
@@ -131,6 +126,7 @@ def get_model_precision(cfg):
     else:
         # For DDP and single GPU, use bfloat16 by default to match FSDP behavior
         return torch.bfloat16
+
 
 def wrap_fsdp_ddp(model, device, cfg):
     if cfg.distributed.fsdp:
@@ -158,12 +154,12 @@ def wrap_fsdp_ddp(model, device, cfg):
 
         if cfg.distributed.rank == 0:
             print(f"Before FSDP parameter num: {sum(p.numel() for p in model.parameters()):,}")
-            print(f"Before FSDP {torch.cuda.memory_allocated()/1024**3:.3} GB")
+            print(f"Before FSDP {torch.cuda.memory_allocated() / 1024**3:.3} GB")
 
         fsdp_kwargs = {}
-        assert not (
-            cfg.distributed.fsdp_hybrid and cfg.distributed.fsdp_hybrid_o2
-        ), "Only --fsdp-hybrid or --fsdp-hybrid-o2 should be set."
+        assert not (cfg.distributed.fsdp_hybrid and cfg.distributed.fsdp_hybrid_o2), (
+            "Only --fsdp-hybrid or --fsdp-hybrid-o2 should be set."
+        )
         if cfg.distributed.fsdp_backward_prefetch:
             fsdp_kwargs["backward_prefetch"] = BackwardPrefetch.BACKWARD_PRE
         if cfg.distributed.fsdp_hybrid:
@@ -185,8 +181,10 @@ def wrap_fsdp_ddp(model, device, cfg):
             **fsdp_kwargs,
         )
 
-        print(f"After FSDP parameter num: {sum(p.numel() for p in model.parameters()):,} on rank {cfg.distributed.rank}")
-        print(f"After FSDP {torch.cuda.memory_allocated()/1024**3:.3} GB on rank {cfg.distributed.rank}")
+        print(
+            f"After FSDP parameter num: {sum(p.numel() for p in model.parameters()):,} on rank {cfg.distributed.rank}"
+        )
+        print(f"After FSDP {torch.cuda.memory_allocated() / 1024**3:.3} GB on rank {cfg.distributed.rank}")
     else:
         ddp_args = {}
         if cfg.distributed.ddp_static_graph:

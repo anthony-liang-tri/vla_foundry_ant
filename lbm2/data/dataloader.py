@@ -1,14 +1,14 @@
 import copy
 import logging
 import random
+from dataclasses import dataclass
+
 import numpy as np
 import torch
-from typing import List, Optional
-from dataclasses import dataclass
 import webdataset as wds
-
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
+
 from lbm2.data.pipelines import create_wds_pipeline
 from lbm2.data.utils import SharedCheckpointCounter
 from lbm2.file_utils import get_metadata_file
@@ -41,14 +41,16 @@ def get_wds_dataloader(datastrings, num_samples_per_dataset, checkpoint_num, cfg
     batch_size = cfg.hparams.global_batch_size // cfg.distributed.world_size
 
     datasets = []
-    for datastring, modality in zip(datastrings, cfg.data.dataset_modality):
+    for datastring, modality in zip(datastrings, cfg.data.dataset_modality, strict=False):
         datasets.append(create_wds_pipeline(datastring, modality, batch_size, checkpoint_num, cfg.data))
     dataset = wds.mix.RandomMix(datasets, probs=num_samples_per_dataset, longest=True)
 
     # Start a generator to have control over reproducibility.
     if cfg.data.seed is not None:
         generator = torch.Generator()
-        generator.manual_seed(cfg.data.seed + shared_checkpoint_counter.get_value() * cfg.distributed.world_size + cfg.distributed.rank)
+        generator.manual_seed(
+            cfg.data.seed + shared_checkpoint_counter.get_value() * cfg.distributed.world_size + cfg.distributed.rank
+        )
         worker_init_fn = seed_worker
     else:
         generator = None
@@ -63,11 +65,11 @@ def get_wds_dataloader(datastrings, num_samples_per_dataset, checkpoint_num, cfg
         generator=generator,
         worker_init_fn=worker_init_fn,
     )
-        
+
     num_workers_per_gpu = max(1, cfg.data.num_workers)
     num_worker_batches = sum(num_samples_per_dataset) // (cfg.hparams.global_batch_size * num_workers_per_gpu)
     if num_worker_batches == 0:
-        raise ValueError(f"The dataloader for has received zero batches.")
+        raise ValueError("The dataloader for has received zero batches.")
 
     num_batches = num_worker_batches * num_workers_per_gpu
     num_samples = num_batches * cfg.hparams.global_batch_size
@@ -88,11 +90,16 @@ def get_datastring_input(
     num_workers_per_gpu: int,
     world_size: int,
 ):
-    manifests = [get_metadata_file(path, shard_shuffle_seed=seed) for path, seed in zip(manifest_paths, shard_shuffle_seed_per_dataset)]
+    manifests = [
+        get_metadata_file(path, shard_shuffle_seed=seed)
+        for path, seed in zip(manifest_paths, shard_shuffle_seed_per_dataset, strict=False)
+    ]
     if dataset_weighting is None:
         dataset_weighting = [1 for i in range(len(manifests))]
-    
-    needed_samples_per_dataset = [int(np.ceil(dataset_weighting[i] * num_samples / sum(dataset_weighting))) for i in range(len(manifests))]
+
+    needed_samples_per_dataset = [
+        int(np.ceil(dataset_weighting[i] * num_samples / sum(dataset_weighting))) for i in range(len(manifests))
+    ]
     next_shard_idx_per_dataset = copy.deepcopy(curr_shard_idx_per_dataset)
     next_shard_shuffle_seed_per_dataset = copy.deepcopy(shard_shuffle_seed_per_dataset)
     shard_list_per_dataset = [[] for i in range(len(manifests))]
@@ -100,9 +107,15 @@ def get_datastring_input(
     total_num_workers = num_workers_per_gpu * world_size
 
     for i in range(len(manifests)):
-        while len(shard_list_per_dataset[i]) < total_num_workers or sum(num_samples_list_per_dataset[i]) < needed_samples_per_dataset[i]:
+        while (
+            len(shard_list_per_dataset[i]) < total_num_workers
+            or sum(num_samples_list_per_dataset[i]) < needed_samples_per_dataset[i]
+        ):
             if sum(num_samples_list_per_dataset[i]) >= needed_samples_per_dataset[i]:
-                logging.warning("num_samples requirement satisfied but not all workers have shards. Adding data to ensure each worker has a shard.")
+                logging.warning(
+                    "num_samples requirement satisfied but not all workers have shards. "
+                    "Adding data to ensure each worker has a shard."
+                )
             try:
                 # Add shards incrementally
                 shard_idx = curr_shard_idx_per_dataset[i]
@@ -113,11 +126,16 @@ def get_datastring_input(
                 if allow_multiple_epochs:
                     # Reshuffle and set index back to 0
                     shard_shuffle_seed_per_dataset[i] += 1
-                    manifests[i] = get_metadata_file(manifest_paths[i], shard_shuffle_seed=shard_shuffle_seed_per_dataset[i])
+                    manifests[i] = get_metadata_file(
+                        manifest_paths[i], shard_shuffle_seed=shard_shuffle_seed_per_dataset[i]
+                    )
                     curr_shard_idx_per_dataset[i] = 0
                     continue
                 else:
-                    logging.error("Number of shards requested for a single epoch is more than the number of shards available. Consider using --allow-multiple-epochs.")
+                    logging.error(
+                        "Number of shards requested for a single epoch is more than the number of shards available. "
+                        "Consider using --allow-multiple-epochs."
+                    )
                     raise e
 
     for i in range(len(manifests)):

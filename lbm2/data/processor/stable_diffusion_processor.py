@@ -1,8 +1,6 @@
 import torch
 from torchvision import transforms
-import numpy as np
 from transformers import CLIPTokenizer
-from PIL import Image
 
 
 class StableDiffusionProcessor:
@@ -19,16 +17,15 @@ class StableDiffusionProcessor:
                 transforms.Normalize([0.5], [0.5]),
             ]
         )
-    
-    def __call__(self, **sample):        
+
+    def __call__(self, **sample):
         # Process text
         text_inputs = self.tokenizer(
-            sample['text'], padding='max_length', max_length=self.max_length+1, 
-            truncation=True, return_tensors='pt'
+            sample["text"], padding="max_length", max_length=self.max_length + 1, truncation=True, return_tensors="pt"
         )
-        
+
         # Process image
-        pixel_values = torch.stack([self.transform(img) for img in sample['images']])
+        pixel_values = torch.stack([self.transform(img) for img in sample["images"]])
 
         return {
             "input_ids": text_inputs["input_ids"],

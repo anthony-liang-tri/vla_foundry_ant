@@ -1,12 +1,13 @@
 import math
+
 import torch
 from torch import nn
 
+from lbm2.activations import get_feed_forward
+from lbm2.attention import get_attn_func
 from lbm2.norms import get_norm_class
 from lbm2.positional_embedding import get_pos_embed
-from lbm2.attention import get_attn_func
-from lbm2.activations import get_feed_forward
-        
+
 
 class CustomAttn(nn.Module):
     def __init__(self, layer_id, model_configs):
@@ -209,7 +210,9 @@ class Transformer(nn.Module):
             past_key_values = list(past_key_values)
         for i, layer in enumerate(self.layers):
             if self.grad_checkpointing:
-                x, past_key_values[i] = checkpoint(layer, x, past_key_values[i], use_cache, attention_mask)
+                x, past_key_values[i] = torch.utils.checkpoint.checkpoint(
+                    layer, x, past_key_values[i], use_cache, attention_mask
+                )
             else:
                 x, past_key_values[i] = layer(x, past_key_values[i], use_cache=use_cache, attention_mask=attention_mask)
         if past_key_values[0] is None:
@@ -219,13 +222,12 @@ class Transformer(nn.Module):
         # follow llama in casting this to float.
         return output.float(), past_key_values
 
-
     def generate(self, input_ids, attention_mask, max_new_tokens=20):
         # Add batch dimension if needed
         if input_ids.dim() == 1:
             input_ids = input_ids.unsqueeze(0)
             attention_mask = attention_mask.unsqueeze(0)
-            
+
         generated = input_ids.clone()
         attn_mask = attention_mask.clone()
 
@@ -238,6 +240,7 @@ class Transformer(nn.Module):
             # Update attention mask: 1 for non-padding tokens
             next_token_mask = torch.ones_like(next_token, dtype=attn_mask.dtype)
             attn_mask = torch.cat([attn_mask, next_token_mask], dim=-1)
-            #Note: You could enable the generation to break earlier than max_new_tokens when it detects a eos token, but this does not work in batched generation (output tensors need to have the same size)    
-        
+            # Note: You could enable the generation to break earlier than max_new_tokens when it detects a eos token,
+            # but this does not work in batched generation (output tensors need to have the same size)
+
         return generated

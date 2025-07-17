@@ -1,9 +1,11 @@
-import random
 import logging
+import random
+from multiprocessing import Value
+
 import webdataset as wds
 from torch.utils.data import get_worker_info
-from multiprocessing import Value
-from lbm2.file_utils import pt_load, get_metadata_file
+
+from lbm2.file_utils import get_metadata_file, pt_load
 
 
 class SharedCheckpointCounter:
@@ -15,6 +17,7 @@ class SharedCheckpointCounter:
 
     def get_value(self):
         return self.shared_checkpoint_num.value
+
 
 def log_and_continue(exn):
     """Call in an exception handler to ignore any exception, issue a warning, and continue."""
@@ -58,12 +61,7 @@ class deterministic_shuffle(wds.PipelineStage):
             self.epoch += 1
             epoch = self.epoch
         rng = random.Random()
-        if self.seed < 0:
-            # If seed is negative, we use the worker's seed, this will be different across all nodes/workers
-            seed = pytorch_worker_seed(epoch)
-        else:
-            # This seed to be deterministic AND the same across all nodes/workers in each epoch
-            seed = self.seed + epoch
+        seed = pytorch_worker_seed(epoch) if self.seed < 0 else self.seed + epoch
         rng.seed(seed)
         return wds.filters._shuffle(src, self.bufsize, self.initial, rng)
 
@@ -77,5 +75,5 @@ def epochs_to_samples(manifest_paths, num_epochs):
     manifests = [get_metadata_file(path) for path in manifest_paths]
     num_samples = 0
     for m in manifests:
-        num_samples += sum(i['num_sequences'] for i in m)
+        num_samples += sum(i["num_sequences"] for i in m)
     return num_samples * num_epochs

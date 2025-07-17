@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from transformers import AutoModelForVision2Seq
 
+
 class VLMHF(nn.Module):
     def __init__(self, model_configs):
         super().__init__()

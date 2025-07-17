@@ -1,7 +1,8 @@
-import torch
 from dataclasses import dataclass, field
+
 from lbm2.distributed import init_distributed_device
 from lbm2.params.base_params import BaseParams
+
 
 @dataclass(frozen=True)
 class DistributedParams(BaseParams):
@@ -18,7 +19,7 @@ class DistributedParams(BaseParams):
     fsdp_limit_all_gathers: bool = field(default=False)
     ddp_static_graph: bool = field(default=False)
 
-    # The following should not be initialized by the user. 
+    # The following should not be initialized by the user.
     # These will be initialized automatically in init_distributed_device()
     use_distributed: bool = field(default=False)
     world_size: int = field(default=1)
@@ -29,4 +30,3 @@ class DistributedParams(BaseParams):
     def __post_init__(self):
         super().__post_init__()
         init_distributed_device(self)
-

@@ -1,11 +1,11 @@
 import numbers
 from functools import partial
-from typing import Union, List
+from typing import List, Union
 
 import torch
-from torch import Tensor, Size
 import torch.nn as nn
 import torch.nn.functional as F
+from torch import Size, Tensor
 from torch.nn.parameter import Parameter
 
 

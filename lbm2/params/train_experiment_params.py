@@ -1,14 +1,18 @@
-import os
+import logging
 import tempfile
-import yaml
-import draccus
 from dataclasses import dataclass, field
+
+import draccus
+import yaml
+
+from lbm2.data.utils import epochs_to_samples
+from lbm2.file_utils import yaml_load
+from lbm2.params.base_params import BaseParams
 from lbm2.params.data_params import DataParams
 from lbm2.params.distributed_params import DistributedParams
 from lbm2.params.hyper_params import HyperParams
 from lbm2.params.model_params import ModelParams
-from lbm2.params.base_params import BaseParams
-from lbm2.file_utils import yaml_load
+
 
 @dataclass(frozen=True)
 class TrainExperimentParams(BaseParams):
@@ -19,7 +23,7 @@ class TrainExperimentParams(BaseParams):
     wandb_project_name: str = field(default="lbm2")
     log_every_n_steps: int = field(default=20)
     remote_sync: str = field(default=None)
-    
+
     # Training
     total_train_samples: int = field(default=None)
     num_epochs: int = field(default=None)
@@ -40,14 +44,20 @@ class TrainExperimentParams(BaseParams):
         if self.num_epochs is not None and self.total_train_samples is not None:
             raise ValueError("Set either num_epochs or total_train_samples, not both.")
         if self.num_epochs is not None:
-            logging.info(f"Setting total_train_samples based on self.num_epochs={self.num_epochs} epochs. If you have already set total_train_samples, this will be ignored.")
+            logging.info(
+                f"Setting total_train_samples based on self.num_epochs={self.num_epochs} epochs. "
+                "If you have already set total_train_samples, this will be ignored."
+            )
             total_train_samples = epochs_to_samples(self.data.dataset_manifest, self.num_epochs)
-            object.__setattr__(self, 'total_train_samples', total_train_samples)
+            object.__setattr__(self, "total_train_samples", total_train_samples)
         self.check_asserts()
 
     def check_asserts(self):
         assert self.hparams.global_batch_size % self.distributed.world_size == 0
-        assert self.hparams.accum_freq * self.distributed.world_size * self.hparams.per_gpu_batch_size == self.hparams.global_batch_size
+        assert (
+            self.hparams.accum_freq * self.distributed.world_size * self.hparams.per_gpu_batch_size
+            == self.hparams.global_batch_size
+        )
         assert len(self.data.dataset_manifest) == len(self.data.dataset_modality)
         assert len(self.data.dataset_manifest) == len(self.data.dataset_weighting)
         assert self.total_train_samples is not None
@@ -56,6 +66,7 @@ class TrainExperimentParams(BaseParams):
         # This causes an error when loading from yaml. Commenting out for now.
         # if self.distributed.fsdp and not self.distributed.use_distributed:
         #     raise ValueError(f"--fsdp can only be specified in distributed mode.")
+
 
 def load_params_from_yaml(path: str) -> TrainExperimentParams:
     curr_yaml = yaml_load(path)

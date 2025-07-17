@@ -69,8 +69,6 @@ def torch_attn(queries, keys, values, is_causal, attention_mask=None):
     if is_causal and keys.shape[1] > queries.shape[1] > 1:
         q_seq_len = queries.shape[1]
         k_seq_len = keys.shape[1]
-        # Same as above, we would like to use:
-        # mask = xops.fmha.attn_bias.LowerTriangularFromBottomRightMask().materialize((1, 1, q_seq_len, k_seq_len), queries.dtype, queries.device)
         mask = get_rectangular_causal_mask((1, 1), q_seq_len, k_seq_len, queries.device, queries.dtype)
         if attention_mask is not None:
             apply_attention_mask_(mask, attention_mask, queries_dtype=queries.dtype)
@@ -169,14 +167,12 @@ def get_attn_func(
     attn_seq_scalar=None,
     alpha=None,
 ):
-    if attn_name == "auto":
-        return torch_attn
-    elif attn_name == "torch_attn":
+    if attn_name == "auto" or attn_name == "torch_attn":
         return torch_attn
     elif attn_name == "custom_attn":
-        assert (
-            attn_activation is not None and attn_seq_scalar is not None and alpha is not None
-        ), "must provide attn-activation, attn-seq-scalar, attn-seq-scalar-alpha"
+        assert attn_activation is not None and attn_seq_scalar is not None and alpha is not None, (
+            "must provide attn-activation, attn-seq-scalar, attn-seq-scalar-alpha"
+        )
         return partial(
             custom_attn,
             attn_activation=attn_activation,

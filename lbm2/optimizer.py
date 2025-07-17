@@ -1,7 +1,9 @@
 import logging
+
 from torch import optim
-from lbm2.file_utils import pt_load
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+
+from lbm2.file_utils import pt_load
 
 
 def create_optimizer(hparams, model):
@@ -33,6 +35,6 @@ def load_optimizer(checkpoint_path, use_fsdp, model, optimizer):
         if use_fsdp:
             osd = FSDP.optim_state_dict_to_load(model=model, optim=optimizer, optim_state_dict=osd)
         optimizer.load_state_dict(osd)
-        logging.info(f"=> resuming optimizer")
+        logging.info("=> resuming optimizer")
     else:
-        logging.info(f"=> WARNING: not resuming optimizer.")
+        logging.info("=> WARNING: not resuming optimizer.")

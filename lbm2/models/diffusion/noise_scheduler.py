@@ -30,34 +30,38 @@ class NoiseSchedulerDDPM(nn.Module):
         # x_start, noise shape [bsz, channels, h, w]
         # self.sqrt_alphas_cumprod[timesteps] shape [bsz]
         return (
-            self.sqrt_alphas_cumprod[timesteps].view(-1, 1, 1, 1) * x_start +
-            self.sqrt_one_minus_alphas_cumprod[timesteps].view(-1, 1, 1, 1) * noise
-        )   # [bsz, channels, h, w]
+            self.sqrt_alphas_cumprod[timesteps].view(-1, 1, 1, 1) * x_start
+            + self.sqrt_one_minus_alphas_cumprod[timesteps].view(-1, 1, 1, 1) * noise
+        )  # [bsz, channels, h, w]
 
     def step(self, model_output, timestep, sample):
         """Reverse process single step"""
         t = timestep
-       
+
         # Get coefficients
         alpha_t = self.alphas[t]  # scalar
         alpha_cumprod_t = self.alphas_cumprod[t]  # scalar
         alpha_cumprod_t_prev = self.alphas_cumprod_prev[t]  # scalar
         beta_t = self.betas[t]  # scalar
-       
+
         # Compute predicted original sample
-        pred_original_sample = (sample - torch.sqrt(1 - alpha_cumprod_t) * model_output) / torch.sqrt(alpha_cumprod_t)  # [batch_size, channels, height, width]
-       
+        pred_original_sample = (sample - torch.sqrt(1 - alpha_cumprod_t) * model_output) / torch.sqrt(
+            alpha_cumprod_t
+        )  # [batch_size, channels, height, width]
+
         # Compute coefficients for pred_original_sample and current sample
         pred_original_sample_coeff = torch.sqrt(alpha_cumprod_t_prev) * beta_t / (1 - alpha_cumprod_t)  # scalar
         current_sample_coeff = torch.sqrt(alpha_t) * (1 - alpha_cumprod_t_prev) / (1 - alpha_cumprod_t)  # scalar
-       
+
         # Compute predicted previous sample
-        pred_prev_sample = pred_original_sample_coeff * pred_original_sample + current_sample_coeff * sample  # [batch_size, channels, height, width]
-       
+        pred_prev_sample = (
+            pred_original_sample_coeff * pred_original_sample + current_sample_coeff * sample
+        )  # [batch_size, channels, height, width]
+
         # Add noise if not the last timestep
         if t > 0:
             noise = torch.randn_like(sample)  # [batch_size, channels, height, width]
             variance = torch.sqrt(self.posterior_variance[t]) * noise  # [batch_size, channels, height, width]
             pred_prev_sample = pred_prev_sample + variance  # [batch_size, channels, height, width]
-       
+
         return pred_prev_sample  # [batch_size, channels, height, width]

@@ -1,6 +1,3 @@
-# NOTE: 08/31/23, this class is copied from xformers as there is currently a bug related to which channel dim the rotary embedding is applied to.
-# when the upstream issue is fixed, this file should be deleted. To track progress, see this issue: https://github.com/facebookresearch/xformers/issues/841
-
 # taken from: https://github.com/facebookresearch/xformers/blob/748c159096d4f9fcfe3eaf22801e5aed4777210b/xformers/components/positional_embedding/rotary.py
 from typing import Tuple
 
@@ -14,10 +11,10 @@ def rotate_half(x):
 
 def apply_rotary_pos_emb(x, cos, sin, offset: int = 0):
     # NOTE: This could probably be moved to Triton
-    assert (
-        cos.shape[1] >= offset + x.shape[1]
-    ), f"Offset and/or input sequence is too large,\
+    assert cos.shape[1] >= offset + x.shape[1], (
+        f"Offset and/or input sequence is too large,\
         \n offset: {offset}, seq_len: {x.shape[1]}, max: {cos.shape[1]}"
+    )
 
     # Handle a possible sequence length mismatch in between q and k
     cos_out = cos[:, offset : offset + x.shape[1], :, :]

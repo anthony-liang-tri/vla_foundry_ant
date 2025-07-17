@@ -1,6 +1,7 @@
+import timm
 import torch
 import torch.nn as nn
-import timm
+
 
 class ViTHF(nn.Module):
     def __init__(self, model_configs):
@@ -16,4 +17,3 @@ class ViTHF(nn.Module):
     @torch.jit.ignore
     def set_grad_checkpointing(self, enable=True):
         raise NotImplementedError
-

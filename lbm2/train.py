@@ -1,6 +1,5 @@
 import itertools
 import logging
-import wandb
 import math
 import time
 from contextlib import nullcontext
@@ -12,18 +11,25 @@ from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 
 from lbm2.data.sampler import sample_chunk
 from lbm2.distributed import is_master
-from lbm2.precision import get_autocast
 from lbm2.meters import AverageMeter
+from lbm2.precision import get_autocast
 
 
 def train_one_checkpoint(
-    model, dataloader, loss, checkpoint_num, step, optimizer, scheduler, cfg,
+    model,
+    dataloader,
+    loss,
+    checkpoint_num,
+    step,
+    optimizer,
+    scheduler,
+    cfg,
 ):
     """Trains model for one checkpoint on the provided data.
 
     Returns:
         success (bool): Whether training completed successfully
-        step (int): Global step at the end of the checkpoint. 
+        step (int): Global step at the end of the checkpoint.
     """
     device = torch.device(cfg.distributed.device)
     autocast = get_autocast(cfg.hparams.precision)
@@ -60,13 +66,13 @@ def train_one_checkpoint(
 
         if cfg.distributed.world_size > 1:
             dist.all_reduce(has_data, op=ReduceOp.SUM)
-        if has_data < cfg.distributed.world_size:      # Not all gpus have data
+        if has_data < cfg.distributed.world_size:  # Not all gpus have data
             break
 
-        input_ids = batch['input_ids'].to(device)
-        image = batch['pixel_values'].to(device) if 'pixel_values' in batch else None
-        attention_mask = batch['attention_mask'].to(device) if 'attention_mask' in batch else None
- 
+        input_ids = batch["input_ids"].to(device)
+        image = batch["pixel_values"].to(device) if "pixel_values" in batch else None
+        attention_mask = batch["attention_mask"].to(device) if "attention_mask" in batch else None
+
         data_time_m.update(time.time() - end)
         optimizer.zero_grad()
 
@@ -80,7 +86,7 @@ def train_one_checkpoint(
                     targets = targets.long()
                     vocab_size = logits.shape[-1]
                     total_loss = loss(logits.reshape(-1, vocab_size), targets.reshape(-1))
-                elif cfg.model.type == "vlm" or cfg.model.type == "vlm_hf":                    
+                elif cfg.model.type == "vlm" or cfg.model.type == "vlm_hf":
                     logits, _ = model(input_ids=input_ids, image=image, attention_mask=attention_mask)
                     forward_time_m.update(time.time() - forward_start)
                     targets = targets.long()
@@ -90,9 +96,11 @@ def train_one_checkpoint(
                     total_loss = loss(logits.reshape(-1, vocab_size), targets.reshape(-1))
                 elif cfg.model.type == "stable_diffusion":
                     noise = torch.randn_like(image)
-                    predicted_noise = model(input_ids=input_ids, image=image, attention_mask=attention_mask, noise=noise)
+                    predicted_noise = model(
+                        input_ids=input_ids, image=image, attention_mask=attention_mask, noise=noise
+                    )
                     if getattr(cfg.model, "diffusion_use_flow_matching_scheduler", False):
-                        noise = noise - image # Predict the direction from image to noise
+                        noise = noise - image  # Predict the direction from image to noise
                     total_loss = loss(predicted_noise, noise)
             backward_start = time.time()
             total_loss.backward()
@@ -112,44 +120,58 @@ def train_one_checkpoint(
                 with maybe_no_sync():
                     with autocast():
                         forward_start = time.time()
-                        inputs_ii = input_ids[ii * cfg.hparams.per_gpu_batch_size : (ii + 1) * cfg.hparams.per_gpu_batch_size]
-                        mask_ii = attention_mask[ii * cfg.hparams.per_gpu_batch_size : (ii + 1) * cfg.hparams.per_gpu_batch_size] if attention_mask is not None else None
+                        inputs_ii = input_ids[
+                            ii * cfg.hparams.per_gpu_batch_size : (ii + 1) * cfg.hparams.per_gpu_batch_size
+                        ]
+                        mask_ii = (
+                            attention_mask[
+                                ii * cfg.hparams.per_gpu_batch_size : (ii + 1) * cfg.hparams.per_gpu_batch_size
+                            ]
+                            if attention_mask is not None
+                            else None
+                        )
                         if inputs_ii.shape[0] == 0:
                             break
-                        targets_ii = targets[ii * cfg.hparams.per_gpu_batch_size : (ii + 1) * cfg.hparams.per_gpu_batch_size]
+                        targets_ii = targets[
+                            ii * cfg.hparams.per_gpu_batch_size : (ii + 1) * cfg.hparams.per_gpu_batch_size
+                        ]
                         if image is not None:
-                            images_ii = image[ii * cfg.hparams.per_gpu_batch_size : (ii + 1) * cfg.hparams.per_gpu_batch_size]
+                            images_ii = image[
+                                ii * cfg.hparams.per_gpu_batch_size : (ii + 1) * cfg.hparams.per_gpu_batch_size
+                            ]
                         if cfg.model.type == "transformer" or cfg.model.type == "transformer_hf":
                             logits, _ = model(input_ids=inputs_ii, attention_mask=mask_ii)
                             forward_total_time += time.time() - forward_start
                             targets_ii = targets_ii.long()
                             vocab_size = logits.shape[-1]
-                            local_loss = (
-                                loss(logits.reshape(-1, vocab_size), targets_ii.reshape(-1))
-                                * (inputs_ii.shape[0] / input_ids.shape[0])
+                            local_loss = loss(logits.reshape(-1, vocab_size), targets_ii.reshape(-1)) * (
+                                inputs_ii.shape[0] / input_ids.shape[0]
                             )
                         elif cfg.model.type == "vlm" or cfg.model.type == "vlm_hf":
                             logits, _ = model(input_ids=inputs_ii, image=images_ii, attention_mask=mask_ii)
                             forward_total_time += time.time() - forward_start
                             targets_ii = targets_ii.long()
-                            ignore_mask = (targets_ii == cfg.data.pad_token_id) | (targets_ii == cfg.data.image_token_id)
+                            ignore_mask = (targets_ii == cfg.data.pad_token_id) | (
+                                targets_ii == cfg.data.image_token_id
+                            )
                             targets_ii = targets_ii.masked_fill(ignore_mask, -100)
                             vocab_size = logits.shape[-1]
-                            local_loss = (
-                                loss(logits.reshape(-1, vocab_size), targets_ii.reshape(-1))
-                                * (inputs_ii.shape[0] / input_ids.shape[0])
+                            local_loss = loss(logits.reshape(-1, vocab_size), targets_ii.reshape(-1)) * (
+                                inputs_ii.shape[0] / input_ids.shape[0]
                             )
                         elif cfg.model.type == "stable_diffusion":
                             noise = torch.randn_like(images_ii)
-                            predicted_noise = model(input_ids=inputs_ii, image=images_ii, attention_mask=mask_ii, noise=noise)
+                            predicted_noise = model(
+                                input_ids=inputs_ii, image=images_ii, attention_mask=mask_ii, noise=noise
+                            )
                             if getattr(cfg.model, "diffusion_use_flow_matching_scheduler", False):
-                                noise = noise - images_ii # Predict the direction from image to noise
+                                noise = noise - images_ii  # Predict the direction from image to noise
                             local_loss = loss(predicted_noise, noise) * (inputs_ii.shape[0] / input_ids.shape[0])
                     backward_start = time.time()
                     local_loss.backward()
-                    backward_total_time += time.time() - backward_start    
+                    backward_total_time += time.time() - backward_start
                 total_lm_loss += local_loss
-                    
+
             forward_time_m.update(forward_total_time)
             backward_time_m.update(backward_total_time)
             total_loss = total_lm_loss
@@ -176,18 +198,18 @@ def train_one_checkpoint(
         step += 1
         if is_master(cfg):
             batch_size = len(input_ids)
-            # update the loss meter with the global loss tensor every iteration, so that the logging is of the avg of loss of the last
-            # cfg.log_every_n_steps iterations
+            # update the loss meter with the global loss tensor every iteration,
+            # so that the logging is of the avg of loss of the last cfg.log_every_n_steps iterations
             losses_m.update(global_loss_tensor.item(), batch_size)
-            if (i % cfg.log_every_n_steps == 0 and i > 0) or batch_count == num_batches_per_checkpoint or step == total_steps - 1:
+            if (
+                (i % cfg.log_every_n_steps == 0 and i > 0)
+                or batch_count == num_batches_per_checkpoint
+                or step == total_steps - 1
+            ):
                 num_samples = batch_count * batch_size * cfg.distributed.world_size
                 samples_per_checkpoint = dataloader.dataloader.num_samples
                 percent_complete = 100.0 * batch_count / num_batches_per_checkpoint
 
-                # gathered_loss = [torch.zeros_like(total_loss) for _ in range(cfg.distributed.world_size)]
-                # torch.distributed.all_gather(gathered_loss, total_loss)
-
-                # losses_m.update(sum(gathered_loss).item() / cfg.distributed.world_size, batch_size * cfg.distributed.world_size)
                 losses_m.update(global_loss_tensor.item(), batch_size)
                 samples_per_second = batch_size * cfg.distributed.world_size / batch_time_m.val
                 samples_per_second_per_gpu = batch_size / batch_time_m.val
@@ -196,13 +218,16 @@ def train_one_checkpoint(
                 loss_str = f"Loss: {losses_m.avg:.3f}"
                 sample_digits = math.ceil(math.log(dataloader.dataloader.num_samples + 1, 10))
                 logging.info(
-                    f"Train Checkpoint: {checkpoint_num} [{num_samples:>{sample_digits}}/{samples_per_checkpoint} ({percent_complete:.0f}%)] "
+                    f"Train Checkpoint: {checkpoint_num} "
+                    f"[{num_samples:>{sample_digits}}/{samples_per_checkpoint} "
+                    f"({percent_complete:.0f}%)] "
                     f"{loss_str} "
                     f"Data (t): {data_time_m.avg:.3f} "
-                    f"Batch (t): {batch_time_m.avg:.3f}, {samples_per_second:#g}/s, {samples_per_second_per_gpu:#g}/s/gpu "
+                    f"Batch (t): {batch_time_m.avg:.3f}, "
+                    f"{samples_per_second:#g}/s, "
+                    f"{samples_per_second_per_gpu:#g}/s/gpu "
                     f"LR: {optimizer.param_groups[0]['lr']:5f} "
                 )
-
                 # Save train loss / etc. Using non avg meter values as loggers have their own smoothing
                 log_data = {
                     "loss": losses_m.val,
@@ -226,7 +251,11 @@ def train_one_checkpoint(
                 for name, val in log_data.items():
                     name = "train/" + name
                     if cfg.wandb:
-                        wandb.log({name: val, "step": step, "tokens": log_data["tokens"], "samples": log_data["samples"]})
+                        import wandb
+
+                        wandb.log(
+                            {name: val, "step": step, "tokens": log_data["tokens"], "samples": log_data["samples"]}
+                        )
 
                 # resetting batch / data time meters per log window
                 batch_time_m.reset()

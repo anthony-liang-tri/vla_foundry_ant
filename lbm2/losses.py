@@ -31,5 +31,5 @@ def get_loss_function(loss_function_type, hparams):
         loss = torch.nn.MSELoss()
     else:
         raise ValueError(f"Loss function {loss_function_type} not supported.")
-    
+
     return loss

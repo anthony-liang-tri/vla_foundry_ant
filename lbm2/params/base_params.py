@@ -1,5 +1,7 @@
 from dataclasses import dataclass, field, fields
+
 import draccus
+
 
 @dataclass(frozen=True)
 class BaseParams:
@@ -7,13 +9,14 @@ class BaseParams:
     BaseParams is the base class for all parameters. Other params classes inherit from it.
 
     It provides a framework for loading parameters from a file through `load_path`.
-    Usage: `--model.load_path=some_path.yaml`, `--data.load_path=...`, etc. 
+    Usage: `--model.load_path=some_path.yaml`, `--data.load_path=...`, etc.
     Can even be something like `--model.unet.load_path=...`.
-    
+
     This argument is useful for recycling presets that we want to use repeatedly.
-    Command line arguments still take precedence (i.e., if an overlapping argument is supplied in 
-    the command line, it will overwrite the value from the preset yaml). 
+    Command line arguments still take precedence (i.e., if an overlapping argument is supplied in
+    the command line, it will overwrite the value from the preset yaml).
     """
+
     load_path: str = field(default=None)
 
     def __post_init__(self):
@@ -26,7 +29,7 @@ class BaseParams:
         for field_info in fields(self):
             field_name = field_info.name
             field_value = getattr(self, field_name)
-            
+
             # Support nested BaseParams objects
             if isinstance(field_value, BaseParams):
                 for nested_name, nested_value in field_value:
@@ -41,7 +44,7 @@ class BaseParams:
     def from_file(cls, file_path):
         cfg_new = draccus.load(cls, file_path)
         return cfg_new
-        
+
     def from_existing_config(self, cfg_new, force=False):
         # Looks for fields in cfg_new that are different from the default value and copies them to self
         # If force is True, overwrite even if current value is already set

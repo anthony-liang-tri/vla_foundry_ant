@@ -1,6 +1,8 @@
 import logging
+
 import torch
 import webdataset as wds
+
 from lbm2.data.pipelines.base import BaseWebDatasetPipeline
 from lbm2.data.utils import deterministic_shuffle, log_and_continue
 
@@ -9,7 +11,8 @@ def filter_lt_seqlen(seq_len, x):
     valid_sample = len(x) > seq_len
     if not valid_sample:
         logging.warning(
-            f"Sample sequence length: {len(x)} not larger than seq_len: {seq_len}. Skipping sample. NOTE: sample sequence length should be one greater than seq_len."
+            f"Sample sequence length: {len(x)} not larger than seq_len: {seq_len}. "
+            "Skipping sample. NOTE: sample sequence length should be one greater than seq_len."
         )
     return valid_sample
 

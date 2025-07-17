@@ -12,10 +12,7 @@ def _warmup_lr(base_lr, warmup_length, step):
 
 def const_lr(optimizer, base_lr, warmup_length):
     def _lr_adjuster(step):
-        if step < warmup_length:
-            lr = _warmup_lr(base_lr, warmup_length, step)
-        else:
-            lr = base_lr
+        lr = _warmup_lr(base_lr, warmup_length, step) if step < warmup_length else base_lr
         assign_learning_rate(optimizer, lr)
         return lr
 
@@ -67,10 +64,7 @@ def cosine_lr(optimizer, base_lr, warmup_length, steps, min_lr, force_min_lr):
 
 def create_scheduler(hparams, optimizer, total_train_samples):
     total_steps = total_train_samples // hparams.global_batch_size
-    if float(hparams.warmup) < 1:
-        warmup = int(float(hparams.warmup) * total_steps)
-    else:
-        warmup = int(hparams.warmup)
+    warmup = int(float(hparams.warmup) * total_steps) if float(hparams.warmup) < 1 else int(hparams.warmup)
     if hparams.lr_scheduler == "cosine":
         scheduler = cosine_lr(
             optimizer,
@@ -80,7 +74,7 @@ def create_scheduler(hparams, optimizer, total_train_samples):
             hparams.lr_cooldown_end,
             hparams.force_min_lr,
         )
-    elif args.lr_scheduler == "const":
+    elif hparams.lr_scheduler == "const":
         scheduler = const_lr(
             optimizer,
             hparams.lr,
