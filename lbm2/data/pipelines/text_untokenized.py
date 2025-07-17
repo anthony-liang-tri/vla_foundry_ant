@@ -1,7 +1,7 @@
 import webdataset as wds
 from lbm2.data.pipelines.base import BaseWebDatasetPipeline
 from lbm2.data.utils import deterministic_shuffle, log_and_continue
-from transformers import AutoTokenizer
+from lbm2.data.tokenizer import get_tokenizer
 
 
 def batch_tokenize(batch, tokenizer, seq_len):
@@ -19,7 +19,7 @@ def batch_tokenize(batch, tokenizer, seq_len):
 class TextUntokenizedPipeline(BaseWebDatasetPipeline):
     def __init__(self, modality, data_configs, batch_size):
         super().__init__(modality, data_configs, batch_size)
-        self.tokenizer = AutoTokenizer.from_pretrained(data_configs.tokenizer)
+        self.tokenizer = get_tokenizer(data_configs.tokenizer)
         if self.tokenizer.pad_token is None:
             self.tokenizer.add_special_tokens({'pad_token': '[PAD]'})
 

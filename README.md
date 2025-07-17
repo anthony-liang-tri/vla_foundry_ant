@@ -196,4 +196,18 @@ Given these, we support setting both the `--hparams.per_gpu_batch_size` (try as 
 Logging is done automatically to [wandb](wandb.ai). We use `samples_per_sec_per_gpu` as the main measure of speed. To disable logging, set the `--wandb=False` flag.  
 
 ### 7. Tests
-(todo)
+Tests are implemented with [pytest](https://docs.pytest.org/en/stable/). To run tests, you can call
+```
+pytest
+```
+To run more verbose tests, you can add `-v` for detailed per-test breakdowns and `-s` to display print statement outputs. 
+
+Please add tests for things you implement. To make it clearer on where to add new tests, we organize the `tests` folder in similar structure to the main `lbm2` folder (with subfolders `data`, `models`, etc.) You can run tests in a specific folder by calling something like
+```
+pytest tests/data
+```
+
+#### 7.1 Credentials and Tiny Datasets
+API keys and secrets are stored in Github secrets and can be accessed like `${{ secrets.HF_TOKEN }}`. This is already set up properly for Hugging Face, so HF tokenizers and models can now be loaded on tests with no issue.
+
+For AWS S3, this is currently not yet set up. For tests that require loading data, we recommend creating tiny WebDataset shards in [tests/shared/tiny_dataset](tests/shared/tiny_dataset). More examples can be found in that folder.

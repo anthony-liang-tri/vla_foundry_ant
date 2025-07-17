@@ -916,6 +916,7 @@ source = { editable = "." }
 dependencies = [
     { name = "accelerate" },
     { name = "boto3" },
+    { name = "huggingface-hub" },
     { name = "diffusers" },
     { name = "draccus" },
     { name = "einops" },
@@ -942,6 +943,7 @@ sagemaker = [
 requires-dist = [
     { name = "accelerate", specifier = "==1.7.0" },
     { name = "boto3", specifier = "==1.38.23" },
+    { name = "huggingface-hub", specifier = ">=0.33.0" },
     { name = "diffusers", specifier = ">=0.34.0" },
     { name = "draccus", git = "https://github.com/sedrick-keh-tri/draccus.git?rev=null-arg-loading" },
     { name = "einops", specifier = ">=0.8.1" },

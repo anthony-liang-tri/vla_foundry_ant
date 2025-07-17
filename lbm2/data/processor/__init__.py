@@ -1,6 +1,19 @@
 from transformers import AutoProcessor
 from lbm2.data.processor.stable_diffusion_processor import StableDiffusionProcessor
+import torch
+from types import SimpleNamespace
 
+class DebugProcessor:
+    def __init__(self):
+        self.image_token_id = 0
+        self.tokenizer = SimpleNamespace(pad_token_id=0)
+
+    def __call__(self, images, text, return_tensors='pt', padding='max_length', padding_side='right', max_length=2048):
+        return {
+            "input_ids": torch.randint(0, 100, (1, max_length)),
+            "attention_mask": torch.ones(1, max_length, dtype=torch.long),
+            "pixel_values": torch.randn(1, 3, 224, 224),
+        }
 
 def get_processor(data_configs):
     if data_configs.processor == "stable_diffusion":
@@ -8,6 +21,8 @@ def get_processor(data_configs):
             image_size=data_configs.image_size, 
             max_length=data_configs.seq_len,
         )
+    elif data_configs.processor == "debug":
+        return DebugProcessor()
     elif data_configs.processor is not None:
         processor = AutoProcessor.from_pretrained(data_configs.processor)
         processor.image_seq_length = data_configs.img_num_tokens

@@ -1,3 +1,4 @@
+import logging
 import torch
 import webdataset as wds
 from lbm2.data.pipelines.base import BaseWebDatasetPipeline

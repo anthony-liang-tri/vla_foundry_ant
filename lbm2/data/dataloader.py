@@ -65,7 +65,7 @@ def get_wds_dataloader(datastrings, num_samples_per_dataset, checkpoint_num, cfg
     )
         
     num_workers_per_gpu = max(1, cfg.data.num_workers)
-    num_worker_batches = sum(num_samples_per_dataset) // (cfg.data.global_batch_size * num_workers_per_gpu)
+    num_worker_batches = sum(num_samples_per_dataset) // (cfg.hparams.global_batch_size * num_workers_per_gpu)
     if num_worker_batches == 0:
         raise ValueError(f"The dataloader for has received zero batches.")
 
