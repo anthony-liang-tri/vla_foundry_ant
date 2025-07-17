@@ -1,157 +1,125 @@
-from dataclasses import dataclass, fields
-from typing import List
+from dataclasses import dataclass, fields, field
+import draccus
+from typing import List, Union
+from lbm2.params.base_params import BaseParams
 
-
-def add_model_params(parser):
-    parser.add_argument(
-        "--model-type",
-        type=str,
-        default="transformer",
-        help="model config to load"
-    )
-    parser.add_argument(
-        "--model",
-        type=str,
-        required=True,
-        help="Name of the model_config to use. Read from yaml"
-    )
-    parser.add_argument(
-        "--norm-type",
-        type=str,
-        default="default_layer_norm",
-        choices=[
-            "default_layer_norm",
-            "lp_layer_norm",
-            "gain_only_lp_layer_norm",
-            "gain_only_layer_norm",
-            "no_wb_layer_norm",
-            "rms_norm",
-        ],
-        help="Type of normalization to employ in the model.",
-    )
-    parser.add_argument(
-        "--ffn-type",
-        type=str,
-        choices=["swiglu", "gelu"],
-        default="swiglu",
-        help="Type of feedforward layer to use.",
-    )
-    parser.add_argument(
-        "--qk-norm",
-        action="store_true",
-        default=False,
-        help="apply --model-norm to qk as in: https://arxiv.org/abs/2302.05442.",
-    )
-    parser.add_argument(
-        "--positional-embedding-type",
-        type=str,
-        choices=["rotary", "head_rotary", "llama_rotary", "none"],
-        default="rotary",
-        help="Type of positional embedding to use.",
-    )
-    parser.add_argument(
-        "--attn-name",
-        type=str,
-        default="auto",
-        choices=["auto", "torch_attn", "custom_attn"],
-        help="type of attention to use",
-    )
-    parser.add_argument(
-        "--hidden-dim", 
-        type=int,
-        default=96,
-    )
-    parser.add_argument(
-        "--n-layers",
-        type=int,
-        default=8,
-    )
-    parser.add_argument(
-        "--n-heads",
-        type=int,
-        default=4,
-    )
-    parser.add_argument(
-        "--seq-len",
-        type=int,
-        default=2048,
-    )
-    parser.add_argument(
-        "--vocab-size",
-        type=int,
-        default=50432,
-    )
-    parser.add_argument(
-        "--post-embed-norm",
-        action="store_true",
-        default=False,
-        help="Whether or nor to layernorm after embedding layer"
-    )
-    parser.add_argument(
-        "--norm-eps",
-        type=float,
-        default=1e-5,
-    )
-    parser.add_argument(
-        "--weight-tying",
-        action="store_true",
-        default=False,
-    )
-
+def register_model_params(key: str):
+    """
+    Registers a ModelParams subclass and sets its type attribute.
+    Use decorator wrapper because draccus's model selection with --model.type doesn't 
+    automatically populate the attribute cfg.model.type
+    """
+    def decorator(cls):
+        registered_cls = ModelParams.register_subclass(key)(cls)
+        registered_cls._type = key
+        return registered_cls
+    return decorator
 
 @dataclass(frozen=True)
-class ModelParams:
-    model_type: str
-    model: str
+class ModelParams(draccus.ChoiceRegistry, BaseParams):  
+    type: str = field(default=None)
+    resume_from_checkpoint: str = field(default=None)
+    resume_weights_only: bool = field(default=False)
+
+    def __init__(self):
+        raise NotImplementedError("ModelParams should not be instantiated directly. Use a subclass with model.type=...")
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.type is None:
+            object.__setattr__(self, 'type', getattr(self, '_type', None))
+
+@register_model_params("transformer")
+@dataclass(frozen=True)
+class TransformerParams(ModelParams):
+    norm_type: str = field(default="default_layer_norm")
+    ffn_type: str = field(default="swiglu")
+    qk_norm: bool = field(default=False)
+    positional_embedding_type: str = field(default="rotary")
+    attn_name: str = field(default="torch_attn")
+    hidden_dim: int = field(default=96)
+    n_layers: int = field(default=8)
+    n_heads: int = field(default=4)
+    vocab_size: int = field(default=50432)
+    post_embed_norm: bool = field(default=False)
+    norm_eps: float = field(default=1e-5)
+    weight_tying: bool = field(default=False)
+    max_seq_len: int = field(default=2048)
+
+
+@register_model_params("transformer_hf")
+@dataclass(frozen=True)
+class TransformerHFParams(ModelParams):
+    hf_pretrained: str = field(default=None)
+
+@register_model_params("vit")
+@dataclass(frozen=True)
+class ViTParams(ModelParams):
+    vit_pretrained: str = field(default=None)
+    vit_freeze: bool = field(default=False)
+    vit_interpolation_mode: str = field(default="bicubic")
+    vit_hidden_dim: int = field(default=768)
+    vit_inter_dim: int = field(default=3072)
+    vit_patch_size: int = field(default=16)
+    vit_img_size: int = field(default=384)
+    vit_n_heads: int = field(default=12)
+    vit_dropout: float = field(default=0.0)
+    vit_n_layers: int = field(default=12)
+    vit_ln_eps: float = field(default=1e-6)
+    vit_cls_flag: bool = field(default=False)
+    projector_pixel_shuffle_factor: int = field(default=1)
+
+@register_model_params("vit_hf")
+@dataclass(frozen=True)
+class ViTHFParams(ModelParams):
+    hf_pretrained: str = field(default=None)
+    vit_hidden_dim: int = field(default=768)
+    projector_pixel_shuffle_factor: int = field(default=1)
+
+@register_model_params("vlm")
+@dataclass(frozen=True)
+class VLMParams(ModelParams):
+    vit: Union[ViTParams, ViTHFParams] = field(default_factory=ViTParams)
+    transformer: Union[TransformerParams, TransformerHFParams] = field(default_factory=TransformerParams)
+    vit_freeze: bool = field(default=False)
+    image_token_id: int = field(default=None)
     
-    norm_type: str
-    ffn_type: str
-    qk_norm: bool
-    positional_embedding_type: str
-    attn_name: str
-    hidden_dim: int
-    n_layers: int
-    n_heads: int
-    seq_len: int
-    vocab_size: int
-    post_embed_norm: bool
-    norm_eps: float
-    weight_tying: bool
+    def init_shared_attributes(self, cfg):
+        object.__setattr__(self, 'image_token_id', cfg.data.image_token_id)
+            
 
-    # These are defined in the add_params of other files but we use them here
-    processor: str
-    vit_pretrained: str
-    vit_freeze: bool
-    vit_interpolation_mode: str
-    vit_hidden_dim: int
-    vit_inter_dim: int
-    vit_patch_size: int
-    vit_img_size: int
-    vit_img_num_tokens: int
-    vit_n_heads: int
-    vit_dropout: float
-    vit_n_layers: int
-    vit_ln_eps: float
-    vit_cls_flag: bool
-    projector_pixel_shuffle_factor: int
+@register_model_params("vlm_hf")
+@dataclass(frozen=True)
+class VLMHFParams(ModelParams):
+    hf_pretrained: str = field(default=None)
 
-    diffusion_use_diffusers_unet: bool
-    diffusion_use_diffusers_scheduler: bool
-    diffusion_use_flow_matching_scheduler: bool
-    diffusion_noise_scheduler_num_timesteps: int
-    diffusion_noise_scheduler_beta_start: int
-    diffusion_noise_scheduler_beta_end: int
-    diffusion_unet_in_channels: int
-    diffusion_unet_out_channels: int
-    diffusion_unet_time_emb_dim: int
-    diffusion_unet_text_emb_dim: int
-    diffusion_unet_channels: List[int]
+@register_model_params("unet")
+@dataclass(frozen=True)
+class UNetParams(ModelParams):
+    in_channels: int = field(default=3)
+    out_channels: int = field(default=3)
+    time_emb_dim: int = field(default=256)
+    text_emb_dim: int = field(default=512)
+    channels: List[int] = field(default_factory=list)
+    image_size: int = field(default=128)
 
-    @classmethod
-    def from_args(cls, args):
-        init_kwargs = {
-            f.name: getattr(args, f.name)
-            for f in fields(cls)
-            if hasattr(args, f.name)
-        }
-        return cls(**init_kwargs)
+@register_model_params("noise_scheduler")
+@dataclass(frozen=True)
+class NoiseSchedulerParams(ModelParams):
+    num_timesteps: int = field(default=1000)
+    beta_start: int = field(default=0.0001)
+    beta_end: int = field(default=0.02)
+
+@register_model_params("stable_diffusion")
+@dataclass(frozen=True)
+class DiffusionParams(ModelParams):
+    unet: UNetParams = field(default_factory=UNetParams)
+    noise_scheduler: NoiseSchedulerParams = field(default_factory=NoiseSchedulerParams)
+    
+    use_diffusers_unet: bool = field(default=False)
+    use_diffusers_scheduler: bool = field(default=False)
+    use_flow_matching_scheduler: bool = field(default=False)
+
+    @property
+    def image_size(self):
+        return self.unet.image_size

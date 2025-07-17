@@ -1,19 +1,13 @@
-import sys
-import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
 import torch
-from lbm2.params.params import load_params_from_json
+from lbm2.params.train_experiment_params import load_params_from_yaml
 from lbm2.models import create_model
 from lbm2.file_utils import load_model_checkpoint
 
 
-cfg = load_params_from_json("s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/vlm_paligemma_3b/2025_06_09-01_54_30-model_vlm-lr_0.0001-bsz_64/config.json")
-object.__setattr__(cfg.model, 'processor', 'google/paligemma-3b-pt-224')
+cfg = load_params_from_yaml("s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/vlm_paligemma_3b/2025_07_04-01_38_18-model_vlm-lr_0.0001-bsz_128/config.yaml")
 model = create_model(cfg.model)
-
-ckpt = "s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/vlm_paligemma_3b/2025_06_09-01_54_30-model_vlm-lr_0.0001-bsz_64/checkpoints/checkpoint_2.pt"
-load_model_checkpoint(model, ckpt, cfg.experiment.seed, cfg.distributed)
+ckpt = "s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/vlm_paligemma_3b/2025_07_04-01_38_18-model_vlm-lr_0.0001-bsz_128/checkpoints/checkpoint_2.pt"
+load_model_checkpoint(model, ckpt, cfg.hparams.seed, cfg.distributed)
 
 
 import requests

@@ -5,7 +5,7 @@ from diffusers import DDPMScheduler
 class NoiseSchedulerDDPMDiffusers:
     def __init__(self, model_configs):
         self.model_configs = model_configs
-        self.num_timesteps = model_configs.diffusion_noise_scheduler_num_timesteps
+        self.num_timesteps = model_configs.noise_scheduler.num_timesteps
         self.noise_scheduler = DDPMScheduler(num_train_timesteps=self.num_timesteps)
 
     def add_noise(self, x_start, noise, timesteps):
@@ -17,7 +17,7 @@ class NoiseSchedulerDDPMDiffusers:
 
 class FlowMatchingScheduler:
     def __init__(self, model_configs):
-        self.num_timesteps = model_configs.diffusion_noise_scheduler_num_timesteps
+        self.num_timesteps = model_configs.noise_scheduler.num_timesteps
 
     def add_noise(self, x_start, noise, timesteps):
         return x_start + timesteps.view(-1, 1, 1, 1)/self.num_timesteps * (noise - x_start)

@@ -35,21 +35,14 @@ class DataInfo:
         if self.sampler is not None and isinstance(self.sampler, DistributedSampler):
             self.sampler.set_checkpoint_num(checkpoint_num)
 
-    def fill_token_ids_if_available(self, processor, vit_configs):
-        if processor is not None:
-            from data.processor import get_processor
-            processor = get_processor(processor, vit_configs)
-            self.pad_token_id = processor.tokenizer.pad_token_id
-            self.image_token_id = processor.image_token_id
-
 
 def get_wds_dataloader(datastrings, num_samples_per_dataset, checkpoint_num, cfg):
     shared_checkpoint_counter = SharedCheckpointCounter(checkpoint_num=checkpoint_num)
-    batch_size = cfg.data.global_batch_size // cfg.distributed.world_size
+    batch_size = cfg.hparams.global_batch_size // cfg.distributed.world_size
 
     datasets = []
     for datastring, modality in zip(datastrings, cfg.data.dataset_modality):
-        datasets.append(create_wds_pipeline(datastring, modality, batch_size, checkpoint_num, cfg))
+        datasets.append(create_wds_pipeline(datastring, modality, batch_size, checkpoint_num, cfg.data))
     dataset = wds.mix.RandomMix(datasets, probs=num_samples_per_dataset, longest=True)
 
     # Start a generator to have control over reproducibility.
@@ -77,12 +70,11 @@ def get_wds_dataloader(datastrings, num_samples_per_dataset, checkpoint_num, cfg
         raise ValueError(f"The dataloader for has received zero batches.")
 
     num_batches = num_worker_batches * num_workers_per_gpu
-    num_samples = num_batches * cfg.data.global_batch_size
+    num_samples = num_batches * cfg.hparams.global_batch_size
     dataloader.num_batches = num_batches
     dataloader.num_samples = num_samples
 
     dataloader = DataInfo(dataloader=dataloader, shared_checkpoint_counter=shared_checkpoint_counter)
-    dataloader.fill_token_ids_if_available(cfg.data.processor, cfg.vit)
     return dataloader
 
 

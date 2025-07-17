@@ -1,13 +1,16 @@
 .venv/bin/torchrun --nproc_per_node=8 --nnodes=1 lbm2/main.py \
---model transformer_11m \
---fsdp \
---fsdp-use-orig-params \
---fsdp-limit-all-gathers \
---dataset-type webdataset \
---dataset-manifest s3://tri-ml-datasets/openlm/dcnlp/datasets/tri-hero-run1_cc_v4_resiliparse_rw_v2_bff_minngram13_10shards_all_fasttext_OH_eli5_vs_rw_v2_bigram_200k_train_0.11-starcoder-math_datasets/manifest.jsonl \
---dataset-modality text \
---total-train-samples 14_000_000 \
---num-checkpoints 5 \
---per-gpu-batch-size 8 \
---global-batch-size 512 \
---disable-wandb \
+--model.type transformer \
+--model.load_path lbm2/config_presets/models/transformer_11m.yaml \
+--distributed.fsdp True \
+--distributed.fsdp_use_orig_params True \
+--distributed.fsdp_limit_all_gathers True \
+--data.type text \
+--data.dataset_manifest ["s3://tri-ml-datasets/openlm/dcnlp/datasets/tri-hero-run1_cc_v4_resiliparse_rw_v2_bff_minngram13_10shards_all_fasttext_OH_eli5_vs_rw_v2_bigram_200k_train_0.11-starcoder-math_datasets/manifest.jsonl"] \
+--data.dataset_modality ["text"] \
+--data.dataset_weighting [1.0] \
+--data.seq_len 2048 \
+--total_train_samples 14_000_000 \
+--num_checkpoints 5 \
+--hparams.per_gpu_batch_size 32 \
+--hparams.global_batch_size 2048 \
+--remote_sync s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/llm_11m

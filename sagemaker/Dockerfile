@@ -19,5 +19,5 @@ RUN uv pip install --python /usr/local/bin/python --no-cache-dir -r /opt/ml/code
 RUN rm /opt/ml/code/pyproject.toml
 
 # /opt/ml and all subdirectories are utilized by SageMaker, use the /code subdirectory to store your user code.
-COPY lbm2/ /opt/ml/code/
-COPY secrets.env /opt/ml/code/
+COPY lbm2/ /opt/ml/code/lbm2/
+ENV SAGEMAKER_PROGRAM /opt/ml/code/lbm2/main.py

@@ -21,6 +21,7 @@ dependencies = [
     "pytest>=8.4.1",
     "diffusers>=0.34.0",
     "einops>=0.8.1",
+    "draccus>=0.11.5",
 ]
 
 [dependency-groups]
@@ -41,6 +42,7 @@ exclude = ["install*", "sagemaker*", "examples*"]
 [tool.uv.sources]
 # This specifies the path to use in installing sagemaker in the above deps.
 sagemaker = { path = "./install/sagemaker-2.240.1.dev0.tar" }
+draccus = { git = "https://github.com/sedrick-keh-tri/draccus.git", rev = "null-arg-loading" }
 
 [tool.ruff]
 line-length = 120

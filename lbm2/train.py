@@ -26,7 +26,7 @@ def train_one_checkpoint(
         step (int): Global step at the end of the checkpoint. 
     """
     device = torch.device(cfg.distributed.device)
-    autocast = get_autocast(cfg.experiment.precision)
+    autocast = get_autocast(cfg.hparams.precision)
 
     model.train()
 
@@ -47,7 +47,7 @@ def train_one_checkpoint(
     for i in itertools.count():
         scheduler(step)
 
-        total_steps = cfg.experiment.total_train_samples // cfg.experiment.global_batch_size
+        total_steps = cfg.total_train_samples // cfg.hparams.global_batch_size
         if step >= total_steps:
             logging.warning(f"step: {step} has reached/exceeded total_steps: {total_steps}. ending training.")
             break
@@ -70,30 +70,25 @@ def train_one_checkpoint(
         data_time_m.update(time.time() - end)
         optimizer.zero_grad()
 
-        if cfg.experiment.accum_freq is not None:
-            accum_freq = cfg.experiment.accum_freq
-        else:
-            combined_batch_size = cfg.distributed.world_size * cfg.experiment.per_gpu_batch_size
-            assert cfg.experiment.global_batch_size % combined_batch_size == 0
-            accum_freq = cfg.experiment.global_batch_size // combined_batch_size
-
-        if accum_freq == 1:
+        if cfg.hparams.accum_freq == 1:
             with autocast():
                 forward_start = time.time()
                 input_ids, attention_mask, targets = sample_chunk(input_ids, attention_mask, cfg.data.seq_len)
-                if cfg.model.model_type == "transformer" or cfg.model.model_type == "transformer_hf":
+                if cfg.model.type == "transformer" or cfg.model.type == "transformer_hf":
                     logits, _ = model(input_ids=input_ids, attention_mask=attention_mask)
                     forward_time_m.update(time.time() - forward_start)
                     targets = targets.long()
-                    total_loss = loss(logits.reshape(-1, cfg.model.vocab_size), targets.reshape(-1))
-                elif cfg.model.model_type == "vlm" or cfg.model.model_type == "vlm_hf":                    
+                    vocab_size = logits.shape[-1]
+                    total_loss = loss(logits.reshape(-1, vocab_size), targets.reshape(-1))
+                elif cfg.model.type == "vlm" or cfg.model.type == "vlm_hf":                    
                     logits, _ = model(input_ids=input_ids, image=image, attention_mask=attention_mask)
                     forward_time_m.update(time.time() - forward_start)
                     targets = targets.long()
-                    ignore_mask = (targets == dataloader.pad_token_id) | (targets == dataloader.image_token_id)
+                    ignore_mask = (targets == cfg.data.pad_token_id) | (targets == cfg.data.image_token_id)
                     targets = targets.masked_fill(ignore_mask, -100)
-                    total_loss = loss(logits.reshape(-1, cfg.model.vocab_size), targets.reshape(-1))
-                elif cfg.model.model_type == "stable_diffusion":
+                    vocab_size = logits.shape[-1]
+                    total_loss = loss(logits.reshape(-1, vocab_size), targets.reshape(-1))
+                elif cfg.model.type == "stable_diffusion":
                     noise = torch.randn_like(image)
                     predicted_noise = model(input_ids=input_ids, image=image, attention_mask=attention_mask, noise=noise)
                     if getattr(cfg.model, "diffusion_use_flow_matching_scheduler", False):
@@ -109,40 +104,42 @@ def train_one_checkpoint(
             forward_total_time = 0
             backward_total_time = 0
             total_lm_loss = 0
-            for ii in range(accum_freq):
+            for ii in range(cfg.hparams.accum_freq):
                 maybe_no_sync = nullcontext
                 # Don't sync gradients until the final batch for FSDP.
-                if isinstance(model, FSDP) and ii != accum_freq - 1:
+                if isinstance(model, FSDP) and ii != cfg.hparams.accum_freq - 1:
                     maybe_no_sync = model.no_sync
                 with maybe_no_sync():
                     with autocast():
                         forward_start = time.time()
-                        inputs_ii = input_ids[ii * cfg.experiment.per_gpu_batch_size : (ii + 1) * cfg.experiment.per_gpu_batch_size]
-                        mask_ii = attention_mask[ii * cfg.experiment.per_gpu_batch_size : (ii + 1) * cfg.experiment.per_gpu_batch_size] if attention_mask is not None else None
+                        inputs_ii = input_ids[ii * cfg.hparams.per_gpu_batch_size : (ii + 1) * cfg.hparams.per_gpu_batch_size]
+                        mask_ii = attention_mask[ii * cfg.hparams.per_gpu_batch_size : (ii + 1) * cfg.hparams.per_gpu_batch_size] if attention_mask is not None else None
                         if inputs_ii.shape[0] == 0:
                             break
-                        targets_ii = targets[ii * cfg.experiment.per_gpu_batch_size : (ii + 1) * cfg.experiment.per_gpu_batch_size]
+                        targets_ii = targets[ii * cfg.hparams.per_gpu_batch_size : (ii + 1) * cfg.hparams.per_gpu_batch_size]
                         if image is not None:
-                            images_ii = image[ii * cfg.experiment.per_gpu_batch_size : (ii + 1) * cfg.experiment.per_gpu_batch_size]
-                        if cfg.model.model_type == "transformer" or cfg.model.model_type == "transformer_hf":
+                            images_ii = image[ii * cfg.hparams.per_gpu_batch_size : (ii + 1) * cfg.hparams.per_gpu_batch_size]
+                        if cfg.model.type == "transformer" or cfg.model.type == "transformer_hf":
                             logits, _ = model(input_ids=inputs_ii, attention_mask=mask_ii)
                             forward_total_time += time.time() - forward_start
                             targets_ii = targets_ii.long()
+                            vocab_size = logits.shape[-1]
                             local_loss = (
-                                loss(logits.reshape(-1, cfg.model.vocab_size), targets_ii.reshape(-1))
+                                loss(logits.reshape(-1, vocab_size), targets_ii.reshape(-1))
                                 * (inputs_ii.shape[0] / input_ids.shape[0])
                             )
-                        elif cfg.model.model_type == "vlm" or cfg.model.model_type == "vlm_hf":
+                        elif cfg.model.type == "vlm" or cfg.model.type == "vlm_hf":
                             logits, _ = model(input_ids=inputs_ii, image=images_ii, attention_mask=mask_ii)
                             forward_total_time += time.time() - forward_start
                             targets_ii = targets_ii.long()
-                            ignore_mask = (targets_ii == dataloader.pad_token_id) | (targets_ii == dataloader.image_token_id)
+                            ignore_mask = (targets_ii == cfg.data.pad_token_id) | (targets_ii == cfg.data.image_token_id)
                             targets_ii = targets_ii.masked_fill(ignore_mask, -100)
+                            vocab_size = logits.shape[-1]
                             local_loss = (
-                                loss(logits.reshape(-1, cfg.model.vocab_size), targets_ii.reshape(-1))
+                                loss(logits.reshape(-1, vocab_size), targets_ii.reshape(-1))
                                 * (inputs_ii.shape[0] / input_ids.shape[0])
                             )
-                        elif cfg.model.model_type == "stable_diffusion":
+                        elif cfg.model.type == "stable_diffusion":
                             noise = torch.randn_like(images_ii)
                             predicted_noise = model(input_ids=inputs_ii, image=images_ii, attention_mask=mask_ii, noise=noise)
                             if getattr(cfg.model, "diffusion_use_flow_matching_scheduler", False):
@@ -158,11 +155,11 @@ def train_one_checkpoint(
             total_loss = total_lm_loss
 
         optim_step_start = time.time()
-        if cfg.experiment.grad_clip_norm is not None:
+        if cfg.hparams.grad_clip_norm is not None:
             if isinstance(model, FSDP):
-                model.clip_grad_norm_(cfg.experiment.grad_clip_norm, norm_type=2.0)
+                model.clip_grad_norm_(cfg.hparams.grad_clip_norm, norm_type=2.0)
             else:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.experiment.grad_clip_norm, norm_type=2.0)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.hparams.grad_clip_norm, norm_type=2.0)
         optimizer.step()
         optim_step_time_m.update(time.time() - optim_step_start)
 
@@ -180,9 +177,9 @@ def train_one_checkpoint(
         if is_master(cfg):
             batch_size = len(input_ids)
             # update the loss meter with the global loss tensor every iteration, so that the logging is of the avg of loss of the last
-            # cfg.experiment.log_every_n_steps iterations
+            # cfg.log_every_n_steps iterations
             losses_m.update(global_loss_tensor.item(), batch_size)
-            if (i % cfg.experiment.log_every_n_steps == 0 and i > 0) or batch_count == num_batches_per_checkpoint or step == total_steps - 1:
+            if (i % cfg.log_every_n_steps == 0 and i > 0) or batch_count == num_batches_per_checkpoint or step == total_steps - 1:
                 num_samples = batch_count * batch_size * cfg.distributed.world_size
                 samples_per_checkpoint = dataloader.dataloader.num_samples
                 percent_complete = 100.0 * batch_count / num_batches_per_checkpoint
@@ -220,15 +217,15 @@ def train_one_checkpoint(
                     "tokens_per_second": tokens_per_second,
                     "tokens_per_second_per_gpu": tokens_per_second_per_gpu,
                     "lr": optimizer.param_groups[0]["lr"],
-                    "tokens": (step + 1) * cfg.experiment.global_batch_size * cfg.data.seq_len,
-                    "samples": (step + 1) * cfg.experiment.global_batch_size,
+                    "tokens": (step + 1) * cfg.hparams.global_batch_size * cfg.data.seq_len,
+                    "samples": (step + 1) * cfg.hparams.global_batch_size,
                     "expected_steps_epoch": dataloader.dataloader.num_batches,
                     "seen_steps_epoch": batch_count,
                 }
 
                 for name, val in log_data.items():
                     name = "train/" + name
-                    if cfg.experiment.wandb:
+                    if cfg.wandb:
                         wandb.log({name: val, "step": step, "tokens": log_data["tokens"], "samples": log_data["samples"]})
 
                 # resetting batch / data time meters per log window

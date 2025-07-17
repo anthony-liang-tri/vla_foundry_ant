@@ -137,7 +137,7 @@ def wrap_fsdp_ddp(model, device, cfg):
         # from https://pytorch.org/blog/efficient-large-scale-training-with-pytorch/
         transformer_auto_wrapper_policy = functools.partial(
             transformer_auto_wrap_policy,
-            transformer_layer_cls=get_model_block(cfg.model.model_type, cfg.model),
+            transformer_layer_cls=get_model_block(cfg.model.type, cfg.model),
         )
         # tries to follow gopher...
         mp_policy = None
@@ -173,7 +173,7 @@ def wrap_fsdp_ddp(model, device, cfg):
         print("=> FSDP kwargs: ", fsdp_kwargs)
 
         # Initialize FSDP. Use the same seed across workers to ensure reset_parameters is the same across workers.
-        random_seed(cfg.experiment.seed, rank=0)
+        random_seed(cfg.hparams.seed, rank=0)
         model = FSDP(
             model,
             auto_wrap_policy=transformer_auto_wrapper_policy,

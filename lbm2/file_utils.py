@@ -6,6 +6,7 @@ import subprocess
 import fsspec
 import numpy as np
 import torch
+import yaml
 
 from torch.distributed.fsdp import (
     FullyShardedDataParallel as FSDP,
@@ -47,6 +48,24 @@ def json_load(file_path):
         return _json_load_s3_cp(file_path)
     with open(file_path, 'r') as f:
         out = json.load(f)
+    return out
+
+def _yaml_load_s3_cp(file_path):
+    cmd = f"aws s3 cp {file_path} -"
+    proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdout, stderr = proc.communicate()
+
+    if proc.returncode != 0:
+        raise RuntimeError(f"Failed to fetch YAML from S3: {stderr.decode().strip()}")
+    
+    return yaml.safe_load(io.BytesIO(stdout))
+
+def yaml_load(file_path):
+    if file_path.startswith("s3"):
+        logging.info("Loading remote yaml.")
+        return _yaml_load_s3_cp(file_path)
+    with open(file_path, 'r') as f:
+        out = yaml.safe_load(f)
     return out
 
 

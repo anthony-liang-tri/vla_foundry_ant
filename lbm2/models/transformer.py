@@ -144,7 +144,7 @@ class Transformer(nn.Module):
         self.hidden_dim = model_configs.hidden_dim
         self.vocab_size = model_configs.vocab_size
         self.n_layers = model_configs.n_layers
-        self.seq_len = model_configs.seq_len
+        self.max_seq_len = model_configs.max_seq_len
         self.norm_type = get_norm_class(model_configs.norm_type)
         self.post_embed_norm = (
             self.norm_type(

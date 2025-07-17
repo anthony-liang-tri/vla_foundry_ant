@@ -8,14 +8,18 @@ def get_experiment_name(cfg):
         if cfg.distributed.use_distributed:
             # sync date_str from master to all ranks
             date_str = broadcast_object(cfg, date_str)
-        cfg.name = "-".join(
+        name = "-".join(
             [
                 date_str,
-                f"model_{cfg.model.model_type}",
-                f"lr_{cfg.experiment.lr}",
-                f"bsz_{cfg.experiment.global_batch_size}",
+                f"model_{cfg.model.type}",
+                f"lr_{cfg.hparams.lr}",
+                f"bsz_{cfg.hparams.global_batch_size}",
             ]
         )
+    else:
+        name = cfg.name
     
     # sanitize model name for filesystem / uri use
-    return cfg.name.replace("/", "-")
+    name.replace("/", "-")
+    object.__setattr__(cfg, 'name', name)
+    return name

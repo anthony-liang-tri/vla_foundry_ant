@@ -5,19 +5,15 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+import draccus
 import boto3
 import sagemaker
 import yaml
 from sagemaker.pytorch import PyTorch
 from sagemaker.batch_queueing.queue import Queue
 
-from dataclasses import fields
-from lbm2.params.data_params import DataParams, add_data_params
-from lbm2.params.distributed_params import DistributedParams, add_distributed_params
-from lbm2.params.experiment_params import ExperimentParams, add_experiment_params
-from lbm2.params.model_params import ModelParams, add_model_params
-from lbm2.params.extra.vit_params import ViTParams, add_vit_params
-from lbm2.params.extra.diffusion_params import DiffusionParams, add_diffusion_params
+from dataclasses import dataclass, field, fields
+from lbm2.params.train_experiment_params import TrainExperimentParams
 
 NAME = "lbm2"
 INSTANCE_MAPPER = {
@@ -31,6 +27,29 @@ QUEUE_MAPPER = {
         "ml.p4d.24xlarge": "fss-ml-p4d-24xlarge-us-west-2",
     },
 }
+
+
+@dataclass(frozen=True)
+class SageMakerParams(TrainExperimentParams):
+    local: bool = field(default=False)
+    user: str = field(default=None)
+
+    # AWS profile args
+    region: str = field(default="us-west-2")
+    profile: str = field(default="default")
+    arn: str = field(default=None)
+    s3_remote_sync: str = field(default=None)
+
+    # Instance args
+    instance_count: int = field(default=1)
+    instance_type: str = field(default="p4de")
+
+    # SageMaker queue args
+    queue_name: str = field(default='ml')
+    priority: int = field(default=1)
+
+    def __post_init__(self):
+        pass
 
 
 def run_command(command):
@@ -73,66 +92,40 @@ def get_image(user, profile="default", region="us-east-1"):
     return f"{account}.dkr.ecr.{region}.amazonaws.com/{algorithm_name}:latest"
 
 
-def parse_args():
-    # Use first line of file docstring as description if it exists.
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--local", action="store_true")
-    parser.add_argument("--user", required=True, help="User name")
-
-    # AWS profile args
-    parser.add_argument("--region", default="us-west-2", help="AWS region")
-    parser.add_argument("--profile", default="default", help="AWS profile to use")
-    parser.add_argument("--arn", default=None, help="If None, reads from SAGEMAKER_ARN env var")
-    parser.add_argument("--s3-remote-sync", default=None, help="S3 path to sync to. If none, reads from S3_REMOTE_SYNC env var")
-
-    # Instance args
-    parser.add_argument("--instance-count", default=1, type=int, help="Number of instances")
-    parser.add_argument("--instance-type", default="p4de", choices=list(INSTANCE_MAPPER.keys()))
-
-    # SageMaker queue args
-    parser.add_argument("--queue-name", type=str, default='ml')
-    parser.add_argument("--priority", type=int, default=1, help="SageMaker FSS queue priority")
-
-    add_data_params(parser)
-    add_distributed_params(parser)
-    add_experiment_params(parser)
-    add_model_params(parser)
-    add_vit_params(parser)
-    add_diffusion_params(parser)
-    args = parser.parse_args()
-    return args
-
-
-def main():
-    args = parse_args()
+def main():    
+    args = draccus.parse(config_class=SageMakerParams)
 
     # Check this first to avoid waiting for Docker build.
     hyperparameters = {}
-    for paramgroup in [DataParams, DistributedParams, ExperimentParams, ModelParams, ViTParams, DiffusionParams]:
-        for i in fields(paramgroup):
-            if i.name in args:
-                if getattr(args, i.name) is False or getattr(args, i.name) is None:
-                    continue
-                elif getattr(args, i.name) is True:
-                    hyperparameters[i.name.replace('_', '-')] = ""
-                else:
-                    hyperparameters[i.name.replace('_', '-')] = getattr(args, i.name)
-    del hyperparameters['wandb']    # always log to wandb for sagemaker
+    for (k, v) in args:
+        if k.startswith('data.') or k.startswith('distributed.') or k.startswith('hparams.') or k.startswith('model.'):
+            if v is None:
+                continue
+            if k == "distributed.use_distributed" or k == "distributed.world_size" or k == "distributed.rank" or k == "distributed.local_rank" or k == "distributed.device" or k == "hparams.world_size":
+                continue
+            hyperparameters[k] = v
+        if k == "name" and v is not None:
+            hyperparameters[k] = v
+    hyperparameters["save_path"] = "/opt/ml/checkpoints"
     print(hyperparameters)
+
+    # We probably want wandb logging and S3 saving for sagemaker runs
+    assert hyperparameters.get("remote_sync") is not None
+    assert hyperparameters.get("wandb") == True
 
     assert args.instance_type in INSTANCE_MAPPER
     if args.arn is None:
         assert (
             "SAGEMAKER_ARN" in os.environ
         ), "Please specify --arn or set the SAGEMAKER_ARN environment variable"
-        args.arn = os.environ["SAGEMAKER_ARN"]
+        object.__setattr__(args, "arn", os.environ["SAGEMAKER_ARN"])
 
     if args.s3_remote_sync is None:
         assert (
             "S3_REMOTE_SYNC" in os.environ
         ), "Please specify --s3-remote-sync or set the S3_REMOTE_SYNC environment variable"
-        args.s3_remote_sync = os.environ["S3_REMOTE_SYNC"]
-        args.s3_remote_sync = args.s3_remote_sync.replace("us-east-1", args.region)
+        object.__setattr__(args, "s3_remote_sync", os.environ["S3_REMOTE_SYNC"])
+        object.__setattr__(args, "s3_remote_sync", args.s3_remote_sync.replace("us-east-1", args.region))
 
     image = get_image(
         args.user,
@@ -183,6 +176,13 @@ def main():
         "SM_USE_RESERVED_CAPACITY": "1",
         "WANDB_PROJECT": "lbm2",
     }
+    with open("secrets.env", 'r') as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                key, value = line.split('=', 1)
+                environment[key.strip()] = value.strip().strip('"\'')
+
     estimator = PyTorch(
         entry_point="lbm2/main.py",
         sagemaker_session=sagemaker_session,

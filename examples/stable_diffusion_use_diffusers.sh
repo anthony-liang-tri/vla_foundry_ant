@@ -1,23 +1,23 @@
-~/anaconda3/envs/vla3/bin/torchrun --nproc_per_node=8 --nnodes=1 lbm2/main.py \
---model stable_diffusion \
---model-type stable_diffusion \
---processor stable_diffusion \
---diffusion-use-diffusers-unet \
---diffusion-use-diffusers-scheduler \
---loss-function mse \
---fsdp \
---fsdp-use-orig-params \
---fsdp-limit-all-gathers \
---dataset-type webdataset \
---dataset-manifest s3://tri-ml-datasets/datasets/datacompdr_1b/manifest.jsonl \
---dataset-modality image_caption \
---total-train-samples 50_000_000 \
---num-checkpoints 10 \
---per-gpu-batch-size 16 \
---global-batch-size 1024 \
---vit-img-size 128 \
---lr 1e-3 \
---lr-cooldown-end 1e-6 \
---seq-len 64 \
---remote-sync s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/stable_diffusion \
---disable-wandb
+.venv/bin/torchrun --nproc_per_node=8 --nnodes=1 lbm2/main.py \
+--model.type stable_diffusion \
+--model.use_diffusers_unet True \
+--model.use_diffusers_scheduler True \
+--model.unet.image_size 128 \
+--distributed.fsdp True \
+--distributed.fsdp_use_orig_params True \
+--distributed.fsdp_limit_all_gathers True \
+--data.type image_caption \
+--data.processor stable_diffusion \
+--data.dataset_manifest ["s3://tri-ml-datasets/datasets/datacompdr_1b/manifest.jsonl"] \
+--data.dataset_modality ["image_caption"] \
+--data.dataset_weighting [1.0] \
+--data.seq_len 64 \
+--hparams.loss_function mse \
+--hparams.per_gpu_batch_size 16 \
+--hparams.global_batch_size 1024 \
+--hparams.lr 1e-3 \
+--hparams.lr_cooldown_end 1e-6 \
+--total_train_samples 50_000_000 \
+--num_checkpoints 10 \
+--remote_sync s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/stable_diffusion \
+--wandb True 

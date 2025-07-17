@@ -4,20 +4,20 @@ from lbm2.file_utils import pt_load
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 
 
-def create_optimizer(experiment_configs, model):
+def create_optimizer(hparams, model):
     named_parameters = list(model.named_parameters())
     no_decay_params = []  # to be potentially used later
     params = [p for n, p in named_parameters if p.requires_grad]
 
-    if experiment_configs.optimizer == "adamw":
+    if hparams.optimizer == "adamw":
         optimizer = optim.AdamW(
             [
                 {"params": no_decay_params, "weight_decay": 0.0},
-                {"params": params, "weight_decay": experiment_configs.wd},
+                {"params": params, "weight_decay": hparams.wd},
             ],
-            lr=experiment_configs.lr,
-            betas=(experiment_configs.beta1, experiment_configs.beta2),
-            eps=experiment_configs.eps,
+            lr=hparams.lr,
+            betas=(hparams.beta1, hparams.beta2),
+            eps=hparams.eps,
         )
     else:
         raise ValueError("Only adamw supported for now")

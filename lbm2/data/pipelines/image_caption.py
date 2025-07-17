@@ -13,10 +13,9 @@ def filter_no_caption_or_no_image(sample):
 
 
 class ImageCaptionPipeline(BaseWebDatasetPipeline):
-    def __init__(self, modality, data_configs, batch_size, vit_configs):
+    def __init__(self, modality, data_configs, batch_size):
         super().__init__(modality, data_configs, batch_size)
-        self.vit_configs = vit_configs
-        self.processor = get_processor(data_configs.processor, vit_configs)
+        self.processor = get_processor(data_configs)
 
     def create_pipeline(self, datastring, checkpoint_num):
         pipeline = [

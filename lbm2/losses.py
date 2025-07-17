@@ -21,10 +21,10 @@ class CrossEntropyLossWithZLoss(CrossEntropyLoss):
         return super().forward(input, target) + self.eps * torch.square(torch.logsumexp(input, dim=-1)).mean()
 
 
-def get_loss_function(loss_function_type, experiment_configs):
+def get_loss_function(loss_function_type, hparams):
     if loss_function_type == "cross_entropy":
-        if experiment_configs.z_loss_coefficient != 0.0:
-            loss = CrossEntropyLossWithZLoss(experiment_configs.z_loss_coefficient)
+        if hparams.z_loss_coefficient != 0.0:
+            loss = CrossEntropyLossWithZLoss(hparams.z_loss_coefficient)
         else:
             loss = torch.nn.CrossEntropyLoss()
     elif loss_function_type == "mse":

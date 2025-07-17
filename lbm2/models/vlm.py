@@ -2,12 +2,12 @@ import torch
 import torch.nn as nn
 
 class ModalityProjector(nn.Module):
-    def __init__(self, model_configs):
+    def __init__(self, vit_configs, output_dim):
         super().__init__()
-        self.model_configs = model_configs
-        self.input_dim = model_configs.vit_hidden_dim * (model_configs.projector_pixel_shuffle_factor**2)
-        self.output_dim = model_configs.hidden_dim
-        self.scale_factor = model_configs.projector_pixel_shuffle_factor
+        self.vit_configs = vit_configs
+        self.input_dim = vit_configs.vit_hidden_dim * (vit_configs.projector_pixel_shuffle_factor**2)
+        self.output_dim = output_dim
+        self.scale_factor = vit_configs.projector_pixel_shuffle_factor
 
         self.proj = nn.Linear(self.input_dim, self.output_dim, bias=False)
         
@@ -49,11 +49,7 @@ class VLM(nn.Module):
         self.model_configs = model_configs
         self.vit = vit
         self.transformer = transformer
-        self.projection = ModalityProjector(model_configs)
-        if model_configs.processor is not None:
-            from lbm2.data.processor import get_processor
-            processor = get_processor(model_configs.processor, model_configs)
-            self.image_token_id = processor.image_token_id
+        self.projection = ModalityProjector(model_configs.vit, model_configs.transformer.hidden_dim)
 
     def forward(self, input_ids, image, attention_mask=None):
         # image shape [bsz, 3, image_size, image_size]
@@ -61,7 +57,7 @@ class VLM(nn.Module):
         image_embd = self.vit(image)        
         image_embd = self.projection(image_embd)        # [bsz, 16*16, lm_hidden_dim]
         token_embd = self.transformer.embeddings(input_ids).to(image_embd.dtype)
-        special_image_mask = (input_ids == self.image_token_id).unsqueeze(-1)
+        special_image_mask = (input_ids == self.model_configs.image_token_id).unsqueeze(-1)
         assert special_image_mask.sum().item() == image_embd.shape[0] * image_embd.shape[1]
         special_image_mask = special_image_mask.expand_as(token_embd).to(token_embd.device)
         inputs_embeds = token_embd.masked_scatter(special_image_mask, image_embd)

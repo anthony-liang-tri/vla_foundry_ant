@@ -1,17 +1,13 @@
-import sys
-import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
 import torch
-from lbm2.params.params import load_params_from_json
+from lbm2.params.train_experiment_params import load_params_from_yaml
 from lbm2.models import create_model
 from lbm2.file_utils import load_model_checkpoint
 
 
-cfg = load_params_from_json("s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/transformer_11m_sagemaker/2025_05_26-21_03_08-model_transformer-lr_0.0001-bsz_128/config.json")
+cfg = load_params_from_yaml("s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/llm_11m/2025_07_04-05_57_53-model_transformer-lr_0.0001-bsz_2048/config.yaml")
 model = create_model(cfg.model)
-ckpt = "s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/transformer_11m_sagemaker/2025_05_26-21_03_08-model_transformer-lr_0.0001-bsz_128/checkpoints/checkpoint_4.pt"
-load_model_checkpoint(model, ckpt, cfg.experiment.seed, cfg.distributed)
+ckpt = "s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/llm_11m/2025_07_04-05_57_53-model_transformer-lr_0.0001-bsz_2048/checkpoints/checkpoint_6.pt"
+load_model_checkpoint(model, ckpt, cfg.hparams.seed, cfg.distributed)
 
 
 from transformers import AutoTokenizer

@@ -2,16 +2,15 @@ from transformers import AutoProcessor
 from lbm2.data.processor.stable_diffusion_processor import StableDiffusionProcessor
 
 
-def get_processor(processor, vit_configs, **kwargs):
-    if processor == "stable_diffusion":
-        image_size = vit_configs.vit_img_size
-        max_length = kwargs.get('max_length', 64)
-        return StableDiffusionProcessor(image_size=image_size, max_length=max_length)
-    elif processor is not None:
-        processor = AutoProcessor.from_pretrained(processor)
-        processor.image_seq_length = vit_configs.vit_img_num_tokens
-        if not hasattr(processor, "image_token_id"):
-            processor.image_token_id = None
+def get_processor(data_configs):
+    if data_configs.processor == "stable_diffusion":
+        return StableDiffusionProcessor(
+            image_size=data_configs.image_size, 
+            max_length=data_configs.seq_len,
+        )
+    elif data_configs.processor is not None:
+        processor = AutoProcessor.from_pretrained(data_configs.processor)
+        processor.image_seq_length = data_configs.img_num_tokens
         return processor
     else:
-        raise ValueError(f"CustomTransform not yet supported. Use an existing HF transform.")
+        raise ValueError(f"{data_configs.processor} not yet supported.")

@@ -1,21 +1,23 @@
 .venv/bin/torchrun --nproc_per_node=8 --nnodes=1 lbm2/main.py \
---model vlm_3b \
---model-type vlm \
---vit-pretrained vit_base_patch16_siglip_224 \
---processor google/paligemma-3b-pt-224 \
---fsdp \
---fsdp-use-orig-params \
---fsdp-limit-all-gathers \
---dataset-type webdataset \
---dataset-manifest s3://tri-ml-datasets/datasets/datacompdr_1b/manifest.jsonl \
---dataset-modality image_caption \
---total-train-samples 14_000_000 \
---num-checkpoints 5 \
---per-gpu-batch-size 2 \
---global-batch-size 64 \
---vit-img-num-tokens 196 \
---vit-hidden-dim 768 \
---projector-pixel-shuffle-factor 1 \
---seq-len 2048 \
---remote-sync s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/vlm_siglip_paligemma_3b \
---disable-wandb
+--model.type vlm \
+--model.transformer.load_path lbm2/config_presets/models/vlm_3b.yaml \
+--model.vit.type vit_hf \
+--model.vit.hf_pretrained vit_base_patch16_siglip_224 \
+--distributed.fsdp True \
+--distributed.fsdp_use_orig_params True \
+--distributed.fsdp_limit_all_gathers True \
+--data.type image_caption \
+--data.processor google/paligemma-3b-pt-224 \
+--data.dataset_manifest ["s3://tri-ml-datasets/datasets/datacompdr_1b/manifest.jsonl"] \
+--data.dataset_modality ["image_caption"] \
+--data.dataset_weighting [1.0] \
+--data.img_num_tokens 196 \
+--data.seq_len 2048 \
+--total_train_samples 14_000_000 \
+--num_checkpoints 5 \
+--hparams.per_gpu_batch_size 2 \
+--hparams.global_batch_size 64 \
+--model.vit.vit_hidden_dim 768 \
+--model.vit.projector_pixel_shuffle_factor 1 \
+--remote_sync s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/vlm_siglip_paligemma_3b \
+--wandb True 

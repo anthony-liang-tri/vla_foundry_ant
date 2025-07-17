@@ -117,11 +117,11 @@ class UNet(nn.Module):
     def __init__(self, model_configs):
         super().__init__()
         self.model_configs = model_configs
-        self.in_channels = model_configs.diffusion_unet_in_channels
-        self.out_channels = model_configs.diffusion_unet_out_channels
-        self.time_emb_dim = model_configs.diffusion_unet_time_emb_dim
-        self.text_emb_dim = model_configs.diffusion_unet_text_emb_dim
-        self.channels = model_configs.diffusion_unet_channels
+        self.in_channels = model_configs.unet.in_channels
+        self.out_channels = model_configs.unet.out_channels
+        self.time_emb_dim = model_configs.unet.time_emb_dim
+        self.text_emb_dim = model_configs.unet.text_emb_dim
+        self.channels = model_configs.unet.channels
         self.dim_expansion = 4
        
         # Time embedding
@@ -192,6 +192,12 @@ class UNet(nn.Module):
 
 
     def forward(self, x, timesteps, text_embeddings=None):
+        # Convert timesteps to tensor with proper batch dimension
+        if not isinstance(timesteps, torch.Tensor):
+            timesteps = torch.tensor([timesteps] * x.shape[0], device=x.device, dtype=torch.long)
+        elif timesteps.dim() == 0:  # scalar tensor
+            timesteps = timesteps.unsqueeze(0).expand(x.shape[0])
+        
         time_emb = self.time_mlp(timesteps)     # [bsz, time_emb_dim*4]
         text_emb_pooled = text_embeddings.max(dim=1)[0] if text_embeddings is not None else None      # [bsz, text_emb_dim]
 

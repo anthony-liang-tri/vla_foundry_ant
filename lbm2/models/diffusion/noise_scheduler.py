@@ -7,9 +7,9 @@ class NoiseSchedulerDDPM(nn.Module):
     def __init__(self, model_configs):
         super().__init__()
         self.model_configs = model_configs
-        self.num_timesteps = model_configs.diffusion_noise_scheduler_num_timesteps
-        self.beta_start = model_configs.diffusion_noise_scheduler_beta_start
-        self.beta_end = model_configs.diffusion_noise_scheduler_beta_end
+        self.num_timesteps = model_configs.noise_scheduler.num_timesteps
+        self.beta_start = model_configs.noise_scheduler.beta_start
+        self.beta_end = model_configs.noise_scheduler.beta_end
         betas = torch.linspace(self.beta_start, self.beta_end, self.num_timesteps)
         alphas = 1 - betas
         alphas_cumprod = torch.cumprod(alphas, dim=0)

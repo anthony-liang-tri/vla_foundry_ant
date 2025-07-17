@@ -6,7 +6,7 @@ class ViTHF(nn.Module):
     def __init__(self, model_configs):
         super().__init__()
         self.model_configs = model_configs
-        self.model_name = model_configs.vit_pretrained
+        self.model_name = model_configs.hf_pretrained
         self.model = timm.create_model(self.model_name, num_classes=0, pretrained=True)
 
     def forward(self, image):

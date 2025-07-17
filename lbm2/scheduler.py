@@ -65,27 +65,27 @@ def cosine_lr(optimizer, base_lr, warmup_length, steps, min_lr, force_min_lr):
     return _lr_adjuster
 
 
-def create_scheduler(experiment_configs, optimizer):
-    total_steps = experiment_configs.total_train_samples // experiment_configs.global_batch_size
-    if float(experiment_configs.warmup) < 1:
-        warmup = int(float(experiment_configs.warmup) * total_steps)
+def create_scheduler(hparams, optimizer, total_train_samples):
+    total_steps = total_train_samples // hparams.global_batch_size
+    if float(hparams.warmup) < 1:
+        warmup = int(float(hparams.warmup) * total_steps)
     else:
-        warmup = int(experiment_configs.warmup)
-    if experiment_configs.lr_scheduler == "cosine":
+        warmup = int(hparams.warmup)
+    if hparams.lr_scheduler == "cosine":
         scheduler = cosine_lr(
             optimizer,
-            experiment_configs.lr,
+            hparams.lr,
             warmup,
             total_steps,
-            experiment_configs.lr_cooldown_end,
-            experiment_configs.force_min_lr,
+            hparams.lr_cooldown_end,
+            hparams.force_min_lr,
         )
     elif args.lr_scheduler == "const":
         scheduler = const_lr(
             optimizer,
-            experiment_configs.lr,
+            hparams.lr,
             warmup,
         )
     else:
-        raise ValueError(f"Unknown scheduler, {experiment_configs.lr_scheduler}. Available options are: cosine, const.")
+        raise ValueError(f"Unknown scheduler, {hparams.lr_scheduler}. Available options are: cosine, const.")
     return scheduler
