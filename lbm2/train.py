@@ -210,7 +210,6 @@ def train_one_checkpoint(
                 samples_per_checkpoint = dataloader.dataloader.num_samples
                 percent_complete = 100.0 * batch_count / num_batches_per_checkpoint
 
-                losses_m.update(global_loss_tensor.item(), batch_size)
                 samples_per_second = batch_size * cfg.distributed.world_size / batch_time_m.val
                 samples_per_second_per_gpu = batch_size / batch_time_m.val
                 tokens_per_second = input_ids.numel() * cfg.distributed.world_size / batch_time_m.val
