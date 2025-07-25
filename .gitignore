@@ -1,5 +1,6 @@
 # Environment / configuration
 secrets.env
+.venv
 
 # Experiments / data / outputs
 wandb
