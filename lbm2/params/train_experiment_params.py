@@ -1,12 +1,10 @@
 import logging
-import tempfile
 from dataclasses import dataclass, field
 
 import draccus
-import yaml
 
 from lbm2.data.utils import epochs_to_samples
-from lbm2.file_utils import yaml_load
+from lbm2.file_utils import copy_to_temp_file
 from lbm2.params.base_params import BaseParams
 from lbm2.params.data_params import DataParams
 from lbm2.params.distributed_params import DistributedParams
@@ -69,9 +67,24 @@ class TrainExperimentParams(BaseParams):
 
 
 def load_params_from_yaml(path: str) -> TrainExperimentParams:
-    curr_yaml = yaml_load(path)
-    # Save curr_yaml to a temporary file and delete it after loading
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=True) as temp_file:
-        yaml.dump(curr_yaml, temp_file)
-        temp_file.flush()  # Ensure data is written
-        return draccus.load(TrainExperimentParams, temp_file.name)
+    """
+    Load a draccus params object from a yaml file with support for s3 paths.
+
+    Warning: If loading from s3, the file will be copied to a temporary file and deleted after loading.
+    This does not allow !include statements in the yaml files because those need to be relative to the file.
+    Hopefully s3 configs do not have !include statements (they shouldn't).
+    """
+    # Need to copy to temp file because draccus doesn't support loading from s3.
+    if path.startswith("s3"):
+        with copy_to_temp_file(path) as temp_path:
+            # Load the params            breakpoint()
+            params = draccus.load(TrainExperimentParams, temp_path)
+    else:
+        # Load the params from the local file so it can support !include statements.
+        params = draccus.load(TrainExperimentParams, path)
+    return params
+
+
+if __name__ == "__main__":
+    path = "s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/vlm_paligemma_3b/2025_07_04-01_38_18-model_vlm-lr_0.0001-bsz_128/config.yaml"
+    print(load_params_from_yaml(path))

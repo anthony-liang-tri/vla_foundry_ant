@@ -9,7 +9,6 @@ data:
   dataset_weighting:
   - 1.0
   - 3.0
-  load_path: null
   num_workers: 1
   seed: 42
   seq_len: 2048
@@ -28,7 +27,6 @@ distributed:
   fsdp_limit_all_gathers: true
   fsdp_pure_bf16: false
   fsdp_use_orig_params: true
-  load_path: null
   local_rank: 0
   rank: 0
   use_distributed: true
@@ -41,7 +39,6 @@ hparams:
   global_batch_size: 2048
   grad_checkpointing: false
   grad_clip_norm: null
-  load_path: null
   loss_function: cross_entropy
   lr: 0.0001
   lr_cooldown_end: 0.0
@@ -55,13 +52,11 @@ hparams:
   wd: 0.2
   world_size: 8
   z_loss_coefficient: 0.0
-load_path: null
 log_every_n_steps: 20
 model:
   attn_name: torch_attn
   ffn_type: swiglu
   hidden_dim: 96
-  load_path: lbm2/config_presets/models/transformer_11m.yaml
   max_seq_len: 2048
   n_heads: 4
   n_layers: 8

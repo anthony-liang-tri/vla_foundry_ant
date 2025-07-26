@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, fields
 
 import draccus
 
@@ -7,22 +7,10 @@ import draccus
 class BaseParams:
     """
     BaseParams is the base class for all parameters. Other params classes inherit from it.
-
-    It provides a framework for loading parameters from a file through `load_path`.
-    Usage: `--model.load_path=some_path.yaml`, `--data.load_path=...`, etc.
-    Can even be something like `--model.unet.load_path=...`.
-
-    This argument is useful for recycling presets that we want to use repeatedly.
-    Command line arguments still take precedence (i.e., if an overlapping argument is supplied in
-    the command line, it will overwrite the value from the preset yaml).
     """
 
-    load_path: str = field(default=None)
-
     def __post_init__(self):
-        if self.load_path is not None:
-            cfg_new = self.from_file(self.load_path)
-            self.from_existing_config(cfg_new, force=False)
+        pass
 
     def __iter__(self):
         """Make the class iterable, yielding (field_name, value) pairs."""
@@ -45,23 +33,32 @@ class BaseParams:
         cfg_new = draccus.load(cls, file_path)
         return cfg_new
 
-    def from_existing_config(self, cfg_new, force=False):
-        # Looks for fields in cfg_new that are different from the default value and copies them to self
-        # If force is True, overwrite even if current value is already set
-        # If force is False, only overwrite if current value is equal to the default value
-        for field_info in fields(self):
+    @classmethod
+    def from_dict(cls, dict_data):
+        # Recursively handle nested BaseParams objects
+        processed_dict = {}
+
+        for field_info in fields(cls):
             field_name = field_info.name
-            current_value = getattr(self, field_name, None)
-            new_value = getattr(cfg_new, field_name, None)
-            if isinstance(current_value, BaseParams):
-                current_value.from_existing_config(new_value, force=force)
-                continue
-            default_value = field_info.default
-            if new_value != default_value:
-                if isinstance(new_value, list) and len(new_value) == 0:
-                    continue
-                is_default = current_value == default_value or current_value == []
-                if not is_default and not force:
-                    continue
-                print(f"Setting {field_name} to {new_value}")
-                object.__setattr__(self, field_name, new_value)
+            field_type = field_info.type
+
+            if field_name in dict_data:
+                field_value = dict_data[field_name]
+
+                if isinstance(field_type, BaseParams) and isinstance(field_value, dict):
+                    # Recursively process nested BaseParams
+                    processed_dict[field_name] = field_type.from_dict(field_value)
+                else:
+                    # Use the value as-is
+                    processed_dict[field_name] = field_value
+            else:
+                # Field not in dict_data, will use default
+                pass
+
+        # Include any extra fields that aren't in the class definition
+        for key, value in dict_data.items():
+            if key not in processed_dict:
+                processed_dict[key] = value
+
+        cfg_new = draccus.decode(cls, processed_dict)
+        return cfg_new

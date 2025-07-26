@@ -2,7 +2,7 @@
 --model.type stable_diffusion \
 --model.use_diffusers_unet False \
 --model.use_diffusers_scheduler False \
---model.unet.load_path lbm2/config_presets/models/unet.yaml \
+--model.unet !include lbm2/config_presets/models/unet.yaml \
 --model.unet.image_size 128 \
 --distributed.fsdp True \
 --distributed.fsdp_use_orig_params True \

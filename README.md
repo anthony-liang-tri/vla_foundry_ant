@@ -18,8 +18,8 @@ An example command is something like this:
 ```bash
 .venv/bin/torchrun --nproc_per_node=8 --nnodes=1 lbm2/main.py \
 --model.type vlm \
---model.transformer.load_path lbm2/config_presets/models/vlm_3b.yaml \
---model.vit.load_path lbm2/config_presets/models/vit_paligemma.yaml \
+--model.transformer !include lbm2/config_presets/models/vlm_3b.yaml \
+--model.vit !include lbm2/config_presets/models/vit_paligemma.yaml \
 --data.type image_caption \
 --data.processor google/paligemma-3b-pt-224 \
 --data.dataset_manifest ["s3://tri-ml-datasets/datasets/datacompdr_1b/manifest.jsonl"] \
@@ -66,7 +66,7 @@ We use [draccus](https://github.com/dlwh/draccus) for argument parsing. Params a
 Below we show an example of how we supply arguments (see [examples](lbm2/examples) folder for more):
 ```bash
 --model.type transformer \
---model.load_path lbm2/config_presets/models/transformer_11m.yaml \
+--model !include lbm2/config_presets/models/transformer_11m.yaml \
 --distributed.fsdp True \
 --distributed.fsdp_use_orig_params True \
 --distributed.fsdp_limit_all_gathers True \
@@ -84,7 +84,7 @@ Below we show an example of how we supply arguments (see [examples](lbm2/example
 A few usage notes:
 - We pass arguments by prepending the subclass, separated by a period, for example `--model.hidden_dim`. We can also nest multiple layers deep, for example `--model.vit.vit_n_layers`
 - For `model` and `data`, we are **required** to set `--model.type` and `--data.type`, which will indicate which specific subclass of `ModelParams` or `DataParams` we will instantiate. For example, `--model.type=transformer_hf` will instantiate `cfg.model` as a `TransformerHFParams` object.
-- As seen in the example above, we can use the `--model.load_path` argument to recycle presets that we want to use repeatedly. Command line arguments still take precedence (i.e., if an overlapping argument is supplied in the command line, it will overwrite the value from the preset yaml). This `load_path` can be used for any parameter class, so we can conceivably have `--data.load_path` for datasets we want to recycle, or even something like `--model.unet.load_path`.
+- As seen in the example above, we can use the `--model !include ...` argument to recycle presets that we want to use repeatedly. Command line arguments still take precedence (i.e., if an overlapping argument is supplied in the command line, it will overwrite the value from the preset yaml). This `!include` can be used for any parameter class that is loaded with draccus.
 
 #### 1.2 Design Choices
 - Arguments are immutable by design, and we recommend developing around this. If really necessary, `object.__setattr__` can be used to modify an immutable argument.

@@ -62,12 +62,10 @@ def get_args_vlm_from_load_path():
     test_args = [
         "--model.type",
         "vlm",
-        "--model.transformer.load_path",
-        "lbm2/config_presets/models/vlm_3b.yaml",
+        "--model.transformer='include lbm2/config_presets/models/vlm_3b.yaml'",
         "--model.vit.type",
         "vit",
-        "--model.vit.load_path",
-        "lbm2/config_presets/models/vit_paligemma.yaml",
+        "--model.vit='include lbm2/config_presets/models/vit_paligemma.yaml'",
         "--distributed.fsdp",
         "True",
         "--distributed.fsdp_use_orig_params",
@@ -126,9 +124,7 @@ def test_get_args_vlm():
 def test_load_path_flag():
     args = get_args_vlm_from_load_path()
     assert args.model.type == "vlm"
-    assert args.model.transformer.load_path == "lbm2/config_presets/models/vlm_3b.yaml"
     assert args.model.vit.type == "vit"
-    assert args.model.vit.load_path == "lbm2/config_presets/models/vit_paligemma.yaml"
     assert args.distributed.fsdp
     assert args.distributed.fsdp_use_orig_params
     assert args.data.type == "image_caption"
@@ -160,6 +156,18 @@ def test_load_path_flag():
 def test_load_params_from_yaml(params_yaml):
     params = load_params_from_yaml(params_yaml)
     assert params.model.vit.vit_hidden_dim == 999
+
+
+@pytest.mark.parametrize(
+    "params_yaml",
+    [
+        "tests/shared/dummy_vlm_config_include_vit.yaml",
+        "tests/shared/dummy_vlm_config_include_model.yaml",
+    ],
+)
+def test_load_params_from_yaml_include(params_yaml):
+    params = load_params_from_yaml(params_yaml)
+    assert params.model.vit.vit_hidden_dim == 100
 
 
 def test_immutable_params():

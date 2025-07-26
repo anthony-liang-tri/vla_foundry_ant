@@ -1,6 +1,6 @@
 .venv/bin/torchrun --nproc_per_node=8 --nnodes=1 lbm2/main.py \
 --model.type vlm \
---model.transformer.load_path lbm2/config_presets/models/vlm_3b.yaml \
+--model.transformer !include lbm2/config_presets/models/vlm_3b.yaml \
 --model.vit.type vit_hf \
 --model.vit.hf_pretrained vit_base_patch16_siglip_224 \
 --distributed.fsdp True \
