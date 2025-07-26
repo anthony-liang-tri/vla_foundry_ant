@@ -515,7 +515,7 @@ class TestImageCaptionPipeline:
         sample = {"txt": "A description", image_format: b"image_data"}
         assert filter_no_caption_or_no_image(sample)
 
-    @pytest.mark.parametrize("param_config_path", ["tests/params/dummy_configs/dummy_vit_config.yaml"])
+    @pytest.mark.parametrize("param_config_path", ["tests/params/dummy_configs/dummy_vlm_config.yaml"])
     def test_vlm_dataloader_actual_datastring(self, param_config_path):
         params = load_experiment_params_from_yaml(param_config_path)
         datastrings, num_samples_per_dataset, _, _ = get_datastring_input(
