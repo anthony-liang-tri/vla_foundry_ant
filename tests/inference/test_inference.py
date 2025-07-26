@@ -1,12 +1,12 @@
 from lbm2.file_utils import load_model_checkpoint
 from lbm2.models import create_model
-from lbm2.params.train_experiment_params import load_params_from_yaml
+from lbm2.params.train_experiment_params import load_experiment_params_from_yaml
 
 EXPECTED_OUTPUT_TEXT = ["hi[PAD][PAD][PAD]....................", "This is a batch...................."]
 
 
 def test_inference_text():
-    cfg = load_params_from_yaml("tests/shared/tiny_model/config.yaml")
+    cfg = load_experiment_params_from_yaml("tests/shared/tiny_model/config.yaml")
     model = create_model(cfg.model)
     ckpt = "tests/shared/tiny_model/checkpoint.pt"
     load_model_checkpoint(model, ckpt, cfg.hparams.seed, cfg.distributed)
@@ -22,7 +22,7 @@ def test_inference_text():
 
 ### Need to find a way to make this faster. Probably load a smaller model.
 # def test_inference_vlm():
-#     cfg = load_params_from_yaml("s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/vlm_paligemma_3b/2025_06_09-01_54_30-model_vlm-lr_0.0001-bsz_64/config.json")
+#     cfg = load_experiment_params_from_yaml("s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/vlm_paligemma_3b/2025_06_09-01_54_30-model_vlm-lr_0.0001-bsz_64/config.json")
 #     object.__setattr__(cfg.model, 'processor', 'google/paligemma-3b-pt-224')
 #     model = create_model(cfg.model)
 

@@ -1,8 +1,7 @@
-
+type: vit
 projector_pixel_shuffle_factor: 2
 resume_from_checkpoint: null
 resume_weights_only: false
-type: vit
 vit_cls_flag: false
 vit_dropout: 1.0
 vit_freeze: false

@@ -1,7 +1,7 @@
 import pytest
 
 from lbm2.data.dataloader import get_datastring_input
-from lbm2.params.train_experiment_params import load_params_from_yaml
+from lbm2.params.train_experiment_params import load_experiment_params_from_yaml
 
 
 def test_get_datastring_input_basic():
@@ -131,13 +131,13 @@ def test_get_datastring_input_smalldata_multiple_epochs():
 @pytest.mark.parametrize(
     "num_samples,world_size,param_config_path",
     [
-        (50_000, 4, "tests/shared/dummy_vlm_config.yaml"),
-        (50_000, 4, "tests/shared/dummy_text_untokenized_config.yaml"),
+        (50_000, 4, "tests/params/dummy_configs/dummy_vlm_config.yaml"),
+        (50_000, 4, "tests/params/dummy_configs/dummy_text_untokenized_config.yaml"),
     ],
 )
 def test_datastring_text_untokenized_scaling(num_samples, world_size, param_config_path):
     """Test text_untokenized dataloader with different scaling parameters."""
-    params = load_params_from_yaml(param_config_path)
+    params = load_experiment_params_from_yaml(param_config_path)
 
     datastrings, num_samples_per_dataset, _, _ = get_datastring_input(
         num_samples=num_samples,

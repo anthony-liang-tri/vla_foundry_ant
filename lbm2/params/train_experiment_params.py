@@ -1,5 +1,6 @@
 import logging
 from dataclasses import dataclass, field
+from typing import Type
 
 import draccus
 
@@ -66,7 +67,7 @@ class TrainExperimentParams(BaseParams):
         #     raise ValueError(f"--fsdp can only be specified in distributed mode.")
 
 
-def load_params_from_yaml(path: str) -> TrainExperimentParams:
+def load_params_from_yaml(params_class: Type[BaseParams], path: str) -> BaseParams:
     """
     Load a draccus params object from a yaml file with support for s3 paths.
 
@@ -77,14 +78,18 @@ def load_params_from_yaml(path: str) -> TrainExperimentParams:
     # Need to copy to temp file because draccus doesn't support loading from s3.
     if path.startswith("s3"):
         with copy_to_temp_file(path) as temp_path:
-            # Load the params            breakpoint()
-            params = draccus.load(TrainExperimentParams, temp_path)
+            # Load the params
+            params = draccus.load(params_class, temp_path)
     else:
         # Load the params from the local file so it can support !include statements.
-        params = draccus.load(TrainExperimentParams, path)
+        params = draccus.load(params_class, path)
     return params
+
+
+def load_experiment_params_from_yaml(path: str) -> TrainExperimentParams:
+    return load_params_from_yaml(TrainExperimentParams, path)
 
 
 if __name__ == "__main__":
     path = "s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/vlm_paligemma_3b/2025_07_04-01_38_18-model_vlm-lr_0.0001-bsz_128/config.yaml"
-    print(load_params_from_yaml(path))
+    print(load_experiment_params_from_yaml(path))

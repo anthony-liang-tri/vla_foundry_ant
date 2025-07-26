@@ -1,4 +1,4 @@
-
+type: vlm
 image_token_id: 257152
 resume_from_checkpoint: null
 resume_weights_only: false

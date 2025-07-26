@@ -161,7 +161,7 @@ Models checkpoints are saved locally to the path in `cfg.save_path`. If `cfg.rem
 
 To load checkpoints, (1) Load the params, (2) Create the model (no weights yet), (3) Load the model weights into the model. An example is shown below. More examples can be found in [lbm2/inference](lbm2/inference).
 ```python
-cfg = load_params_from_yaml("s3://(path-here)/config.yaml")
+cfg = load_experiment_params_from_yaml("s3://(path-here)/config.yaml")
 model = create_model(cfg.model)
 ckpt = "s3://(path-here)/checkpoints/checkpoint_5.pt"
 load_model_checkpoint(model, ckpt, cfg.hparams.seed, cfg.distributed)

@@ -2,9 +2,9 @@ from transformers import AutoTokenizer
 
 from lbm2.file_utils import load_model_checkpoint
 from lbm2.models import create_model
-from lbm2.params.train_experiment_params import load_params_from_yaml
+from lbm2.params.train_experiment_params import load_experiment_params_from_yaml
 
-cfg = load_params_from_yaml(
+cfg = load_experiment_params_from_yaml(
     "s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/llm_11m/2025_07_04-05_57_53-model_transformer-lr_0.0001-bsz_2048/config.yaml"
 )
 model = create_model(cfg.model)
