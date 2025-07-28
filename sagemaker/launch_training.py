@@ -1,7 +1,7 @@
 import os
 import subprocess
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from datetime import datetime
 from pathlib import Path
 
@@ -97,6 +97,7 @@ def main():
 
     # Check this first to avoid waiting for Docker build.
     hyperparameters = {}
+    experiment_params_fields = [f.name for f in fields(TrainExperimentParams)]
     for k, v in args:
         if k.startswith("data.") or k.startswith("distributed.") or k.startswith("hparams.") or k.startswith("model."):
             if v is None:
@@ -111,7 +112,9 @@ def main():
             ):
                 continue
             hyperparameters[k] = v
-        if k == "name" and v is not None:
+        if k in experiment_params_fields and v is not None:
+            if k in ["data", "model", "distributed", "hparams"]:
+                continue
             hyperparameters[k] = v
     hyperparameters["save_path"] = "/opt/ml/checkpoints"
     print(hyperparameters)
