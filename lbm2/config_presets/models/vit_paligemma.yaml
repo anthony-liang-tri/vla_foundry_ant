@@ -1,3 +1,4 @@
+type: vit
 vit_img_size: 224
 vit_hidden_dim: 1152
 vit_inter_dim: 4304

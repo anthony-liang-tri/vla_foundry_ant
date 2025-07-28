@@ -2,12 +2,12 @@ import torch
 from PIL import Image
 
 from lbm2.data.processor import get_processor
-from lbm2.params.train_experiment_params import load_params_from_yaml
+from lbm2.params.train_experiment_params import load_experiment_params_from_yaml
 
 
 class TestProcessorPaliGemma:
     def test_processor_paligemma(self):
-        params = load_params_from_yaml("tests/shared/dummy_vlm_config.yaml")
+        params = load_experiment_params_from_yaml("tests/params/dummy_configs/dummy_vlm_config.yaml")
         object.__setattr__(params.data, "processor", "google/paligemma-3b-pt-224")
         paligemma_processor = get_processor(params.data)
 

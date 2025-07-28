@@ -8,7 +8,7 @@ from PIL import Image
 
 from lbm2.file_utils import load_model_checkpoint
 from lbm2.models import create_model
-from lbm2.params.train_experiment_params import load_params_from_yaml
+from lbm2.params.train_experiment_params import load_experiment_params_from_yaml
 
 
 def make_grid(images, rows, cols):
@@ -20,7 +20,7 @@ def make_grid(images, rows, cols):
 
 
 # Load config and model
-cfg = load_params_from_yaml(
+cfg = load_experiment_params_from_yaml(
     "s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/stable_diffusion/2025_06_18-19_02_29-model_stable_diffusion-lr_0.0001-bsz_1024/config.json"
 )
 model = create_model(cfg.model)

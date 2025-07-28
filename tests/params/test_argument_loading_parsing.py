@@ -5,7 +5,7 @@ from unittest.mock import patch
 import draccus
 import pytest
 
-from lbm2.params.train_experiment_params import TrainExperimentParams, load_params_from_yaml
+from lbm2.params.train_experiment_params import TrainExperimentParams, load_experiment_params_from_yaml
 
 
 def get_args_text():
@@ -58,16 +58,18 @@ def get_args_vlm():
     return args
 
 
-def get_args_vlm_from_load_path():
+def get_args_vlm_from_load_path(**kwargs):
+    if kwargs is None:
+        kwargs = {}
     test_args = [
         "--model.type",
         "vlm",
-        "--model.transformer.load_path",
-        "lbm2/config_presets/models/vlm_3b.yaml",
-        "--model.vit.type",
-        "vit",
-        "--model.vit.load_path",
-        "lbm2/config_presets/models/vit_paligemma.yaml",
+        "--model.transformer",
+        "include tests/params/dummy_configs/dummy_transformer_config.yaml",
+        "--model.vit",
+        "include tests/params/dummy_configs/dummy_vit_config.yaml",
+        "--model.vit.vit_hidden_dim",
+        str(kwargs.get("vit_hidden_dim", 999)),
         "--distributed.fsdp",
         "True",
         "--distributed.fsdp_use_orig_params",
@@ -85,13 +87,13 @@ def get_args_vlm_from_load_path():
         "--data.dataset_weighting",
         ["1.0"],
         "--data.seq_len",
-        "2048",
+        str(kwargs.get("seq_len", 2048)),
         "--data.img_num_tokens",
-        "256",
+        str(kwargs.get("img_num_tokens", 256)),
         "--total_train_samples",
-        "14_000_000",
+        str(kwargs.get("total_train_samples", 14_000_000)),
         "--num_checkpoints",
-        "5",
+        str(kwargs.get("num_checkpoints", 5)),
     ]
     with patch.object(sys, "argv", ["test"] + test_args):
         args = draccus.parse(config_class=TrainExperimentParams)
@@ -124,11 +126,10 @@ def test_get_args_vlm():
 
 
 def test_load_path_flag():
-    args = get_args_vlm_from_load_path()
+    vit_hidden_dim = 999
+    args = get_args_vlm_from_load_path(vit_hidden_dim=vit_hidden_dim)
     assert args.model.type == "vlm"
-    assert args.model.transformer.load_path == "lbm2/config_presets/models/vlm_3b.yaml"
     assert args.model.vit.type == "vit"
-    assert args.model.vit.load_path == "lbm2/config_presets/models/vit_paligemma.yaml"
     assert args.distributed.fsdp
     assert args.distributed.fsdp_use_orig_params
     assert args.data.type == "image_caption"
@@ -147,19 +148,47 @@ def test_load_path_flag():
     assert args.model.transformer.vocab_size == 257216
     assert not args.model.transformer.post_embed_norm
     assert not args.model.transformer.weight_tying
-    assert args.model.vit.vit_img_size == 224
-    assert args.model.vit.vit_hidden_dim == 1152
-    assert args.model.vit.vit_inter_dim == 4304
-    assert args.model.vit.vit_n_heads == 16
-    assert args.model.vit.vit_n_layers == 27
-    assert args.model.vit.vit_patch_size == 14
-    assert args.model.vit.projector_pixel_shuffle_factor == 1
+    assert args.model.vit.vit_img_size == 32
+    assert args.model.vit.vit_hidden_dim == vit_hidden_dim  # overridden by vit_hidden_dim flag
+    assert args.model.vit.vit_inter_dim == 4300
+    assert args.model.vit.vit_n_heads == 10
+    assert args.model.vit.vit_n_layers == 10
+    assert args.model.vit.vit_patch_size == 10
+    assert args.model.vit.projector_pixel_shuffle_factor == 2
 
 
-@pytest.mark.parametrize("params_yaml", ["tests/shared/dummy_vlm_config.yaml"])
-def test_load_params_from_yaml(params_yaml):
-    params = load_params_from_yaml(params_yaml)
+@pytest.mark.parametrize("params_yaml", ["tests/params/dummy_configs/dummy_vlm_config.yaml"])
+def test_load_experiment_params_from_yaml(params_yaml):
+    params = load_experiment_params_from_yaml(params_yaml)
     assert params.model.vit.vit_hidden_dim == 999
+
+
+@pytest.mark.parametrize(
+    "params_yaml",
+    [
+        "tests/params/dummy_configs/dummy_vlm_config_include_vit.yaml",
+        "tests/params/dummy_configs/dummy_vlm_config_include_model.yaml",
+    ],
+)
+def test_load_experiment_params_from_yaml_include(params_yaml):
+    params = load_experiment_params_from_yaml(params_yaml)
+    assert params.model.vit.vit_hidden_dim == 100
+
+
+@pytest.mark.parametrize(
+    "params_yaml, hidden_dim",
+    [
+        ("tests/params/dummy_configs/dummy_vlm_config_include_vit.yaml", 900),
+        ("tests/params/dummy_configs/dummy_vlm_config_include_model.yaml", 1000),
+    ],
+)
+def get_args_vlm_from_load_path_modify(params_yaml, hidden_dim):
+    if hidden_dim is not None:
+        params = get_args_vlm_from_load_path(params_yaml, hidden_dim=hidden_dim)
+        assert params.model.vit.vit_hidden_dim == hidden_dim
+    else:
+        params = get_args_vlm_from_load_path(params_yaml)
+        assert params.model.vit.vit_hidden_dim == 100
 
 
 def test_immutable_params():

@@ -4,11 +4,11 @@ import torch
 
 from lbm2.file_utils import load_model_checkpoint
 from lbm2.models import create_model
-from lbm2.params.train_experiment_params import load_params_from_yaml
+from lbm2.params.train_experiment_params import load_experiment_params_from_yaml
 
 
 def test_model_loading():
-    cfg = load_params_from_yaml("tests/shared/tiny_model/config.yaml")
+    cfg = load_experiment_params_from_yaml("tests/shared/tiny_model/config.yaml")
     model = create_model(cfg.model)
     initial_keys = set(model.state_dict().keys())
     initial_state_dict = deepcopy(model.state_dict())
@@ -37,7 +37,7 @@ def test_model_loading():
 
 def test_model_same_seed_same_initialization():
     """Test that model initializes same parameters with same seed."""
-    cfg = load_params_from_yaml("tests/shared/tiny_model/config.yaml")
+    cfg = load_experiment_params_from_yaml("tests/shared/tiny_model/config.yaml")
 
     # Set seed and create model
     torch.manual_seed(42)
@@ -54,7 +54,7 @@ def test_model_same_seed_same_initialization():
 
 def test_model_deterministic_loading():
     """Test that model loads deterministically regardless of seed."""
-    cfg = load_params_from_yaml("tests/shared/tiny_model/config.yaml")
+    cfg = load_experiment_params_from_yaml("tests/shared/tiny_model/config.yaml")
 
     # Set seed and create model
     torch.manual_seed(42)

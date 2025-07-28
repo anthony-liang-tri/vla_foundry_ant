@@ -2,7 +2,10 @@ import io
 import json
 import logging
 import os
+import shutil
 import subprocess
+import tempfile
+from contextlib import contextmanager
 
 import fsspec
 import numpy as np
@@ -74,6 +77,31 @@ def yaml_load(file_path):
     with open(file_path, "r") as f:
         out = yaml.safe_load(f)
     return out
+
+
+@contextmanager
+def copy_to_temp_file(file_path):
+    """
+    Copy a file to a temporary file and clean it up when done.
+    If the file is on s3, use aws s3 cp to copy it to a temporary file.
+    If the file is on the local filesystem, use shutil.copy to copy it to a temporary file.
+    """
+    extension = os.path.splitext(file_path)[1]
+    with tempfile.NamedTemporaryFile(delete=False, suffix=extension) as temp_file:
+        temp_path = temp_file.name
+
+    try:
+        if file_path.startswith("s3"):
+            cmd = f"aws s3 cp {file_path} {temp_path}"
+            subprocess.run(cmd, shell=True, check=True)
+        else:
+            shutil.copy(file_path, temp_path)
+
+        yield temp_path
+    finally:
+        # Clean up the temporary file
+        if os.path.exists(temp_path):
+            os.unlink(temp_path)
 
 
 def get_metadata_file(path, shard_shuffle_seed=None):
