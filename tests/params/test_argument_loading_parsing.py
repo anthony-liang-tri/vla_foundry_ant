@@ -64,8 +64,10 @@ def get_args_vlm_from_load_path(**kwargs):
     test_args = [
         "--model.type",
         "vlm",
-        "--model.transformer='include tests/params/dummy_configs/dummy_transformer_config.yaml'",
-        "--model.vit='include tests/params/dummy_configs/dummy_vit_config.yaml'",
+        "--model.transformer",
+        "include tests/params/dummy_configs/dummy_transformer_config.yaml",
+        "--model.vit",
+        "include tests/params/dummy_configs/dummy_vit_config.yaml",
         "--model.vit.vit_hidden_dim",
         str(kwargs.get("vit_hidden_dim", 999)),
         "--distributed.fsdp",

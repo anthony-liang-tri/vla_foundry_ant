@@ -1,6 +1,6 @@
 .venv/bin/torchrun --nproc_per_node=8 --nnodes=1 lbm2/main.py \
 --model.type transformer \
---model="include lbm2/config_presets/models/transformer_11m.yaml" \
+--model "include lbm2/config_presets/models/transformer_11m.yaml" \
 --distributed.fsdp True \
 --distributed.fsdp_use_orig_params True \
 --distributed.fsdp_limit_all_gathers True \
