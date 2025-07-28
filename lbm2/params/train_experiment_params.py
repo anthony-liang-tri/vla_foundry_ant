@@ -88,8 +88,3 @@ def load_params_from_yaml(params_class: Type[BaseParams], path: str) -> BasePara
 
 def load_experiment_params_from_yaml(path: str) -> TrainExperimentParams:
     return load_params_from_yaml(TrainExperimentParams, path)
-
-
-if __name__ == "__main__":
-    path = "s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/vlm_paligemma_3b/2025_07_04-01_38_18-model_vlm-lr_0.0001-bsz_128/config.yaml"
-    print(load_experiment_params_from_yaml(path))

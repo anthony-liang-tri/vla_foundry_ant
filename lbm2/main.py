@@ -27,6 +27,16 @@ def random_seed(seed=42, rank=0):
 
 
 def main():
+    """
+    Main entry point for training.
+
+    Arguments are parsed with draccus.parse to instantiate a TrainExperimentParams object.
+    They are provided as a preset yaml file, or as command line arguments or both.
+    When using both a preset yaml file and command line arguments, the command line arguments take precedence.
+    The preset yaml file is loaded with draccus.load, which supports !include statements to link a sub-preset yaml file.
+    Other sub-preset yaml files can be passed as command line arguments with '--arg.subarg="include <path>"'.
+    See README.md for more details.
+    """
     cfg = draccus.parse(config_class=TrainExperimentParams)
     device = cfg.distributed.device
     random_seed(cfg.hparams.seed, 0)
