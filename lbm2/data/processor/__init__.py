@@ -4,6 +4,7 @@ import torch
 from transformers import AutoProcessor
 
 from lbm2.data.processor.stable_diffusion_processor import StableDiffusionProcessor
+from lbm2.data.utils import text_to_seed
 
 
 class DebugProcessor:
@@ -12,10 +13,12 @@ class DebugProcessor:
         self.tokenizer = SimpleNamespace(pad_token_id=0)
 
     def __call__(self, images, text, return_tensors="pt", padding="max_length", padding_side="right", max_length=2048):
+        batch_size = len(images)
+        seed = text_to_seed(text[0])
         return {
-            "input_ids": torch.randint(0, 100, (1, max_length)),
-            "attention_mask": torch.ones(1, max_length, dtype=torch.long),
-            "pixel_values": torch.randn(1, 3, 224, 224),
+            "input_ids": torch.randint(0, 100, (batch_size, max_length), generator=torch.Generator().manual_seed(seed)),
+            "attention_mask": torch.ones(batch_size, max_length, dtype=torch.long),
+            "pixel_values": torch.randn(batch_size, 3, 224, 224, generator=torch.Generator().manual_seed(seed)),
         }
 
 

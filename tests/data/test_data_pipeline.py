@@ -122,7 +122,7 @@ class TestTextPipeline:
         # Assert we got at least some batches
         assert batch_count > 0
 
-    def test_text_batch_consistency(self):
+    def test_text_batch_consistency_and_shuffle(self):
         """Test that text batches maintain consistency across dataloader instances."""
         params = load_experiment_params_from_yaml("tests/params/dummy_configs/dummy_text_config.yaml")
 
@@ -138,37 +138,68 @@ class TestTextPipeline:
             world_size=8,
         )
 
+        object.__setattr__(params.data, "seed", 42)
         dataloader1 = get_wds_dataloader(datastrings, num_samples_per_dataset, checkpoint_num=0, cfg=params)
+        # Set seed to 123456789 so dataloader4 is different from dataloader1
+        object.__setattr__(params.data, "seed", 123456789)
+        dataloader4 = get_wds_dataloader(datastrings, num_samples_per_dataset, checkpoint_num=0, cfg=params)
+        # Reset seed to 42 so dataloader2 and dataloader1 are the same
+        object.__setattr__(params.data, "seed", 42)
         dataloader2 = get_wds_dataloader(datastrings, num_samples_per_dataset, checkpoint_num=0, cfg=params)
+        # Set shuffle_buffer_size and shuffle_initial to 0 so dataloader3 is not shuffled
+        object.__setattr__(params.data, "shuffle_buffer_size", 0)
+        object.__setattr__(params.data, "shuffle_initial", 0)
+        dataloader3 = get_wds_dataloader(datastrings, num_samples_per_dataset, checkpoint_num=0, cfg=params)
+        # Here we set the seed to 123456789 but the buffer size and initial are still 0
+        # so dataloader3bis and dataloader3 are both not shuffled
+        object.__setattr__(params.data, "seed", 123456789)
+        dataloader3bis = get_wds_dataloader(datastrings, num_samples_per_dataset, checkpoint_num=0, cfg=params)
 
         # Get first batch from each dataloader
         batch1 = next(iter(dataloader1.dataloader))
         batch2 = next(iter(dataloader2.dataloader))
+        batch3 = next(iter(dataloader3.dataloader))
+        batch3bis = next(iter(dataloader3bis.dataloader))
+        batch4 = next(iter(dataloader4.dataloader))
 
         # Assert consistent batch structure
         assert isinstance(batch1, dict)
         assert isinstance(batch2, dict)
-        assert "input_ids" in batch1 and "input_ids" in batch2
+        assert isinstance(batch3, dict)
+        assert "input_ids" in batch1 and "input_ids" in batch2 and "input_ids" in batch3
 
         # Assert tensor properties are consistent
         assert batch1["input_ids"].dtype == batch2["input_ids"].dtype
         assert batch1["input_ids"].shape == batch2["input_ids"].shape
-
+        assert batch1["input_ids"].shape == batch3["input_ids"].shape
         # Assert both batches have valid content
         assert batch1["input_ids"].shape[0] > 0  # Non-empty batch
         assert batch2["input_ids"].shape[0] > 0
         assert batch1["input_ids"].shape[1] == params.data.seq_len + 1
         assert batch2["input_ids"].shape[1] == params.data.seq_len + 1
-
+        assert batch3["input_ids"].shape[1] == params.data.seq_len + 1
         # Assert no NaN or infinite values in either batch
         assert not torch.isnan(batch1["input_ids"]).any()
         assert not torch.isinf(batch1["input_ids"]).any()
         assert not torch.isnan(batch2["input_ids"]).any()
         assert not torch.isinf(batch2["input_ids"]).any()
-
+        assert not torch.isnan(batch3["input_ids"]).any()
+        assert not torch.isinf(batch3["input_ids"]).any()
         # Assert valid token ranges
         assert (batch1["input_ids"] >= 0).all()
         assert (batch2["input_ids"] >= 0).all()
+        assert (batch3["input_ids"] >= 0).all()
+
+        # Assert that batch1 and batch2 are the same
+        assert torch.equal(batch1["input_ids"], batch2["input_ids"])
+
+        # Assert that batch1 and batch3 are different
+        assert not torch.equal(batch1["input_ids"], batch3["input_ids"])
+        # Assert that batch4 is shuffled differently from batch1 and batch3
+        assert not torch.equal(batch1["input_ids"], batch4["input_ids"])
+        assert not torch.equal(batch3["input_ids"], batch4["input_ids"])
+        # Assert that batch3 and batch3bis are the same
+        assert torch.equal(batch3["input_ids"], batch3bis["input_ids"])
 
 
 class TestTextUntokenizedPipeline:
@@ -376,7 +407,7 @@ class TestTextUntokenizedPipeline:
         # Assert we successfully got batches
         assert batch_count > 0, "No batches were produced by the dataloader"
 
-    def test_text_untokenized_batch_consistency(self):
+    def test_text_untokenized_batch_consistency_and_shuffle(self):
         """Test that text_untokenized batches maintain consistency across dataloader instances."""
         params = load_experiment_params_from_yaml("tests/params/dummy_configs/dummy_text_untokenized_config.yaml")
 
@@ -394,33 +425,36 @@ class TestTextUntokenizedPipeline:
 
         dataloader1 = get_wds_dataloader(datastrings, num_samples_per_dataset, checkpoint_num=0, cfg=params)
         dataloader2 = get_wds_dataloader(datastrings, num_samples_per_dataset, checkpoint_num=0, cfg=params)
-
+        object.__setattr__(params.data, "shuffle_buffer_size", 0)
+        object.__setattr__(params.data, "shuffle_initial", 0)
+        dataloader3 = get_wds_dataloader(datastrings, num_samples_per_dataset, checkpoint_num=0, cfg=params)
         # Get first batch from each dataloader
         batch1 = next(iter(dataloader1.dataloader))
         batch2 = next(iter(dataloader2.dataloader))
+        batch3 = next(iter(dataloader3.dataloader))
 
         # Assert consistent batch structure for text_untokenized
         assert isinstance(batch1, dict)
         assert isinstance(batch2, dict)
-        assert "input_ids" in batch1 and "input_ids" in batch2
-        assert "attention_mask" in batch1 and "attention_mask" in batch2
-
+        assert isinstance(batch3, dict)
+        assert "input_ids" in batch1 and "input_ids" in batch2 and "input_ids" in batch3
+        assert "attention_mask" in batch1 and "attention_mask" in batch2 and "attention_mask" in batch3
         # Assert tensor properties are consistent
         assert batch1["input_ids"].dtype == batch2["input_ids"].dtype
         assert batch1["attention_mask"].dtype == batch2["attention_mask"].dtype
         assert batch1["input_ids"].shape == batch2["input_ids"].shape
         assert batch1["attention_mask"].shape == batch2["attention_mask"].shape
-
+        assert batch1["input_ids"].shape == batch3["input_ids"].shape
         # Assert both batches have valid content
         assert batch1["input_ids"].shape[0] > 0  # Non-empty batch
         assert batch2["input_ids"].shape[0] > 0
         assert batch1["input_ids"].shape[1] == params.data.seq_len + 1
         assert batch2["input_ids"].shape[1] == params.data.seq_len + 1
-
+        assert batch3["input_ids"].shape[1] == params.data.seq_len + 1
         # Assert tensor shapes match between input_ids and attention_mask
         assert batch1["input_ids"].shape == batch1["attention_mask"].shape
         assert batch2["input_ids"].shape == batch2["attention_mask"].shape
-
+        assert batch1["input_ids"].shape == batch3["input_ids"].shape
         # Assert no NaN or infinite values in either batch
         assert not torch.isnan(batch1["input_ids"]).any()
         assert not torch.isinf(batch1["input_ids"]).any()
@@ -430,13 +464,17 @@ class TestTextUntokenizedPipeline:
         assert not torch.isinf(batch2["input_ids"]).any()
         assert not torch.isnan(batch2["attention_mask"]).any()
         assert not torch.isinf(batch2["attention_mask"]).any()
-
+        assert not torch.isnan(batch3["input_ids"]).any()
+        assert not torch.isinf(batch3["input_ids"]).any()
+        assert not torch.isnan(batch3["attention_mask"]).any()
+        assert not torch.isinf(batch3["attention_mask"]).any()
         # Assert valid token ranges
         assert (batch1["input_ids"] >= 0).all()
         assert (batch2["input_ids"] >= 0).all()
         assert (batch1["attention_mask"] >= 0).all() and (batch1["attention_mask"] <= 1).all()
         assert (batch2["attention_mask"] >= 0).all() and (batch2["attention_mask"] <= 1).all()
-
+        assert (batch3["input_ids"] >= 0).all()
+        assert (batch3["attention_mask"] >= 0).all() and (batch3["attention_mask"] <= 1).all()
         # Assert attention mask structure consistency
         for batch in [batch1, batch2]:
             batch_size = batch["input_ids"].shape[0]
@@ -453,6 +491,12 @@ class TestTextUntokenizedPipeline:
                     assert (attention_row[:first_zero] == 1).all()
                     # All tokens after first zero should be 0
                     assert (attention_row[first_zero:] == 0).all()
+
+        # Assert that batch1 and batch2 are the same
+        assert torch.equal(batch1["input_ids"], batch2["input_ids"])
+
+        # Assert that batch1 and batch3 are different
+        assert not torch.equal(batch1["input_ids"], batch3["input_ids"])
 
 
 class TestImageCaptionPipeline:
@@ -639,7 +683,7 @@ class TestImageCaptionPipeline:
         # Assert we successfully got batches
         assert batch_count > 0, "No batches were produced by the VLM dataloader"
 
-    def test_vlm_batch_consistency(self):
+    def test_vlm_batch_consistency_and_shuffle(self):
         params = load_experiment_params_from_yaml("tests/params/dummy_configs/dummy_vlm_config.yaml")
 
         # Create two identical dataloaders
@@ -656,15 +700,28 @@ class TestImageCaptionPipeline:
 
         dataloader1 = get_wds_dataloader(datastrings, num_samples_per_dataset, checkpoint_num=0, cfg=params)
         dataloader2 = get_wds_dataloader(datastrings, num_samples_per_dataset, checkpoint_num=0, cfg=params)
+        object.__setattr__(params.data, "shuffle_buffer_size", 0)
+        object.__setattr__(params.data, "shuffle_initial", 0)
+        dataloader3 = get_wds_dataloader(datastrings, num_samples_per_dataset, checkpoint_num=0, cfg=params)
 
         # Get first batch from each
         batch1 = next(iter(dataloader1.dataloader))
         batch2 = next(iter(dataloader2.dataloader))
+        batch3 = next(iter(dataloader3.dataloader))
 
         # Assert consistent shapes (content may differ due to randomness)
         assert batch1["input_ids"].shape == batch2["input_ids"].shape
         assert batch1["attention_mask"].shape == batch2["attention_mask"].shape
         assert batch1["pixel_values"].shape == batch2["pixel_values"].shape
+        assert batch1["input_ids"].shape == batch3["input_ids"].shape
+        assert batch1["attention_mask"].shape == batch3["attention_mask"].shape
+        assert batch1["pixel_values"].shape == batch3["pixel_values"].shape
+
+        # Assert that batch1 and batch2 are the same
+        assert torch.equal(batch1["input_ids"], batch2["input_ids"])
+
+        # Assert that batch1 and batch3 are different
+        assert not torch.equal(batch1["input_ids"], batch3["input_ids"])
 
 
 class TestPipelineCreation:

@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import random
 from multiprocessing import Value
@@ -77,3 +78,7 @@ def epochs_to_samples(manifest_paths, num_epochs):
     for m in manifests:
         num_samples += sum(i["num_sequences"] for i in m)
     return num_samples * num_epochs
+
+
+def text_to_seed(text):
+    return int(hashlib.sha256(text.encode()).hexdigest(), 16) % (2**32 - 1)

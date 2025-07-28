@@ -20,8 +20,8 @@ class ImageCaptionPipeline(BaseWebDatasetPipeline):
         pipeline = [
             wds.SimpleShardList(datastring),
             deterministic_shuffle(
-                bufsize=0,
-                initial=0,
+                bufsize=self.data_configs.shuffle_buffer_size,
+                initial=self.data_configs.shuffle_initial,
                 seed=self.data_configs.seed,
                 epoch=checkpoint_num,
             ),
