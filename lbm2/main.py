@@ -34,7 +34,7 @@ def main():
     They are provided as a preset yaml file, or as command line arguments or both.
     When using both a preset yaml file and command line arguments, the command line arguments take precedence.
     The preset yaml file is loaded with draccus.load, which supports !include statements to link a sub-preset yaml file.
-    Other sub-preset yaml files can be passed as command line arguments with '--arg.subarg="include <path>"'.
+    Other sub-preset yaml files can be passed as command line arguments with '--arg.subarg "include <path>"'.
     See README.md for more details.
     """
     cfg = draccus.parse(config_class=TrainExperimentParams)
