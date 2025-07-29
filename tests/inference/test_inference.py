@@ -9,7 +9,7 @@ def test_inference_text():
     cfg = load_experiment_params_from_yaml("tests/shared/tiny_model/config.yaml")
     model = create_model(cfg.model)
     ckpt = "tests/shared/tiny_model/checkpoint.pt"
-    load_model_checkpoint(model, ckpt, cfg.hparams.seed, cfg.distributed)
+    load_model_checkpoint(model, ckpt, cfg.distributed)
 
     from transformers import AutoTokenizer
 
@@ -27,7 +27,7 @@ def test_inference_text():
 #     model = create_model(cfg.model)
 
 #     ckpt = "s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/vlm_paligemma_3b/2025_06_09-01_54_30-model_vlm-lr_0.0001-bsz_64/checkpoints/checkpoint_1.pt"
-#     load_model_checkpoint(model, ckpt, cfg.experiment.seed, cfg.distributed)
+#     load_model_checkpoint(model, ckpt, cfg.distributed)
 
 
 #     import requests

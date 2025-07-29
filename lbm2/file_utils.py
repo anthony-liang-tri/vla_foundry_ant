@@ -174,26 +174,14 @@ def remote_sync(local_dir, remote_dir):
     return True
 
 
-def load_model_checkpoint(model, resume_from_checkpoint, seed, distributed_configs):
+def load_model_checkpoint(model, resume_from_checkpoint, distributed_configs):
     checkpoint = pt_load(resume_from_checkpoint, map_location="cpu")
-    if "shard_shuffle_seed" in checkpoint:
-        pretrained_seed = checkpoint["shard_shuffle_seed"]
-        assert pretrained_seed == seed, (
-            f"This checkpoint was trained with a random seed of {pretrained_seed}. "
-            "Since this seed affects shard shuffling, resuming training must use the same seed."
-        )
-    else:
-        message = (
-            "Resuming a checkpoint that does not have a seed saved. This means that the "
-            "shards were not shuffled, so they will remain unshuffled."
-        )
-        logging.info(message)
-        pretrained_seed = None
 
     # resuming a train checkpoint w/ epoch and optimizer state
     start_checkpoint_num = checkpoint["checkpoint_num"]
     sd = checkpoint["state_dict"]
     global_step = checkpoint["global_step"]
+    shard_shuffle_seed_per_dataset = checkpoint.get("shard_shuffle_seed_per_dataset", None)
     if next(iter(sd.items()))[0].startswith("module"):
         sd = {k[len("module.") :]: v for k, v in sd.items()}
     if "_orig_mod" in next(iter(sd.items()))[0]:
@@ -205,4 +193,4 @@ def load_model_checkpoint(model, resume_from_checkpoint, seed, distributed_confi
     else:
         model.load_state_dict(sd)
     logging.info(f"=> resuming checkpoint '{resume_from_checkpoint}' (checkpoint {start_checkpoint_num})")
-    return start_checkpoint_num, global_step, pretrained_seed
+    return start_checkpoint_num, global_step, shard_shuffle_seed_per_dataset

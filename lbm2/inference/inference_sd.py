@@ -25,7 +25,7 @@ cfg = load_experiment_params_from_yaml(
 )
 model = create_model(cfg.model)
 ckpt = "s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/stable_diffusion/2025_06_18-19_02_29-model_stable_diffusion-lr_0.0001-bsz_1024/checkpoints/checkpoint_6.pt"
-load_model_checkpoint(model, ckpt, cfg.hparams.seed, cfg.distributed)
+load_model_checkpoint(model, ckpt, cfg.distributed)
 
 model = model.to("cuda")
 images = model.generate(batch_size=16, device=torch.device("cuda"))  # numpy [16, 224, 224, 3]

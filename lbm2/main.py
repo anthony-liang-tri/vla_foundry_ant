@@ -79,12 +79,12 @@ def main():
     # optionally resume model from a checkpoint
     start_checkpoint_num, global_step = 0, 0
     total_steps = cfg.total_train_samples // cfg.hparams.global_batch_size
-    shard_shuffle_seed = cfg.hparams.seed
+    shard_shuffle_seed_per_dataset = None
     if cfg.model.resume_from_checkpoint is not None:
         if cfg.model.resume_weights_only:
             load_model_checkpoint(model, cfg.model.resume_from_checkpoint, cfg.distributed)
         else:
-            start_checkpoint_num, global_step, shard_shuffle_seed = load_model_checkpoint(
+            start_checkpoint_num, global_step, shard_shuffle_seed_per_dataset = load_model_checkpoint(
                 model, cfg.model.resume_from_checkpoint, cfg.distributed
             )
 
@@ -127,7 +127,8 @@ def main():
     done_training = global_step >= total_steps
     checkpoint_num = start_checkpoint_num
     curr_shard_idx_per_dataset = [0 for dataset in range(len(cfg.data.dataset_manifest))]
-    shard_shuffle_seed_per_dataset = [shard_shuffle_seed for dataset in range(len(cfg.data.dataset_manifest))]
+    if shard_shuffle_seed_per_dataset is None:
+        shard_shuffle_seed_per_dataset = [cfg.hparams.seed for dataset in range(len(cfg.data.dataset_manifest))]
     samples_seen = 0
     if cfg.model.resume_from_checkpoint is not None and not cfg.model.resume_weights_only:
         curr_shard_idx_per_dataset, samples_seen = load_data_chunks(cfg.model.resume_from_checkpoint)

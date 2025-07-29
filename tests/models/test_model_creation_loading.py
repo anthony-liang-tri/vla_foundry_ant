@@ -14,7 +14,7 @@ def test_model_loading():
     initial_state_dict = deepcopy(model.state_dict())
 
     ckpt = "tests/shared/tiny_model/checkpoint.pt"
-    load_model_checkpoint(model, ckpt, cfg.hparams.seed, cfg.distributed)
+    load_model_checkpoint(model, ckpt, cfg.distributed)
     loaded_keys = set(model.state_dict().keys())
     loaded_state_dict = model.state_dict()
     assert initial_keys == loaded_keys, "State dict keys changed after loading checkpoint"
@@ -65,8 +65,8 @@ def test_model_deterministic_loading():
     model2 = create_model(cfg.model)
 
     ckpt = "tests/shared/tiny_model/checkpoint.pt"
-    load_model_checkpoint(model1, ckpt, cfg.hparams.seed, cfg.distributed)
-    load_model_checkpoint(model2, ckpt, cfg.hparams.seed, cfg.distributed)
+    load_model_checkpoint(model1, ckpt, cfg.distributed)
+    load_model_checkpoint(model2, ckpt, cfg.distributed)
 
     for p1, p2 in zip(model1.parameters(), model2.parameters(), strict=False):
         assert torch.equal(p1, p2), "Models with same seed should have identical parameters"

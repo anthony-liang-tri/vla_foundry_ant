@@ -11,7 +11,7 @@ cfg = load_experiment_params_from_yaml(
 )
 model = create_model(cfg.model)
 ckpt = "s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/vlm_paligemma_3b/2025_07_04-01_38_18-model_vlm-lr_0.0001-bsz_128/checkpoints/checkpoint_2.pt"
-load_model_checkpoint(model, ckpt, cfg.hparams.seed, cfg.distributed)
+load_model_checkpoint(model, ckpt, cfg.distributed)
 
 processor = AutoProcessor.from_pretrained("google/paligemma-3b-pt-224")
 

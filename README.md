@@ -166,7 +166,7 @@ To load checkpoints, (1) Load the params, (2) Create the model (no weights yet),
 cfg = load_experiment_params_from_yaml("s3://(path-here)/config.yaml")
 model = create_model(cfg.model)
 ckpt = "s3://(path-here)/checkpoints/checkpoint_5.pt"
-load_model_checkpoint(model, ckpt, cfg.hparams.seed, cfg.distributed)
+load_model_checkpoint(model, ckpt, cfg.distributed)
 ```
 
 ### 5. Training

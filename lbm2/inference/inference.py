@@ -9,7 +9,7 @@ cfg = load_experiment_params_from_yaml(
 )
 model = create_model(cfg.model)
 ckpt = "s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/llm_11m/2025_07_04-05_57_53-model_transformer-lr_0.0001-bsz_2048/checkpoints/checkpoint_6.pt"
-load_model_checkpoint(model, ckpt, cfg.hparams.seed, cfg.distributed)
+load_model_checkpoint(model, ckpt, cfg.distributed)
 
 tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
 tokenizer.add_special_tokens({"pad_token": "[PAD]"})
