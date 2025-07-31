@@ -36,7 +36,7 @@ An example command is something like this:
 See `./examples` for more examples. [llm_11m.sh](examples/llm_11m.sh) is a good place to start. 
 
 ### Running on SageMaker
-Create a `secrets.env` file in the root directory:
+Create a `secrets.env` file in the project's root directory:
 ```bash
 WANDB_API_KEY=<your wandb key>
 HF_TOKEN=<your hf token>
