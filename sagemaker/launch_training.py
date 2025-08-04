@@ -1,7 +1,8 @@
+import atexit
 import os
 import subprocess
 import time
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
@@ -9,6 +10,7 @@ import boto3
 import draccus
 
 import sagemaker
+from lbm2.params.base_params import BaseParams
 from lbm2.params.train_experiment_params import TrainExperimentParams
 from sagemaker.batch_queueing.queue import Queue
 from sagemaker.pytorch import PyTorch
@@ -28,7 +30,7 @@ QUEUE_MAPPER = {
 
 
 @dataclass(frozen=True)
-class SageMakerParams(TrainExperimentParams):
+class SageMakerRunParams(BaseParams):
     local: bool = field(default=False)
     user: str = field(default=None)
 
@@ -36,15 +38,20 @@ class SageMakerParams(TrainExperimentParams):
     region: str = field(default="us-west-2")
     profile: str = field(default="default")
     arn: str = field(default=None)
-    s3_remote_sync: str = field(default=None)
 
     # Instance args
     instance_count: int = field(default=1)
     instance_type: str = field(default="p4de")
+    max_run: int = field(default=10)
 
     # SageMaker queue args
     queue_name: str = field(default="ml")
     priority: int = field(default=1)
+
+
+@dataclass(frozen=True)
+class SageMakerParams(TrainExperimentParams):
+    sagemaker: SageMakerRunParams = field(default_factory=SageMakerRunParams)
 
     def __post_init__(self):
         pass
@@ -95,45 +102,25 @@ def get_image(user, profile="default", region="us-east-1"):
 def main():
     args = draccus.parse(config_class=SageMakerParams)
 
-    # Check this first to avoid waiting for Docker build.
-    hyperparameters = {}
-    experiment_params_fields = [f.name for f in fields(TrainExperimentParams)]
-    for k, v in args:
-        if k.startswith("data.") or k.startswith("distributed.") or k.startswith("hparams.") or k.startswith("model."):
-            if v is None:
-                continue
-            if (
-                k == "distributed.use_distributed"
-                or k == "distributed.world_size"
-                or k == "distributed.rank"
-                or k == "distributed.local_rank"
-                or k == "distributed.device"
-                or k == "hparams.world_size"
-            ):
-                continue
-            hyperparameters[k] = v
-        if k in experiment_params_fields and v is not None:
-            if k in ["data", "model", "distributed", "hparams"]:
-                continue
-            hyperparameters[k] = v
-    hyperparameters["save_path"] = "/opt/ml/checkpoints"
-    print(hyperparameters)
+    # Save hyperparameters to a yaml file. File is deleted on exit.
+    temp_file_path = "sagemaker/hyperparameters.yaml"
+    hyperparameter_sagemaker_path = "/opt/ml/code/hyperparameters.yaml"
+    with open(temp_file_path, "w") as f:
+        args_dict = draccus.parsers.encoding.encode(args)
+        del args_dict["sagemaker"]
+        print(args_dict)
+        draccus.cfgparsing.save_config(args_dict, f)
+    atexit.register(lambda: os.remove(temp_file_path))
 
     # We probably want wandb logging and S3 saving for sagemaker runs
-    assert hyperparameters.get("remote_sync") is not None
-    assert hyperparameters.get("wandb")
+    assert args.remote_sync is not None
+    assert args.wandb
 
+    args = args.sagemaker
     assert args.instance_type in INSTANCE_MAPPER
     if args.arn is None:
         assert "SAGEMAKER_ARN" in os.environ, "Please specify --arn or set the SAGEMAKER_ARN environment variable"
         object.__setattr__(args, "arn", os.environ["SAGEMAKER_ARN"])
-
-    if args.s3_remote_sync is None:
-        assert "S3_REMOTE_SYNC" in os.environ, (
-            "Please specify --s3-remote-sync or set the S3_REMOTE_SYNC environment variable"
-        )
-        object.__setattr__(args, "s3_remote_sync", os.environ["S3_REMOTE_SYNC"])
-        object.__setattr__(args, "s3_remote_sync", args.s3_remote_sync.replace("us-east-1", args.region))
 
     image = get_image(
         args.user,
@@ -178,9 +165,6 @@ def main():
 
     job_name = get_job_name(base_job_name)
 
-    output_root = f"{args.s3_remote_sync}/sagemaker/{args.user}/{NAME}/"
-    output_s3 = os.path.join(output_root, job_name)
-
     environment = {
         "SM_USE_RESERVED_CAPACITY": "1",
         "WANDB_PROJECT": "lbm2",
@@ -196,23 +180,20 @@ def main():
         entry_point="lbm2/main.py",
         sagemaker_session=sagemaker_session,
         base_job_name=base_job_name,
-        hyperparameters=hyperparameters,
+        hyperparameters={"config_path": hyperparameter_sagemaker_path},
         role=role,
         image_uri=image,
         instance_count=args.instance_count,
         instance_type="local_gpu" if args.local else INSTANCE_MAPPER[args.instance_type],
-        output_path=output_s3,
         job_name=job_name,
-        checkpoint_s3_uri=None if args.local else f"{output_s3}/checkpoint",
         checkpoint_local_path=None if args.local else checkpoint_local_path,
-        code_location=output_s3,
         # Training using SMDataParallel Distributed Training Framework
         distribution={"torch_distributed": {"enabled": True}},
         # Max run 5 days
-        max_run=5 * 24 * 60 * 60,
+        max_run=args.max_run * 24 * 60 * 60,  # max_run days
         input_mode="FastFile",
         environment=environment,
-        keep_alive_period_in_seconds=5 * 60,  # 30 minutes
+        keep_alive_period_in_seconds=5 * 60,  # 5 minutes
         tags=[
             {"Key": "tri.project", "Value": "MM:PJ-0077"},
             {"Key": "tri.owner.email", "Value": f"{args.user}@tri.global"},
@@ -228,7 +209,7 @@ def main():
         job_names=[job_name],
         priority=args.priority,
         share_identifier="default",
-        timeout={"attemptDurationSeconds": 10 * 24 * 60 * 60},
+        timeout={"attemptDurationSeconds": args.max_run * 24 * 60 * 60},
     )
     print(f"Queued {job_name}")
 

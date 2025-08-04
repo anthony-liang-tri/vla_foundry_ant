@@ -50,10 +50,10 @@ where sagemaker is installed. The reason to do this is so that the local and sag
 
 ```bash
 uv run --group sagemaker sagemaker/launch_training.py \
---user your.user.name \
---instance_count 1 \
---instance_type p4de \
---insert_your_arguments_here
+--sagemaker.user your.user.name \
+--sagemaker.instance_count 1 \
+--sagemaker.instance_type p4de \
+--insert_experiment_arguments_here (no_need_for_sagemaker_prefix)
 ```
 
 ## Repo Structure and Implementation
