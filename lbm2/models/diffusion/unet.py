@@ -5,6 +5,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from lbm2.params.model_params import UNetParams
+
 
 class SinusoidalPositionEmbeddings(nn.Module):
     def __init__(self, dim):
@@ -114,14 +116,13 @@ class CrossAttentionBlock(nn.Module):
 class UNet(nn.Module):
     """U-Net architecture for diffusion model"""
 
-    def __init__(self, model_configs):
+    def __init__(self, model_params: UNetParams):
         super().__init__()
-        self.model_configs = model_configs
-        self.in_channels = model_configs.unet.in_channels
-        self.out_channels = model_configs.unet.out_channels
-        self.time_emb_dim = model_configs.unet.time_emb_dim
-        self.text_emb_dim = model_configs.unet.text_emb_dim
-        self.channels = model_configs.unet.channels
+        self.in_channels = model_params.in_channels
+        self.out_channels = model_params.out_channels
+        self.time_emb_dim = model_params.time_emb_dim
+        self.text_emb_dim = model_params.text_emb_dim
+        self.channels = model_params.channels
         self.dim_expansion = 4
 
         # Time embedding

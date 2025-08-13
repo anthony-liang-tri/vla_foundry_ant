@@ -3,11 +3,15 @@ import torch.nn as nn
 from PIL import Image
 from tqdm import tqdm
 
+from lbm2.models.diffusion.noise_scheduler import NoiseScheduler
+from lbm2.models.diffusion.unet import UNet
+from lbm2.params.model_params import DiffusionParams
+
 
 class StableDiffusion(nn.Module):
-    def __init__(self, model_configs, scheduler, unet):
+    def __init__(self, model_params: DiffusionParams, scheduler: NoiseScheduler, unet: UNet):
         super().__init__()
-        self.model_configs = model_configs
+        self.model_params = model_params
         self.scheduler = scheduler
         self.unet = unet
         # self.text_encoder = CLIPTextModel.from_pretrained("openai/clip-vit-base-patch32")
@@ -24,9 +28,7 @@ class StableDiffusion(nn.Module):
 
     @torch.no_grad()
     def generate(self, batch_size, device):
-        images = torch.randn(
-            batch_size, self.unet.in_channels, self.model_configs.img_size, self.model_configs.img_size
-        )
+        images = torch.randn(batch_size, self.unet.in_channels, self.unet.image_size, self.unet.image_size)
         images = images.to(device)
 
         for t in tqdm(range(self.scheduler.num_timesteps - 1, 0, -1)):

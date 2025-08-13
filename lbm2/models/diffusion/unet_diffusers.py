@@ -1,16 +1,17 @@
 import torch.nn as nn
 from diffusers import UNet2DModel
 
+from lbm2.params.model_params import UNetParams
+
 
 class UNetDiffusers(nn.Module):
-    def __init__(self, model_configs):
+    def __init__(self, model_params: UNetParams):
         super().__init__()
-        self.model_configs = model_configs
-        self.in_channels = model_configs.unet.in_channels
+        self.in_channels = model_params.in_channels
         self.model = UNet2DModel(
-            sample_size=model_configs.image_size,  # the target image resolution
-            in_channels=model_configs.unet.in_channels,  # the number of input channels, 3 for RGB images
-            out_channels=model_configs.unet.out_channels,  # the number of output channels
+            sample_size=model_params.image_size,  # the target image resolution
+            in_channels=model_params.in_channels,  # the number of input channels, 3 for RGB images
+            out_channels=model_params.out_channels,  # the number of output channels
             layers_per_block=2,  # how many ResNet layers to use per UNet block
             block_out_channels=(128, 128, 256, 256, 512, 512),  # the number of output channels for each UNet block
             down_block_types=(

@@ -14,43 +14,54 @@ from lbm2.models.vit import ViT
 from lbm2.models.vit_hf import ViTHF
 from lbm2.models.vlm import VLM
 from lbm2.models.vlm_hf import VLMHF
+from lbm2.params.model_params import ModelParams
 
 
-def create_model(model_configs):
-    if model_configs.type == "transformer":
-        model = Transformer(model_configs)
-    elif model_configs.type == "transformer_hf":
-        model = TransformerHF(model_configs)
-    elif model_configs.type == "vlm":
-        transformer = Transformer(model_configs.transformer)
-        vit = ViT(model_configs.vit) if model_configs.vit.type == "vit" else ViTHF(model_configs.vit)
-        if model_configs.vit.freeze:
+def create_model(model_params: ModelParams):
+    if model_params.type == "transformer":
+        model = Transformer(model_params)
+        if model_params.freeze:
+            for param in model.parameters():
+                param.requires_grad = False
+    elif model_params.type == "transformer_hf":
+        model = TransformerHF(model_params)
+    elif model_params.type == "vlm":
+        transformer = create_model(model_params.transformer)
+        vit = ViT(model_params.vit) if model_params.vit.type == "vit" else ViTHF(model_params.vit)
+        if model_params.vit.freeze:
             for param in vit.parameters():
                 param.requires_grad = False
-        model = VLM(model_configs, transformer, vit)
-    elif model_configs.type == "vlm_hf":
-        model = VLMHF(model_configs)
-    elif model_configs.type == "stable_diffusion":
-        unet = UNetDiffusers(model_configs) if model_configs.use_diffusers_unet else UNet(model_configs)
-        if model_configs.use_diffusers_scheduler:
-            noise_scheduler = NoiseSchedulerDDPMDiffusers(model_configs)
-        elif model_configs.use_flow_matching_scheduler:
-            noise_scheduler = FlowMatchingScheduler(model_configs)
+        model = VLM(model_params, transformer, vit)
+        if model_params.freeze:
+            for param in model.parameters():
+                param.requires_grad = False
+    elif model_params.type == "vlm_hf":
+        model = VLMHF(model_params)
+        # TODO: Jean do we want to be able to freeze the image encoder here?
+        if model_params.freeze:
+            for param in model.parameters():
+                param.requires_grad = False
+    elif model_params.type == "stable_diffusion":
+        unet = UNetDiffusers(model_params.unet) if model_params.use_diffusers_unet else UNet(model_params.unet)
+        if model_params.use_diffusers_scheduler:
+            noise_scheduler = NoiseSchedulerDDPMDiffusers(model_params.noise_scheduler)
+        elif model_params.use_flow_matching_scheduler:
+            noise_scheduler = FlowMatchingScheduler(model_params.noise_scheduler)
         else:
-            noise_scheduler = NoiseSchedulerDDPM(model_configs)
-        model = StableDiffusion(model_configs, noise_scheduler, unet)
+            noise_scheduler = NoiseSchedulerDDPM(model_params.noise_scheduler)
+        model = StableDiffusion(model_params, noise_scheduler, unet)
     else:
-        raise ValueError(f"{model_configs.type} not supported!")
+        raise ValueError(f"{model_params.type} not supported!")
     return model
 
 
-def get_model_block(model_type, model_configs):
+def get_model_block(model_type: str, model_params: ModelParams):
     if model_type == "transformer":
         return {TransformerBlock}
     elif model_type == "transformer_hf":
         from transformers import AutoConfig, AutoModelForCausalLM
 
-        config = AutoConfig.from_pretrained(model_configs.hf_pretrained)
+        config = AutoConfig.from_pretrained(model_params.hf_pretrained)
         model = AutoModelForCausalLM.from_config(config)
         for _name, module in model.model.named_modules():
             if isinstance(module, nn.ModuleList) and len(module) > 0:
@@ -61,7 +72,7 @@ def get_model_block(model_type, model_configs):
     elif model_type == "vlm_hf":
         from transformers import AutoConfig, AutoModelForVision2Seq
 
-        config = AutoConfig.from_pretrained(model_configs.hf_pretrained)
+        config = AutoConfig.from_pretrained(model_params.hf_pretrained)
         model = AutoModelForVision2Seq.from_config(config)
         for attr in ["language_model", "text_model"]:
             if hasattr(model.model, attr):
@@ -70,7 +81,7 @@ def get_model_block(model_type, model_configs):
                         return {type(module[0])}
         raise ValueError("Could not find model block class.")
     elif model_type == "stable_diffusion":
-        if model_configs.use_diffusers_unet:
+        if model_params.use_diffusers_unet:
             from diffusers.models.unets.unet_2d_blocks import (
                 AttnDownBlock2D,
                 AttnUpBlock2D,

@@ -3,6 +3,7 @@ import webdataset as wds
 from lbm2.data.pipelines.base import BaseWebDatasetPipeline
 from lbm2.data.tokenizer import get_tokenizer
 from lbm2.data.utils import deterministic_shuffle, log_and_continue
+from lbm2.params.base_data_params import DataParams
 
 
 def batch_tokenize(batch, tokenizer, seq_len):
@@ -18,19 +19,19 @@ def batch_tokenize(batch, tokenizer, seq_len):
 
 
 class TextUntokenizedPipeline(BaseWebDatasetPipeline):
-    def __init__(self, modality, data_configs, batch_size):
-        super().__init__(modality, data_configs, batch_size)
-        self.tokenizer = get_tokenizer(data_configs.tokenizer)
+    def __init__(self, modality: str, data_params: DataParams, batch_size: int):
+        super().__init__(modality, data_params, batch_size)
+        self.tokenizer = get_tokenizer(data_params.tokenizer)
         if self.tokenizer.pad_token is None:
             self.tokenizer.add_special_tokens({"pad_token": "[PAD]"})
 
-    def create_pipeline(self, datastring, checkpoint_num):
+    def create_pipeline(self, datastring: str, checkpoint_num: int):
         pipeline = [
             wds.SimpleShardList(datastring),
             deterministic_shuffle(
-                bufsize=self.data_configs.shuffle_buffer_size,
-                initial=self.data_configs.shuffle_initial,
-                seed=self.data_configs.seed,
+                bufsize=self.data_params.shuffle_buffer_size,
+                initial=self.data_params.shuffle_initial,
+                seed=self.data_params.seed,
                 epoch=checkpoint_num,
             ),
             wds.split_by_node,
@@ -43,5 +44,5 @@ class TextUntokenizedPipeline(BaseWebDatasetPipeline):
         return pipeline
 
     def tokenize_wrapper(self, batch):
-        input_ids, attention_mask = batch_tokenize(batch, self.tokenizer, self.data_configs.seq_len)
+        input_ids, attention_mask = batch_tokenize(batch, self.tokenizer, self.data_params.seq_len)
         return {"input_ids": input_ids, "attention_mask": attention_mask}

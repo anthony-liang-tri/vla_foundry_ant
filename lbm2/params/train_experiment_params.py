@@ -6,8 +6,11 @@ import draccus
 
 from lbm2.data.utils import epochs_to_samples
 from lbm2.file_utils import copy_to_temp_file
+from lbm2.params.base_data_params import DataParams
 from lbm2.params.base_params import BaseParams
-from lbm2.params.data_params import DataParams
+
+# Need to import these here to register the subclasses with draccus.
+from lbm2.params.data_params import ImageCaptionDataParams, TextDataParams, TextUntokenizedDataParams  # noqa: F401
 from lbm2.params.distributed_params import DistributedParams
 from lbm2.params.hyper_params import HyperParams
 from lbm2.params.model_params import ModelParams

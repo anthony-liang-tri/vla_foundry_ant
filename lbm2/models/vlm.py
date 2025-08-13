@@ -1,14 +1,17 @@
 import torch
 import torch.nn as nn
 
+from lbm2.models.transformer import Transformer
+from lbm2.models.vit import ViT
+from lbm2.params.model_params import ViTParams, VLMParams
+
 
 class ModalityProjector(nn.Module):
-    def __init__(self, vit_configs, output_dim):
+    def __init__(self, vit_params: ViTParams, output_dim: int):
         super().__init__()
-        self.vit_configs = vit_configs
-        self.input_dim = vit_configs.hidden_dim * (vit_configs.projector_pixel_shuffle_factor**2)
+        self.input_dim = vit_params.hidden_dim * (vit_params.projector_pixel_shuffle_factor**2)
         self.output_dim = output_dim
-        self.scale_factor = vit_configs.projector_pixel_shuffle_factor
+        self.scale_factor = vit_params.projector_pixel_shuffle_factor
 
         self.proj = nn.Linear(self.input_dim, self.output_dim, bias=False)
 
@@ -45,20 +48,20 @@ class ModalityProjector(nn.Module):
 
 
 class VLM(nn.Module):
-    def __init__(self, model_configs, transformer, vit):
+    def __init__(self, model_params: VLMParams, transformer: Transformer, vit: ViT):
         super().__init__()
-        self.model_configs = model_configs
+        self.model_params = model_params
         self.vit = vit
         self.transformer = transformer
-        self.projection = ModalityProjector(model_configs.vit, model_configs.transformer.hidden_dim)
+        self.projection = ModalityProjector(model_params.vit, model_params.transformer.hidden_dim)
 
-    def forward(self, input_ids, image, attention_mask=None):
+    def forward(self, input_ids: torch.Tensor, image: torch.Tensor, attention_mask: torch.Tensor = None):
         # image shape [bsz, 3, image_size, image_size]
         # input_ids and attention_mask should already allot tokens for the image
         image_embd = self.vit(image)
         image_embd = self.projection(image_embd)  # [bsz, 16*16, lm_hidden_dim]
         token_embd = self.transformer.embeddings(input_ids).to(image_embd.dtype)
-        special_image_mask = (input_ids == self.model_configs.image_token_id).unsqueeze(-1)
+        special_image_mask = (input_ids == self.model_params.image_token_id).unsqueeze(-1)
         assert special_image_mask.sum().item() == image_embd.shape[0] * image_embd.shape[1]
         special_image_mask = special_image_mask.expand_as(token_embd).to(token_embd.device)
         inputs_embeds = token_embd.masked_scatter(special_image_mask, image_embd)
@@ -66,7 +69,13 @@ class VLM(nn.Module):
         logits, _ = self.transformer(input_embeds=inputs_embeds, attention_mask=attention_mask)
         return logits, _
 
-    def generate(self, input_ids, image, attention_mask, max_new_tokens=20):
+    def generate(
+        self,
+        input_ids: torch.Tensor,
+        image: torch.Tensor,
+        attention_mask: torch.Tensor,
+        max_new_tokens: int = 20,
+    ) -> torch.Tensor:
         # Add batch dimension if needed
         if input_ids.dim() == 1:
             input_ids = input_ids.unsqueeze(0)

@@ -11,7 +11,6 @@ from contextlib import contextmanager
 import fsspec
 import numpy as np
 import torch
-import torch.distributed
 import yaml
 from torch.distributed.fsdp import (
     FullStateDictConfig,
@@ -210,7 +209,7 @@ def remote_sync(local_dir, remote_dir):
     return True
 
 
-def load_model_checkpoint(model, resume_from_checkpoint, distributed_configs):
+def load_model_checkpoint(model, resume_from_checkpoint, distributed_params):
     checkpoint = pt_load(resume_from_checkpoint, map_location="cpu")
 
     # resuming a train checkpoint w/ epoch and optimizer state
@@ -222,9 +221,9 @@ def load_model_checkpoint(model, resume_from_checkpoint, distributed_configs):
         sd = {k[len("module.") :]: v for k, v in sd.items()}
     if "_orig_mod" in next(iter(sd.items()))[0]:
         sd = {k.replace("_orig_mod.", ""): v for k, v in sd.items()}
-    if distributed_configs.fsdp:
+    if distributed_params.fsdp:
         model.load_state_dict(sd)
-    elif distributed_configs.use_distributed:
+    elif distributed_params.use_distributed:
         model.module.load_state_dict(sd)
     else:
         model.load_state_dict(sd)

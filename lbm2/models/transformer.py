@@ -6,27 +6,28 @@ from torch import nn
 from lbm2.activations import get_feed_forward
 from lbm2.attention import get_attn_func
 from lbm2.norms import get_norm_class
+from lbm2.params.model_params import TransformerParams
 from lbm2.positional_embedding import get_pos_embed
 
 
 class CustomAttn(nn.Module):
-    def __init__(self, layer_id, model_configs):
+    def __init__(self, layer_id: int, model_params: TransformerParams):
         super().__init__()
-        self.n_heads = model_configs.n_heads
-        self.hidden_dim = model_configs.hidden_dim
-        self.head_dim = model_configs.hidden_dim // model_configs.n_heads
+        self.n_heads = model_params.n_heads
+        self.hidden_dim = model_params.hidden_dim
+        self.head_dim = model_params.hidden_dim // model_params.n_heads
         self.in_proj = nn.Linear(self.hidden_dim, 3 * self.n_heads * self.head_dim, bias=False)
         self.out_proj = nn.Linear(self.n_heads * self.head_dim, self.hidden_dim, bias=False)
-        self.pos_embed = get_pos_embed(model_configs)
-        self.attn_fn = get_attn_func(model_configs.attn_name)
-        self.apply_qk_norm = model_configs.qk_norm
+        self.pos_embed = get_pos_embed(model_params)
+        self.attn_fn = get_attn_func(model_params.attn_name)
+        self.apply_qk_norm = model_params.qk_norm
 
         # initialize norm layers for queries and keys if needed
-        self.norm_type = get_norm_class(model_configs.norm_type)
+        self.norm_type = get_norm_class(model_params.norm_type)
         self.q_norm = (
             self.norm_type(
                 self.n_heads * self.head_dim,
-                eps=model_configs.norm_eps,
+                eps=model_params.norm_eps,
             )
             if self.apply_qk_norm
             else nn.Identity()
@@ -34,7 +35,7 @@ class CustomAttn(nn.Module):
         self.k_norm = (
             self.norm_type(
                 self.n_heads * self.head_dim,
-                eps=model_configs.norm_eps,
+                eps=model_params.norm_eps,
             )
             if self.apply_qk_norm
             else nn.Identity()
@@ -84,25 +85,25 @@ class CustomAttn(nn.Module):
 
 
 class TransformerBlock(nn.Module):
-    def __init__(self, layer_id, model_configs):
+    def __init__(self, layer_id: int, model_params: TransformerParams):
         super().__init__()
-        self.n_heads = model_configs.n_heads
-        self.hidden_dim = model_configs.hidden_dim
+        self.n_heads = model_params.n_heads
+        self.hidden_dim = model_params.hidden_dim
 
-        self.head_dim = model_configs.hidden_dim // model_configs.n_heads
-        self.attention = CustomAttn(layer_id, model_configs)
-        self.ffn_type = model_configs.ffn_type
+        self.head_dim = model_params.hidden_dim // model_params.n_heads
+        self.attention = CustomAttn(layer_id, model_params)
+        self.ffn_type = model_params.ffn_type
         self.feed_forward, self.ffn_hidden_dim = get_feed_forward(self.ffn_type, self.hidden_dim)
 
         self.layer_id = layer_id
-        self.norm_type = get_norm_class(model_configs.norm_type)
+        self.norm_type = get_norm_class(model_params.norm_type)
         self.attention_norm = self.norm_type(
-            model_configs.hidden_dim,
-            eps=model_configs.norm_eps,
+            model_params.hidden_dim,
+            eps=model_params.norm_eps,
         )
         self.ffn_norm = self.norm_type(
-            model_configs.hidden_dim,
-            eps=model_configs.norm_eps,
+            model_params.hidden_dim,
+            eps=model_params.norm_eps,
         )
         self.reset_parameters()
 
@@ -138,36 +139,36 @@ class TransformerBlock(nn.Module):
 
 
 class Transformer(nn.Module):
-    def __init__(self, model_configs):
+    def __init__(self, model_params: TransformerParams):
         super().__init__()
         # for convenience we often share param names with llama
-        self.model_configs = model_configs
-        self.hidden_dim = model_configs.hidden_dim
-        self.vocab_size = model_configs.vocab_size
-        self.n_layers = model_configs.n_layers
-        self.max_seq_len = model_configs.max_seq_len
-        self.norm_type = get_norm_class(model_configs.norm_type)
+        self.model_params = model_params
+        self.hidden_dim = model_params.hidden_dim
+        self.vocab_size = model_params.vocab_size
+        self.n_layers = model_params.n_layers
+        self.max_seq_len = model_params.max_seq_len
+        self.norm_type = get_norm_class(model_params.norm_type)
         self.post_embed_norm = (
             self.norm_type(
-                model_configs.hidden_dim,
-                eps=model_configs.norm_eps,
+                model_params.hidden_dim,
+                eps=model_params.norm_eps,
             )
-            if model_configs.post_embed_norm
+            if model_params.post_embed_norm
             else nn.Identity()
         )
-        self.weight_tying = model_configs.weight_tying
-        self.embeddings = nn.Embedding(model_configs.vocab_size, model_configs.hidden_dim)
+        self.weight_tying = model_params.weight_tying
+        self.embeddings = nn.Embedding(model_params.vocab_size, model_params.hidden_dim)
 
         self.layers = torch.nn.ModuleList()
-        for layer_id in range(model_configs.n_layers):
-            self.layers.append(TransformerBlock(layer_id, model_configs))
+        for layer_id in range(model_params.n_layers):
+            self.layers.append(TransformerBlock(layer_id, model_params))
 
         # get class for normalization layers
         self.norm = self.norm_type(
-            model_configs.hidden_dim,
-            eps=model_configs.norm_eps,
+            model_params.hidden_dim,
+            eps=model_params.norm_eps,
         )
-        self.output = nn.Linear(model_configs.hidden_dim, model_configs.vocab_size, bias=False)
+        self.output = nn.Linear(model_params.hidden_dim, model_params.vocab_size, bias=False)
         if self.weight_tying:
             self.embeddings.weight = self.output.weight
         self.grad_checkpointing = False

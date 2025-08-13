@@ -52,6 +52,7 @@ class TransformerParams(ModelParams):
     norm_eps: float = field(default=1e-5)
     weight_tying: bool = field(default=False)
     max_seq_len: int = field(default=2048)
+    freeze: bool = field(default=False)
 
 
 @register_model_params("transformer_hf")
@@ -102,6 +103,7 @@ class VLMParams(ModelParams):
 @dataclass(frozen=True)
 class VLMHFParams(ModelParams):
     hf_pretrained: str = field(default=None)
+    freeze: bool = field(default=False)
 
 
 @register_model_params("unet")
