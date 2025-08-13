@@ -18,8 +18,8 @@ class NoiseScheduler:
 
 class NoiseSchedulerDDPM(nn.Module, NoiseScheduler):
     def __init__(self, params: NoiseSchedulerParams):
-        super(NoiseSchedulerDDPM, self).__init__(params)
-        super(nn.Module, self).__init__()
+        nn.Module.__init__(self)
+        NoiseScheduler.__init__(self, params)
         self.num_timesteps = params.num_timesteps
         self.beta_start = params.beta_start
         self.beta_end = params.beta_end

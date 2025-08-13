@@ -6,6 +6,7 @@ from lbm2.params.model_params import NoiseSchedulerParams
 
 class NoiseSchedulerDDPMDiffusers(NoiseScheduler):
     def __init__(self, params: NoiseSchedulerParams):
+        super(NoiseSchedulerDDPMDiffusers, self).__init__(params)
         self.num_timesteps = params.num_timesteps
         self.scheduler = DDPMScheduler(num_train_timesteps=self.num_timesteps)
 

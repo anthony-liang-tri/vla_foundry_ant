@@ -28,7 +28,12 @@ class StableDiffusion(nn.Module):
 
     @torch.no_grad()
     def generate(self, batch_size, device):
-        images = torch.randn(batch_size, self.unet.in_channels, self.unet.image_size, self.unet.image_size)
+        images = torch.randn(
+            batch_size,
+            self.model_params.unet.in_channels,
+            self.model_params.unet.image_size,
+            self.model_params.unet.image_size,
+        )
         images = images.to(device)
 
         for t in tqdm(range(self.scheduler.num_timesteps - 1, 0, -1)):
