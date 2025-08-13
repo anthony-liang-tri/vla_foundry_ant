@@ -5,9 +5,21 @@ import torch.nn.functional as F
 from lbm2.params.model_params import NoiseSchedulerParams
 
 
-class NoiseSchedulerDDPM(nn.Module):
+class NoiseScheduler:
     def __init__(self, params: NoiseSchedulerParams):
-        super().__init__()
+        pass
+
+    def add_noise(self, x_start, noise, timesteps):
+        raise NotImplementedError
+
+    def step(self, model_output, timestep, sample):
+        raise NotImplementedError
+
+
+class NoiseSchedulerDDPM(nn.Module, NoiseScheduler):
+    def __init__(self, params: NoiseSchedulerParams):
+        super(NoiseSchedulerDDPM, self).__init__(params)
+        super(nn.Module, self).__init__()
         self.num_timesteps = params.num_timesteps
         self.beta_start = params.beta_start
         self.beta_end = params.beta_end

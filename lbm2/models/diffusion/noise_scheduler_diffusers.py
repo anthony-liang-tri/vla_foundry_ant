@@ -1,9 +1,10 @@
 from diffusers import DDPMScheduler
 
+from lbm2.models.diffusion.noise_scheduler import NoiseScheduler
 from lbm2.params.model_params import NoiseSchedulerParams
 
 
-class NoiseSchedulerDDPMDiffusers:
+class NoiseSchedulerDDPMDiffusers(NoiseScheduler):
     def __init__(self, params: NoiseSchedulerParams):
         self.num_timesteps = params.num_timesteps
         self.scheduler = DDPMScheduler(num_train_timesteps=self.num_timesteps)
