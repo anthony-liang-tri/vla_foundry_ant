@@ -63,18 +63,18 @@ class TransformerHFParams(ModelParams):
 @register_model_params("vit")
 @dataclass(frozen=True)
 class ViTParams(ModelParams):
-    vit_pretrained: str = field(default=None)
-    vit_freeze: bool = field(default=False)
-    vit_interpolation_mode: str = field(default="bicubic")
-    vit_hidden_dim: int = field(default=768)
-    vit_inter_dim: int = field(default=3072)
-    vit_patch_size: int = field(default=16)
-    vit_img_size: int = field(default=384)
-    vit_n_heads: int = field(default=12)
-    vit_dropout: float = field(default=0.0)
-    vit_n_layers: int = field(default=12)
-    vit_ln_eps: float = field(default=1e-6)
-    vit_cls_flag: bool = field(default=False)
+    pretrained: str = field(default=None)
+    freeze: bool = field(default=False)
+    interpolation_mode: str = field(default="bicubic")
+    hidden_dim: int = field(default=768)
+    inter_dim: int = field(default=3072)
+    patch_size: int = field(default=16)
+    img_size: int = field(default=384)
+    n_heads: int = field(default=12)
+    dropout: float = field(default=0.0)
+    n_layers: int = field(default=12)
+    ln_eps: float = field(default=1e-6)
+    cls_flag: bool = field(default=False)
     projector_pixel_shuffle_factor: int = field(default=1)
 
 
@@ -82,7 +82,7 @@ class ViTParams(ModelParams):
 @dataclass(frozen=True)
 class ViTHFParams(ModelParams):
     hf_pretrained: str = field(default=None)
-    vit_hidden_dim: int = field(default=768)
+    hidden_dim: int = field(default=768)
     projector_pixel_shuffle_factor: int = field(default=1)
 
 
@@ -91,7 +91,7 @@ class ViTHFParams(ModelParams):
 class VLMParams(ModelParams):
     vit: Union[ViTParams, ViTHFParams] = field(default_factory=ViTParams)
     transformer: Union[TransformerParams, TransformerHFParams] = field(default_factory=TransformerParams)
-    vit_freeze: bool = field(default=False)
+    freeze: bool = field(default=False)
     image_token_id: int = field(default=None)
 
     def init_shared_attributes(self, cfg):

@@ -50,7 +50,7 @@ def get_args_vlm():
         ["1.0", "1.0"],
         "--data.processor",
         "debug",
-        "--model.vit.vit_hidden_dim",
+        "--model.vit.hidden_dim",
         "999",
     ]
     with patch.object(sys, "argv", ["test"] + test_args):
@@ -68,8 +68,8 @@ def get_args_vlm_from_load_path(**kwargs):
         "include tests/params/dummy_configs/dummy_transformer_config.yaml",
         "--model.vit",
         "include tests/params/dummy_configs/dummy_vit_config.yaml",
-        "--model.vit.vit_hidden_dim",
-        str(kwargs.get("vit_hidden_dim", 999)),
+        "--model.vit.hidden_dim",
+        str(kwargs.get("hidden_dim", 999)),
         "--distributed.fsdp",
         "True",
         "--distributed.fsdp_use_orig_params",
@@ -122,12 +122,12 @@ def test_get_args_vlm():
     assert args.data.dataset_manifest == ["s3://test-bucket/manifest.jsonl", "s3://test-bucket-2/manifest.jsonl"]
     assert args.data.dataset_modality == ["image", "text"]
     assert args.data.dataset_weighting == [1.0, 1.0]
-    assert args.model.vit.vit_hidden_dim == 999
+    assert args.model.vit.hidden_dim == 999
 
 
 def test_load_path_flag():
-    vit_hidden_dim = 999
-    args = get_args_vlm_from_load_path(vit_hidden_dim=vit_hidden_dim)
+    hidden_dim = 999
+    args = get_args_vlm_from_load_path(hidden_dim=hidden_dim)
     assert args.model.type == "vlm"
     assert args.model.vit.type == "vit"
     assert args.distributed.fsdp
@@ -148,19 +148,19 @@ def test_load_path_flag():
     assert args.model.transformer.vocab_size == 257216
     assert not args.model.transformer.post_embed_norm
     assert not args.model.transformer.weight_tying
-    assert args.model.vit.vit_img_size == 32
-    assert args.model.vit.vit_hidden_dim == vit_hidden_dim  # overridden by vit_hidden_dim flag
-    assert args.model.vit.vit_inter_dim == 4300
-    assert args.model.vit.vit_n_heads == 10
-    assert args.model.vit.vit_n_layers == 10
-    assert args.model.vit.vit_patch_size == 10
+    assert args.model.vit.img_size == 32
+    assert args.model.vit.hidden_dim == hidden_dim  # overridden by hidden_dim flag
+    assert args.model.vit.inter_dim == 4300
+    assert args.model.vit.n_heads == 10
+    assert args.model.vit.n_layers == 10
+    assert args.model.vit.patch_size == 10
     assert args.model.vit.projector_pixel_shuffle_factor == 2
 
 
 @pytest.mark.parametrize("params_yaml", ["tests/params/dummy_configs/dummy_vlm_config.yaml"])
 def test_load_experiment_params_from_yaml(params_yaml):
     params = load_experiment_params_from_yaml(params_yaml)
-    assert params.model.vit.vit_hidden_dim == 999
+    assert params.model.vit.hidden_dim == 999
 
 
 @pytest.mark.parametrize(
@@ -172,7 +172,7 @@ def test_load_experiment_params_from_yaml(params_yaml):
 )
 def test_load_experiment_params_from_yaml_include(params_yaml):
     params = load_experiment_params_from_yaml(params_yaml)
-    assert params.model.vit.vit_hidden_dim == 100
+    assert params.model.vit.hidden_dim == 100
 
 
 @pytest.mark.parametrize(
@@ -185,10 +185,10 @@ def test_load_experiment_params_from_yaml_include(params_yaml):
 def get_args_vlm_from_load_path_modify(params_yaml, hidden_dim):
     if hidden_dim is not None:
         params = get_args_vlm_from_load_path(params_yaml, hidden_dim=hidden_dim)
-        assert params.model.vit.vit_hidden_dim == hidden_dim
+        assert params.model.vit.hidden_dim == hidden_dim
     else:
         params = get_args_vlm_from_load_path(params_yaml)
-        assert params.model.vit.vit_hidden_dim == 100
+        assert params.model.vit.hidden_dim == 100
 
 
 def test_immutable_params():

@@ -83,19 +83,18 @@ model:
     resume_from_checkpoint: null
     resume_weights_only: false
     type: vit
-    vit_cls_flag: false
-    vit_dropout: 0.0
-    vit_freeze: false
-    vit_hidden_dim: 999
-    vit_img_size: 224
-    vit_inter_dim: 4304
-    vit_interpolation_mode: bicubic
-    vit_ln_eps: 1.0e-06
-    vit_n_heads: 16
-    vit_n_layers: 27
-    vit_patch_size: 14
-    vit_pretrained: null
-  vit_freeze: false
+    cls_flag: false
+    dropout: 0.0
+    freeze: false
+    hidden_dim: 999
+    img_size: 224
+    inter_dim: 4304
+    interpolation_mode: bicubic
+    ln_eps: 1.0e-06
+    n_heads: 16
+    n_layers: 27
+    patch_size: 14
+    pretrained: null
 name: 2025_07_14-22_28_54-model_vlm-lr_0.0001-bsz_128
 num_checkpoints: 5
 num_epochs: null

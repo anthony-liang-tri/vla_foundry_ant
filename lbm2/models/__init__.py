@@ -24,7 +24,7 @@ def create_model(model_configs):
     elif model_configs.type == "vlm":
         transformer = Transformer(model_configs.transformer)
         vit = ViT(model_configs.vit) if model_configs.vit.type == "vit" else ViTHF(model_configs.vit)
-        if model_configs.vit_freeze:
+        if model_configs.vit.freeze:
             for param in vit.parameters():
                 param.requires_grad = False
         model = VLM(model_configs, transformer, vit)

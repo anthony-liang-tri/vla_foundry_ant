@@ -11,7 +11,7 @@ from torch.utils.data.distributed import DistributedSampler
 
 from lbm2.data.pipelines import create_wds_pipeline
 from lbm2.data.utils import SharedCheckpointCounter
-from lbm2.file_utils import get_metadata_file
+from lbm2.file_utils import load_dataset_manifest
 
 
 def seed_worker(worker_id):
@@ -91,7 +91,7 @@ def get_datastring_input(
     world_size: int,
 ):
     manifests = [
-        get_metadata_file(path, shard_shuffle_seed=seed)
+        load_dataset_manifest(path, shard_shuffle_seed=seed)
         for path, seed in zip(manifest_paths, shard_shuffle_seed_per_dataset, strict=False)
     ]
     if dataset_weighting is None:
@@ -126,7 +126,7 @@ def get_datastring_input(
                 if allow_multiple_epochs:
                     # Reshuffle and set index back to 0
                     shard_shuffle_seed_per_dataset[i] += 1
-                    manifests[i] = get_metadata_file(
+                    manifests[i] = load_dataset_manifest(
                         manifest_paths[i], shard_shuffle_seed=shard_shuffle_seed_per_dataset[i]
                     )
                     curr_shard_idx_per_dataset[i] = 0

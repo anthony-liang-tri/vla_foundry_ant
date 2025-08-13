@@ -6,7 +6,7 @@ from multiprocessing import Value
 import webdataset as wds
 from torch.utils.data import get_worker_info
 
-from lbm2.file_utils import get_metadata_file, pt_load
+from lbm2.file_utils import load_dataset_manifest, pt_load
 
 
 class SharedCheckpointCounter:
@@ -48,6 +48,13 @@ class deterministic_shuffle(wds.PipelineStage):
         seed=0,
         epoch=-1,
     ):
+        """
+        Args:
+            bufsize (int): Buffer size for shuffling.
+            initial (int): Initial buffer size before yielding.
+            seed: Seed for the random number generator.
+            epoch: Epoch number.
+        """
         self.bufsize = bufsize
         self.initial = initial
         self.seed = seed
@@ -62,6 +69,8 @@ class deterministic_shuffle(wds.PipelineStage):
             self.epoch += 1
             epoch = self.epoch
         rng = random.Random()
+        # If seed is negative, we use the worker's seed, this will be different across all nodes/workers
+        # Otherwise, we use the seed + epoch to be deterministic AND the same across all nodes/workers in each epoch
         seed = pytorch_worker_seed(epoch) if self.seed < 0 else self.seed + epoch
         rng.seed(seed)
         return wds.filters._shuffle(src, self.bufsize, self.initial, rng)
@@ -73,7 +82,7 @@ def load_data_chunks(resume_from_checkpoint):
 
 
 def epochs_to_samples(manifest_paths, num_epochs):
-    manifests = [get_metadata_file(path) for path in manifest_paths]
+    manifests = [load_dataset_manifest(path) for path in manifest_paths]
     num_samples = 0
     for m in manifests:
         num_samples += sum(i["num_sequences"] for i in m)

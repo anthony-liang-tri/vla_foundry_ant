@@ -75,8 +75,9 @@ model:
     vocab_size: 257216
     weight_tying: false
   type: vlm
-  vit: !include dummy_vit_config.yaml
-  vit_freeze: false
+  vit: 
+    <<: !include dummy_vit_config.yaml
+    freeze: false
 name: 2025_07_14-22_28_54-model_vlm-lr_0.0001-bsz_128
 num_checkpoints: 5
 num_epochs: null

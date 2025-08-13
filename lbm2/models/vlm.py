@@ -6,7 +6,7 @@ class ModalityProjector(nn.Module):
     def __init__(self, vit_configs, output_dim):
         super().__init__()
         self.vit_configs = vit_configs
-        self.input_dim = vit_configs.vit_hidden_dim * (vit_configs.projector_pixel_shuffle_factor**2)
+        self.input_dim = vit_configs.hidden_dim * (vit_configs.projector_pixel_shuffle_factor**2)
         self.output_dim = output_dim
         self.scale_factor = vit_configs.projector_pixel_shuffle_factor
 

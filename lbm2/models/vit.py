@@ -1,16 +1,18 @@
 import torch
 import torch.nn as nn
 
+from lbm2.params.model_params import ViTParams
+
 
 # https://github.com/huggingface/transformers/blob/main/src/transformers/models/siglip/modeling_siglip.py#L245
 class ViTPatchEmbeddings(nn.Module):
-    def __init__(self, model_configs):
+    def __init__(self, params: ViTParams):
         super().__init__()
-        self.img_size = model_configs.vit_img_size
-        self.patch_size = model_configs.vit_patch_size
+        self.img_size = params.img_size
+        self.patch_size = params.patch_size
         self.num_patches = (self.img_size // self.patch_size) ** 2
-        self.cls_flag = model_configs.vit_cls_flag
-        self.embd_dim = model_configs.vit_hidden_dim
+        self.cls_flag = params.cls_flag
+        self.embd_dim = params.hidden_dim
 
         # Conv layer to extract the patches
         self.conv = nn.Conv2d(
@@ -45,13 +47,13 @@ class ViTPatchEmbeddings(nn.Module):
 # https://github.com/huggingface/transformers/blob/main/src/transformers/models/siglip/modeling_siglip.py#L381
 # https://github.com/karpathy/nanoGPT/blob/master/model.py#L29
 class ViTMultiHeadAttention(nn.Module):
-    def __init__(self, model_configs):
+    def __init__(self, params: ViTParams):
         super().__init__()
-        self.n_heads = model_configs.vit_n_heads
-        self.embd_dim = model_configs.vit_hidden_dim
+        self.n_heads = params.n_heads
+        self.embd_dim = params.hidden_dim
         assert self.embd_dim % self.n_heads == 0, "embd_dim must be divisible by num_heads"
         self.head_dim = self.embd_dim // self.n_heads
-        self.dropout = model_configs.vit_dropout
+        self.dropout = params.dropout
 
         # Combined projections for all heads
         self.qkv_proj = nn.Linear(self.embd_dim, 3 * self.embd_dim, bias=True)
@@ -89,12 +91,12 @@ class ViTMultiHeadAttention(nn.Module):
 
 # https://github.com/huggingface/transformers/blob/main/src/transformers/models/siglip/modeling_siglip.py#L453
 class ViTMLP(nn.Module):
-    def __init__(self, model_configs):
+    def __init__(self, params: ViTParams):
         super().__init__()
         self.activation_fn = nn.GELU(approximate="tanh")
-        self.fc1 = nn.Linear(model_configs.vit_hidden_dim, model_configs.vit_inter_dim)
-        self.fc2 = nn.Linear(model_configs.vit_inter_dim, model_configs.vit_hidden_dim)
-        self.dropout = nn.Dropout(model_configs.vit_dropout)
+        self.fc1 = nn.Linear(params.hidden_dim, params.inter_dim)
+        self.fc2 = nn.Linear(params.inter_dim, params.hidden_dim)
+        self.dropout = nn.Dropout(params.dropout)
 
     def forward(self, x):
         x = self.fc1(x)
@@ -106,12 +108,12 @@ class ViTMLP(nn.Module):
 
 # https://github.com/karpathy/nanoGPT/blob/master/model.py#L94
 class ViTBlock(nn.Module):
-    def __init__(self, model_configs):
+    def __init__(self, params: ViTParams):
         super().__init__()
-        self.ln1 = nn.LayerNorm(model_configs.vit_hidden_dim, eps=model_configs.vit_ln_eps)
-        self.attn = ViTMultiHeadAttention(model_configs)
-        self.ln2 = nn.LayerNorm(model_configs.vit_hidden_dim, eps=model_configs.vit_ln_eps)
-        self.mlp = ViTMLP(model_configs)
+        self.ln1 = nn.LayerNorm(params.hidden_dim, eps=params.ln_eps)
+        self.attn = ViTMultiHeadAttention(params)
+        self.ln2 = nn.LayerNorm(params.hidden_dim, eps=params.ln_eps)
+        self.mlp = ViTMLP(params)
 
     def forward(self, x):
         x = x + self.attn(self.ln1(x))
@@ -120,14 +122,14 @@ class ViTBlock(nn.Module):
 
 
 class ViT(nn.Module):
-    def __init__(self, model_configs):
+    def __init__(self, params: ViTParams):
         super().__init__()
-        self.model_configs = model_configs
-        self.patch_embedding = ViTPatchEmbeddings(model_configs)
-        self.cls_flag = model_configs.vit_cls_flag
-        self.dropout = nn.Dropout(model_configs.vit_dropout)
-        self.blocks = nn.ModuleList([ViTBlock(model_configs) for _ in range(model_configs.vit_n_layers)])
-        self.layer_norm = nn.LayerNorm(model_configs.vit_hidden_dim, eps=model_configs.vit_ln_eps)
+        self.params = params
+        self.patch_embedding = ViTPatchEmbeddings(params)
+        self.cls_flag = params.cls_flag
+        self.dropout = nn.Dropout(params.dropout)
+        self.blocks = nn.ModuleList([ViTBlock(params) for _ in range(params.n_layers)])
+        self.layer_norm = nn.LayerNorm(params.hidden_dim, eps=params.ln_eps)
 
         self.apply(self._init_weights)
 

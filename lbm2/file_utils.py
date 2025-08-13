@@ -5,11 +5,13 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 from contextlib import contextmanager
 
 import fsspec
 import numpy as np
 import torch
+import torch.distributed
 import yaml
 from torch.distributed.fsdp import (
     FullStateDictConfig,
@@ -104,17 +106,51 @@ def copy_to_temp_file(file_path):
             os.unlink(temp_path)
 
 
-def get_metadata_file(path, shard_shuffle_seed=None):
-    of = fsspec.open(path, "rb")
-    with of as f:
-        out = f.read()
-    out_split = out.decode("utf-8").split("\n")
-    if len(out_split[-1]) == 0:
-        out_split = out_split[:-1]
-    out = [json.loads(o) for o in out_split]
-    if shard_shuffle_seed is not None:
-        rng_gen = np.random.default_rng(shard_shuffle_seed)
-        rng_gen.shuffle(out)
+def load_dataset_manifest(path, shard_shuffle_seed=None):
+    # Check if we're using distributed training
+    is_distributed = False
+    rank = 0
+    if torch.distributed.is_available() and torch.distributed.is_initialized():
+        is_distributed = True
+        rank = torch.distributed.get_rank()
+
+    # Only rank 0 reads the file
+    if not is_distributed or rank == 0:
+        max_retry = 3
+        for i in range(max_retry):
+            try:
+                of = fsspec.open(path, "rb")
+                with of as f:
+                    out = f.read()
+                out_split = out.decode("utf-8").split("\n")
+                if len(out_split[-1]) == 0:
+                    out_split = out_split[:-1]
+                out = [json.loads(o) for o in out_split]
+                break
+            except Exception as e:
+                logging.error(f"Error loading dataset manifest: {e}, retry {i}/{max_retry}")
+                time.sleep(1)
+                if i == max_retry - 1:
+                    out = None
+                    logging.error(f"Failed to load dataset manifest from {path}")
+
+        # Apply shuffling if needed
+        if out is not None and shard_shuffle_seed is not None:
+            rng_gen = np.random.default_rng(shard_shuffle_seed)
+            rng_gen.shuffle(out)
+    else:
+        # Non-master processes initialize with None
+        out = None
+
+    # Broadcast the result from rank 0 to all other processes
+    if is_distributed:
+        object_list = [out]
+        torch.distributed.broadcast_object_list(object_list, src=0)
+        out = object_list[0]
+
+    if out is None:
+        raise Exception(f"Failed to load dataset manifest from {path}")
+
     return out
 
 

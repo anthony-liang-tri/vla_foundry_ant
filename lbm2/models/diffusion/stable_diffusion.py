@@ -19,13 +19,13 @@ class StableDiffusion(nn.Module):
         timesteps = torch.randint(0, self.scheduler.num_timesteps, (input_ids.shape[0],)).to(image.device)  # [bsz]
         # text_embeddings = self.text_encoder(input_ids).last_hidden_state
         noisy_images = self.scheduler.add_noise(image, noise, timesteps)  # [bsz, channels, h, w]
-        predicted_noise = self.unet(noisy_images, timesteps)  # [bsz, channels, h, w]
-        return predicted_noise
+        predicted_direction = self.unet(noisy_images, timesteps)  # [bsz, channels, h, w]
+        return predicted_direction
 
     @torch.no_grad()
     def generate(self, batch_size, device):
         images = torch.randn(
-            batch_size, self.unet.in_channels, self.model_configs.vit_img_size, self.model_configs.vit_img_size
+            batch_size, self.unet.in_channels, self.model_configs.img_size, self.model_configs.img_size
         )
         images = images.to(device)
 
