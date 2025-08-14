@@ -4,8 +4,6 @@
 --data.type image_caption \
 --data.processor google/paligemma-3b-pt-224 \
 --distributed.fsdp True \
---distributed.fsdp_use_orig_params True \
---distributed.fsdp_limit_all_gathers True \
 --data.dataset_manifest ["s3://tri-ml-datasets/datasets/datacompdr_1b/manifest.jsonl"] \
 --data.dataset_modality ["image_caption"] \
 --data.dataset_weighting [1.0] \

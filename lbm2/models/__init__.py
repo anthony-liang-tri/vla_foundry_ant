@@ -46,7 +46,7 @@ def create_model(model_configs):
 
 def get_model_block(model_type, model_configs):
     if model_type == "transformer":
-        return {TransformerBlock}
+        return (TransformerBlock,)
     elif model_type == "transformer_hf":
         from transformers import AutoConfig, AutoModelForCausalLM
 
@@ -54,10 +54,10 @@ def get_model_block(model_type, model_configs):
         model = AutoModelForCausalLM.from_config(config)
         for _name, module in model.model.named_modules():
             if isinstance(module, nn.ModuleList) and len(module) > 0:
-                return {type(module[0])}
+                return (type(module[0]),)
         raise ValueError("Could not find model block class.")
     elif model_type == "vlm":
-        return {TransformerBlock}
+        return (TransformerBlock,)
     elif model_type == "vlm_hf":
         from transformers import AutoConfig, AutoModelForVision2Seq
 
@@ -67,7 +67,7 @@ def get_model_block(model_type, model_configs):
             if hasattr(model.model, attr):
                 for _name, module in getattr(model.model, attr).named_modules():
                     if isinstance(module, nn.ModuleList) and len(module) > 0:
-                        return {type(module[0])}
+                        return (type(module[0]),)
         raise ValueError("Could not find model block class.")
     elif model_type == "stable_diffusion":
         if model_configs.use_diffusers_unet:
@@ -79,14 +79,14 @@ def get_model_block(model_type, model_configs):
                 UpBlock2D,
             )
 
-            return {
+            return (
                 DownBlock2D,
                 UpBlock2D,
                 UNetMidBlock2D,
                 AttnUpBlock2D,
                 AttnDownBlock2D,
-            }
+            )
         else:
-            return {ResnetBlock, SelfAttentionBlock, CrossAttentionBlock}
+            return (ResnetBlock, SelfAttentionBlock, CrossAttentionBlock)
     else:
         raise ValueError(f"get_model_block (used for FSDP) not supported for {model_type}")

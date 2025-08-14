@@ -4,8 +4,6 @@
 --model.vit.type vit_hf \
 --model.vit.hf_pretrained vit_base_patch16_siglip_224 \
 --distributed.fsdp True \
---distributed.fsdp_use_orig_params True \
---distributed.fsdp_limit_all_gathers True \
 --data.type image_caption \
 --data.processor google/paligemma-3b-pt-224 \
 --data.dataset_manifest ["s3://tri-ml-datasets/datasets/datacompdr_1b/manifest.jsonl"] \

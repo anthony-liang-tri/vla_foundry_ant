@@ -106,7 +106,7 @@ def main():
     # optionally resume optimizer from a checkpoint
     # this needs to be after torchcompile
     if cfg.model.resume_from_checkpoint is not None and not cfg.model.resume_weights_only:
-        load_optimizer(cfg.model.resume_from_checkpoint, cfg.distributed.fsdp, model, optimizer)
+        load_optimizer(optimizer, checkpoint_path=cfg.model.resume_from_checkpoint, use_fsdp=cfg.distributed.fsdp)
 
     scheduler = create_scheduler(cfg.hparams, optimizer, cfg.total_train_samples)
     loss = get_loss_function(cfg.hparams.loss_function, cfg.hparams)

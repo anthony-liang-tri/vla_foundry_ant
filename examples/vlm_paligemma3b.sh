@@ -3,8 +3,6 @@
 --model.transformer "include lbm2/config_presets/models/vlm_3b.yaml" \
 --model.vit "include lbm2/config_presets/models/vit_paligemma.yaml" \
 --distributed.fsdp True \
---distributed.fsdp_use_orig_params True \
---distributed.fsdp_limit_all_gathers True \
 --data.type image_caption \
 --data.processor google/paligemma-3b-pt-224 \
 --data.dataset_manifest ["s3://tri-ml-datasets/datasets/datacompdr_1b/manifest.jsonl"] \

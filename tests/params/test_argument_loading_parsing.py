@@ -72,10 +72,6 @@ def get_args_vlm_from_load_path(**kwargs):
         str(kwargs.get("vit_hidden_dim", 999)),
         "--distributed.fsdp",
         "True",
-        "--distributed.fsdp_use_orig_params",
-        "True",
-        "--distributed.fsdp_limit_all_gathers",
-        "True",
         "--data.type",
         "image_caption",
         "--data.processor",
@@ -131,7 +127,6 @@ def test_load_path_flag():
     assert args.model.type == "vlm"
     assert args.model.vit.type == "vit"
     assert args.distributed.fsdp
-    assert args.distributed.fsdp_use_orig_params
     assert args.data.type == "image_caption"
     assert args.data.processor == "debug"
     assert args.data.dataset_manifest == ["s3://tri-ml-datasets/datasets/datacompdr_1b/manifest.jsonl"]

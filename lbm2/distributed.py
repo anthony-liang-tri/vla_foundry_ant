@@ -1,5 +1,4 @@
-# This is from open_clip.
-import functools
+# Partly from open_clip.
 import os
 import random
 
@@ -7,15 +6,13 @@ import numpy as np
 import torch
 import torch.distributed as dist
 from torch.distributed.fsdp import (
-    BackwardPrefetch,
-    CPUOffload,
-    MixedPrecision,
-    ShardingStrategy,
+    CPUOffloadPolicy,
+    MixedPrecisionPolicy,
 )
 from torch.distributed.fsdp import (
-    FullyShardedDataParallel as FSDP,
+    # FullyShardedDataParallel as FSDP,
+    fully_shard as FSDP2,
 )
-from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
 
 from lbm2.models import get_model_block
 
@@ -130,56 +127,45 @@ def get_model_precision(cfg):
 
 def wrap_fsdp_ddp(model, device, cfg):
     if cfg.distributed.fsdp:
-        # from https://pytorch.org/blog/efficient-large-scale-training-with-pytorch/
-        transformer_auto_wrapper_policy = functools.partial(
-            transformer_auto_wrap_policy,
-            transformer_layer_cls=get_model_block(cfg.model.type, cfg.model),
+        mp_policy = MixedPrecisionPolicy(
+            param_dtype=None,
+            reduce_dtype=None,
+            output_dtype=None,
         )
-        # tries to follow gopher...
-        mp_policy = None
         if cfg.distributed.fsdp_amp:
             print("=> using bfloat16 params as part of fsdp amp policy.")
-            mp_policy = MixedPrecision(
+            mp_policy = MixedPrecisionPolicy(
                 param_dtype=torch.bfloat16,
                 reduce_dtype=torch.float32,
-                buffer_dtype=torch.bfloat16,
+                output_dtype=torch.bfloat16,
             )
         elif cfg.distributed.fsdp_pure_bf16:
             print("=> using pure bfloat16 params as part of fsdp amp policy.")
-            mp_policy = MixedPrecision(
+            mp_policy = MixedPrecisionPolicy(
                 param_dtype=torch.bfloat16,
                 reduce_dtype=torch.bfloat16,
-                buffer_dtype=torch.bfloat16,
+                output_dtype=torch.bfloat16,
             )
 
         if cfg.distributed.rank == 0:
             print(f"Before FSDP parameter num: {sum(p.numel() for p in model.parameters()):,}")
             print(f"Before FSDP {torch.cuda.memory_allocated() / 1024**3:.3} GB")
 
-        fsdp_kwargs = {}
-        assert not (cfg.distributed.fsdp_hybrid and cfg.distributed.fsdp_hybrid_o2), (
-            "Only --fsdp-hybrid or --fsdp-hybrid-o2 should be set."
-        )
-        if cfg.distributed.fsdp_backward_prefetch:
-            fsdp_kwargs["backward_prefetch"] = BackwardPrefetch.BACKWARD_PRE
-        if cfg.distributed.fsdp_hybrid:
-            fsdp_kwargs["sharding_strategy"] = ShardingStrategy.HYBRID_SHARD
-        if cfg.distributed.fsdp_hybrid_o2:
-            fsdp_kwargs["sharding_strategy"] = ShardingStrategy._HYBRID_SHARD_ZERO2
+        fsdp_kwargs = {
+            "mp_policy": mp_policy,
+            "offload_policy": CPUOffloadPolicy() if cfg.distributed.fsdp_cpu_offload else None,
+            "reshard_after_forward": cfg.distributed.fsdp_reshard_after_forward,
+        }
         print("=> FSDP kwargs: ", fsdp_kwargs)
 
         # Initialize FSDP. Use the same seed across workers to ensure reset_parameters is the same across workers.
         random_seed(cfg.hparams.seed, rank=0)
-        model = FSDP(
-            model,
-            auto_wrap_policy=transformer_auto_wrapper_policy,
-            device_id=device,
-            mixed_precision=mp_policy,
-            cpu_offload=CPUOffload(offload_params=cfg.distributed.fsdp_cpu_offload),
-            use_orig_params=cfg.distributed.fsdp_use_orig_params,
-            limit_all_gathers=cfg.distributed.fsdp_limit_all_gathers,
-            **fsdp_kwargs,
-        )
+
+        model_block_tuple = get_model_block(cfg.model.type, cfg.model)
+        for p in model.modules():
+            if isinstance(p, model_block_tuple):
+                FSDP2(p, **fsdp_kwargs)
+        FSDP2(model, **fsdp_kwargs)
 
         print(
             f"After FSDP parameter num: {sum(p.numel() for p in model.parameters()):,} on rank {cfg.distributed.rank}"

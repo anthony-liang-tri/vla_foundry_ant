@@ -2,8 +2,6 @@
 --model.type transformer_hf \
 --model.hf_pretrained Qwen/Qwen2.5-0.5B \
 --distributed.fsdp True \
---distributed.fsdp_use_orig_params True \
---distributed.fsdp_limit_all_gathers True \
 --data.type text_untokenized \
 --data.dataset_manifest ["s3://tri-ml-datasets/scratch/sedrick.keh/synthetic-untokenized/manifest.jsonl"] \
 --data.dataset_modality ["text_untokenized"] \
