@@ -14,6 +14,10 @@ def _ensure_params_buffers_float32(module: nn.Module) -> None:
             module.register_buffer(name, buffer.float(), persistent=module._is_buffer_persistent(name))
 
 
+def _float_cast(tensor: torch.Tensor) -> torch.Tensor:
+    return tensor.float()
+
+
 def Float32Module(
     wrapped_module: nn.Module,
     cast_outputs_back: bool = False,
@@ -77,10 +81,8 @@ def Float32Module(
 
         def forward_float32_then_cast_back(self, *args, **kwargs):
             ref_dtype = _first_tensor_dtype(args, kwargs)
-            args_f32 = _map_tensors(args, lambda t: t.float())
-            float_cast = lambda t: t.float()
-            args_f32 = _map_tensors(args, float_cast)
-            kwargs_f32 = {k: _map_tensors(v, float_cast) for k, v in kwargs.items()}
+            args_f32 = _map_tensors(args, _float_cast)
+            kwargs_f32 = {k: _map_tensors(v, _float_cast) for k, v in kwargs.items()}
             outputs = original_forward(*args_f32, **kwargs_f32)
             if ref_dtype is None:
                 return outputs
