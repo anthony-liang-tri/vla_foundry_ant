@@ -78,7 +78,9 @@ def Float32Module(
         def forward_float32_then_cast_back(self, *args, **kwargs):
             ref_dtype = _first_tensor_dtype(args, kwargs)
             args_f32 = _map_tensors(args, lambda t: t.float())
-            kwargs_f32 = {k: _map_tensors(v, lambda t: t.float()) for k, v in kwargs.items()}
+            float_cast = lambda t: t.float()
+            args_f32 = _map_tensors(args, float_cast)
+            kwargs_f32 = {k: _map_tensors(v, float_cast) for k, v in kwargs.items()}
             outputs = original_forward(*args_f32, **kwargs_f32)
             if ref_dtype is None:
                 return outputs
