@@ -6,7 +6,7 @@ from lbm2.positional_embedding.rotary import RotaryWithCast
 def get_pos_embed(model_configs):
     head_dim = model_configs.hidden_dim // model_configs.n_heads
     if model_configs.positional_embedding_type == "rotary":
-        return Float32Module(RotaryWithCast(head_dim, model_configs.max_seq_len))
+        return Float32Module(RotaryWithCast(head_dim, model_configs.max_seq_len), cast_outputs_back=True)
     elif model_configs.positional_embedding_type == "none":
         return identity_with_cast
     else:
