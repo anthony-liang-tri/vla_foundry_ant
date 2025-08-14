@@ -11,7 +11,7 @@ def _ensure_params_buffers_float32(module: nn.Module) -> None:
     for name, buffer in module.named_buffers(recurse=True):
         # Keep buffers as-is unless they are floating; cast float buffers to float32 for stability
         if torch.is_floating_point(buffer) and buffer.dtype is not torch.float32:
-            module.register_buffer(name, buffer.float(), persistent=False)
+            module.register_buffer(name, buffer.float(), persistent=module._is_buffer_persistent(name))
 
 
 def Float32Module(
