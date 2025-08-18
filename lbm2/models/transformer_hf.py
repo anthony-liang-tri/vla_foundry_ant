@@ -1,14 +1,13 @@
 import torch
-import torch.nn as nn
 from transformers import AutoModelForCausalLM
 
+from lbm2.models.base_model import BaseModel
 from lbm2.params.model_params import TransformerHFParams
 
 
-class TransformerHF(nn.Module):
+class TransformerHF(BaseModel):
     def __init__(self, model_params: TransformerHFParams):
-        super().__init__()
-        self.model_params = model_params
+        super().__init__(model_params)
         self.model_name = model_params.hf_pretrained
         self.model = AutoModelForCausalLM.from_pretrained(self.model_name)
 

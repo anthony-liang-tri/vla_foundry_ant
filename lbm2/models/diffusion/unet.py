@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from lbm2.models.base_model import BaseModel
 from lbm2.params.model_params import UNetParams
 
 
@@ -113,11 +114,11 @@ class CrossAttentionBlock(nn.Module):
         return x + self.proj_out(h)  # [B, C, H, W]
 
 
-class UNet(nn.Module):
+class UNet(BaseModel):
     """U-Net architecture for diffusion model"""
 
     def __init__(self, model_params: UNetParams):
-        super().__init__()
+        super().__init__(model_params)
         self.in_channels = model_params.in_channels
         self.out_channels = model_params.out_channels
         self.time_emb_dim = model_params.time_emb_dim

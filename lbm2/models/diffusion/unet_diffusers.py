@@ -1,12 +1,12 @@
-import torch.nn as nn
 from diffusers import UNet2DModel
 
+from lbm2.models.base_model import BaseModel
 from lbm2.params.model_params import UNetParams
 
 
-class UNetDiffusers(nn.Module):
+class UNetDiffusers(BaseModel):
     def __init__(self, model_params: UNetParams):
-        super().__init__()
+        super().__init__(model_params)
         self.in_channels = model_params.in_channels
         self.model = UNet2DModel(
             sample_size=model_params.image_size,  # the target image resolution

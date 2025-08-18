@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 
+from lbm2.models.base_model import BaseModel
 from lbm2.models.transformer import Transformer
 from lbm2.models.vit import ViT
 from lbm2.params.model_params import ViTParams, VLMParams
@@ -47,10 +48,9 @@ class ModalityProjector(nn.Module):
         return x
 
 
-class VLM(nn.Module):
+class VLM(BaseModel):
     def __init__(self, model_params: VLMParams, transformer: Transformer, vit: ViT):
-        super().__init__()
-        self.model_params = model_params
+        super().__init__(model_params)
         self.vit = vit
         self.transformer = transformer
         self.projection = ModalityProjector(model_params.vit, model_params.transformer.hidden_dim)

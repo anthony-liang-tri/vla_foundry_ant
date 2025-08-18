@@ -5,6 +5,7 @@ from torch import nn
 
 from lbm2.activations import get_feed_forward
 from lbm2.attention import get_attn_func
+from lbm2.models.base_model import BaseModel
 from lbm2.norms import get_norm_class
 from lbm2.params.model_params import TransformerParams
 from lbm2.positional_embedding import get_pos_embed
@@ -138,11 +139,10 @@ class TransformerBlock(nn.Module):
         return out, past_key_value
 
 
-class Transformer(nn.Module):
+class Transformer(BaseModel):
     def __init__(self, model_params: TransformerParams):
-        super().__init__()
+        super().__init__(model_params)
         # for convenience we often share param names with llama
-        self.model_params = model_params
         self.hidden_dim = model_params.hidden_dim
         self.vocab_size = model_params.vocab_size
         self.n_layers = model_params.n_layers

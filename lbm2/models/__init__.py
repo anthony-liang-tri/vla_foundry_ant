@@ -20,27 +20,14 @@ from lbm2.params.model_params import ModelParams
 def create_model(model_params: ModelParams):
     if model_params.type == "transformer":
         model = Transformer(model_params)
-        if model_params.freeze:
-            for param in model.parameters():
-                param.requires_grad = False
     elif model_params.type == "transformer_hf":
         model = TransformerHF(model_params)
     elif model_params.type == "vlm":
         transformer = create_model(model_params.transformer)
         vit = ViT(model_params.vit) if model_params.vit.type == "vit" else ViTHF(model_params.vit)
-        if model_params.vit.freeze:
-            for param in vit.parameters():
-                param.requires_grad = False
         model = VLM(model_params, transformer, vit)
-        if model_params.freeze:
-            for param in model.parameters():
-                param.requires_grad = False
     elif model_params.type == "vlm_hf":
         model = VLMHF(model_params)
-        # TODO: Jean do we want to be able to freeze the image encoder here?
-        if model_params.freeze:
-            for param in model.parameters():
-                param.requires_grad = False
     elif model_params.type == "stable_diffusion":
         unet = UNetDiffusers(model_params.unet) if model_params.use_diffusers_unet else UNet(model_params.unet)
         if model_params.use_diffusers_scheduler:

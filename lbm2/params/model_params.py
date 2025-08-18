@@ -26,6 +26,7 @@ class ModelParams(draccus.ChoiceRegistry, BaseParams):
     type: str = field(default=None)
     resume_from_checkpoint: str = field(default=None)
     resume_weights_only: bool = field(default=False)
+    freeze: bool = field(default=False)
 
     def __init__(self):
         raise NotImplementedError("ModelParams should not be instantiated directly. Use a subclass with model.type=...")
@@ -52,7 +53,6 @@ class TransformerParams(ModelParams):
     norm_eps: float = field(default=1e-5)
     weight_tying: bool = field(default=False)
     max_seq_len: int = field(default=2048)
-    freeze: bool = field(default=False)
 
 
 @register_model_params("transformer_hf")
@@ -65,7 +65,6 @@ class TransformerHFParams(ModelParams):
 @dataclass(frozen=True)
 class ViTParams(ModelParams):
     pretrained: str = field(default=None)
-    freeze: bool = field(default=False)
     interpolation_mode: str = field(default="bicubic")
     hidden_dim: int = field(default=768)
     inter_dim: int = field(default=3072)
@@ -92,7 +91,6 @@ class ViTHFParams(ModelParams):
 class VLMParams(ModelParams):
     vit: Union[ViTParams, ViTHFParams] = field(default_factory=ViTParams)
     transformer: Union[TransformerParams, TransformerHFParams] = field(default_factory=TransformerParams)
-    freeze: bool = field(default=False)
     image_token_id: int = field(default=None)
 
     def init_shared_attributes(self, cfg):
@@ -103,7 +101,6 @@ class VLMParams(ModelParams):
 @dataclass(frozen=True)
 class VLMHFParams(ModelParams):
     hf_pretrained: str = field(default=None)
-    freeze: bool = field(default=False)
 
 
 @register_model_params("unet")

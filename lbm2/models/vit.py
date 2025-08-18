@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 
+from lbm2.models.base_model import BaseModel
 from lbm2.params.model_params import ViTParams
 
 
@@ -121,10 +122,9 @@ class ViTBlock(nn.Module):
         return x
 
 
-class ViT(nn.Module):
+class ViT(BaseModel):
     def __init__(self, model_params: ViTParams):
-        super().__init__()
-        self.params = model_params
+        super().__init__(model_params)
         self.patch_embedding = ViTPatchEmbeddings(model_params)
         self.cls_flag = model_params.cls_flag
         self.dropout = nn.Dropout(model_params.dropout)

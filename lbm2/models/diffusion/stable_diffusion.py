@@ -1,17 +1,16 @@
 import torch
-import torch.nn as nn
 from PIL import Image
 from tqdm import tqdm
 
+from lbm2.models.base_model import BaseModel
 from lbm2.models.diffusion.noise_scheduler import NoiseScheduler
 from lbm2.models.diffusion.unet import UNet
 from lbm2.params.model_params import DiffusionParams
 
 
-class StableDiffusion(nn.Module):
+class StableDiffusion(BaseModel):
     def __init__(self, model_params: DiffusionParams, scheduler: NoiseScheduler, unet: UNet):
-        super().__init__()
-        self.model_params = model_params
+        super().__init__(model_params)
         self.scheduler = scheduler
         self.unet = unet
         # self.text_encoder = CLIPTextModel.from_pretrained("openai/clip-vit-base-patch32")
