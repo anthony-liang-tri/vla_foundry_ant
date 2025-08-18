@@ -24,8 +24,8 @@ def original_pixel_shuffle(x, scale_factor=1):
 
 
 class MockVitConfigs:
-    def __init__(self, vit_hidden_dim, projector_pixel_shuffle_factor):
-        self.vit_hidden_dim = vit_hidden_dim
+    def __init__(self, hidden_dim, projector_pixel_shuffle_factor):
+        self.hidden_dim = hidden_dim
         self.projector_pixel_shuffle_factor = projector_pixel_shuffle_factor
 
 

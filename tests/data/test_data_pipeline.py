@@ -14,7 +14,7 @@ from lbm2.params.train_experiment_params import load_experiment_params_from_yaml
 class TestTextPipeline:
     """Test TextPipeline for pre-tokenized text data."""
 
-    def create_mock_data_configs(self):
+    def create_mock_data_params(self):
         """Create mock data configurations."""
         mock_config = Mock()
         mock_config.seq_len = 128
@@ -37,13 +37,13 @@ class TestTextPipeline:
 
     def test_text_pipeline_creation(self):
         """Test TextPipeline initialization and pipeline creation."""
-        data_configs = self.create_mock_data_configs()
+        data_params = self.create_mock_data_params()
         batch_size = 4
 
-        pipeline = TextPipeline("text", data_configs, batch_size)
+        pipeline = TextPipeline("text", data_params, batch_size)
 
         assert pipeline.modality == "text"
-        assert pipeline.data_configs == data_configs
+        assert pipeline.data_params == data_params
         assert pipeline.batch_size == batch_size
 
     @pytest.mark.parametrize(
@@ -56,11 +56,11 @@ class TestTextPipeline:
     )
     def test_text_pipeline_different_configs(self, seq_len, batch_size):
         """Test TextPipeline with different configurations."""
-        data_configs = Mock()
-        data_configs.seq_len = seq_len
-        data_configs.seed = 42
+        data_params = Mock()
+        data_params.seq_len = seq_len
+        data_params.seed = 42
 
-        pipeline = TextPipeline("text", data_configs, batch_size)
+        pipeline = TextPipeline("text", data_params, batch_size)
         pipeline.create_pipeline("dummy_datastring", 0)
 
         assert pipeline.batch_size == batch_size
@@ -205,7 +205,7 @@ class TestTextPipeline:
 class TestTextUntokenizedPipeline:
     """Test TextUntokenizedPipeline for raw text data."""
 
-    def create_mock_data_configs(self):
+    def create_mock_data_params(self):
         """Create mock data configurations."""
         mock_config = Mock()
         mock_config.seq_len = 128
@@ -221,13 +221,13 @@ class TestTextUntokenizedPipeline:
         mock_tokenizer_instance.add_special_tokens = Mock()
         mock_tokenizer.return_value = mock_tokenizer_instance
 
-        data_configs = self.create_mock_data_configs()
+        data_params = self.create_mock_data_params()
         batch_size = 4
 
-        pipeline = TextUntokenizedPipeline("text_untokenized", data_configs, batch_size)
+        pipeline = TextUntokenizedPipeline("text_untokenized", data_params, batch_size)
 
         assert pipeline.modality == "text_untokenized"
-        assert pipeline.data_configs == data_configs
+        assert pipeline.data_params == data_params
         assert pipeline.batch_size == batch_size
         assert pipeline.tokenizer == mock_tokenizer_instance
 
@@ -292,8 +292,8 @@ class TestTextUntokenizedPipeline:
         mock_tokenizer_instance.pad_token = "[PAD]"
         mock_tokenizer.return_value = mock_tokenizer_instance
 
-        data_configs = self.create_mock_data_configs()
-        pipeline = TextUntokenizedPipeline("text_untokenized", data_configs, 4)
+        data_params = self.create_mock_data_params()
+        pipeline = TextUntokenizedPipeline("text_untokenized", data_params, 4)
 
         # Mock batch_tokenize
         with patch("lbm2.data.pipelines.text_untokenized.batch_tokenize") as mock_batch_tokenize:
@@ -305,7 +305,7 @@ class TestTextUntokenizedPipeline:
             result = pipeline.tokenize_wrapper(batch)
 
             # Verify batch_tokenize was called
-            mock_batch_tokenize.assert_called_once_with(batch, mock_tokenizer_instance, data_configs.seq_len)
+            mock_batch_tokenize.assert_called_once_with(batch, mock_tokenizer_instance, data_params.seq_len)
 
             # Verify output format
             assert "input_ids" in result
@@ -502,13 +502,13 @@ class TestTextUntokenizedPipeline:
 class TestImageCaptionPipeline:
     """Test ImageCaptionPipeline for image-caption data."""
 
-    def create_mock_configs(self):
+    def create_mock_data_params(self):
         """Create mock configurations."""
-        data_config = Mock()
-        data_config.seq_len = 128
-        data_config.seed = 42
-        data_config.processor = "google/paligemma-3b-pt-224"
-        return data_config
+        data_params = Mock()
+        data_params.seq_len = 128
+        data_params.seed = 42
+        data_params.processor = "google/paligemma-3b-pt-224"
+        return data_params
 
     def test_filter_no_caption_or_no_image(self):
         """Test filter_no_caption_or_no_image function."""
@@ -540,18 +540,18 @@ class TestImageCaptionPipeline:
         mock_processor = Mock()
         mock_get_processor.return_value = mock_processor
 
-        data_config = self.create_mock_configs()
+        data_params = self.create_mock_data_params()
         batch_size = 4
 
-        pipeline = ImageCaptionPipeline("image_caption", data_config, batch_size)
+        pipeline = ImageCaptionPipeline("image_caption", data_params, batch_size)
 
         assert pipeline.modality == "image_caption"
-        assert pipeline.data_configs == data_config
+        assert pipeline.data_params == data_params
         assert pipeline.batch_size == batch_size
         assert pipeline.processor == mock_processor
 
         # Verify processor was initialized correctly
-        mock_get_processor.assert_called_once_with(data_config)
+        mock_get_processor.assert_called_once_with(data_params)
 
     @pytest.mark.parametrize("image_format", ["jpg", "png", "jpeg", "webp"])
     def test_image_caption_filter_different_formats(self, image_format):

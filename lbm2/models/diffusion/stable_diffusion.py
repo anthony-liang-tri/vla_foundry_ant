@@ -1,13 +1,16 @@
 import torch
-import torch.nn as nn
 from PIL import Image
 from tqdm import tqdm
 
+from lbm2.models.base_model import BaseModel
+from lbm2.models.diffusion.noise_scheduler import NoiseScheduler
+from lbm2.models.diffusion.unet import UNet
+from lbm2.params.model_params import DiffusionParams
 
-class StableDiffusion(nn.Module):
-    def __init__(self, model_configs, scheduler, unet):
-        super().__init__()
-        self.model_configs = model_configs
+
+class StableDiffusion(BaseModel):
+    def __init__(self, model_params: DiffusionParams, scheduler: NoiseScheduler, unet: UNet):
+        super().__init__(model_params)
         self.scheduler = scheduler
         self.unet = unet
         # self.text_encoder = CLIPTextModel.from_pretrained("openai/clip-vit-base-patch32")
@@ -19,13 +22,16 @@ class StableDiffusion(nn.Module):
         timesteps = torch.randint(0, self.scheduler.num_timesteps, (input_ids.shape[0],)).to(image.device)  # [bsz]
         # text_embeddings = self.text_encoder(input_ids).last_hidden_state
         noisy_images = self.scheduler.add_noise(image, noise, timesteps)  # [bsz, channels, h, w]
-        predicted_noise = self.unet(noisy_images, timesteps)  # [bsz, channels, h, w]
-        return predicted_noise
+        predicted_direction = self.unet(noisy_images, timesteps)  # [bsz, channels, h, w]
+        return predicted_direction
 
     @torch.no_grad()
     def generate(self, batch_size, device):
         images = torch.randn(
-            batch_size, self.unet.in_channels, self.model_configs.vit_img_size, self.model_configs.vit_img_size
+            batch_size,
+            self.model_params.unet.in_channels,
+            self.model_params.unet.image_size,
+            self.model_params.unet.image_size,
         )
         images = images.to(device)
 

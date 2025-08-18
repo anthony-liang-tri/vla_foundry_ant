@@ -2,14 +2,27 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from lbm2.params.model_params import NoiseSchedulerParams
 
-class NoiseSchedulerDDPM(nn.Module):
-    def __init__(self, model_configs):
-        super().__init__()
-        self.model_configs = model_configs
-        self.num_timesteps = model_configs.noise_scheduler.num_timesteps
-        self.beta_start = model_configs.noise_scheduler.beta_start
-        self.beta_end = model_configs.noise_scheduler.beta_end
+
+class NoiseScheduler:
+    def __init__(self, params: NoiseSchedulerParams):
+        pass
+
+    def add_noise(self, x_start, noise, timesteps):
+        raise NotImplementedError
+
+    def step(self, model_output, timestep, sample):
+        raise NotImplementedError
+
+
+class NoiseSchedulerDDPM(nn.Module, NoiseScheduler):
+    def __init__(self, params: NoiseSchedulerParams):
+        nn.Module.__init__(self)
+        NoiseScheduler.__init__(self, params)
+        self.num_timesteps = params.num_timesteps
+        self.beta_start = params.beta_start
+        self.beta_end = params.beta_end
         betas = torch.linspace(self.beta_start, self.beta_end, self.num_timesteps)
         alphas = 1 - betas
         alphas_cumprod = torch.cumprod(alphas, dim=0)

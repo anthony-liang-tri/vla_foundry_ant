@@ -80,7 +80,7 @@ Below we show an example of how we supply arguments (see [examples](lbm2/example
 ```
 
 A few usage notes:
-- We pass arguments by prepending the subclass, separated by a period, for example `--model.hidden_dim`. We can also nest multiple layers deep, for example `--model.vit.vit_n_layers`
+- We pass arguments by prepending the subclass, separated by a period, for example `--model.hidden_dim`. We can also nest multiple layers deep, for example `--model.vit.n_layers`
 - For `model` and `data`, we are **required** to set `--model.type` and `--data.type`, which will indicate which specific subclass of `ModelParams` or `DataParams` we will instantiate. For example, `--model.type=transformer_hf` will instantiate `cfg.model` as a `TransformerHFParams` object.
 - As seen in the example above, we can use the `--model "include ..."` argument to recycle presets that we want to use repeatedly. This `include` can be used for any parameter class that is loaded with draccus.
 - When including a preset in a yaml file, the path must be relative to the file and the statement is `arg: !include <path>`.
@@ -104,7 +104,7 @@ class VLMParams(ModelParams):
     transformer: Union[TransformerParams, TransformerHFParams] = field(default_factory=TransformerParams)
 ```
 
-Here, the ViT can either be `ViTParams` or `ViTHFParams`. We can dynamically pick between the two by directly supplying the necessary arguments. For example, indicating `--model.vit.hf_pretrained=vit_base_patch16_siglip_224` will automatically instantiate `cfg.model.vit` as a `ViTHFParams` object, while `--model.vit.vit_hidden_dim=1152` will automatically instantiate `cfg.model.vit` as a `ViTParams` object. No need to indicate `--model.vit.type` in this case.
+Here, the ViT can either be `ViTParams` or `ViTHFParams`. We can dynamically pick between the two by directly supplying the necessary arguments. For example, indicating `--model.vit.hf_pretrained=vit_base_patch16_siglip_224` will automatically instantiate `cfg.model.vit` as a `ViTHFParams` object, while `--model.vit.hidden_dim=1152` will automatically instantiate `cfg.model.vit` as a `ViTParams` object. No need to indicate `--model.vit.type` in this case.
 
 
 ### 2. Data

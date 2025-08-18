@@ -23,13 +23,13 @@ class FiniteDataPipeline(wds.DataPipeline):
             return self.iterator()
 
 
-def create_wds_pipeline(datastring, modality, batch_size, checkpoint_num, data_configs):
+def create_wds_pipeline(datastring, modality, batch_size, checkpoint_num, data_params):
     if modality == "text":
-        pipeline = TextPipeline(modality, data_configs, batch_size)
+        pipeline = TextPipeline(modality, data_params, batch_size)
     elif modality == "text_untokenized":
-        pipeline = TextUntokenizedPipeline(modality, data_configs, batch_size)
+        pipeline = TextUntokenizedPipeline(modality, data_params, batch_size)
     elif modality == "image_caption":
-        pipeline = ImageCaptionPipeline(modality, data_configs, batch_size)
+        pipeline = ImageCaptionPipeline(modality, data_params, batch_size)
     else:
         raise ValueError(f"{modality} webdataset pipeline not supported")
 

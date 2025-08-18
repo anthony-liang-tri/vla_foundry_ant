@@ -43,7 +43,7 @@ todos / thought dump:
 - double check fp 16 bf 16. check that resuming the model maintains this. 
 - precompute masks if static
 - text intermediate layer as parameter
-- maybe support processor_configs instead of merging into data/model/vit?
+- maybe support processor_params instead of merging into data/model/vit?
 [x] load siglip weights
 [x] load paligemma weights
 [x] user-specified processor instead of loading from existing

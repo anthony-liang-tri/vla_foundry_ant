@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 from contextlib import contextmanager
 
 import fsspec
@@ -99,17 +100,51 @@ def copy_to_temp_file(file_path):
             os.unlink(temp_path)
 
 
-def get_metadata_file(path, shard_shuffle_seed=None):
-    of = fsspec.open(path, "rb")
-    with of as f:
-        out = f.read()
-    out_split = out.decode("utf-8").split("\n")
-    if len(out_split[-1]) == 0:
-        out_split = out_split[:-1]
-    out = [json.loads(o) for o in out_split]
-    if shard_shuffle_seed is not None:
-        rng_gen = np.random.default_rng(shard_shuffle_seed)
-        rng_gen.shuffle(out)
+def load_dataset_manifest(path, shard_shuffle_seed=None):
+    # Check if we're using distributed training
+    is_distributed = False
+    rank = 0
+    if torch.distributed.is_available() and torch.distributed.is_initialized():
+        is_distributed = True
+        rank = torch.distributed.get_rank()
+
+    # Only rank 0 reads the file
+    if not is_distributed or rank == 0:
+        max_retry = 3
+        for i in range(max_retry):
+            try:
+                of = fsspec.open(path, "rb")
+                with of as f:
+                    out = f.read()
+                out_split = out.decode("utf-8").split("\n")
+                if len(out_split[-1]) == 0:
+                    out_split = out_split[:-1]
+                out = [json.loads(o) for o in out_split]
+                break
+            except Exception as e:
+                logging.error(f"Error loading dataset manifest: {e}, retry {i}/{max_retry}")
+                time.sleep(1)
+                if i == max_retry - 1:
+                    out = None
+                    logging.error(f"Failed to load dataset manifest from {path}")
+
+        # Apply shuffling if needed
+        if out is not None and shard_shuffle_seed is not None:
+            rng_gen = np.random.default_rng(shard_shuffle_seed)
+            rng_gen.shuffle(out)
+    else:
+        # Non-master processes initialize with None
+        out = None
+
+    # Broadcast the result from rank 0 to all other processes
+    if is_distributed:
+        object_list = [out]
+        torch.distributed.broadcast_object_list(object_list, src=0)
+        out = object_list[0]
+
+    if out is None:
+        raise Exception(f"Failed to load dataset manifest from {path}")
+
     return out
 
 
@@ -192,7 +227,7 @@ def remote_sync(local_dir, remote_dir):
     return True
 
 
-def load_model_checkpoint(model, resume_from_checkpoint, distributed_configs):
+def load_model_checkpoint(model, resume_from_checkpoint, distributed_params):
     checkpoint = pt_load(resume_from_checkpoint, map_location="cpu")
 
     # resuming a train checkpoint w/ epoch and optimizer state
@@ -202,7 +237,7 @@ def load_model_checkpoint(model, resume_from_checkpoint, distributed_configs):
     shard_shuffle_seed_per_dataset = checkpoint.get("shard_shuffle_seed_per_dataset", None)
     if "_orig_mod" in next(iter(sd.items()))[0]:
         sd = {k.replace("_orig_mod.", ""): v for k, v in sd.items()}
-    if distributed_configs.fsdp:
+    if distributed_params.fsdp:
         if isinstance(model, FSDPModule):
             sharded_sd = {}
             model_sd = model.state_dict()
@@ -226,7 +261,7 @@ def load_model_checkpoint(model, resume_from_checkpoint, distributed_configs):
         else:
             # Inference
             model.load_state_dict(sd)
-    elif distributed_configs.use_distributed:
+    elif distributed_params.use_distributed:
         model.module.load_state_dict(sd)
     else:
         model.load_state_dict(sd)

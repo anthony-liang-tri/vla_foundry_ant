@@ -61,31 +61,31 @@ def world_info_from_env():
     return local_rank, global_rank, world_size
 
 
-def init_distributed_device(distributed_configs):
+def init_distributed_device(distributed_params):
     # Distributed training = training on more than one GPU.
     # Works in both single and multi-node scenarios.
-    object.__setattr__(distributed_configs, "use_distributed", False)  # bypass Frozen=True
-    object.__setattr__(distributed_configs, "world_size", 1)
-    object.__setattr__(distributed_configs, "rank", 0)
-    object.__setattr__(distributed_configs, "local_rank", 0)
+    object.__setattr__(distributed_params, "use_distributed", False)  # bypass Frozen=True
+    object.__setattr__(distributed_params, "world_size", 1)
+    object.__setattr__(distributed_params, "rank", 0)
+    object.__setattr__(distributed_params, "local_rank", 0)
     if is_using_distributed():
         # DDP via torchrun, torch.distributed.launch
         # Note that this currently assumes that the world size is all gpus in a node.
         local_rank, _, _ = world_info_from_env()
-        object.__setattr__(distributed_configs, "local_rank", local_rank)
+        object.__setattr__(distributed_params, "local_rank", local_rank)
         torch.distributed.init_process_group(
-            backend=distributed_configs.dist_backend, init_method=distributed_configs.dist_url
+            backend=distributed_params.dist_backend, init_method=distributed_params.dist_url
         )
-        object.__setattr__(distributed_configs, "world_size", torch.distributed.get_world_size())
-        object.__setattr__(distributed_configs, "rank", torch.distributed.get_rank())
-        object.__setattr__(distributed_configs, "use_distributed", True)
+        object.__setattr__(distributed_params, "world_size", torch.distributed.get_world_size())
+        object.__setattr__(distributed_params, "rank", torch.distributed.get_rank())
+        object.__setattr__(distributed_params, "use_distributed", True)
 
     if torch.cuda.is_available():
-        device = "cuda:%d" % distributed_configs.local_rank if distributed_configs.use_distributed else "cuda:0"
+        device = "cuda:%d" % distributed_params.local_rank if distributed_params.use_distributed else "cuda:0"
         torch.cuda.set_device(device)
     else:
         device = "cpu"
-    object.__setattr__(distributed_configs, "device", device)
+    object.__setattr__(distributed_params, "device", device)
     device = torch.device(device)
     return device
 

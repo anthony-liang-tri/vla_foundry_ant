@@ -1,13 +1,14 @@
 import timm
 import torch
-import torch.nn as nn
+
+from lbm2.models.base_model import BaseModel
+from lbm2.params.model_params import ViTHFParams
 
 
-class ViTHF(nn.Module):
-    def __init__(self, model_configs):
-        super().__init__()
-        self.model_configs = model_configs
-        self.model_name = model_configs.hf_pretrained
+class ViTHF(BaseModel):
+    def __init__(self, model_params: ViTHFParams):
+        super().__init__(model_params)
+        self.model_name = model_params.hf_pretrained
         self.model = timm.create_model(self.model_name, num_classes=0, pretrained=True)
 
     def forward(self, image):
