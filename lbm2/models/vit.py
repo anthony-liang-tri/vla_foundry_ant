@@ -7,13 +7,13 @@ from lbm2.params.model_params import ViTParams
 
 # https://github.com/huggingface/transformers/blob/main/src/transformers/models/siglip/modeling_siglip.py#L245
 class ViTPatchEmbeddings(nn.Module):
-    def __init__(self, model_paramsparams: ViTParams):
+    def __init__(self, model_params: ViTParams):
         super().__init__()
-        self.img_size = model_paramsparams.img_size
-        self.patch_size = model_paramsparams.patch_size
+        self.img_size = model_params.img_size
+        self.patch_size = model_params.patch_size
         self.num_patches = (self.img_size // self.patch_size) ** 2
-        self.cls_flag = model_paramsparams.cls_flag
-        self.embd_dim = model_paramsparams.hidden_dim
+        self.cls_flag = model_params.cls_flag
+        self.embd_dim = model_params.hidden_dim
 
         # Conv layer to extract the patches
         self.conv = nn.Conv2d(
