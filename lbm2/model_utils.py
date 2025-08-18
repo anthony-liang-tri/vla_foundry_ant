@@ -114,7 +114,7 @@ def Float32Module(
 
             # Use autocast to ensure float32 computation for this specific layer
             # This will override any outer autocast context for this layer only
-            with cast_env:
+            with cast_env():
                 outputs = original_forward(*args_f32, **kwargs_f32)
 
             return outputs

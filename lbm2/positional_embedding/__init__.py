@@ -9,6 +9,7 @@ def get_pos_embed(model_params: TransformerParams):
     if model_params.positional_embedding_type == "rotary":
         return RotaryWithCast(head_dim, model_params.max_seq_len)
     elif model_params.positional_embedding_type == "rotary_float32":
+        # TODO: Currently results in some slowdowns. Need to investigate.
         return Float32Module(RotaryWithCast(head_dim, model_params.max_seq_len), cast_outputs_back=True)
     elif model_params.positional_embedding_type == "none":
         return identity_with_cast
