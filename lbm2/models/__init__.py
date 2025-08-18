@@ -1,4 +1,5 @@
 import torch.nn as nn
+from transformers import AutoConfig, AutoModelForCausalLM, AutoModelForVision2Seq
 
 from lbm2.models.diffusion.noise_scheduler import NoiseSchedulerDDPM
 from lbm2.models.diffusion.noise_scheduler_diffusers import FlowMatchingScheduler, NoiseSchedulerDDPMDiffusers
@@ -45,8 +46,6 @@ def get_model_block(model_type, model_configs):
     if model_type == "transformer":
         return (TransformerBlock,)
     elif model_type == "transformer_hf":
-        from transformers import AutoConfig, AutoModelForCausalLM
-
         config = AutoConfig.from_pretrained(model_configs.hf_pretrained)
         model = AutoModelForCausalLM.from_config(config)
         for _name, module in model.model.named_modules():
@@ -56,16 +55,28 @@ def get_model_block(model_type, model_configs):
     elif model_type == "vlm":
         return (TransformerBlock,)
     elif model_type == "vlm_hf":
-        from transformers import AutoConfig, AutoModelForVision2Seq
-
         config = AutoConfig.from_pretrained(model_configs.hf_pretrained)
         model = AutoModelForVision2Seq.from_config(config)
+
+        block_types = set()
+
+        # Find text/language model blocks
         for attr in ["language_model", "text_model"]:
             if hasattr(model.model, attr):
                 for _name, module in getattr(model.model, attr).named_modules():
                     if isinstance(module, nn.ModuleList) and len(module) > 0:
-                        return (type(module[0]),)
-        raise ValueError("Could not find model block class.")
+                        block_types.add(type(module[0]))
+
+        # Find vision model blocks
+        if hasattr(model.model, "vision_model") and hasattr(model.model.vision_model, "encoder"):
+            for _name, module in model.model.vision_model.encoder.named_modules():
+                if isinstance(module, nn.ModuleList) and len(module) > 0:
+                    block_types.add(type(module[0]))
+
+        if not block_types:
+            raise ValueError("Could not find any model block classes.")
+
+        return tuple(block_types)
     elif model_type == "stable_diffusion":
         if model_configs.use_diffusers_unet:
             from diffusers.models.unets.unet_2d_blocks import (
