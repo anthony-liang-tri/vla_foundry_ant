@@ -133,7 +133,10 @@ class UNet(nn.Module):
             nn.SiLU(),
             nn.Linear(self.time_emb_dim * self.dim_expansion, self.time_emb_dim * self.dim_expansion),
         )
-        self.time_mlp = Float32Module(time_mlp, cast_outputs_back=True)
+        if model_configs.unet.time_mlp_float32:
+            self.time_mlp = Float32Module(time_mlp, cast_outputs_back=True)
+        else:
+            self.time_mlp = time_mlp
         # Initial projection
         self.init_conv = nn.Conv2d(self.in_channels, self.channels[0], 3, padding=1)
 

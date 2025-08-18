@@ -113,6 +113,7 @@ class UNetParams(ModelParams):
     text_emb_dim: int = field(default=512)
     channels: List[int] = field(default_factory=list)
     image_size: int = field(default=128)
+    time_mlp_float32: bool = field(default=False)
 
 
 @register_model_params("noise_scheduler")
