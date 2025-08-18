@@ -4,8 +4,6 @@
 --model.use_flow_matching_scheduler True \
 --model.unet.image_size 128 \
 --distributed.fsdp True \
---distributed.fsdp_use_orig_params True \
---distributed.fsdp_limit_all_gathers True \
 --data.type image_caption \
 --data.processor stable_diffusion \
 --data.dataset_manifest ["s3://tri-ml-datasets/datasets/datacompdr_1b/manifest.jsonl"] \

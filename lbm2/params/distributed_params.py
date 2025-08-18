@@ -11,12 +11,8 @@ class DistributedParams(BaseParams):
     fsdp: bool = field(default=False)
     fsdp_amp: bool = field(default=False)
     fsdp_pure_bf16: bool = field(default=False)
-    fsdp_backward_prefetch: bool = field(default=False)
-    fsdp_hybrid: bool = field(default=False)
-    fsdp_hybrid_o2: bool = field(default=False)
     fsdp_cpu_offload: bool = field(default=False)
-    fsdp_use_orig_params: bool = field(default=False)
-    fsdp_limit_all_gathers: bool = field(default=False)
+    fsdp_reshard_after_forward: bool = field(default=False)
     ddp_static_graph: bool = field(default=False)
 
     # The following should not be initialized by the user.

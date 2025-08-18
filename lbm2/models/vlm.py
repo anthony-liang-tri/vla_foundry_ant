@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from einops import rearrange
 
 from lbm2.models.base_model import BaseModel
 from lbm2.models.transformer import Transformer
@@ -24,22 +25,41 @@ class ModalityProjector(nn.Module):
             if module.bias is not None:
                 nn.init.zeros_(module.bias)
 
+    # equivalent to:
     # https://github.com/huggingface/smollm/blob/main/vision/m4/models/vllama3/modeling_vllama3.py#L1281
     def pixel_shuffle(self, x):
-        bsz, seq, embed_dim = x.size()  # x shape [bsz, 16*16, embed_dim]
+        if x.ndim == 4:
+            bsz, cams, seq, embed_dim = x.size()
+        else:
+            cams = 0
+            bsz, seq, embed_dim = x.size()  # x shape [bsz, 16*16, embed_dim]
         seq_root = int(seq**0.5)
-        assert seq_root**2 == seq  # Sequence length must be a perfect square for pixel shuffle
-        assert seq_root % self.scale_factor == 0  # Sequence root must be divisible by scale factor
+        assert seq_root**2 == seq, (
+            f"seq_root**2 = {seq_root**2}, seq = {seq}"
+        )  # Sequence length must be a perfect square for pixel shuffle
+        assert seq_root % self.scale_factor == 0, (
+            f"seq_root % self.scale_factor = {seq_root % self.scale_factor}, self.scale_factor = {self.scale_factor}"
+        )  # Sequence root must be divisible by scale factor
 
-        height = width = seq_root
-        x = x.view(bsz, height, width, embed_dim)  # [bsz, 16, 16, embed_dim]
-        h_out = height // self.scale_factor
-        w_out = width // self.scale_factor
-
-        x = x.reshape(bsz, h_out, self.scale_factor, w_out, self.scale_factor, embed_dim)
-        x = x.permute(0, 1, 3, 2, 4, 5).contiguous()
-        x = x.reshape(bsz, h_out * w_out, embed_dim * self.scale_factor**2)
-
+        # Verified equivalent to original_pixel_shuffle implementation (see tests/models/test_pixelshuffle.py)
+        if cams == 0:
+            x = rearrange(
+                x,
+                "n (w w_scale h h_scale) c -> n (w h) (w_scale h_scale c)",
+                w_scale=self.scale_factor,
+                h_scale=self.scale_factor,
+                w=seq_root // self.scale_factor,
+                h=seq_root // self.scale_factor,
+            )
+        else:
+            x = rearrange(
+                x,
+                "n cams (w w_scale h h_scale) c -> n (cams w h) (w_scale h_scale c)",
+                w_scale=self.scale_factor,
+                h_scale=self.scale_factor,
+                w=seq_root // self.scale_factor,
+                h=seq_root // self.scale_factor,
+            )
         return x
 
     def forward(self, x):

@@ -21,13 +21,9 @@ distributed:
   dist_url: env://
   fsdp: true
   fsdp_amp: false
-  fsdp_backward_prefetch: false
   fsdp_cpu_offload: false
-  fsdp_hybrid: false
-  fsdp_hybrid_o2: false
-  fsdp_limit_all_gathers: true
   fsdp_pure_bf16: false
-  fsdp_use_orig_params: true
+  fsdp_reshard_after_forward: false
   local_rank: 0
   rank: 0
   use_distributed: true

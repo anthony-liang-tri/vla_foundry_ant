@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from lbm2.model_utils import Float32Module
 from lbm2.models.base_model import BaseModel
 from lbm2.params.model_params import UNetParams
 
@@ -127,13 +128,16 @@ class UNet(BaseModel):
         self.dim_expansion = 4
 
         # Time embedding
-        self.time_mlp = nn.Sequential(
+        time_mlp = nn.Sequential(
             SinusoidalPositionEmbeddings(self.time_emb_dim),
             nn.Linear(self.time_emb_dim, self.time_emb_dim * self.dim_expansion),
             nn.SiLU(),
             nn.Linear(self.time_emb_dim * self.dim_expansion, self.time_emb_dim * self.dim_expansion),
         )
-
+        if model_params.time_mlp_float32:
+            self.time_mlp = Float32Module(time_mlp, cast_outputs_back=True)
+        else:
+            self.time_mlp = time_mlp
         # Initial projection
         self.init_conv = nn.Conv2d(self.in_channels, self.channels[0], 3, padding=1)
 

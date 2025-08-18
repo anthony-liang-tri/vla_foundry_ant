@@ -2,12 +2,10 @@ import itertools
 import logging
 import math
 import time
-from contextlib import nullcontext
 
 import torch
 import torch.distributed as dist
 from torch.distributed.distributed_c10d import ReduceOp
-from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 
 from lbm2.data.sampler import sample_chunk
 from lbm2.distributed import is_master
@@ -113,63 +111,61 @@ def train_one_checkpoint(
             backward_total_time = 0
             total_lm_loss = 0
             for ii in range(cfg.hparams.accum_freq):
-                maybe_no_sync = nullcontext
                 # Don't sync gradients until the final batch for FSDP.
-                if isinstance(model, FSDP) and ii != cfg.hparams.accum_freq - 1:
-                    maybe_no_sync = model.no_sync
-                with maybe_no_sync():
-                    with autocast():
-                        forward_start = time.time()
-                        inputs_ii = input_ids[
+                if cfg.distributed.fsdp:
+                    is_final_accum = ii == cfg.hparams.accum_freq - 1
+                    model.set_requires_gradient_sync(is_final_accum)
+                    model.set_requires_all_reduce(is_final_accum)
+                    model.set_reshard_after_backward(is_final_accum)
+                    model.set_is_last_backward(is_final_accum)
+                with autocast():
+                    forward_start = time.time()
+                    inputs_ii = input_ids[
+                        ii * cfg.hparams.per_gpu_batch_size : (ii + 1) * cfg.hparams.per_gpu_batch_size
+                    ]
+                    mask_ii = (
+                        attention_mask[ii * cfg.hparams.per_gpu_batch_size : (ii + 1) * cfg.hparams.per_gpu_batch_size]
+                        if attention_mask is not None
+                        else None
+                    )
+                    if inputs_ii.shape[0] == 0:
+                        break
+                    targets_ii = targets[
+                        ii * cfg.hparams.per_gpu_batch_size : (ii + 1) * cfg.hparams.per_gpu_batch_size
+                    ]
+                    if image is not None:
+                        images_ii = image[
                             ii * cfg.hparams.per_gpu_batch_size : (ii + 1) * cfg.hparams.per_gpu_batch_size
                         ]
-                        mask_ii = (
-                            attention_mask[
-                                ii * cfg.hparams.per_gpu_batch_size : (ii + 1) * cfg.hparams.per_gpu_batch_size
-                            ]
-                            if attention_mask is not None
-                            else None
+                    if cfg.model.type == "transformer" or cfg.model.type == "transformer_hf":
+                        logits, _ = model(input_ids=inputs_ii, attention_mask=mask_ii)
+                        forward_total_time += time.time() - forward_start
+                        targets_ii = targets_ii.long()
+                        vocab_size = logits.shape[-1]
+                        local_loss = loss(logits.reshape(-1, vocab_size), targets_ii.reshape(-1)) * (
+                            inputs_ii.shape[0] / input_ids.shape[0]
                         )
-                        if inputs_ii.shape[0] == 0:
-                            break
-                        targets_ii = targets[
-                            ii * cfg.hparams.per_gpu_batch_size : (ii + 1) * cfg.hparams.per_gpu_batch_size
-                        ]
-                        if image is not None:
-                            images_ii = image[
-                                ii * cfg.hparams.per_gpu_batch_size : (ii + 1) * cfg.hparams.per_gpu_batch_size
-                            ]
-                        if cfg.model.type == "transformer" or cfg.model.type == "transformer_hf":
-                            logits, _ = model(input_ids=inputs_ii, attention_mask=mask_ii)
-                            forward_total_time += time.time() - forward_start
-                            targets_ii = targets_ii.long()
-                            vocab_size = logits.shape[-1]
-                            local_loss = loss(logits.reshape(-1, vocab_size), targets_ii.reshape(-1)) * (
-                                inputs_ii.shape[0] / input_ids.shape[0]
-                            )
-                        elif cfg.model.type == "vlm" or cfg.model.type == "vlm_hf":
-                            logits, _ = model(input_ids=inputs_ii, image=images_ii, attention_mask=mask_ii)
-                            forward_total_time += time.time() - forward_start
-                            targets_ii = targets_ii.long()
-                            ignore_mask = (targets_ii == cfg.data.pad_token_id) | (
-                                targets_ii == cfg.data.image_token_id
-                            )
-                            targets_ii = targets_ii.masked_fill(ignore_mask, -100)
-                            vocab_size = logits.shape[-1]
-                            local_loss = loss(logits.reshape(-1, vocab_size), targets_ii.reshape(-1)) * (
-                                inputs_ii.shape[0] / input_ids.shape[0]
-                            )
-                        elif cfg.model.type == "stable_diffusion":
-                            noise = torch.randn_like(images_ii)
-                            predicted_noise = model(
-                                input_ids=inputs_ii, image=images_ii, attention_mask=mask_ii, noise=noise
-                            )
-                            if getattr(cfg.model, "diffusion_use_flow_matching_scheduler", False):
-                                noise = noise - images_ii  # Predict the direction from image to noise
-                            local_loss = loss(predicted_noise, noise) * (inputs_ii.shape[0] / input_ids.shape[0])
-                    backward_start = time.time()
-                    local_loss.backward()
-                    backward_total_time += time.time() - backward_start
+                    elif cfg.model.type == "vlm" or cfg.model.type == "vlm_hf":
+                        logits, _ = model(input_ids=inputs_ii, image=images_ii, attention_mask=mask_ii)
+                        forward_total_time += time.time() - forward_start
+                        targets_ii = targets_ii.long()
+                        ignore_mask = (targets_ii == cfg.data.pad_token_id) | (targets_ii == cfg.data.image_token_id)
+                        targets_ii = targets_ii.masked_fill(ignore_mask, -100)
+                        vocab_size = logits.shape[-1]
+                        local_loss = loss(logits.reshape(-1, vocab_size), targets_ii.reshape(-1)) * (
+                            inputs_ii.shape[0] / input_ids.shape[0]
+                        )
+                    elif cfg.model.type == "stable_diffusion":
+                        noise = torch.randn_like(images_ii)
+                        predicted_noise = model(
+                            input_ids=inputs_ii, image=images_ii, attention_mask=mask_ii, noise=noise
+                        )
+                        if getattr(cfg.model, "diffusion_use_flow_matching_scheduler", False):
+                            noise = noise - images_ii  # Predict the direction from image to noise
+                        local_loss = loss(predicted_noise, noise) * (inputs_ii.shape[0] / input_ids.shape[0])
+                backward_start = time.time()
+                local_loss.backward()
+                backward_total_time += time.time() - backward_start
                 total_lm_loss += local_loss
 
             forward_time_m.update(forward_total_time)
@@ -178,10 +174,7 @@ def train_one_checkpoint(
 
         optim_step_start = time.time()
         if cfg.hparams.grad_clip_norm is not None:
-            if isinstance(model, FSDP):
-                model.clip_grad_norm_(cfg.hparams.grad_clip_norm, norm_type=2.0)
-            else:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.hparams.grad_clip_norm, norm_type=2.0)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.hparams.grad_clip_norm, norm_type=2.0)
         optimizer.step()
         optim_step_time_m.update(time.time() - optim_step_start)
 

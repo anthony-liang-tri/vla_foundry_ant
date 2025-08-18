@@ -1,7 +1,5 @@
-from pathlib import Path
-
 import torch.nn as nn
-import yaml
+from transformers import AutoConfig, AutoModelForCausalLM, AutoModelForVision2Seq
 
 from lbm2.models.diffusion.noise_scheduler import NoiseSchedulerDDPM
 from lbm2.models.diffusion.noise_scheduler_diffusers import FlowMatchingScheduler, NoiseSchedulerDDPMDiffusers
@@ -44,29 +42,39 @@ def create_model(model_params: ModelParams):
 
 def get_model_block(model_type: str, model_params: ModelParams):
     if model_type == "transformer":
-        return {TransformerBlock}
+        return (TransformerBlock,)
     elif model_type == "transformer_hf":
-        from transformers import AutoConfig, AutoModelForCausalLM
-
         config = AutoConfig.from_pretrained(model_params.hf_pretrained)
         model = AutoModelForCausalLM.from_config(config)
         for _name, module in model.model.named_modules():
             if isinstance(module, nn.ModuleList) and len(module) > 0:
-                return {type(module[0])}
+                return (type(module[0]),)
         raise ValueError("Could not find model block class.")
     elif model_type == "vlm":
-        return {TransformerBlock}
+        return (TransformerBlock,)
     elif model_type == "vlm_hf":
-        from transformers import AutoConfig, AutoModelForVision2Seq
-
         config = AutoConfig.from_pretrained(model_params.hf_pretrained)
         model = AutoModelForVision2Seq.from_config(config)
+
+        block_types = set()
+
+        # Find text/language model blocks
         for attr in ["language_model", "text_model"]:
             if hasattr(model.model, attr):
                 for _name, module in getattr(model.model, attr).named_modules():
                     if isinstance(module, nn.ModuleList) and len(module) > 0:
-                        return {type(module[0])}
-        raise ValueError("Could not find model block class.")
+                        block_types.add(type(module[0]))
+
+        # Find vision model blocks
+        if hasattr(model.model, "vision_model") and hasattr(model.model.vision_model, "encoder"):
+            for _name, module in model.model.vision_model.encoder.named_modules():
+                if isinstance(module, nn.ModuleList) and len(module) > 0:
+                    block_types.add(type(module[0]))
+
+        if not block_types:
+            raise ValueError("Could not find any model block classes.")
+
+        return tuple(block_types)
     elif model_type == "stable_diffusion":
         if model_params.use_diffusers_unet:
             from diffusers.models.unets.unet_2d_blocks import (
@@ -77,14 +85,14 @@ def get_model_block(model_type: str, model_params: ModelParams):
                 UpBlock2D,
             )
 
-            return {
+            return (
                 DownBlock2D,
                 UpBlock2D,
                 UNetMidBlock2D,
                 AttnUpBlock2D,
                 AttnDownBlock2D,
-            }
+            )
         else:
-            return {ResnetBlock, SelfAttentionBlock, CrossAttentionBlock}
+            return (ResnetBlock, SelfAttentionBlock, CrossAttentionBlock)
     else:
         raise ValueError(f"get_model_block (used for FSDP) not supported for {model_type}")

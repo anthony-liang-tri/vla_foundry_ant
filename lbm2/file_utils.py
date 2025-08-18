@@ -12,13 +12,8 @@ import fsspec
 import numpy as np
 import torch
 import yaml
-from torch.distributed.fsdp import (
-    FullStateDictConfig,
-    StateDictType,
-)
-from torch.distributed.fsdp import (
-    FullyShardedDataParallel as FSDP,
-)
+from torch.distributed.fsdp import FSDPModule
+from torch.distributed.tensor import DTensor, distribute_tensor
 
 
 def _pt_load_s3_cp(file_path, map_location=None):
@@ -166,10 +161,33 @@ def save_checkpoint(
     shard_shuffle_seed_per_dataset,
 ):
     if cfg.distributed.fsdp:
-        save_policy = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
-        with FSDP.state_dict_type(model, StateDictType.FULL_STATE_DICT, save_policy):
-            cpu_state = model.state_dict()
-            optim_state = FSDP.optim_state_dict(model, optimizer)
+        # FSDP get model state dict (load all params to CPU)
+        cpu_state = {}
+        for param_name, sharded_param in model.state_dict().items():
+            full_param = sharded_param.full_tensor() if isinstance(sharded_param, DTensor) else sharded_param
+            if torch.distributed.get_rank() == 0:
+                cpu_state[param_name] = full_param.cpu()
+            else:
+                del full_param
+
+        # FSDP get optimizer state dict
+        full_state = {}
+        for group_id, sharded_group in optimizer.state_dict()["state"].items():
+            group_state = {}
+            for param_name, sharded_param in sharded_group.items():
+                full_tensor = sharded_param.full_tensor() if isinstance(sharded_param, DTensor) else sharded_param
+                if torch.distributed.get_rank() == 0:
+                    group_state[param_name] = full_tensor.cpu()
+                else:
+                    del full_tensor
+            if torch.distributed.get_rank() == 0:
+                full_state[group_id] = group_state
+            else:
+                del group_state
+        optim_state = {
+            "param_groups": optimizer.state_dict()["param_groups"],
+            "state": full_state,
+        }
 
     checkpoint_dict = {
         "checkpoint_num": checkpoint_num,
@@ -217,12 +235,32 @@ def load_model_checkpoint(model, resume_from_checkpoint, distributed_params):
     sd = checkpoint["state_dict"]
     global_step = checkpoint["global_step"]
     shard_shuffle_seed_per_dataset = checkpoint.get("shard_shuffle_seed_per_dataset", None)
-    if next(iter(sd.items()))[0].startswith("module"):
-        sd = {k[len("module.") :]: v for k, v in sd.items()}
     if "_orig_mod" in next(iter(sd.items()))[0]:
         sd = {k.replace("_orig_mod.", ""): v for k, v in sd.items()}
     if distributed_params.fsdp:
-        model.load_state_dict(sd)
+        if isinstance(model, FSDPModule):
+            sharded_sd = {}
+            model_sd = model.state_dict()
+            for param_name, full_tensor in sd.items():
+                sharded_meta_param = model_sd.get(param_name)
+                if isinstance(sharded_meta_param, DTensor):
+                    # shard weights from cpu to their target device
+                    sharded_tensor = distribute_tensor(
+                        full_tensor,
+                        sharded_meta_param.device_mesh,
+                        sharded_meta_param.placements,
+                    )
+                    sharded_sd[param_name] = torch.nn.Parameter(sharded_tensor)
+                else:
+                    # FSDP2 doesn't shard buffers.
+                    assert torch.allclose(
+                        full_tensor.to(sharded_meta_param.device), sharded_meta_param, rtol=1e-5, atol=1e-8
+                    )
+                    sharded_sd[param_name] = sharded_meta_param
+            model.load_state_dict(sharded_sd, assign=True)
+        else:
+            # Inference
+            model.load_state_dict(sd)
     elif distributed_params.use_distributed:
         model.module.load_state_dict(sd)
     else:
