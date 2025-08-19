@@ -8,12 +8,19 @@ import tempfile
 import time
 from contextlib import contextmanager
 
+import boto3
 import fsspec
 import numpy as np
-import torch
 import yaml
-from torch.distributed.fsdp import FSDPModule
-from torch.distributed.tensor import DTensor, distribute_tensor
+
+try:
+    import torch
+    from torch.distributed.fsdp import FSDPModule
+    from torch.distributed.tensor import DTensor, distribute_tensor
+except ImportError:
+    # Avoid needing to download torch for Ray clusters
+    logging.info("Skipping torch imports in file_utils.py")
+    pass
 
 
 def _pt_load_s3_cp(file_path, map_location=None):
@@ -73,6 +80,69 @@ def yaml_load(file_path):
     with open(file_path, "r") as f:
         out = yaml.safe_load(f)
     return out
+
+
+def list_directory_recursive(dir_path):
+    """Get all S3 objects under a prefix efficiently using pagination."""
+    assert dir_path.startswith("s3"), "Only S3 paths are supported for now"
+    s3_client = boto3.client("s3")
+    bucket, prefix = parse_s3_path(dir_path)
+    paginator = s3_client.get_paginator("list_objects_v2")
+    objects = set()
+
+    try:
+        for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+            if "Contents" in page:
+                for obj in page["Contents"]:
+                    # Store relative path from prefix
+                    key = obj["Key"]
+                    if key.startswith(prefix):
+                        relative_key = key[len(prefix) :]
+                        objects.add(relative_key.lstrip("/"))
+    except Exception as e:
+        print(f"Error listing directory {dir_path}: {e}")
+        pass
+
+    return objects
+
+
+def _file_exists_s3_ls(file_path):
+    """Check if an S3 file exists using aws s3 ls."""
+    cmd = f"aws s3 ls {file_path}"
+    proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdout, stderr = proc.communicate()
+
+    if proc.returncode != 0:
+        return False
+
+    # Parse the output to ensure it's an exact match, not a prefix match
+    output = stdout.decode("utf-8").strip()
+    if not output:
+        return False
+
+    expected_filename = file_path.split("/")[-1]
+    for line in output.split("\n"):
+        if line.strip():
+            parts = line.strip().split()
+            if len(parts) >= 4:
+                actual_filename = " ".join(parts[3:])
+                if actual_filename == expected_filename:
+                    return True
+    return False
+
+
+def file_exists(path):
+    if path.startswith("s3"):
+        return _file_exists_s3_ls(path)
+    return os.path.exists(path)
+
+
+def parse_s3_path(s3_path: str):
+    assert s3_path.startswith("s3://")
+    parts = s3_path.removeprefix("s3://").split("/", 1)
+    bucket = parts[0]
+    directory = parts[1].removesuffix("/") if len(parts) > 1 else ""
+    return bucket, directory
 
 
 @contextmanager
