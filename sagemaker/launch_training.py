@@ -1,10 +1,10 @@
-import atexit
 import os
 import subprocess
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from uuid import uuid4
 
 import boto3
 import draccus
@@ -62,6 +62,13 @@ def run_command(command):
     subprocess.run(command, shell=True, check=True)
 
 
+def remove_old_hyperparameters(path, expiration_days=3):
+    """Remove old hyperparameters files."""
+    for file in Path(path).glob("hyperparameters_*.yaml"):
+        if file.stat().st_mtime < time.time() - expiration_days * 24 * 60 * 60:
+            file.unlink()
+
+
 def get_image(user, profile="default", region="us-east-1"):
     os.environ["AWS_PROFILE"] = f"{profile}"
     account = subprocess.getoutput(
@@ -102,15 +109,17 @@ def get_image(user, profile="default", region="us-east-1"):
 def main():
     args = draccus.parse(config_class=SageMakerParams)
 
-    # Save hyperparameters to a yaml file. File is deleted on exit.
-    temp_file_path = "sagemaker/hyperparameters.yaml"
-    hyperparameter_sagemaker_path = "/opt/ml/code/hyperparameters.yaml"
+    # Save hyperparameters to a yaml file. Files are deleted after 3 days.
+    uuid = str(uuid4())
+    temp_file_path = f"sagemaker/configs/hyperparameters_{uuid}.yaml"
+    hyperparameter_sagemaker_path = f"/opt/ml/code/configs/hyperparameters_{uuid}.yaml"
+    os.makedirs(os.path.dirname(temp_file_path), exist_ok=True)
     with open(temp_file_path, "w") as f:
         args_dict = draccus.parsers.encoding.encode(args)
         del args_dict["sagemaker"]
         print(args_dict)
         draccus.cfgparsing.save_config(args_dict, f)
-    atexit.register(lambda: os.remove(temp_file_path))
+    remove_old_hyperparameters("sagemaker/configs", expiration_days=3)
 
     # We probably want wandb logging and S3 saving for sagemaker runs
     assert args.remote_sync is not None
