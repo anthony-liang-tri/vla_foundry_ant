@@ -10,7 +10,7 @@ img_size: 32
 inter_dim: 4300
 interpolation_mode: new_method
 ln_eps: 1.0
-n_heads: 10
-n_layers: 10
+n_heads: 2
+n_layers: 2
 patch_size: 10
 pretrained: best_model

@@ -11,7 +11,7 @@ data:
   num_workers: 1
   processor: debug
   seed: 42
-  seq_len: 2048
+  seq_len: 16
   type: image_caption
   shuffle: true
   shuffle_buffer_size: 2000
@@ -59,10 +59,10 @@ model:
   transformer:
     attn_name: torch_attn
     ffn_type: swiglu
-    hidden_dim: 2048
-    max_seq_len: 2048
-    n_heads: 8
-    n_layers: 18
+    hidden_dim: 128
+    max_seq_len: 16
+    n_heads: 2
+    n_layers: 2
     norm_eps: 1.0e-05
     norm_type: default_layer_norm
     positional_embedding_type: rotary
@@ -71,7 +71,7 @@ model:
     resume_from_checkpoint: null
     resume_weights_only: false
     type: transformer
-    vocab_size: 257216
+    vocab_size: 1000
     weight_tying: false
   type: vlm
   vit:
@@ -82,7 +82,7 @@ model:
     cls_flag: false
     dropout: 0.0
     freeze: false
-    hidden_dim: 999
+    hidden_dim: 128
     img_size: 224
     inter_dim: 4304
     interpolation_mode: bicubic

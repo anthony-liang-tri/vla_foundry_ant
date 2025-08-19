@@ -34,6 +34,6 @@ class TextPipeline(BaseWebDatasetPipeline):
             wds.map(lambda sample: {"input_ids": sample["json.gz"]}, handler=log_and_continue),
             wds.select(lambda x: filter_lt_seqlen(self.data_params.seq_len, x["input_ids"])),
             wds.batched(self.batch_size, partial=False),
-            wds.map(lambda batch: {"input_ids": torch.LongTensor(batch["input_ids"])}),
+            wds.map(lambda batch: {"input_ids": torch.LongTensor(batch["input_ids"]), "attention_mask": None}),
         ]
         return pipeline

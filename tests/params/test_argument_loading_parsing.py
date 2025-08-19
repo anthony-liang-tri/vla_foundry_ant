@@ -136,18 +136,18 @@ def test_load_path_flag():
     assert args.data.img_num_tokens == 256
     assert args.total_train_samples == 14_000_000
     assert args.num_checkpoints == 5
-    assert args.model.transformer.hidden_dim == 2048
-    assert args.model.transformer.n_layers == 18
-    assert args.model.transformer.n_heads == 8
-    assert args.model.transformer.max_seq_len == 2048
-    assert args.model.transformer.vocab_size == 257216
+    assert args.model.transformer.hidden_dim == 128
+    assert args.model.transformer.n_layers == 2
+    assert args.model.transformer.n_heads == 2
+    assert args.model.transformer.max_seq_len == 16
+    assert args.model.transformer.vocab_size == 1000
     assert not args.model.transformer.post_embed_norm
     assert not args.model.transformer.weight_tying
     assert args.model.vit.img_size == 32
     assert args.model.vit.hidden_dim == hidden_dim  # overridden by hidden_dim flag
     assert args.model.vit.inter_dim == 4300
-    assert args.model.vit.n_heads == 10
-    assert args.model.vit.n_layers == 10
+    assert args.model.vit.n_heads == 2
+    assert args.model.vit.n_layers == 2
     assert args.model.vit.patch_size == 10
     assert args.model.vit.projector_pixel_shuffle_factor == 2
 
@@ -155,7 +155,7 @@ def test_load_path_flag():
 @pytest.mark.parametrize("params_yaml", ["tests/params/dummy_configs/dummy_vlm_config.yaml"])
 def test_load_experiment_params_from_yaml(params_yaml):
     params = load_experiment_params_from_yaml(params_yaml)
-    assert params.model.vit.hidden_dim == 999
+    assert params.model.vit.hidden_dim == 128
 
 
 @pytest.mark.parametrize(

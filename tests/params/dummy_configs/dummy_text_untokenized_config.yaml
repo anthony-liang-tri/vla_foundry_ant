@@ -8,7 +8,7 @@ data:
   - 1.0
   num_workers: 1
   seed: 42
-  seq_len: 2048
+  seq_len: 16
   tokenizer: debug
   type: text_untokenized
   shuffle: true
@@ -33,7 +33,7 @@ hparams:
   beta2: 0.95
   eps: 1.0e-08
   force_min_lr: 0.0
-  global_batch_size: 512
+  global_batch_size: 8
   grad_checkpointing: false
   grad_clip_norm: null
   loss_function: cross_entropy
@@ -41,7 +41,7 @@ hparams:
   lr_cooldown_end: 0.0
   lr_scheduler: cosine
   optimizer: adamw
-  per_gpu_batch_size: 8
+  per_gpu_batch_size: 4
   precision: amp_bfloat16
   seed: 42
   torchcompile: false

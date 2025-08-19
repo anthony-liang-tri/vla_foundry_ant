@@ -18,13 +18,15 @@ class TestProcessorPaliGemma:
 
         sample = {"image": image, "text": "<image> What is in this image?"}
 
+        num_img_tokens = paligemma_processor.image_seq_length
         result = paligemma_processor(
             images=sample["image"],
             text=sample["text"],
             return_tensors="pt",
             padding="max_length",
             padding_side="right",
-            max_length=params.data.seq_len + 1,
+            padding_value=0,
+            max_length=params.data.seq_len + num_img_tokens,
         )
 
         # Test that all expected keys are present
@@ -35,7 +37,9 @@ class TestProcessorPaliGemma:
         # Test input_ids shape and values
         assert result["input_ids"].dim() == 2, "input_ids should be 2D tensor"
         assert result["input_ids"].shape[0] == 1, "Batch size should be 1"
-        assert result["input_ids"].shape[1] == params.data.seq_len + 1, "Sequence length should match config"
+        assert result["input_ids"].shape[1] == params.data.seq_len + num_img_tokens, (
+            "Sequence length should be 256 for next token prediction"
+        )
         assert result["input_ids"].dtype == torch.long, "input_ids should be long tensor"
         # Check that input_ids contains valid token IDs (non-negative integers)
         assert (result["input_ids"] >= 0).all(), "All input_ids should be non-negative"

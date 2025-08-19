@@ -186,7 +186,15 @@ class Transformer(BaseModel):
     def set_grad_checkpointing(self, enable=True):
         self.grad_checkpointing = enable
 
-    def forward(self, input_ids=None, input_embeds=None, past_key_values=None, use_cache=False, attention_mask=None):
+    def forward(
+        self,
+        input_ids=None,
+        input_embeds=None,
+        past_key_values=None,
+        use_cache=False,
+        attention_mask=None,
+        output_hidden_states=False,
+    ):
         """
         Args:
             input
@@ -195,6 +203,7 @@ class Transformer(BaseModel):
             attention_mask (torch.Tensor): Shape (batch_size, sequence_len), indicates tokens that should not be
                 attended to. attention_mask[s, i] = False indicates that token i should not be attended to by any other
                 token for sequence s.
+            output_hidden_states (bool): Whether to return the hidden states of the transformer.
         """
         if input_ids is not None:
             x = self.embeddings(input_ids)
@@ -209,6 +218,7 @@ class Transformer(BaseModel):
             past_key_values = [None] * self.n_layers
         elif isinstance(past_key_values, tuple):
             past_key_values = list(past_key_values)
+        hidden_states = []
         for i, layer in enumerate(self.layers):
             if self.grad_checkpointing:
                 x, past_key_values[i] = torch.utils.checkpoint.checkpoint(
@@ -216,12 +226,14 @@ class Transformer(BaseModel):
                 )
             else:
                 x, past_key_values[i] = layer(x, past_key_values[i], use_cache=use_cache, attention_mask=attention_mask)
+            if output_hidden_states:
+                hidden_states.append(x)
         if past_key_values[0] is None:
             past_key_values = None
         x = self.norm(x)
         output = self.output(x)
         # follow llama in casting this to float.
-        return output.float(), past_key_values
+        return output.float(), past_key_values, (hidden_states if output_hidden_states else None)
 
     def generate(self, input_ids, attention_mask, max_new_tokens=20):
         # Add batch dimension if needed
@@ -233,7 +245,7 @@ class Transformer(BaseModel):
         attn_mask = attention_mask.clone()
 
         for _ in range(max_new_tokens):
-            outputs, _ = self.forward(input_ids=generated, attention_mask=attn_mask)
+            outputs, _, _ = self.forward(input_ids=generated, attention_mask=attn_mask)
             last_output = outputs[:, -1, :]
             next_token = torch.argmax(last_output, dim=-1, keepdim=True)
             generated = torch.cat([generated, next_token], dim=-1)

@@ -79,13 +79,15 @@ def train_one_checkpoint(
                 forward_start = time.time()
                 input_ids, attention_mask, targets = sample_chunk(input_ids, attention_mask, cfg.data.seq_len)
                 if cfg.model.type == "transformer" or cfg.model.type == "transformer_hf":
-                    logits, _ = model(input_ids=input_ids, attention_mask=attention_mask)
+                    logits, _, _ = model(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=False)
                     forward_time_m.update(time.time() - forward_start)
                     targets = targets.long()
                     vocab_size = logits.shape[-1]
                     total_loss = loss(logits.reshape(-1, vocab_size), targets.reshape(-1))
                 elif cfg.model.type == "vlm" or cfg.model.type == "vlm_hf":
-                    logits, _ = model(input_ids=input_ids, image=image, attention_mask=attention_mask)
+                    logits, _, _ = model(
+                        input_ids=input_ids, image=image, attention_mask=attention_mask, output_hidden_states=False
+                    )
                     forward_time_m.update(time.time() - forward_start)
                     targets = targets.long()
                     ignore_mask = (targets == cfg.data.pad_token_id) | (targets == cfg.data.image_token_id)
@@ -138,7 +140,7 @@ def train_one_checkpoint(
                             ii * cfg.hparams.per_gpu_batch_size : (ii + 1) * cfg.hparams.per_gpu_batch_size
                         ]
                     if cfg.model.type == "transformer" or cfg.model.type == "transformer_hf":
-                        logits, _ = model(input_ids=inputs_ii, attention_mask=mask_ii)
+                        logits, _, _ = model(input_ids=inputs_ii, attention_mask=mask_ii, output_hidden_states=False)
                         forward_total_time += time.time() - forward_start
                         targets_ii = targets_ii.long()
                         vocab_size = logits.shape[-1]
@@ -146,7 +148,9 @@ def train_one_checkpoint(
                             inputs_ii.shape[0] / input_ids.shape[0]
                         )
                     elif cfg.model.type == "vlm" or cfg.model.type == "vlm_hf":
-                        logits, _ = model(input_ids=inputs_ii, image=images_ii, attention_mask=mask_ii)
+                        logits, _, _ = model(
+                            input_ids=inputs_ii, image=images_ii, attention_mask=mask_ii, output_hidden_states=False
+                        )
                         forward_total_time += time.time() - forward_start
                         targets_ii = targets_ii.long()
                         ignore_mask = (targets_ii == cfg.data.pad_token_id) | (targets_ii == cfg.data.image_token_id)

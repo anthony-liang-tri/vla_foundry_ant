@@ -75,7 +75,7 @@ class VLM(BaseModel):
         self.transformer = transformer
         self.projection = ModalityProjector(model_params.vit, model_params.transformer.hidden_dim)
 
-    def forward(self, input_ids: torch.Tensor, image: torch.Tensor, attention_mask: torch.Tensor = None):
+    def forward(self, input_ids, image, attention_mask=None, output_hidden_states=False, use_cache=False, **kwargs):
         # image shape [bsz, 3, image_size, image_size]
         # input_ids and attention_mask should already allot tokens for the image
         image_embd = self.vit(image)
@@ -86,8 +86,23 @@ class VLM(BaseModel):
         special_image_mask = special_image_mask.expand_as(token_embd).to(token_embd.device)
         inputs_embeds = token_embd.masked_scatter(special_image_mask, image_embd)
 
-        logits, _ = self.transformer(input_embeds=inputs_embeds, attention_mask=attention_mask)
-        return logits, _
+        # Call transformer's forward method directly to get logits and past_key_values and hidden_states
+        logits, past_key_values, hidden_states = self.transformer(
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            output_hidden_states=output_hidden_states,
+            use_cache=use_cache,
+            **kwargs,
+        )
+        return logits, past_key_values, hidden_states
+
+    @property
+    def hidden_dim(self) -> int:
+        return self.model_params.transformer.hidden_dim
+
+    @property
+    def num_hidden_layers(self) -> int:
+        return self.model_params.transformer.n_layers
 
     def generate(
         self,
@@ -105,7 +120,7 @@ class VLM(BaseModel):
         attn_mask = attention_mask.clone()
 
         for _ in range(max_new_tokens):
-            outputs, _ = self.forward(input_ids=generated, image=image, attention_mask=attn_mask)
+            outputs, _, _ = self.forward(input_ids=generated, image=image, attention_mask=attn_mask)
             last_output = outputs[:, -1, :]
             next_token = torch.argmax(last_output, dim=-1, keepdim=True)
             generated = torch.cat([generated, next_token], dim=-1)

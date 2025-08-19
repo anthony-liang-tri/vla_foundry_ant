@@ -5,10 +5,10 @@ resume_weights_only: false
 transformer:
   attn_name: torch_attn
   ffn_type: swiglu
-  hidden_dim: 2048
-  max_seq_len: 2048
-  n_heads: 8
-  n_layers: 18
+  hidden_dim: 128 
+  max_seq_len: 16
+  n_heads: 2
+  n_layers: 2
   norm_eps: 1.0e-05
   norm_type: default_layer_norm
   positional_embedding_type: rotary
@@ -17,7 +17,7 @@ transformer:
   resume_from_checkpoint: null
   resume_weights_only: false
   type: transformer
-  vocab_size: 257216
+  vocab_size: 1000
   weight_tying: false
 type: vlm
 vit:

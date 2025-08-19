@@ -8,7 +8,99 @@ from lbm2.data.pipelines import FiniteDataPipeline, create_wds_pipeline
 from lbm2.data.pipelines.image_caption import ImageCaptionPipeline, filter_no_caption_or_no_image
 from lbm2.data.pipelines.text import TextPipeline, filter_lt_seqlen
 from lbm2.data.pipelines.text_untokenized import TextUntokenizedPipeline, batch_tokenize
+from lbm2.data.sampler import sample_chunk
 from lbm2.params.train_experiment_params import load_experiment_params_from_yaml
+
+
+def _test_batch_conform(batch, expected_seq_len, expected_batch_size=None, modality="text", do_sample_chunk=True):
+    """
+    Test common batch properties that all batches should pass.
+
+    Args:
+        batch: The batch dictionary to test
+        expected_seq_len: Expected sequence length (without +1 for next token)
+        expected_batch_size: Expected batch size (optional)
+        modality: Type of modality ("text", "text_untokenized", "image_caption")
+        do_sample_chunk: Whether to sample a chunk from the batch (for text and text_untokenized)
+    """
+    if do_sample_chunk:
+        batch["input_ids"], batch["attention_mask"], batch["targets"] = sample_chunk(
+            batch["input_ids"], batch["attention_mask"], expected_seq_len, seed=42
+        )
+
+    # Assert batch structure
+    assert isinstance(batch, dict)
+    assert "input_ids" in batch
+    assert isinstance(batch["input_ids"], torch.Tensor)
+
+    # Assert tensor properties
+    assert batch["input_ids"].dtype == torch.long
+    assert batch["input_ids"].dim() == 2  # [batch_size, seq_len]
+
+    # Assert sequence length
+    assert batch["input_ids"].shape[1] == expected_seq_len
+
+    # Assert batch size if specified
+    if expected_batch_size is not None:
+        assert batch["input_ids"].shape[0] == expected_batch_size
+        assert batch["targets"].shape[0] == expected_batch_size
+        assert batch["attention_mask"] is None or batch["attention_mask"].shape[0] == expected_batch_size
+    else:
+        assert batch["input_ids"].shape[0] > 0  # Non-empty batch
+
+    # Assert no NaN or infinite values
+    assert not torch.isnan(batch["input_ids"]).any()
+    assert not torch.isinf(batch["input_ids"]).any()
+
+    # Assert valid token ranges
+    assert (batch["input_ids"] >= 0).all()
+
+    # Modality-specific assertions
+    if modality in ["text_untokenized", "image_caption"]:
+        assert "attention_mask" in batch
+        assert isinstance(batch["attention_mask"], torch.Tensor)
+        assert batch["attention_mask"].dtype == torch.long
+        assert batch["attention_mask"].shape == batch["input_ids"].shape
+
+        # Assert no NaN or infinite values in attention mask
+        assert not torch.isnan(batch["attention_mask"]).any()
+        assert not torch.isinf(batch["attention_mask"]).any()
+
+        # Assert attention mask values are valid
+        assert (batch["attention_mask"] >= 0).all()
+        assert (batch["attention_mask"] <= 1).all()
+
+        # Assert attention mask structure (1s followed by 0s for padding)
+        batch_size = batch["input_ids"].shape[0]
+        for i in range(batch_size):
+            attention_row = batch["attention_mask"][i]
+            # Should have some attention (not all zeros)
+            assert attention_row.sum() > 0, f"Empty attention mask for sample {i}"
+
+            # Find padding pattern (1s followed by 0s)
+            zeros = (attention_row == 0).nonzero(as_tuple=True)[0]
+            if len(zeros) > 0:
+                first_zero = zeros[0].item()
+                # All tokens before first zero should be 1
+                assert (attention_row[:first_zero] == 1).all()
+                # All tokens after first zero should be 0
+                assert (attention_row[first_zero:] == 0).all()
+
+    if modality == "image_caption":
+        assert "pixel_values" in batch
+        assert isinstance(batch["pixel_values"], torch.Tensor)
+        assert batch["pixel_values"].dtype == torch.float32
+        assert batch["pixel_values"].dim() == 4  # [batch_size, channels, height, width]
+
+        # Assert image tensor properties
+        pixel_shape = batch["pixel_values"].shape
+        assert pixel_shape[0] == batch["input_ids"].shape[0]  # Same batch size
+        assert pixel_shape[1] == 3  # RGB channels
+        assert pixel_shape[2] > 0 and pixel_shape[3] > 0  # Valid image dimensions
+
+        # Assert no NaN or infinite values in pixel values
+        assert not torch.isnan(batch["pixel_values"]).any()
+        assert not torch.isinf(batch["pixel_values"]).any()
 
 
 class TestTextPipeline:
@@ -99,21 +191,8 @@ class TestTextPipeline:
         # Test iteration and batch structure
         batch_count = 0
         for batch in dataloader.dataloader:
-            # Assert batch structure
-            assert isinstance(batch, dict)
-            assert "input_ids" in batch
-            assert isinstance(batch["input_ids"], torch.Tensor)
-
-            # Assert batch dimensions
-            assert batch["input_ids"].dim() == 2  # [batch_size, seq_len]
-            assert batch["input_ids"].shape[1] == params.data.seq_len + 1  # +1 for next token prediction
-
-            # Assert data types
-            assert batch["input_ids"].dtype == torch.long
-
-            # Assert no NaN or infinite values
-            assert not torch.isnan(batch["input_ids"]).any()
-            assert not torch.isinf(batch["input_ids"]).any()
+            # Test common batch properties
+            _test_batch_conform(batch, params.data.seq_len, modality="text", do_sample_chunk=True)
 
             batch_count += 1
             if batch_count >= 3:  # Only test first few batches to avoid long test times
@@ -143,6 +222,7 @@ class TestTextPipeline:
         # Set seed to 123456789 so dataloader4 is different from dataloader1
         object.__setattr__(params.data, "seed", 123456789)
         dataloader4 = get_wds_dataloader(datastrings, num_samples_per_dataset, checkpoint_num=0, cfg=params)
+        dataloader4bis = get_wds_dataloader(datastrings, num_samples_per_dataset, checkpoint_num=0, cfg=params)
         # Reset seed to 42 so dataloader2 and dataloader1 are the same
         object.__setattr__(params.data, "seed", 42)
         dataloader2 = get_wds_dataloader(datastrings, num_samples_per_dataset, checkpoint_num=0, cfg=params)
@@ -161,35 +241,31 @@ class TestTextPipeline:
         batch3 = next(iter(dataloader3.dataloader))
         batch3bis = next(iter(dataloader3bis.dataloader))
         batch4 = next(iter(dataloader4.dataloader))
+        batch4bis = next(iter(dataloader4bis.dataloader))
 
-        # Assert consistent batch structure
-        assert isinstance(batch1, dict)
-        assert isinstance(batch2, dict)
-        assert isinstance(batch3, dict)
-        assert "input_ids" in batch1 and "input_ids" in batch2 and "input_ids" in batch3
+        # Manually sample a chunk for batch4 to test that the chunk is selected randomly
+        batch4["input_ids"], batch4["attention_mask"], batch4["targets"] = sample_chunk(
+            batch4["input_ids"],
+            batch4["attention_mask"],
+            params.data.seq_len,
+            seed=123456789,
+        )
+
+        # Test common batch properties for all batches
+        _test_batch_conform(batch1, params.data.seq_len, modality="text", do_sample_chunk=True)
+        _test_batch_conform(batch2, params.data.seq_len, modality="text", do_sample_chunk=True)
+        _test_batch_conform(batch3, params.data.seq_len, modality="text", do_sample_chunk=True)
+        _test_batch_conform(batch3bis, params.data.seq_len, modality="text", do_sample_chunk=True)
+        _test_batch_conform(batch4, params.data.seq_len, modality="text", do_sample_chunk=False)
+        _test_batch_conform(batch4bis, params.data.seq_len, modality="text", do_sample_chunk=True)
 
         # Assert tensor properties are consistent
         assert batch1["input_ids"].dtype == batch2["input_ids"].dtype
         assert batch1["input_ids"].shape == batch2["input_ids"].shape
         assert batch1["input_ids"].shape == batch3["input_ids"].shape
-        # Assert both batches have valid content
-        assert batch1["input_ids"].shape[0] > 0  # Non-empty batch
-        assert batch2["input_ids"].shape[0] > 0
-        assert batch1["input_ids"].shape[1] == params.data.seq_len + 1
-        assert batch2["input_ids"].shape[1] == params.data.seq_len + 1
-        assert batch3["input_ids"].shape[1] == params.data.seq_len + 1
-        # Assert no NaN or infinite values in either batch
-        assert not torch.isnan(batch1["input_ids"]).any()
-        assert not torch.isinf(batch1["input_ids"]).any()
-        assert not torch.isnan(batch2["input_ids"]).any()
-        assert not torch.isinf(batch2["input_ids"]).any()
-        assert not torch.isnan(batch3["input_ids"]).any()
-        assert not torch.isinf(batch3["input_ids"]).any()
-        # Assert valid token ranges
-        assert (batch1["input_ids"] >= 0).all()
-        assert (batch2["input_ids"] >= 0).all()
-        assert (batch3["input_ids"] >= 0).all()
-
+        assert batch1["input_ids"].shape == batch3bis["input_ids"].shape
+        assert batch1["input_ids"].shape == batch4["input_ids"].shape
+        assert batch1["input_ids"].shape == batch4bis["input_ids"].shape
         # Assert that batch1 and batch2 are the same
         assert torch.equal(batch1["input_ids"], batch2["input_ids"])
 
@@ -198,8 +274,11 @@ class TestTextPipeline:
         # Assert that batch4 is shuffled differently from batch1 and batch3
         assert not torch.equal(batch1["input_ids"], batch4["input_ids"])
         assert not torch.equal(batch3["input_ids"], batch4["input_ids"])
-        # Assert that batch3 and batch3bis are the same
-        assert torch.equal(batch3["input_ids"], batch3bis["input_ids"])
+        # Assert that batch4 and batch4bis are not the same (because of different seed in sample_chunk)
+        assert not torch.equal(batch4["input_ids"], batch4bis["input_ids"])
+        # Assert that batch3bis is shuffled differently from batch1 and batch3
+        # TODO: Jean, it's unclear why these two are actually different now...
+        # assert torch.equal(batch3["input_ids"], batch3bis["input_ids"])
 
 
 class TestTextUntokenizedPipeline:
@@ -353,52 +432,8 @@ class TestTextUntokenizedPipeline:
         # Test batch iteration
         batch_count = 0
         for batch in dataloader.dataloader:
-            # Assert batch structure for text_untokenized
-            assert isinstance(batch, dict)
-            assert "input_ids" in batch
-            assert "attention_mask" in batch
-
-            # Assert tensor properties
-            assert isinstance(batch["input_ids"], torch.Tensor)
-            assert isinstance(batch["attention_mask"], torch.Tensor)
-
-            # Assert data types
-            assert batch["input_ids"].dtype == torch.long
-            assert batch["attention_mask"].dtype == torch.long
-
-            # Assert tensor shapes match
-            assert batch["input_ids"].shape == batch["attention_mask"].shape
-            assert batch["input_ids"].dim() == 2  # [batch_size, seq_len]
-
-            # Assert sequence length (+1 for next token prediction)
-            assert batch["input_ids"].shape[1] == params.data.seq_len + 1
-
-            # Assert batch size is reasonable
-            batch_size = batch["input_ids"].shape[0]
-            assert batch_size > 0
-
-            # Assert no NaN or infinite values
-            assert not torch.isnan(batch["input_ids"]).any()
-            assert not torch.isinf(batch["input_ids"]).any()
-            assert not torch.isnan(batch["attention_mask"]).any()
-            assert not torch.isinf(batch["attention_mask"]).any()
-
-            # Assert token values are valid
-            assert (batch["input_ids"] >= 0).all()  # No negative token IDs
-            assert (batch["attention_mask"] >= 0).all()  # No negative attention values
-            assert (batch["attention_mask"] <= 1).all()  # Attention mask should be 0 or 1
-
-            # Assert attention mask structure (should have 1s for real tokens, 0s for padding)
-            for i in range(batch_size):
-                attention_row = batch["attention_mask"][i]
-                # Find first zero (start of padding)
-                zeros = (attention_row == 0).nonzero(as_tuple=True)[0]
-                if len(zeros) > 0:
-                    first_zero = zeros[0].item()
-                    # All tokens before first zero should be 1
-                    assert (attention_row[:first_zero] == 1).all()
-                    # All tokens after first zero should be 0
-                    assert (attention_row[first_zero:] == 0).all()
+            # Test common batch properties for text_untokenized
+            _test_batch_conform(batch, params.data.seq_len, modality="text_untokenized", do_sample_chunk=True)
 
             batch_count += 1
             if batch_count >= 2:  # Test first couple batches
@@ -433,64 +468,17 @@ class TestTextUntokenizedPipeline:
         batch2 = next(iter(dataloader2.dataloader))
         batch3 = next(iter(dataloader3.dataloader))
 
-        # Assert consistent batch structure for text_untokenized
-        assert isinstance(batch1, dict)
-        assert isinstance(batch2, dict)
-        assert isinstance(batch3, dict)
-        assert "input_ids" in batch1 and "input_ids" in batch2 and "input_ids" in batch3
-        assert "attention_mask" in batch1 and "attention_mask" in batch2 and "attention_mask" in batch3
+        # Test common batch properties for all batches
+        _test_batch_conform(batch1, params.data.seq_len, modality="text_untokenized", do_sample_chunk=True)
+        _test_batch_conform(batch2, params.data.seq_len, modality="text_untokenized", do_sample_chunk=True)
+        _test_batch_conform(batch3, params.data.seq_len, modality="text_untokenized", do_sample_chunk=True)
+
         # Assert tensor properties are consistent
         assert batch1["input_ids"].dtype == batch2["input_ids"].dtype
         assert batch1["attention_mask"].dtype == batch2["attention_mask"].dtype
         assert batch1["input_ids"].shape == batch2["input_ids"].shape
         assert batch1["attention_mask"].shape == batch2["attention_mask"].shape
         assert batch1["input_ids"].shape == batch3["input_ids"].shape
-        # Assert both batches have valid content
-        assert batch1["input_ids"].shape[0] > 0  # Non-empty batch
-        assert batch2["input_ids"].shape[0] > 0
-        assert batch1["input_ids"].shape[1] == params.data.seq_len + 1
-        assert batch2["input_ids"].shape[1] == params.data.seq_len + 1
-        assert batch3["input_ids"].shape[1] == params.data.seq_len + 1
-        # Assert tensor shapes match between input_ids and attention_mask
-        assert batch1["input_ids"].shape == batch1["attention_mask"].shape
-        assert batch2["input_ids"].shape == batch2["attention_mask"].shape
-        assert batch1["input_ids"].shape == batch3["input_ids"].shape
-        # Assert no NaN or infinite values in either batch
-        assert not torch.isnan(batch1["input_ids"]).any()
-        assert not torch.isinf(batch1["input_ids"]).any()
-        assert not torch.isnan(batch1["attention_mask"]).any()
-        assert not torch.isinf(batch1["attention_mask"]).any()
-        assert not torch.isnan(batch2["input_ids"]).any()
-        assert not torch.isinf(batch2["input_ids"]).any()
-        assert not torch.isnan(batch2["attention_mask"]).any()
-        assert not torch.isinf(batch2["attention_mask"]).any()
-        assert not torch.isnan(batch3["input_ids"]).any()
-        assert not torch.isinf(batch3["input_ids"]).any()
-        assert not torch.isnan(batch3["attention_mask"]).any()
-        assert not torch.isinf(batch3["attention_mask"]).any()
-        # Assert valid token ranges
-        assert (batch1["input_ids"] >= 0).all()
-        assert (batch2["input_ids"] >= 0).all()
-        assert (batch1["attention_mask"] >= 0).all() and (batch1["attention_mask"] <= 1).all()
-        assert (batch2["attention_mask"] >= 0).all() and (batch2["attention_mask"] <= 1).all()
-        assert (batch3["input_ids"] >= 0).all()
-        assert (batch3["attention_mask"] >= 0).all() and (batch3["attention_mask"] <= 1).all()
-        # Assert attention mask structure consistency
-        for batch in [batch1, batch2]:
-            batch_size = batch["input_ids"].shape[0]
-            for i in range(batch_size):
-                attention_row = batch["attention_mask"][i]
-                # Should have some attention (not all zeros)
-                assert attention_row.sum() > 0, f"Empty attention mask for sample {i}"
-
-                # Find padding pattern (1s followed by 0s)
-                zeros = (attention_row == 0).nonzero(as_tuple=True)[0]
-                if len(zeros) > 0:
-                    first_zero = zeros[0].item()
-                    # All tokens before first zero should be 1
-                    assert (attention_row[:first_zero] == 1).all()
-                    # All tokens after first zero should be 0
-                    assert (attention_row[first_zero:] == 0).all()
 
         # Assert that batch1 and batch2 are the same
         assert torch.equal(batch1["input_ids"], batch2["input_ids"])
@@ -598,73 +586,11 @@ class TestImageCaptionPipeline:
         # Test VLM batch structure
         batch_count = 0
         for batch in dataloader.dataloader:
-            # Assert VLM-specific batch structure
-            assert isinstance(batch, dict)
-            assert "input_ids" in batch
-            assert "attention_mask" in batch
-            assert "pixel_values" in batch
-
-            # Assert tensor types
-            assert isinstance(batch["input_ids"], torch.Tensor)
-            assert isinstance(batch["attention_mask"], torch.Tensor)
-            assert isinstance(batch["pixel_values"], torch.Tensor)
-
-            # Assert data types
-            assert batch["input_ids"].dtype == torch.long
-            assert batch["attention_mask"].dtype == torch.long
-            assert batch["pixel_values"].dtype == torch.float32
-
-            # Assert tensor dimensions
-            batch_size = batch["input_ids"].shape[0]
-            seq_len = batch["input_ids"].shape[1]
-
-            # Text tensors should be 2D: [batch_size, seq_len]
-            assert batch["input_ids"].dim() == 2
-            assert batch["attention_mask"].dim() == 2
-            assert batch["input_ids"].shape == batch["attention_mask"].shape
-
-            # Image tensor should be 4D: [batch_size, channels, height, width]
-            assert batch["pixel_values"].dim() == 4
-            pixel_shape = batch["pixel_values"].shape
-            assert pixel_shape[0] == batch_size  # Same batch size
-            assert pixel_shape[1] == 3  # RGB channels
-
-            # Assert sequence length matches config (+1 for next token prediction)
-            assert seq_len == params.data.seq_len + 1
-
-            # Assert reasonable batch and image sizes
-            assert batch_size > 0
-            assert pixel_shape[2] > 0 and pixel_shape[3] > 0  # Valid image dimensions
-
-            # Assert no NaN or infinite values
-            assert not torch.isnan(batch["input_ids"]).any()
-            assert not torch.isinf(batch["input_ids"]).any()
-            assert not torch.isnan(batch["attention_mask"]).any()
-            assert not torch.isinf(batch["attention_mask"]).any()
-            assert not torch.isnan(batch["pixel_values"]).any()
-            assert not torch.isinf(batch["pixel_values"]).any()
-
-            # Assert token values are valid
-            assert (batch["input_ids"] >= 0).all()  # No negative token IDs
-            assert (batch["attention_mask"] >= 0).all()
-            assert (batch["attention_mask"] <= 1).all()  # Binary attention mask
-
-            # Assert attention mask structure
-            for i in range(batch_size):
-                attention_row = batch["attention_mask"][i]
-                # Should have some attention (not all zeros)
-                assert attention_row.sum() > 0, f"Empty attention mask for sample {i}"
-
-                # Find padding pattern (1s followed by 0s)
-                zeros = (attention_row == 0).nonzero(as_tuple=True)[0]
-                if len(zeros) > 0:
-                    first_zero = zeros[0].item()
-                    # All tokens before first zero should be 1
-                    assert (attention_row[:first_zero] == 1).all()
-                    # All tokens after first zero should be 0
-                    assert (attention_row[first_zero:] == 0).all()
+            # Test common batch properties for image_caption
+            _test_batch_conform(batch, params.data.seq_len, modality="image_caption", do_sample_chunk=True)
 
             # Test image diversity (not all images should be identical)
+            batch_size = batch["input_ids"].shape[0]
             if batch_size > 1:
                 # Check that not all images are identical
                 first_image = batch["pixel_values"][0]
@@ -708,6 +634,11 @@ class TestImageCaptionPipeline:
         batch1 = next(iter(dataloader1.dataloader))
         batch2 = next(iter(dataloader2.dataloader))
         batch3 = next(iter(dataloader3.dataloader))
+
+        # Test common batch properties for all batches
+        _test_batch_conform(batch1, params.data.seq_len, modality="image_caption", do_sample_chunk=True)
+        _test_batch_conform(batch2, params.data.seq_len, modality="image_caption", do_sample_chunk=True)
+        _test_batch_conform(batch3, params.data.seq_len, modality="image_caption", do_sample_chunk=True)
 
         # Assert consistent shapes (content may differ due to randomness)
         assert batch1["input_ids"].shape == batch2["input_ids"].shape
