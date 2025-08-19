@@ -1,3 +1,4 @@
+import einops
 import torch
 import torch.nn as nn
 
@@ -26,6 +27,7 @@ class ViTPatchEmbeddings(nn.Module):
 
         if self.cls_flag:
             self.cls_token = nn.Parameter(torch.zeros(1, 1, self.embd_dim))
+            # TODO: jean initialize position embedding as rotary embeddings
             self.position_embedding = nn.Parameter(torch.rand(1, self.num_patches + 1, self.embd_dim))
         else:
             self.position_embedding = nn.Parameter(torch.rand(1, self.num_patches, self.embd_dim))
@@ -147,11 +149,19 @@ class ViT(BaseModel):
                 torch.nn.init.zeros_(module.bias)
 
     def forward(self, x):
+        bsz = x.shape[0]
+        if x.ndim == 5:
+            # x shape [bsz, num_cameras, 3, 224, 224]
+            several_images = True
+            x = einops.rearrange(x, "bsz num_cameras c h w -> (bsz num_cameras) c h w")
+        else:
+            several_images = False
         x = self.patch_embedding(x)
         x = self.dropout(x)
         for block in self.blocks:
             x = block(x)
 
         x = self.layer_norm(x[:, 0]) if self.cls_flag else self.layer_norm(x)
-
+        if several_images:
+            x = einops.rearrange(x, "(bsz num_cameras) t c -> bsz num_cameras t c", bsz=bsz)
         return x
