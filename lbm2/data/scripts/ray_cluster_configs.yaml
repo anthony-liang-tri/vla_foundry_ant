@@ -6,6 +6,7 @@ available_node_types:
         resources: {}
         node_config:
             SubnetIds: [subnet-07bf42d7c9cb929e4, subnet-0f72615fd9bd3c717, subnet-0a29e4f1a47443e28, subnet-06e0db77592be2b36]
+            SecurityGroupIds: [sg-0441353b5b47d1a1d]
             ImageId: ami-0fc5d935ebf8bc3bc # ray us-east-1
             InstanceType: i4i.4xlarge
             IamInstanceProfile:
@@ -22,6 +23,7 @@ available_node_types:
         max_workers: 60
         node_config:
             SubnetIds: [subnet-07bf42d7c9cb929e4, subnet-0f72615fd9bd3c717, subnet-0a29e4f1a47443e28, subnet-06e0db77592be2b36]
+            SecurityGroupIds: [sg-0441353b5b47d1a1d]
             ImageId: ami-0fc5d935ebf8bc3bc # ray us-east-1
             InstanceType: i4i.4xlarge
             IamInstanceProfile:
