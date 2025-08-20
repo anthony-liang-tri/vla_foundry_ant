@@ -23,6 +23,7 @@ dependencies = [
     "diffusers>=0.34.0",
     "einops>=0.8.1",
     "draccus>=0.11.5",
+    "ray>=2.48.0",
 ]
 
 [dependency-groups]
