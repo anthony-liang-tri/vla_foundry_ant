@@ -10,7 +10,12 @@ ENV SAGEMAKER_SUBMIT_DIRECTORY /opt/ml/code
 # even if we are installing without that group.
 RUN pip install --no-cache-dir uv
 COPY pyproject.toml /opt/ml/code/pyproject.toml
-RUN uv pip install --python /usr/local/bin/python --no-cache-dir -r /opt/ml/code/pyproject.toml \
+RUN \
+    # Drop the optional inference group and workspace-only sources that aren't present in this image
+    sed -E -i '/^[[:space:]]*inference[[:space:]]*=[[:space:]]*\[/,/^[[:space:]]*\][[:space:]]*$/d' /opt/ml/code/pyproject.toml \
+    && sed -E -i '/^[[:space:]]*robot-gym[[:space:]]*=[[:space:]]*\{[[:space:]]*workspace[[:space:]]*=[[:space:]]*true[[:space:]]*\}/d' /opt/ml/code/pyproject.toml \
+    && sed -E -i '/^[[:space:]]*grpc_workspace[[:space:]]*=[[:space:]]*\{[[:space:]]*workspace[[:space:]]*=[[:space:]]*true[[:space:]]*\}/d' /opt/ml/code/pyproject.toml \
+    && uv pip install --python /usr/local/bin/python --no-cache-dir -r /opt/ml/code/pyproject.toml \
     && uv pip uninstall --python /usr/local/bin/python flash-attn \
     && uv pip install --python /usr/local/bin/python flash-attn --no-build-isolation --no-cache-dir \
     && rm -rf /root/.cache/pip \

@@ -33,7 +33,7 @@ An example command is something like this:
 --remote_sync s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/vlm_paligemma_3b
 ```
 
-See `./examples` for more examples. [llm_11m.sh](examples/llm_11m.sh) is a good place to start. 
+See `./examples` for more examples. [llm_11m.sh](examples/training/llm_11m.sh) is a good place to start. 
 
 ### Running on SageMaker
 Create a `secrets.env` file in the project's root directory:

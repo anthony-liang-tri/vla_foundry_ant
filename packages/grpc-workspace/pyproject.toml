@@ -1,0 +1,14 @@
+[project]
+name = "grpc_workspace"
+version = "0.1.0"
+description = "gRPC workspace package for LBM2 project."
+requires-python = ">=3.10"
+dependencies = [
+    "grpcio",
+    "grpcio-tools",
+    "numpy"
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

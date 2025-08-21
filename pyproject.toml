@@ -10,13 +10,16 @@ dependencies = [
     "webdataset==0.2.111",
     "torchvision==0.22.0",
     "timm==1.0.15",
-    "wandb",
-    "s3fs",
+    "wandb>=0.21.1",
+    "s3fs>=2025.7.0",
     "boto3==1.38.23",
     "nest-asyncio",
     "accelerate==1.7.0",
     "sentencepiece==0.2.0",
     "matplotlib",
+    "tqdm>=4.67.1",
+    "gradio>=5.43.1",
+    "scipy>=1.15.3",
     "ruff>=0.12.0",
     "pytest>=8.4.1",
     "huggingface-hub>=0.33.0",
@@ -33,6 +36,12 @@ sagemaker = [
     "sagemaker==2.240.1.dev0",
 ]
 
+# Add `--group inference` to install runtime deps for GRPC policy serving and robot gym
+inference = [
+    "robot-gym",
+    "grpc-workspace",
+]
+
 [build-system]
 requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
@@ -45,10 +54,18 @@ exclude = ["install*", "sagemaker*", "examples*"]
 # This specifies the path to use in installing sagemaker in the above deps.
 sagemaker = { path = "./install/sagemaker-2.240.1.dev0.tar" }
 draccus = { git = "https://github.com/jmercat/draccus.git", rev = "jean/fix_include" }
+robot-gym = { workspace = true }
+grpc_workspace = { workspace = true }
+
+[tool.uv.workspace]
+members = ["packages/*"]
 
 [tool.ruff]
 line-length = 120
 indent-width = 4
+exclude = [
+    "packages/",
+]
 
 [tool.ruff.lint]
 select = [
