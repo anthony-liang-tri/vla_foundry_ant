@@ -150,9 +150,9 @@ def main():
 
     role = args.arn
     # provide a pre-existing role ARN as an alternative to creating a new role
-    role_name = role.split(["/"][-1])
+    role_name = role.split("/")[-1]
     print(f"SageMaker Execution Role:{role}")
-    print(f"The name of the Execution role: {role_name[-1]}")
+    print(f"The name of the Execution role: {role_name}")
 
     client = boto3.client("sts")
     account = client.get_caller_identity()["Account"]

@@ -1,7 +1,7 @@
 data:
   allow_multiple_epochs: false
   dataset_manifest:
-  - tests/shared/tiny_dataset/image_caption/manifest.json
+  - tests/shared/tiny_dataset/image_caption/manifest.jsonl
   dataset_modality:
   - image_caption
   dataset_weighting:

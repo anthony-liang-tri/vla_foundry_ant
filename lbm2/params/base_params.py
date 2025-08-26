@@ -1,3 +1,4 @@
+import json
 from dataclasses import dataclass, fields
 
 import draccus
@@ -62,3 +63,14 @@ class BaseParams:
 
         cfg_new = draccus.decode(cls, processed_dict)
         return cfg_new
+
+
+# Make classes that define to_dict method JSON-serializable
+class CustomJSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if hasattr(obj, "to_dict"):
+            return obj.to_dict()
+        return super().default(obj)
+
+
+json._default_encoder = CustomJSONEncoder()

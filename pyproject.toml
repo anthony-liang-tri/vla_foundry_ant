@@ -27,6 +27,8 @@ dependencies = [
     "einops>=0.8.1",
     "draccus>=0.11.5",
     "ray>=2.48.0",
+    "gradio>=5.43.1",
+    "plotly>=6.3.0",
 ]
 
 [dependency-groups]
@@ -34,6 +36,22 @@ dependencies = [
 # or run a script with sagemaker installed.
 sagemaker = [
     "sagemaker==2.240.1.dev0",
+]
+
+# Add `--group preprocessing` to install preprocessing deps.
+preprocessing = [
+    "huggingface-hub>=0.34.4",
+    "opencv-python>=4.11.0.86",
+    "datasets>=2.14.4",
+    "pyarrow>=21.0.0",
+    "av>=15.0.0",
+    "matplotlib>=3.10.5",
+    "tqdm>=4.67.1",
+    "scipy>=1.15.3",
+    "numpy>=1.26",
+    "Pillow>=10.0.0",
+    "PyYAML>=6.0.1",
+    "pyturbojpeg>=1.8.2",
 ]
 
 # Add `--group inference` to install runtime deps for GRPC policy serving and robot gym

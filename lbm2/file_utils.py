@@ -50,15 +50,47 @@ def _json_load_s3_cp(file_path):
     if proc.returncode != 0:
         raise RuntimeError(f"Failed to fetch JSON from S3: {stderr.decode().strip()}")
 
-    return json.load(io.BytesIO(stdout))
+    # Return raw bytes; parsing happens in json_load to support JSON and JSONL
+    return stdout
 
 
 def json_load(file_path):
-    if file_path.startswith("s3"):
-        logging.info("Loading remote json.")
-        return _json_load_s3_cp(file_path)
-    with open(file_path, "r") as f:
-        out = json.load(f)
+    # Check if we're using distributed execution
+    is_distributed = False
+    rank = 0
+    if torch.distributed.is_available() and torch.distributed.is_initialized():
+        is_distributed = True
+        rank = torch.distributed.get_rank()
+
+    # Only rank 0 performs the actual load
+    if not is_distributed or rank == 0:
+        if file_path.startswith("s3"):
+            logging.info("Loading remote json.")
+            raw_bytes = _json_load_s3_cp(file_path)
+            text = raw_bytes.decode("utf-8")
+        else:
+            with open(file_path, "r", encoding="utf-8") as f:
+                text = f.read()
+
+        # Decide parsing mode based on extension; fallback if needed
+        lower_path = str(file_path).lower()
+        is_jsonl_ext = lower_path.endswith(".jsonl") or lower_path.endswith(".ndjson")
+        if is_jsonl_ext:
+            lines = [line for line in text.splitlines() if line.strip()]
+            out = [json.loads(line) for line in lines]
+        else:
+            # Try whole-document JSON
+            out = json.loads(text)
+
+    else:
+        out = None
+
+    # Broadcast the loaded object to all ranks
+    if is_distributed:
+        object_list = [out]
+        torch.distributed.broadcast_object_list(object_list, src=0)
+        out = object_list[0]
+
     return out
 
 
