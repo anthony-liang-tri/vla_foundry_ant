@@ -853,6 +853,8 @@ class GradioDataExplorer:
                 lines.append(f"  - Robot state: {len(robot_keys)} keys")
             if other_keys:
                 lines.append(f"  - Other: {len(other_keys)} keys")
+            if "language_instruction" in sample["lowdim"]:
+                lines.append(f"  - Language instruction: {sample['lowdim']['language_instruction'][0]}")
 
         return "\n".join(lines)
 
