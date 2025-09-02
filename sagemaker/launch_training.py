@@ -177,6 +177,7 @@ def main():
     environment = {
         "SM_USE_RESERVED_CAPACITY": "1",
         "WANDB_PROJECT": "lbm2",
+        "TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS": "1",
     }
     with open("secrets.env", "r") as f:
         for line in f:

@@ -69,7 +69,11 @@ def train_one_checkpoint(
 
         input_ids = batch["input_ids"].to(device)
         image = batch["pixel_values"].to(device) if "pixel_values" in batch else None
-        attention_mask = batch["attention_mask"].to(device) if "attention_mask" in batch else None
+        attention_mask = (
+            batch["attention_mask"].to(device)
+            if "attention_mask" in batch and batch["attention_mask"] is not None
+            else None
+        )
 
         data_time_m.update(time.time() - end)
         optimizer.zero_grad()
