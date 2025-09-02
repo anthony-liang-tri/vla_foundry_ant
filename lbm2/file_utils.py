@@ -94,6 +94,27 @@ def json_load(file_path):
     return out
 
 
+def _jsonl_load_s3_cp(file_path):
+    cmd = f"aws s3 cp {file_path} -"
+    proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdout, stderr = proc.communicate()
+
+    if proc.returncode != 0:
+        raise RuntimeError(f"Failed to fetch JSONL from S3: {stderr.decode().strip()}")
+
+    content = stdout.decode("utf-8")
+    return [json.loads(line) for line in content.strip().split("\n") if line.strip()]
+
+
+def jsonl_load(file_path):
+    if file_path.startswith("s3"):
+        logging.info("Loading remote jsonl.")
+        return _jsonl_load_s3_cp(file_path)
+    with open(file_path, "r") as f:
+        entries = [json.loads(line) for line in f if line.strip()]
+    return entries
+
+
 def _yaml_load_s3_cp(file_path):
     cmd = f"aws s3 cp {file_path} -"
     proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -112,6 +133,51 @@ def yaml_load(file_path):
     with open(file_path, "r") as f:
         out = yaml.safe_load(f)
     return out
+
+
+def _list_directory_s3_ls(dir_path):
+    cmd = f"aws s3 ls {dir_path.rstrip('/') + '/'}"
+    proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdout, stderr = proc.communicate()
+
+    if proc.returncode != 0:
+        raise RuntimeError(f"Failed to list S3 directory: {stderr.decode().strip()}")
+
+    items = []
+    for line in stdout.decode("utf-8").strip().split("\n"):
+        if line.strip():
+            parts = line.strip().split()
+            if len(parts) >= 1:
+                if "PRE" in parts:
+                    # Directory (prefix)
+                    dirname = parts[-1].rstrip("/")
+                    items.append(dirname)
+                elif len(parts) >= 4:
+                    # File
+                    filename = " ".join(parts[3:])  # Handle filenames with spaces
+                    items.append(filename)
+    return items
+
+
+def list_directory(dir_path):
+    if dir_path.startswith("s3"):
+        return _list_directory_s3_ls(dir_path)
+    return os.listdir(dir_path)
+
+
+def _is_dir_s3_ls(dir_path):
+    """Check if an S3 path is a directory by trying to list it."""
+    try:
+        _list_directory_s3_ls(dir_path)
+        return True
+    except RuntimeError:
+        return False
+
+
+def is_dir(path):
+    if path.startswith("s3"):
+        return _is_dir_s3_ls(path)
+    return os.path.isdir(path)
 
 
 def list_directory_recursive(dir_path):
@@ -191,7 +257,11 @@ def copy_to_temp_file(file_path):
     try:
         if file_path.startswith("s3"):
             cmd = f"aws s3 cp {file_path} {temp_path}"
-            subprocess.run(cmd, shell=True, check=True)
+            proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            stdout, stderr = proc.communicate()
+
+            if proc.returncode != 0:
+                raise RuntimeError(f"Failed to copy S3 file: {stderr.decode().strip()}")
         else:
             shutil.copy(file_path, temp_path)
 

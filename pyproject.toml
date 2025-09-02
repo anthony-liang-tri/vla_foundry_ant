@@ -26,6 +26,7 @@ dependencies = [
     "diffusers>=0.34.0",
     "einops>=0.8.1",
     "draccus>=0.11.5",
+    "pyarrow>=21.0.0",
     "ray>=2.48.0",
     "gradio>=5.43.1",
     "plotly>=6.3.0",

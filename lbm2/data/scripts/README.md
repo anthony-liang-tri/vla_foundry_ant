@@ -43,3 +43,9 @@ This assumes that the HF dataset is already downloaded to S3 (see above section)
 python lbm2/data/scripts/img_shards_img2dataset.py --cluster ray --input_path s3://tri-ml-datasets/scratch/sedrick.keh/downloads/ --output_path s3://tri-ml-datasets/scratch/sedrick.keh/downloads2/ --url_col images --caption_col texts --save_additional_columns metadata
 ```
 
+# Sharding a LeRobot dataset
+This assumes that the HF dataset is already downloaded to S3.
+
+```bash
+python lbm2/data/scripts/convert_lerobot_to_tar.py --dataset_path s3://tri-ml-datasets/hf_datasets/oxe_lerobot/droid_lerobot --s3_output_path s3://tri-ml-datasets/lbm2_datasets/droid_lerobot --tmp_dir /tmp --shard_size 2048
+```
