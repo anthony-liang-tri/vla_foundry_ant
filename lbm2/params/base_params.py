@@ -26,6 +26,9 @@ class BaseParams:
             else:
                 yield field_name, field_value
 
+    def get(self, key, default=None):
+        return getattr(self, key, default)
+
     def init_shared_attributes(self, cfg):
         pass
 
