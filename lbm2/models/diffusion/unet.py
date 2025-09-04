@@ -216,7 +216,7 @@ class UNet(BaseModel):
         elif timesteps.dim() == 0:  # scalar tensor
             timesteps = timesteps.unsqueeze(0).expand(x.shape[0])
 
-        time_emb = self.time_mlp(timesteps)  # [bsz, time_emb_dim*4]
+        time_emb = self.time_mlp(timesteps).to(x.dtype)  # [bsz, time_emb_dim*4]
         text_emb_pooled = text_embeddings.max(dim=1)[0] if text_embeddings is not None else None  # [bsz, text_emb_dim]
 
         x = self.init_conv(x)  # [bsz, channels[0], h, w]

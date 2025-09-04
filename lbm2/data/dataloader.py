@@ -70,8 +70,14 @@ def get_wds_dataloader(
         DataInfo: A wrapper containing the `WebLoader` and helper objects.
     """
     shared_checkpoint_counter = SharedCheckpointCounter(checkpoint_num=checkpoint_num)
+    
     # Per-rank batch size (global batch is split evenly across ranks).
-    batch_size = cfg.hparams.global_batch_size // cfg.distributed.world_size
+    if cfg.hparams.global_batch_size // cfg.distributed.world_size == 0:
+        logging.error(
+            f"Global batch size {cfg.hparams.global_batch_size} is smaller than world size "
+            f"{cfg.distributed.world_size}, setting it to world size"
+        )
+    batch_size = max(cfg.hparams.global_batch_size // cfg.distributed.world_size, 1)
 
     # Build one pipeline per dataset, then mix them by target sample counts.
     datasets = []
@@ -103,6 +109,8 @@ def get_wds_dataloader(
 
     # Compute total batches/samples this loader will emit in this window.
     # We want each worker to process the same number of shard-groups.
+    if cfg.data.num_workers == 0:
+        logging.warning("num_workers is <= 0, setting to 1 per GPU")
     num_workers_per_gpu = max(1, cfg.data.num_workers)
     num_worker_batches = sum(num_samples_per_dataset) // (cfg.hparams.global_batch_size * num_workers_per_gpu)
     if num_worker_batches == 0:
@@ -168,12 +176,16 @@ def get_datastring_input(
     # Default to uniform weighting if not provided.
     if dataset_weighting is None:
         dataset_weighting = [1 for i in range(len(manifests))]
-    # Compute desired samples per dataset proportional to weights.
-    needed_samples_per_dataset = [
-        int(np.ceil(dataset_weighting[i] * num_samples / sum(dataset_weighting))) for i in range(len(manifests))
-    ]
 
-    # Work on local copies to compute the next positions/seeds.
+    if num_samples > 0:
+        needed_samples_per_dataset = [
+            int(np.ceil(dataset_weighting[i] * num_samples / sum(dataset_weighting))) for i in range(len(manifests))
+        ]
+    else:
+        needed_samples_per_dataset = [-1 for i in range(len(manifests))]
+        # Avoid infinite loop when num_samples is -1
+        assert not allow_multiple_epochs, "allow_multiple_epochs must be False when num_samples is -1"
+
     next_shard_idx_per_dataset = copy.deepcopy(curr_shard_idx_per_dataset)
     next_shard_shuffle_seed_per_dataset = copy.deepcopy(shard_shuffle_seed_per_dataset)
 
@@ -189,6 +201,7 @@ def get_datastring_input(
         while (
             len(shard_list_per_dataset[i]) < total_num_workers
             or sum(num_samples_list_per_dataset[i]) < needed_samples_per_dataset[i]
+            or needed_samples_per_dataset[i] == -1
         ):
             if sum(num_samples_list_per_dataset[i]) >= needed_samples_per_dataset[i]:
                 logging.warning(
@@ -211,6 +224,10 @@ def get_datastring_input(
                     curr_shard_idx_per_dataset[i] = 0
                     continue
                 else:
+                    # If num_samples is -1, we don't need to raise an error,
+                    # just break the loop to continue with the next dataset
+                    if needed_samples_per_dataset[i] == -1:
+                        break
                     logging.error(
                         "Number of shards requested for a single epoch is more than the number of shards available. "
                         "Consider using --allow-multiple-epochs."
@@ -220,7 +237,11 @@ def get_datastring_input(
     # Normalize shard lists: ensure each dataset's shard count is divisible by total workers.
     for i in range(len(manifests)):
         # Ensure number of shards is a multiple of number of workers, so each worker has same number of shards.
-        idx_div = (len(shard_list_per_dataset[i]) // total_num_workers) * total_num_workers
+        idx_div = (
+            (len(shard_list_per_dataset[i]) // total_num_workers) * total_num_workers
+            if total_num_workers > 0
+            else len(shard_list_per_dataset[i])
+        )
         shard_list_per_dataset[i] = shard_list_per_dataset[i][:idx_div]
         num_samples_list_per_dataset[i] = num_samples_list_per_dataset[i][:idx_div]
 

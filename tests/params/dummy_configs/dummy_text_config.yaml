@@ -1,8 +1,8 @@
 data:
   allow_multiple_epochs: false
   dataset_manifest:
-  - tests/shared/tiny_dataset/text/text_dataset_1/manifest.json
-  - tests/shared/tiny_dataset/text/text_dataset_2/manifest.json
+  - tests/shared/tiny_dataset/text/text_dataset_1/manifest.jsonl
+  - tests/shared/tiny_dataset/text/text_dataset_2/manifest.jsonl
   dataset_modality:
   - text
   - text

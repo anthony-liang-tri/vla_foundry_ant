@@ -2,6 +2,7 @@
 ## Development Process
 1. Fork the project.
 Go to [LBM2](https://github.com/TRI-ML/lbm2) and click the "fork" button to create your own copy of the project.
+- In order for the CI tests to pass, you may need to add your Hugging Face key. In your fork, go to "Settings" >> "Secrets and variables" and create a new environment variable called `HF_TOKEN`.
 2. Clone your fork locally.
 ```
 git clone git@github.com:your-username/lbm2.git

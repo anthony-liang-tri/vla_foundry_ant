@@ -1,6 +1,7 @@
 .venv/bin/torchrun --nproc_per_node=8 --nnodes=1 lbm2/main.py \
 --model.type transformer \
 --model "include lbm2/config_presets/models/transformer_1b.yaml" \
+--model.cast_output_to_float32 True \
 --distributed.fsdp True \
 --data.type text \
 --data.dataset_manifest ["s3://tri-ml-datasets/openlm/dcnlp/datasets/tri-hero-run1_cc_v4_resiliparse_rw_v2_bff_minngram13_10shards_all_fasttext_OH_eli5_vs_rw_v2_bigram_200k_train_0.11-starcoder-math_datasets/manifest.jsonl"] \

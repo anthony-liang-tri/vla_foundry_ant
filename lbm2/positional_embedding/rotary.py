@@ -1,7 +1,10 @@
-# taken from: https://github.com/facebookresearch/xformers/blob/748c159096d4f9fcfe3eaf22801e5aed4777210b/xformers/components/positional_embedding/rotary.py
+# inspired from: https://github.com/facebookresearch/xformers/blob/748c159096d4f9fcfe3eaf22801e5aed4777210b/xformers/components/positional_embedding/rotary.py # noqa: E501
 from typing import Tuple
 
 import torch
+
+# Disable torch.compile/dynamo for cache updates to avoid in-graph buffer overwrites
+from torch._dynamo import disable as _dynamo_disable  # type: ignore
 
 
 def rotate_half(x):
@@ -57,6 +60,7 @@ class RotaryEmbedding(torch.nn.Module):
         self.inv_freq = 1.0 / (10000 ** (torch.arange(0, self.dim_model, 2).float() / self.dim_model))
         self._update_cos_sin_tables(self.seq_len)
 
+    @_dynamo_disable
     def _update_cos_sin_tables(self, seq_len: int = None, device: torch.device = None, dtype: torch.dtype = None):
         # If no seq_len is provided, use the cached one
         # If the seq_len is smaller than the cached one it is included in the cached one so no need to update
@@ -67,12 +71,14 @@ class RotaryEmbedding(torch.nn.Module):
         # or if we're on a new device (possibly due to tracing for instance)
         if seq_len > self._seq_len_cached or self._cos_cached.device != device or self._cos_cached.dtype != dtype:
             self._seq_len_cached = seq_len
-            t = torch.arange(seq_len, device=device, dtype=torch.float32)
-            freqs = torch.einsum("i,j->ij", t, self.inv_freq.to(dtype))
-            emb = torch.cat((freqs, freqs), dim=-1).to(device)
+            with torch.no_grad():
+                t = torch.arange(seq_len, device=device, dtype=torch.float32)
+                freqs = torch.einsum("i,j->ij", t, self.inv_freq.to(dtype))
+                emb = torch.cat((freqs, freqs), dim=-1).to(device)
 
-            self._cos_cached = emb.cos()[None, :, None, :].to(dtype)
-            self._sin_cached = emb.sin()[None, :, None, :].to(dtype)
+                # Create fresh tensors to avoid aliasing and ensure assignment happens outside compiled graphs
+                self._cos_cached = emb.cos().to(dtype)[None, :, None, :]
+                self._sin_cached = emb.sin().to(dtype)[None, :, None, :]
 
     def forward(self, q: torch.Tensor, k: torch.Tensor, offset: int = 0) -> Tuple[torch.Tensor, torch.Tensor]:
         self._update_cos_sin_tables(k.shape[1] + offset, device=k.device, dtype=k.dtype)
