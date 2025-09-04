@@ -1,9 +1,8 @@
 import random
+from datetime import datetime
 
 import numpy as np
 import torch
-
-from datetime import datetime
 
 from lbm2.distributed import broadcast_object
 
@@ -23,8 +22,7 @@ def set_random_seed(seed: int = 42, rank: int = 0) -> None:
 
 def get_experiment_name(cfg):
     """
-    Resolve and return a canonical experiment name, updating ``cfg.name``
-    in-place.
+    Resolve and return a canonical experiment name, updating ``cfg.name`` in-place.
 
     The naming scheme is as follows:
       * If ``cfg.name`` is ``None``, constructs a name of the form

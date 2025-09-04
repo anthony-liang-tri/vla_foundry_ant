@@ -52,7 +52,7 @@ def main():
     # Seed rank-0 before any object creation for reproducibility.
     set_random_seed(cfg.hparams.seed, 0)
 
-    # Set experiment path.
+    # Set path for experiment, log, checkpoints.
     experiment_name = get_experiment_name(cfg)
     paths = setup_experiment_io(cfg, experiment_name)
     if cfg.save_path is None:
@@ -60,10 +60,8 @@ def main():
     else:
         experiment_path = os.path.join(cfg.save_path, experiment_name)
     os.makedirs(experiment_path, exist_ok=True)
-    # Set log path.
     log_path = os.path.join(experiment_path, "out.log")
     setup_logging(log_path, logging.INFO)
-    # Set checkpoint path.
     checkpoint_path = os.path.join(experiment_path, "checkpoints")
     os.makedirs(checkpoint_path, exist_ok=True)
 
@@ -89,7 +87,6 @@ def main():
     # Re-seed with rank to randomize across workers.
     set_random_seed(cfg.hparams.seed, cfg.distributed.rank)
     if cfg.hparams.grad_checkpointing:
-        # Enables activation (gradient) checkpointing inside the model.
         model.set_grad_checkpointing()
 
     # Wrap for distributed or move to device with the configured precision.
@@ -148,7 +145,6 @@ def main():
         )
         logging.debug("Wandb initialized.")
 
-    # Bookipeeping.
     done_training = global_step >= total_steps
     checkpoint_num = start_checkpoint_num
     # Per-dataset cursors and shuffle seeds allow resuming mixed datasets.
@@ -166,8 +162,7 @@ def main():
         if is_master(cfg):
             logging.info(f"Start checkpoint {checkpoint_num}")
 
-        # Partition the global sample budget into evenly-sized checkpoint
-        # chunks.
+        # Partition the global sample budget into evenly-sized checkpoint chunks.
         samples_per_checkpoint = cfg.total_train_samples // cfg.num_checkpoints
         datastrings, num_samples_per_dataset, curr_shard_idx_per_dataset, shard_shuffle_seed_per_dataset = (
             get_datastring_input(
@@ -219,6 +214,7 @@ def main():
         samples_seen = samples_seen + (global_step - prev_step) * cfg.hparams.global_batch_size
         checkpoint_num += 1
         done_training = global_step >= total_steps
+
         # Persist training state (model/opt/scheduler + data cursors).
         save_checkpoint(
             cfg,
@@ -232,6 +228,7 @@ def main():
             global_step,
             shard_shuffle_seed_per_dataset,
         )
+
         # Optionally push artifacts to remote storage after each checkpoint.
         if is_master(cfg) and cfg.remote_sync:
             remote_sync(experiment_path, os.path.join(cfg.remote_sync, experiment_name))

@@ -28,17 +28,16 @@ def seed_worker(worker_id: int) -> None:
 
 @dataclass
 class DataInfo:
-    # The `webdataset.WebLoader` (behaves like an iterator of batches).
+    """
+    This is a wrapper around WebDataset's DataLoader that allows us to store a few extra information.
+    """
+
     dataloader: DataLoader
-    # Optional distributed sampler (if used upstream) that can receive
-    # checkpoint notifications.
     sampler: DistributedSampler = None
-    # Cross-worker/rank observable counter used by some dataset pipelines
     shared_checkpoint_counter: SharedCheckpointCounter = None
 
-    # Optional token id to treat as padding.
+    # Optional token IDs for padding and image tokenization.
     pad_token_id: int = None
-    # Optional token id representing image positions (for VLM masking).
     image_token_id: int = None
 
     def set_checkpoint_num(self, checkpoint_num: int) -> None:
@@ -70,7 +69,7 @@ def get_wds_dataloader(
         DataInfo: A wrapper containing the `WebLoader` and helper objects.
     """
     shared_checkpoint_counter = SharedCheckpointCounter(checkpoint_num=checkpoint_num)
-    
+
     # Per-rank batch size (global batch is split evenly across ranks).
     if cfg.hparams.global_batch_size // cfg.distributed.world_size == 0:
         logging.error(

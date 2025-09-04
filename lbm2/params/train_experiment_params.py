@@ -24,25 +24,18 @@ class TrainExperimentParams(BaseParams):
 
     # -- Logging and remote sync
     # Optional explicit experiment name.
-    # If `None`, a name will be generated
-    # at runtime (see `lbm2.utils.get_experiment_name`).
+    # If `None`, a name will be generated at runtime (see `lbm2.utils.get_experiment_name`).
     name: str = field(default=None)
-    # Optional base directory where the experiment folder is
-    # created. If `None`, defaults to `experiments/`.
+    # Optional base directory where the experiment folder is created. If `None`, defaults to `experiments/`.
     save_path: str = field(default=None)
-    # Whether to log to Weights & Biases.
     wandb: bool = field(default=True)
-    # W&B project to log into when `wandb` is True.
     wandb_project_name: str = field(default="lbm2")
-    # Logging cadence within a checkpoint window.
     log_every_n_steps: int = field(default=20)
-    # Optional remote path/URI to which the experiment directory
-    # is synced.
+    # Optional path to S3 to which the experiment directory is synced.
     remote_sync: str = field(default=None)
 
     # --Training
-    # total number of samples to train on. Mutually exclusive with
-    # `num_epochs`.
+    # total number of samples to train on. Mutually exclusive with `num_epochs`.
     total_train_samples: int = field(default=None)
     # Number of epochs over the input datasets. If set, it is converted to
     # `total_train_samples` using `epochs_to_samples`. Mutually exclusive with
@@ -52,13 +45,9 @@ class TrainExperimentParams(BaseParams):
     num_checkpoints: int = field(default=5)
 
     # --Params Subclasses
-    # Data-related parameters
     data: DataParams = field(default_factory=DataParams)
-    # Distributed training parameters
     distributed: DistributedParams = field(default_factory=DistributedParams)
-    # Optimization hyperparameters
     hparams: HyperParams = field(default_factory=HyperParams)
-    # Model construction parameters
     model: ModelParams = field(default_factory=ModelParams)
 
     def __post_init__(self):
