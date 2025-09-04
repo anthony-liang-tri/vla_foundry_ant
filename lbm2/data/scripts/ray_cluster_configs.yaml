@@ -1,12 +1,12 @@
 cluster_name: s3-webdataset-cluster
+min_workers: 60
 max_workers: 60
-upscaling_speed: 0.0
 available_node_types:
     ray.head.default:
         resources: {}
         node_config:
             SubnetIds: [subnet-07bf42d7c9cb929e4, subnet-0f72615fd9bd3c717, subnet-0a29e4f1a47443e28, subnet-06e0db77592be2b36]
-            SecurityGroupIds: [sg-0441353b5b47d1a1d]
+            SecurityGroupIds: [sg-02ef5539cfee1e6c3]
             ImageId: ami-0fc5d935ebf8bc3bc # ray us-east-1
             InstanceType: i4i.4xlarge
             IamInstanceProfile:
@@ -23,7 +23,7 @@ available_node_types:
         max_workers: 60
         node_config:
             SubnetIds: [subnet-07bf42d7c9cb929e4, subnet-0f72615fd9bd3c717, subnet-0a29e4f1a47443e28, subnet-06e0db77592be2b36]
-            SecurityGroupIds: [sg-0441353b5b47d1a1d]
+            SecurityGroupIds: [sg-02ef5539cfee1e6c3]
             ImageId: ami-0fc5d935ebf8bc3bc # ray us-east-1
             InstanceType: i4i.4xlarge
             IamInstanceProfile:
@@ -55,7 +55,8 @@ rsync_exclude:
     - "**/wandb/"
   
 setup_commands:
-    # - sudo apt-get update -y
+    - sudo apt-get update -y
+    - sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" ffmpeg
     - wget https://repo.anaconda.com/miniconda/Miniconda3-py310_23.3.1-0-Linux-x86_64.sh -O miniconda.sh
     - sudo mkfs -t xfs /dev/nvme1n1
     - sudo mount /dev/nvme1n1 /tmp

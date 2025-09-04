@@ -1,7 +1,7 @@
 data:
   allow_multiple_epochs: true
   dataset_manifest:
-  - tests/shared/tiny_dataset/text_untokenized/manifest.json
+  - tests/shared/tiny_dataset/text_untokenized/manifest.jsonl
   dataset_modality:
   - text_untokenized
   dataset_weighting:

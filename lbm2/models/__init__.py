@@ -21,7 +21,11 @@ def create_model(model_params: ModelParams):
     elif model_params.type == "transformer_hf":
         model = TransformerHF(model_params)
     elif model_params.type == "vlm":
-        transformer = create_model(model_params.transformer)
+        transformer = (
+            Transformer(model_params.transformer)
+            if model_params.transformer.type == "transformer"
+            else TransformerHF(model_params.transformer)
+        )
         vit = ViT(model_params.vit) if model_params.vit.type == "vit" else ViTHF(model_params.vit)
         model = VLM(model_params, transformer, vit)
     elif model_params.type == "vlm_hf":

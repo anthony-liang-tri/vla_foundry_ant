@@ -232,8 +232,10 @@ class Transformer(BaseModel):
             past_key_values = None
         x = self.norm(x)
         output = self.output(x)
-        # follow llama in casting this to float.
-        return output.float(), past_key_values, (hidden_states if output_hidden_states else None)
+        if self.model_params.cast_output_to_float32:
+            output = output.float()
+
+        return output, past_key_values, (hidden_states if output_hidden_states else None)
 
     def generate(self, input_ids, attention_mask, max_new_tokens=20):
         # Add batch dimension if needed

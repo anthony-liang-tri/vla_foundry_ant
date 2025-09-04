@@ -1,3 +1,4 @@
+import json
 from dataclasses import dataclass, fields
 
 import draccus
@@ -24,6 +25,9 @@ class BaseParams:
                     yield f"{field_name}.{nested_name}", nested_value
             else:
                 yield field_name, field_value
+
+    def get(self, key, default=None):
+        return getattr(self, key, default)
 
     def init_shared_attributes(self, cfg):
         pass
@@ -62,3 +66,14 @@ class BaseParams:
 
         cfg_new = draccus.decode(cls, processed_dict)
         return cfg_new
+
+
+# Make classes that define to_dict method JSON-serializable
+class CustomJSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if hasattr(obj, "to_dict"):
+            return obj.to_dict()
+        return super().default(obj)
+
+
+json._default_encoder = CustomJSONEncoder()

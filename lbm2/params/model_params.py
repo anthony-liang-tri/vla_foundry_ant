@@ -52,6 +52,7 @@ class TransformerParams(ModelParams):
     post_embed_norm: bool = field(default=False)
     norm_eps: float = field(default=1e-5)
     weight_tying: bool = field(default=False)
+    cast_output_to_float32: bool = field(default=False)
     max_seq_len: int = field(default=2048)
 
 
