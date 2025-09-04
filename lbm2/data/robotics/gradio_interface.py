@@ -854,7 +854,13 @@ class GradioDataExplorer:
             if other_keys:
                 lines.append(f"  - Other: {len(other_keys)} keys")
             if "language_instruction" in sample["lowdim"]:
-                lines.append(f"  - Language instruction: {sample['lowdim']['language_instruction'][0]}")
+                # Instruction is a list of strings when batched with a dataloader, but a string if read from a file
+                instruction = (
+                    sample["lowdim"]["language_instruction"]
+                    if isinstance(sample["lowdim"]["language_instruction"], str)
+                    else sample["lowdim"]["language_instruction"][0]
+                )
+                lines.append(f"  - Language instruction: {instruction}")
 
         return "\n".join(lines)
 

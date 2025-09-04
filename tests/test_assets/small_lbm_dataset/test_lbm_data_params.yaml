@@ -1,0 +1,110 @@
+type: robotics
+
+dataset_manifest:
+  - s3://robotics-manip-lbm/vlm_datasets/preprocess_test/lbm/PickAndPlaceBox/cabot/sim/manifest.jsonl
+
+dataset_statistics:
+  - s3://robotics-manip-lbm/vlm_datasets/preprocess_test/lbm/PickAndPlaceBox/cabot/sim/dataset_statistics.json
+
+dataset_weighting:
+  - 1.0
+
+dataset_modality:
+  - robotics
+
+allow_multiple_epochs: true
+num_workers: 32
+seq_len: 4096
+add_action_token: true
+seed: 42
+
+proprioception_fields:
+  - robot__actual__poses__right::panda__xyz 
+  - robot__actual__poses__left::panda__xyz
+  - robot__actual__poses__right::panda__rot_6d
+  - robot__actual__poses__left::panda__rot_6d
+  - robot__actual__joint_position__left::panda
+  - robot__actual__joint_position__right::panda
+  - robot__actual__grippers__left::panda_hand
+  - robot__actual__grippers__right::panda_hand
+
+action_fields:
+  - robot__desired__poses__left::panda__xyz
+  - robot__desired__poses__right::panda__xyz
+  - robot__desired__poses__left::panda__rot_6d
+  - robot__desired__poses__right::panda__rot_6d
+  - robot__desired__grippers__left::panda_hand
+  - robot__desired__grippers__right::panda_hand
+
+
+exclude_fields:
+  - language_instruction
+  - task_description
+  - robot__version
+
+processor: google/paligemma-3b-pt-224
+img_num_tokens: 49
+image_size: 224
+num_images: 12
+image_size: 224
+
+normalization:
+  enabled: true
+
+  field_configs:
+    robot__desired__poses__left::panda__xyz:
+      method: percentile_1_99
+      scope: global
+      epsilon: 1e-1
+    robot__desired__poses__right::panda__xyz:
+      method: percentile_1_99
+      scope: global
+      epsilon: 1e-1
+    robot__desired__poses__left::panda__rot_6d:
+      method: std
+      scope: global
+      epsilon: 1e-1
+    robot__desired__poses__right::panda__rot_6d:
+      method: std
+      scope: global
+      epsilon: 1e-1
+    robot__desired__grippers__left::panda_hand:
+      method: percentile_1_99
+      scope: global
+      epsilon: 1e-1
+    robot__desired__grippers__right::panda_hand:
+      method: percentile_1_99
+      scope: global
+      epsilon: 1e-1
+    robot__actual__joint_position__left::panda:
+      method: std
+      scope: global
+      epsilon: 1e-8
+    robot__actual__joint_position__right::panda:
+      method: std
+      scope: global
+      epsilon: 1e-1
+    robot__actual__grippers__left::panda_hand:
+      method: percentile_1_99
+      scope: global
+      epsilon: 1e-1
+    robot__actual__grippers__right::panda_hand:
+      method: percentile_1_99
+      scope: global
+      epsilon: 1e-1
+    robot__actual__poses__left::panda__xyz:
+      method: percentile_1_99
+      scope: global
+      epsilon: 1e-1
+    robot__actual__poses__right::panda__xyz:
+      method: percentile_1_99
+      scope: global
+      epsilon: 1e-1
+    robot__actual__poses__left::panda__rot_6d:
+      method: std
+      scope: global
+      epsilon: 1e-1
+    robot__actual__poses__right::panda__rot_6d:
+      method: std
+      scope: global
+      epsilon: 1e-1

@@ -463,6 +463,10 @@ class RoboticsDataLoader:
                     else:
                         sample["extrinsics"][key] = value
 
+            if "language_instructions" in batch:
+                print(f"Found language instructions in batch: {batch['language_instructions'][i]}")
+                sample["language_instructions"] = batch["language_instructions"][i]
+
             if "__key__" in batch and i < len(batch["__key__"]):
                 sample["__key__"] = batch["__key__"][i]
 

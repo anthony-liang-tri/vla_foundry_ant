@@ -5,8 +5,12 @@ This module provides helper functions for working with robotics data,
 including extraction of proprioception and action data based on configuration.
 """
 
+from typing import Any, Dict
+
 import numpy as np
 import torch
+
+from lbm2.params.data_params import LBMDataParams
 
 
 def _get_rotation_matrix(x, y, z, perm_config):
@@ -122,3 +126,222 @@ def rot_6d_to_relative(rot_6d_sequence: np.ndarray, reference_index: int) -> np.
     relative_rot_6d = np.array([matrix_to_rot_6d(rot) for rot in relative_rotations])
 
     return relative_rot_6d
+
+
+def extract_proprioception_data(batch, dataset_config: LBMDataParams, device=None):
+    """
+    Extract proprioception data from a batch based on dataset config.
+
+    Args:
+        batch: Batch data containing 'lowdim' field
+        dataset_config: Dataset configuration with proprioception field definitions
+        device: Device to move tensors to (optional)
+
+    Returns:
+        Proprioception tensor of shape [batch_size, timesteps, proprioception_dim] or [batch_size, proprioception_dim]
+    """
+    if "lowdim" not in batch:
+        raise ValueError("Batch missing 'lowdim' field")
+
+    proprioception_data = []
+
+    # Extract data for each proprioception field
+    for field_name in dataset_config.proprioception_fields:
+        if field_name in batch["lowdim"]:
+            field_data = batch["lowdim"][field_name]
+            if device is not None:
+                field_data = field_data.to(device)
+            proprioception_data.append(field_data)
+
+    if not proprioception_data:
+        raise ValueError("No proprioception fields found in batch")
+
+    # Concatenate all proprioception data along the last dimension
+    proprioception = torch.cat(proprioception_data, dim=-1)
+    return proprioception
+
+
+def extract_action_data(batch, dataset_config: LBMDataParams, device=None):
+    """
+    Extract action data from a batch based on dataset config.
+
+    Args:
+        batch: Batch data containing 'lowdim' field
+        dataset_config: Dataset configuration with action field definitions
+        device: Device to move tensors to (optional)
+
+    Returns:
+        Action tensor of shape [batch_size, timesteps, action_dim] or [batch_size, action_dim]
+    """
+    if "lowdim" not in batch:
+        raise ValueError("Batch missing 'lowdim' field")
+
+    action_data = []
+
+    # Extract data for each action field
+    for field_name in dataset_config.action_fields:
+        if field_name in batch["lowdim"]:
+            field_data = batch["lowdim"][field_name]
+            if device is not None:
+                field_data = field_data.to(device)
+            action_data.append(field_data)
+
+    if not action_data:
+        raise ValueError("No action fields found in batch")
+
+    # Concatenate all action data along the last dimension
+    actions = torch.cat(action_data, dim=-1)
+    return actions
+
+
+def extract_and_aggregate_proprioception(
+    batch: Dict[str, Any], dataset_config: LBMDataParams, device=None, aggregation_method: str = "mean"
+) -> torch.Tensor:
+    """
+    Extract and aggregate proprioception data from batch.
+
+    Args:
+        batch: Batch data from robotics dataloader
+        dataset_config: Dataset configuration (uses default if None)
+        device: Device to move tensors to
+        aggregation_method: How to aggregate temporal dimension ("mean", "last", "masked_mean")
+
+    Returns:
+        Aggregated proprioception tensor [batch_size, proprioception_dim]
+    """
+    # Extract proprioception data [B, T, D]
+    proprioception = extract_proprioception_data(batch, dataset_config, device)
+
+    # Aggregate temporal dimension
+    if aggregation_method == "mean":
+        # Simple mean across time
+        proprioception = proprioception.mean(dim=1)  # [B, D]
+    elif aggregation_method == "last":
+        # Take last timestep
+        proprioception = proprioception[:, -1, :]  # [B, D]
+    elif aggregation_method == "masked_mean":
+        # Use past mask if available for masked mean
+        if "masks" in batch and "past_mask" in batch["masks"]:
+            past_mask = batch["masks"]["past_mask"]
+            if device is not None:
+                past_mask = past_mask.to(device)
+
+            # Masked mean of past proprioception
+            proprioception_masked = proprioception * past_mask.unsqueeze(-1).float()
+            proprioception = proprioception_masked.sum(dim=1) / past_mask.sum(dim=1, keepdim=True).float()  # [B, D]
+        else:
+            # Fallback to regular mean if no mask available
+            proprioception = proprioception.mean(dim=1)  # [B, D]
+    else:
+        raise ValueError(f"Unknown aggregation method: {aggregation_method}")
+
+    return proprioception
+
+
+def extract_and_aggregate_actions(
+    batch: Dict[str, Any], dataset_config: LBMDataParams, device=None, aggregation_method: str = "none"
+) -> torch.Tensor:
+    """
+    Extract and optionally aggregate action data from batch.
+
+    Args:
+        batch: Batch data from robotics dataloader
+        dataset_config: Dataset configuration (uses default if None)
+        device: Device to move tensors to
+        aggregation_method: How to aggregate temporal dimension ("none", "mean", "future_only")
+
+    Returns:
+        Action tensor [batch_size, timesteps, action_dim] or [batch_size, action_dim]
+    """
+
+    # Extract action data [B, T, D]
+    actions = extract_action_data(batch, dataset_config, device)
+
+    # Optionally aggregate temporal dimension
+    if aggregation_method == "none":
+        # Keep full temporal dimension
+        return actions  # [B, T, D]
+    elif aggregation_method == "mean":
+        # Mean across time
+        return actions.mean(dim=1)  # [B, D]
+    elif aggregation_method == "future_only":
+        # Use future mask if available
+        if "masks" in batch and "future_mask" in batch["masks"]:
+            future_mask = batch["masks"]["future_mask"]
+            if device is not None:
+                future_mask = future_mask.to(device)
+
+            # Masked mean of future actions
+            actions_masked = actions * future_mask.unsqueeze(-1).float()
+            actions = actions_masked.sum(dim=1) / future_mask.sum(dim=1, keepdim=True).float()  # [B, D]
+            return actions
+        else:
+            # Fallback to regular mean if no mask available
+            return actions.mean(dim=1)  # [B, D]
+    else:
+        raise ValueError(f"Unknown aggregation method: {aggregation_method}")
+
+
+def extract_robotics_data_for_training(
+    batch: Dict[str, Any], dataset_config: LBMDataParams, device=None
+) -> Dict[str, torch.Tensor]:
+    """
+    Extract proprioception and action data for training.
+
+    This is a convenience function that replaces hardcoded field extraction
+    in training scripts.
+
+    Args:
+        batch: Batch data from robotics dataloader
+        dataset_config: Dataset configuration (uses default if None)
+        device: Device to move tensors to
+
+    Returns:
+        Dict with 'proprioception' and 'actions' tensors
+    """
+
+    # Extract proprioception using masked mean (considers past context)
+    proprioception = extract_and_aggregate_proprioception(
+        batch, dataset_config, device, aggregation_method="masked_mean"
+    )
+
+    # Extract actions keeping full temporal dimension
+    actions = extract_and_aggregate_actions(batch, dataset_config, device, aggregation_method="none")
+
+    return {"proprioception": proprioception, "actions": actions}
+
+
+# Example usage:
+if __name__ == "__main__":
+    # Example with xyz positions
+    xyz_positions = np.array([[1.0, 2.0, 3.0], [1.5, 2.2, 3.1], [2.0, 2.5, 3.3], [2.2, 2.8, 3.5]])
+
+    reference_idx = 1  # Use second position as reference
+    relative_xyz = xyz_to_relative(xyz_positions, reference_idx)
+    print("Original positions:")
+    print(xyz_positions)
+    print(f"\nRelative to index {reference_idx}:")
+    print(relative_xyz)
+
+    # Example with 6D rotations (random valid 6D rotations)
+    np.random.seed(42)
+    # Generate some 6D rotations by creating rotation matrices and taking first 2 columns
+    rot_6d_positions = []
+    for _ in range(4):
+        # Create a random rotation matrix using QR decomposition
+        A = np.random.randn(3, 3)
+        Q, R = np.linalg.qr(A)
+        # Ensure proper rotation (det = 1)
+        if np.linalg.det(Q) < 0:
+            Q[:, 0] *= -1
+        # Convert to 6D
+        rot_6d = Q[:, :2].flatten()
+        rot_6d_positions.append(rot_6d)
+
+    rot_6d_positions = np.array(rot_6d_positions)
+
+    relative_rot_6d = rot_6d_to_relative(rot_6d_positions, reference_idx)
+    print("\nOriginal 6D rotations:")
+    print(rot_6d_positions)
+    print(f"\nRelative 6D rotations to index {reference_idx}:")
+    print(relative_rot_6d)

@@ -1,0 +1,90 @@
+import torch
+
+
+class RoboticsProcessor:
+    def __init__(self):
+        pass
+
+    def add_action_and_proprioception_fields(self, batch, action_fields=None, proprioception_fields=None):
+        # Pre-extract concatenated actions if action fields are provided
+        if action_fields:
+            action_data = []
+            for key in action_fields:
+                if key in batch["lowdim"]:
+                    action_data.append(batch["lowdim"][key])
+            batch["actions"] = torch.cat(action_data, dim=-1)  # [B, T, D]
+
+            # Explicitly extract future_mask and past_mask for convenience
+            if "masks" in batch and "future_mask" in batch["masks"] and "past_mask" in batch["masks"]:
+                batch["future_mask"] = batch["masks"]["future_mask"]
+                batch["past_mask"] = batch["masks"]["past_mask"]
+
+        if proprioception_fields:
+            proprioception_data = []
+            num_past_steps = batch.get("metadata", [{}])[0].get("anchor_relative_idx", 0)
+            if num_past_steps > 0:
+                for key in proprioception_fields:
+                    proprioception_data.append(batch["lowdim"][key][:, :num_past_steps])
+                batch["proprioception"] = torch.cat(proprioception_data, dim=-1)
+
+        return batch
+
+    def tokenize_inputs(self, batch, processor, num_images=None, max_text_seq_len=None):
+        """Convert with padding for specific sequence fields in lowdim data too.
+        Args:
+            batch: Batch of samples to convert to tensors.
+            processor: Processor to use for tokenization.
+        """
+        batch_text, batch_images = [], []
+        for sample_images, instruction in zip(batch["images"], batch["language_instruction"], strict=False):
+            camera_names = list(sample_images.keys())
+            if num_images is not None and num_images > 0:
+                camera_names = camera_names[:num_images]
+
+            sample_images = [sample_images[k] for k in camera_names]
+            sample_num_images = len(sample_images)
+
+            # Apply chat template if available
+            if processor.chat_template:
+                content = [{"type": "image"} for _ in range(sample_num_images)]
+                content.append({"type": "text", "text": instruction})
+                messages = [{"role": "user", "content": content}]
+                instruction = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
+            elif processor.tokenizer and processor.tokenizer.chat_template:
+                content = [{"type": "image"} for _ in range(sample_num_images)]
+                content.append({"type": "text", "text": instruction})
+                messages = [{"role": "user", "content": content}]
+                instruction = processor.tokenizer.apply_chat_template(
+                    messages, tokenize=False, add_generation_prompt=False
+                )
+            else:
+                # No chat template support, use instruction as-is
+                # Add image tokens for PaliGemma processor if we have images
+                if sample_num_images > 0:
+                    image_tokens = "<image> " * sample_num_images
+                    instruction = image_tokens + instruction
+
+            batch_text.append(instruction)
+            batch_images.append(sample_images)
+
+        # Run processor on entire batch
+        processed = processor(images=batch_images, text=batch_text, padding=True, return_tensors="pt")
+
+        processed_batch = {}
+        processed_batch["input_ids"] = processed["input_ids"]
+        processed_batch["attention_mask"] = processed["attention_mask"]
+        _, c, h, w = processed["pixel_values"].shape
+        processed_batch["pixel_values"] = processed["pixel_values"].reshape(len(batch_images), -1, c, h, w)
+        processed_batch["camera_names"] = camera_names
+        processed_batch["images"] = batch_images
+        processed_batch["metadata"] = batch["metadata"]
+        processed_batch["intrinsics"] = batch["intrinsics"]
+        processed_batch["extrinsics"] = batch["extrinsics"]
+        processed_batch["lowdim"] = {}
+        for k in batch["lowdim"][0]:
+            if isinstance(batch["lowdim"][0][k][0], str):
+                continue
+            values = [sample_lowdim[k] for sample_lowdim in batch["lowdim"]]
+            processed_batch["lowdim"][k] = torch.stack([torch.as_tensor(v, dtype=torch.float32) for v in values])
+
+        return processed_batch

@@ -1,3 +1,4 @@
+import logging
 from types import SimpleNamespace
 
 import torch
@@ -34,6 +35,23 @@ def get_processor(data_params: DataParams):
     elif data_params.processor is not None:
         processor = AutoProcessor.from_pretrained(data_params.processor)
         processor.image_seq_length = data_params.img_num_tokens
+
+        # Set image size for processors if specified in config
+        processor_name = str(data_params.processor).lower() if hasattr(data_params, "processor") else ""
+        image_size = data_params.get("image_size")
+        if image_size and hasattr(processor, "image_processor"):
+            # Different processors expect different size formats
+            if "paligemma" in processor_name or "pali-gemma" in processor_name:
+                # PaliGemma expects height and width
+                processor.image_processor.size = {"height": int(image_size), "width": int(image_size)}
+                logging.debug(
+                    f"Set processor image_processor.size to {{'height': {image_size}, 'width': {image_size}}}"
+                )
+            else:
+                # SmolVLM and others expect longest_edge
+                processor.image_processor.size = {"longest_edge": int(image_size)}
+                logging.debug(f"Set processor image_processor.size to {{'longest_edge': {image_size}}}")
+
         return processor
     else:
         raise ValueError(f"{data_params.processor} not yet supported.")

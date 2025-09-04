@@ -18,7 +18,9 @@ class TestReturnHiddenStatesConsistency:
 
     @pytest.fixture
     def vlm_config(self):
-        return load_experiment_params_from_yaml("tests/params/dummy_configs/dummy_vlm_config.yaml")
+        config = load_experiment_params_from_yaml("tests/params/dummy_configs/dummy_vlm_config.yaml")
+        object.__setattr__(config.model, "image_token_id", 999)
+        return config
 
     def test_transformer_return_format_consistency(self, transformer_config):
         """Test that Transformer consistently returns 3 items"""

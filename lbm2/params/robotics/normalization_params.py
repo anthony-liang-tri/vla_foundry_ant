@@ -16,6 +16,13 @@ class FieldNormalizationParams:
     scope: str = field(default="global")  # "global" or "per_timestep"
     epsilon: float = field(default=1e-8)
 
+    def to_dict(self):
+        return {
+            "method": self.method,
+            "scope": self.scope,
+            "epsilon": self.epsilon,
+        }
+
     def __reduce__(self):
         """Control how this object is pickled/serialized.
 
@@ -41,3 +48,12 @@ class NormalizationParams(BaseParams):
 
     # Field-specific configurations (initialized in __post_init__)
     field_configs: Dict[str, FieldNormalizationParams] = field(default_factory=dict)
+
+    def to_dict(self):
+        return {
+            "enabled": self.enabled,
+            "method": self.method,
+            "scope": self.scope,
+            "epsilon": self.epsilon,
+            "field_configs": {k: v.to_dict() for k, v in self.field_configs.items()},
+        }

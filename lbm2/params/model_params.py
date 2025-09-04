@@ -3,6 +3,7 @@ from typing import List, Union
 
 import draccus
 
+from lbm2.data.processor import get_processor
 from lbm2.params.base_params import BaseParams
 
 
@@ -95,7 +96,45 @@ class VLMParams(ModelParams):
     image_token_id: int = field(default=None)
 
     def init_shared_attributes(self, cfg):
-        object.__setattr__(self, "image_token_id", cfg.data.image_token_id)
+        # Prefer computing special ids from the processor/tokenizer rather than requiring user input
+        # 1) Resolve processor once (reuse if already loaded on data params)
+        processor = getattr(cfg.data, "processor_loaded", None)
+        if processor is None and hasattr(cfg.data, "processor") and cfg.data.processor is not None:
+            processor = get_processor(cfg.data)
+
+        # 2) Compute image_token_id if available from data or processor
+        image_token_id = getattr(cfg.data, "image_token_id", None)
+        if image_token_id is None and processor is not None:
+            image_token_id = getattr(processor, "image_token_id", None)
+        if image_token_id is not None and getattr(self, "image_token_id", None) is None:
+            object.__setattr__(self, "image_token_id", image_token_id)
+
+        # 3) Compute vocab_size from tokenizer length if transformer params exist and not explicitly overridden
+        if hasattr(self, "transformer") and hasattr(self.transformer, "vocab_size") and processor is not None:
+            tokenizer = getattr(processor, "tokenizer", None)
+            if tokenizer is not None:
+                computed_vocab_size = None
+                # Prefer __len__ if available
+                if hasattr(tokenizer, "__len__"):
+                    length_value = len(tokenizer)
+                    if isinstance(length_value, int) and length_value > 0:
+                        computed_vocab_size = length_value
+                # Fallback to get_vocab if available
+                if computed_vocab_size is None and hasattr(tokenizer, "get_vocab"):
+                    vocab = tokenizer.get_vocab()
+                    if isinstance(vocab, dict) and len(vocab) > 0:
+                        computed_vocab_size = len(vocab)
+                # Fallback to attribute vocab_size if available
+                if computed_vocab_size is None and hasattr(tokenizer, "vocab_size"):
+                    vs = tokenizer.vocab_size
+                    if isinstance(vs, int) and vs > 0:
+                        computed_vocab_size = vs
+
+                if isinstance(computed_vocab_size, int) and computed_vocab_size > 0:
+                    current_vocab_size = getattr(self.transformer, "vocab_size", None)
+                    # Only override when it's the default/sentinel value
+                    if current_vocab_size in (None, 0, TransformerParams.vocab_size):
+                        object.__setattr__(self.transformer, "vocab_size", computed_vocab_size)
 
 
 @register_model_params("vlm_hf")

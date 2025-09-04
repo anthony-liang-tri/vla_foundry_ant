@@ -48,13 +48,21 @@ def main():
         default=True,
         help="Use dataloader pipeline for loading (default: True, use --no-use-dataloader for direct file loading)",
     )
+    parser.add_argument(
+        "--load-from-files",
+        default=False,
+        action="store_true",
+        help="Load samples directly from files instead of using dataloader pipeline",
+    )
 
     args = parser.parse_args()
 
-    if args.dataset_path.endswith("/"):
-        args.dataset_path = args.dataset_path[:-1]
+    args.dataset_path = args.dataset_path.rstrip("/")
 
     print("🔍 Loading robotics data...")
+
+    # Determine loading method
+    use_dataloader = not args.load_from_files
 
     # Load data using direct file access
     config_path = "lbm2/config_presets/data/lbm_data_params.yaml"
@@ -64,7 +72,7 @@ def main():
     # Override fields for the data explorer
     config_dict.update(
         {
-            "num_workers": 0,
+            "num_workers": 1,
             "seed": 42,
             "processor": "google/paligemma-3b-pt-224",
             "add_action_token": False,
@@ -77,9 +85,11 @@ def main():
 
     params = LBMDataParams.from_dict(config_dict)
 
-    # Create data loader and load samples
     data_loader = RoboticsDataLoader(
-        params, max_samples=args.max_samples, max_shards=args.max_shards, use_dataloader=False
+        params,
+        max_samples=args.max_samples,
+        max_shards=args.max_shards,
+        use_dataloader=use_dataloader,
     )
     samples = data_loader.load_samples_auto()
 

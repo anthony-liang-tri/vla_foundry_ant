@@ -3,6 +3,7 @@ from itertools import islice
 import webdataset as wds
 
 from lbm2.data.pipelines.image_caption import ImageCaptionPipeline
+from lbm2.data.pipelines.robotics import LBMPipeline
 from lbm2.data.pipelines.text import TextPipeline
 from lbm2.data.pipelines.text_untokenized import TextUntokenizedPipeline
 
@@ -17,8 +18,10 @@ class FiniteDataPipeline(wds.DataPipeline):
         Note: wds.DataPipeline.__iter__ inexplicably only limits the number of samples with self.nsamples if
         self.repetitions != 1. Here, we always slice using self.nsamples, if self.nsamples > 0.
         """
-        if self.nsamples > 0:
-            return islice(self.iterator(), self.nsamples)
+        # Handle case where nsamples might not be set (None) or is 0
+        nsamples = getattr(self, "nsamples", 0)
+        if nsamples and nsamples > 0:
+            return islice(self.iterator(), nsamples)
         else:
             return self.iterator()
 
@@ -30,6 +33,8 @@ def create_wds_pipeline(datastring, modality, batch_size, checkpoint_num, data_p
         pipeline = TextUntokenizedPipeline(modality, data_params, batch_size)
     elif modality == "image_caption":
         pipeline = ImageCaptionPipeline(modality, data_params, batch_size)
+    elif modality == "robotics":
+        pipeline = LBMPipeline(modality, data_params, batch_size)
     else:
         raise ValueError(f"{modality} webdataset pipeline not supported")
 

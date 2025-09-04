@@ -69,11 +69,13 @@ class LBMDataParams(DataParams):
     """
 
     dataset_statistics: list[str] = field(default_factory=list)
-    processor: str = field(default="google/paligemma-3b-pt-224")
+    processor: str = field(default=None)
     img_num_tokens: int = field(default=256)
     image_size: int = field(default=224)
     num_images: int = field(default=1)
     add_action_token: bool = field(default=False)
+    # Language instruction types to use: "original", "randomized", "verbose", "alternative"
+    language_instruction_types: list[str] = field(default_factory=lambda: ["original"])
 
     proprioception_fields: list[str] = field(default_factory=list)
     action_fields: list[str] = field(default_factory=list)
@@ -82,6 +84,13 @@ class LBMDataParams(DataParams):
 
     def __post_init__(self):
         super().__post_init__()
+
+        # Validate language instruction types
+        valid_types = {"original", "randomized", "verbose", "alternative"}
+        invalid_types = set(self.language_instruction_types) - valid_types
+        if invalid_types:
+            raise ValueError(f"Invalid language instruction types: {invalid_types}. Valid types are: {valid_types}")
+
         # Global default normalization parameters
         enabled = self.normalization.enabled
         method = self.normalization.method
@@ -108,3 +117,11 @@ class LBMDataParams(DataParams):
                 epsilon=epsilon,
             ),
         )
+
+    def init_shared_attributes(self, cfg):
+        super().init_shared_attributes(cfg)
+        if cfg.data.processor:
+            if hasattr(cfg.model, "hf_pretrained"):
+                object.__setattr__(self, "processor", cfg.model.hf_pretrained)
+            elif hasattr(cfg.model, "vlm_params") and hasattr(cfg.model.vlm_params, "hf_pretrained"):
+                object.__setattr__(self, "processor", cfg.model.vlm_params.hf_pretrained)
