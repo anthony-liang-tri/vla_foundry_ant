@@ -34,9 +34,11 @@ import datetime
 import json
 import logging
 import os
+import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
 import av
 import datasets
 import draccus
@@ -49,7 +51,7 @@ import yaml
 from huggingface_hub import HfApi
 from PIL import Image
 from tqdm import tqdm
-import shutil
+
 from lbm2.data.preprocessing.preprocess_lbm_data import discover_episodes_targeted
 from lbm2.params.base_params import BaseParams
 
@@ -248,6 +250,7 @@ class LeRobotPreprocessParams(BaseParams):
     token: Optional[str] = field(default=None)
     private: bool = field(default=True)
 
+
 @ray.remote
 class LeRobotDatasetWriter:
     """Writes data in LeRobot format."""
@@ -309,7 +312,7 @@ class LeRobotDatasetWriter:
     def process_episode_ray(self, episode_path: str, episode_index: int, chunk_index: int = 0) -> Dict[str, Any]:
         """Ray remote wrapper for processing a single episode and converting to LeRobot format."""
         return self.process_episode(episode_path, episode_index, chunk_index)
-    
+
     def process_episode(self, episode_path: str, episode_index: int, chunk_index: int = 0) -> Dict[str, Any]:
         """Process a single episode and convert to LeRobot format."""
         try:
@@ -665,7 +668,9 @@ class LeRobotDatasetWriter:
                 task_description = str(instructions[0])
 
         else:
-            print (f"Warning: No language instruction found in episode {episode_path}. Using task description from path.")
+            print(
+                f"Warning: No language instruction found in episode {episode_path}. Using task description from path."
+            )
         # Extract task from path if possible
         task_from_path = extract_task_from_path(episode_path)
         return {
@@ -1344,9 +1349,10 @@ If you use this dataset, please cite the original LBM work and this conversion.
 """
         return readme
 
+
 def extract_task_from_path(episode_path: str) -> str:
     """Extract task name from episode path.
-    
+
     Assumes path format: .../TaskName/...
     """
     path_parts = Path(episode_path).parts
@@ -1357,7 +1363,8 @@ def extract_task_from_path(episode_path: str) -> str:
     print(f"No task found, using parent directory: {Path(episode_path).parent.name}")
     # Fallback: use parent directory name
     return Path(episode_path).parent.name
-        
+
+
 def group_episodes_by_task(episode_paths: List[str]) -> Dict[str, List[str]]:
     """Group episode paths by task name."""
     task_groups = {}
@@ -1368,6 +1375,7 @@ def group_episodes_by_task(episode_paths: List[str]) -> Dict[str, List[str]]:
         task_groups[task_name].append(episode_path)
     return task_groups
 
+
 def load_episodes_from_csv(csv_path: str) -> List[str]:
     """Load episode paths from a CSV file."""
     episodes = []
@@ -1377,6 +1385,8 @@ def load_episodes_from_csv(csv_path: str) -> List[str]:
             if episode_path:
                 episodes.append(episode_path)
     return episodes
+
+
 def main():
     """Main preprocessing function."""
     # Parse CLI arguments
@@ -1399,7 +1409,7 @@ def main():
     if cfg.source_eps_csv_path:
         print(f"Using episode list from CSV: {cfg.source_eps_csv_path}")
         episodes = load_episodes_from_csv(cfg.source_eps_csv_path)
-        print (f"Loaded {len(episodes)} episodes from CSV")
+        print(f"Loaded {len(episodes)} episodes from CSV")
     elif cfg.source_episodes:
         print(f"Using source episodes from: {cfg.source_episodes}")
         episodes = discover_episodes_targeted(cfg.source_episodes, cfg.max_episodes)
@@ -1414,27 +1424,28 @@ def main():
         print("❌ No episodes found!")
         return
 
-    excludes = ["/home/swatigupta/lbm2/tests/shared/tiny_model/checkpoint.pt", "/home/swatigupta/lbm2/.git/objects/pack/pack-69ba1b3dc47c051c4f691dbe3c05dcfe33ebb904.pack"]
+    excludes = [
+        "/home/swatigupta/lbm2/tests/shared/tiny_model/checkpoint.pt",
+        "/home/swatigupta/lbm2/.git/objects/pack/pack-69ba1b3dc47c051c4f691dbe3c05dcfe33ebb904.pack",
+    ]
     if cfg.ray_address:
         ray.init(address=cfg.ray_address)
         print(f"Connected to Ray cluster at {cfg.ray_address}")
     else:
-        ray.init(address="auto", num_cpus=cfg.ray_num_cpus, runtime_env={'excludes': excludes})
+        ray.init(address="auto", num_cpus=cfg.ray_num_cpus, runtime_env={"excludes": excludes})
         print(f"Started auto Ray cluster with num_cpus={cfg.ray_num_cpus}")
-
 
     # Group episodes by task and create separate datasets
     print("📋 Organizing episodes by task...")
-    
+
     task_groups = group_episodes_by_task(episodes)
-    
+
     print(f"Found {len(task_groups)} tasks: {list(task_groups.keys())}")
-    
+
     total_processed = 0
     for task_name, task_episodes in task_groups.items():
-        print(f"\n🎯 Processing task: {task_name} "
-                f"({len(task_episodes)} episodes)")
-        
+        print(f"\n🎯 Processing task: {task_name} ({len(task_episodes)} episodes)")
+
         # Create task-specific output directory
         task_output_dir = Path(cfg.output_dir) / task_name
         task_dataset_name = f"{cfg.dataset_name}_{task_name}"
@@ -1454,7 +1465,7 @@ def main():
             sync_cameras=cfg.sync_cameras,
         )
         writer = LeRobotDatasetWriter.remote(**writer_args)
-        
+
         total_episodes = len(task_episodes)
         num_processed = 0
         chunk_size = min(cfg.chunk_size, total_episodes)
@@ -1467,17 +1478,13 @@ def main():
             ray_futures = []
             for episode_idx, episode_path in enumerate(episode_chunk):
                 global_episode_idx = chunk_idx * chunk_size + episode_idx
-                ray_futures.append(
-                    writer.process_episode.remote(
-                        episode_path, global_episode_idx, chunk_idx
-                    )
-                )
+                ray_futures.append(writer.process_episode.remote(episode_path, global_episode_idx, chunk_idx))
             # Gather results
             results = ray.get(ray_futures)
-            
+
             for result in tqdm(results, total=len(ray_futures), desc=f"Chunk {chunk_idx}"):
                 chunk_results.append(result)
-    
+
             chunk_dfs = []
             for result in chunk_results:
                 if result["success"]:
@@ -1490,19 +1497,18 @@ def main():
         # Finalize dataset
         print("📋 Creating metadata files...")
         ray.get(writer.finalize_dataset.remote())
-        
+
         total_processed += num_processed
-        
+
         # Push task dataset to hub if requested
         if cfg.push_to_hub and cfg.repo_id:
             task_repo_id = f"{cfg.repo_id}_{task_name}"
             try:
                 ray.get(writer.push_dataset_to_hub.remote(repo_id=task_repo_id, private=cfg.private))
-                print(f"🚀 Task dataset pushed to: "
-                        f"https://huggingface.co/datasets/{task_repo_id}")
+                print(f"🚀 Task dataset pushed to: https://huggingface.co/datasets/{task_repo_id}")
             except Exception as e:
                 print(f"❌ Error pushing task {task_name} to hub: {e}")
-    
+
     num_processed_episodes = total_processed
 
     # Push to Hugging Face Hub if requested
@@ -1518,9 +1524,9 @@ def main():
         except Exception as e:
             print(f"❌ Error pushing to hub: {e}")
             print("Dataset was still saved locally.")
-    
+
     ray.shutdown()
-    
+
     print("✅ Conversion complete!")
     print(f"📊 Processed {num_processed_episodes} episodes successfully")
     print(f"📁 Dataset saved to: {cfg.output_dir}")
