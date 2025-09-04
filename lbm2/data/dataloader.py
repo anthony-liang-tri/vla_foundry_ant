@@ -128,7 +128,6 @@ def get_datastring_input(
     num_workers_per_gpu: int,
     world_size: int,
 ) -> Tuple[List[str], List[int], List[int], List[int]]:
-
     """
     Select shards for the next checkpoint window and build datastrings.
 

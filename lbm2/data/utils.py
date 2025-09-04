@@ -13,6 +13,7 @@ class SharedCheckpointCounter:
     """
     A process-safe counter that can be shared across dataloader workers.
     """
+
     def __init__(self, checkpoint_num: int = 0):
         """
         Args:
@@ -56,6 +57,7 @@ class deterministic_shuffle(wds.PipelineStage):
     `run()` is invoked, which may diverge across workers in multi-process
     settings. To keep workers aligned, pass a `SharedCheckpointCounter`.
     """
+
     def __init__(
         self,
         bufsize: int = 1000,
