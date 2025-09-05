@@ -1,12 +1,12 @@
 import torch
 from transformers import AutoModelForCausalLM
 
-from lbm2.models.base_model import BaseModel
+from lbm2.models.transformer_base import TransformerBase
 from lbm2.models.utils import get_hidden_dim_hf, get_num_hidden_layers_hf
 from lbm2.params.model_params import TransformerHFParams
 
 
-class TransformerHF(BaseModel):
+class TransformerHF(TransformerBase):
     def __init__(self, model_params: TransformerHFParams):
         super().__init__(model_params)
         self.model_name = model_params.hf_pretrained
@@ -35,3 +35,11 @@ class TransformerHF(BaseModel):
     @property
     def num_hidden_layers(self) -> int:
         return get_num_hidden_layers_hf(self.model.config)
+
+    def resize_token_embeddings(self, token_id: int = None) -> int:
+        """Extend the embedding vocabulary of the underlying LM."""
+        embed = self.model.resize_token_embeddings(token_id)
+        if token_id is None:
+            return embed.num_embeddings
+        else:
+            return token_id

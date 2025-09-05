@@ -2,9 +2,7 @@ import torch
 import torch.nn as nn
 from einops import rearrange
 
-from lbm2.models.base_model import BaseModel
-from lbm2.models.transformer import Transformer
-from lbm2.models.vit import ViT
+from lbm2.models.transformer_base import TransformerBase
 from lbm2.params.model_params import ViTParams, VLMParams
 
 
@@ -68,8 +66,8 @@ class ModalityProjector(nn.Module):
         return x
 
 
-class VLM(BaseModel):
-    def __init__(self, model_params: VLMParams, transformer: Transformer, vit: ViT):
+class VLM(TransformerBase):
+    def __init__(self, model_params: VLMParams, transformer, vit):
         super().__init__(model_params)
         self.vit = vit
         self.transformer = transformer
@@ -95,6 +93,15 @@ class VLM(BaseModel):
             **kwargs,
         )
         return logits, past_key_values, hidden_states
+
+    def set_grad_checkpointing(self, enable: bool = True):
+        """Optional: enable gradient checkpointing on the underlying LM if supported."""
+        self.transformer.set_grad_checkpointing(enable)
+        self.vit.set_grad_checkpointing(enable)
+
+    def resize_token_embeddings(self, token_id: int = None) -> int:
+        """Extend the embedding vocabulary of the underlying LM."""
+        return self.transformer.resize_token_embeddings(token_id)
 
     @property
     def hidden_dim(self) -> int:

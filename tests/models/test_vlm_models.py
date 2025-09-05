@@ -4,8 +4,11 @@ import pytest
 import torch
 
 from lbm2.models import create_model
+from lbm2.models.base_model import BaseModel
+from lbm2.models.transformer_base import TransformerBase
 from lbm2.models.utils import compute_num_image_tokens
-from lbm2.models.vlm import ModalityProjector
+from lbm2.models.vlm import VLM, ModalityProjector
+from lbm2.models.vlm_hf import VLMHF
 from lbm2.params.model_params import ViTParams
 from lbm2.params.train_experiment_params import load_experiment_params_from_yaml, load_params_from_yaml
 
@@ -285,26 +288,6 @@ class TestVLMHF:
         assert isinstance(vlm.num_hidden_layers, int)
 
     @patch("lbm2.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
-    def test_vlm_hf_set_num_action_layers(self, mock_from_pretrained, vlm_hf_config):
-        """Test setting number of action layers"""
-        # Mock the HF model
-        mock_model = Mock()
-        mock_from_pretrained.return_value = mock_model
-
-        vlm = create_model(vlm_hf_config)
-
-        # Initially should be None
-        assert vlm._limit_hidden_states_to_last_n is None
-
-        # Set to 3 layers
-        vlm.set_num_action_layers(3)
-        assert vlm._limit_hidden_states_to_last_n == 3
-
-        # Set to 0 layers
-        vlm.set_num_action_layers(0)
-        assert vlm._limit_hidden_states_to_last_n == 0
-
-    @patch("lbm2.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
     def test_vlm_hf_grad_checkpointing(self, mock_from_pretrained, vlm_hf_config):
         """Test gradient checkpointing methods"""
         # Mock the HF model with gradient checkpointing methods
@@ -358,3 +341,241 @@ class TestVLMHF:
         generated = vlm.generate(input_ids, image, attention_mask, max_new_tokens=5)
 
         assert generated.shape == (batch_size, seq_len + 5)
+
+
+class TestTransformerBase:
+    """Test the TransformerBase abstract base class"""
+
+    def test_transformer_base_instantiation_works(self):
+        """Test that TransformerBase can be instantiated (it's not truly abstract)"""
+        # TransformerBase can be instantiated but will raise NotImplementedError when methods are called
+        transformer_base = TransformerBase(Mock())
+        assert isinstance(transformer_base, TransformerBase)
+
+    def test_transformer_base_abstract_methods_raise_not_implemented(self):
+        """Test that TransformerBase abstract methods raise NotImplementedError when called"""
+        transformer_base = TransformerBase(Mock())
+
+        # Test that abstract methods raise NotImplementedError
+        with pytest.raises(NotImplementedError):
+            _ = transformer_base.hidden_dim
+
+        with pytest.raises(NotImplementedError):
+            _ = transformer_base.num_hidden_layers
+
+        with pytest.raises(NotImplementedError):
+            transformer_base.forward(torch.tensor([1]), torch.tensor([1]))
+
+    def test_transformer_base_interface_methods(self):
+        """Test that TransformerBase defines the expected interface methods"""
+        # Check that required methods exist
+        assert hasattr(TransformerBase, "hidden_dim")
+        assert hasattr(TransformerBase, "num_hidden_layers")
+        assert hasattr(TransformerBase, "forward")
+        assert hasattr(TransformerBase, "resize_token_embeddings")
+
+        # Check that these are properties or methods
+        assert isinstance(TransformerBase.hidden_dim, property)
+        assert isinstance(TransformerBase.num_hidden_layers, property)
+        assert callable(TransformerBase.forward)
+        assert callable(TransformerBase.resize_token_embeddings)
+
+
+class TestVLMInheritance:
+    """Test that VLM now properly inherits from TransformerBase"""
+
+    @pytest.fixture
+    def vlm_config(self):
+        return load_experiment_params_from_yaml("tests/params/dummy_configs/dummy_vlm_config.yaml").model
+
+    @pytest.fixture
+    def vlm(self, vlm_config):
+        vlm = create_model(vlm_config)
+        # Use a safe in-vocab token id for image tokens to avoid embedding OOB
+        import builtins
+
+        builtins.object.__setattr__(vlm.model_params, "image_token_id", 0)
+        return vlm
+
+    def test_vlm_inherits_from_transformer_base(self, vlm):
+        """Test that VLM now inherits from TransformerBase instead of BaseModel directly"""
+        assert isinstance(vlm, TransformerBase)
+        assert isinstance(vlm, BaseModel)  # Should inherit from BaseModel through TransformerBase
+        # Check that the inheritance chain is correct
+        assert VLM.__mro__.index(TransformerBase) < VLM.__mro__.index(BaseModel)
+
+    def test_vlm_has_transformer_base_methods(self, vlm):
+        """Test that VLM has all the methods from TransformerBase"""
+        assert hasattr(vlm, "resize_token_embeddings")
+
+        # Test that resize_token_embeddings returns the token_id (default implementation)
+        token_id = 1000
+        result = vlm.resize_token_embeddings(token_id)
+        assert result == token_id
+
+
+class TestVLMGradientCheckpointing:
+    """Test the new gradient checkpointing functionality in VLM"""
+
+    @pytest.fixture
+    def vlm_config(self):
+        return load_experiment_params_from_yaml("tests/params/dummy_configs/dummy_vlm_config.yaml").model
+
+    @pytest.fixture
+    def vlm(self, vlm_config):
+        vlm = create_model(vlm_config)
+        import builtins
+
+        builtins.object.__setattr__(vlm.model_params, "image_token_id", 0)
+        return vlm
+
+    def test_vlm_set_grad_checkpointing_calls_underlying_models(self, vlm):
+        """Test that set_grad_checkpointing calls the underlying transformer and vit models"""
+        # Mock the underlying models' set_grad_checkpointing methods
+        vlm.transformer.set_grad_checkpointing = Mock()
+        vlm.vit.set_grad_checkpointing = Mock()
+
+        # Call the method
+        vlm.set_grad_checkpointing(True)
+
+        # Verify both underlying models were called
+        vlm.transformer.set_grad_checkpointing.assert_called_once_with(True)
+        vlm.vit.set_grad_checkpointing.assert_called_once_with(True)
+
+        # Test with False
+        vlm.set_grad_checkpointing(False)
+        assert vlm.transformer.set_grad_checkpointing.call_count == 2
+        assert vlm.vit.set_grad_checkpointing.call_count == 2
+        vlm.transformer.set_grad_checkpointing.assert_called_with(False)
+        vlm.vit.set_grad_checkpointing.assert_called_with(False)
+
+
+class TestVLMHFInheritance:
+    """Test that VLMHF now properly inherits from TransformerBase"""
+
+    @pytest.fixture
+    def vlm_hf_config(self):
+        return load_experiment_params_from_yaml("tests/params/dummy_configs/dummy_vlm_hf_config.yaml").model
+
+    @patch("lbm2.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
+    def test_vlm_hf_inherits_from_transformer_base(self, mock_from_pretrained, vlm_hf_config):
+        """Test that VLMHF now inherits from TransformerBase instead of BaseModel directly"""
+        # Mock the HF model
+        mock_model = Mock()
+        mock_config_obj = Mock()
+        mock_config_obj.hidden_size = 128
+        mock_config_obj.num_hidden_layers = 2
+        mock_model.config = mock_config_obj
+        mock_from_pretrained.return_value = mock_model
+
+        vlm = create_model(vlm_hf_config)
+
+        assert isinstance(vlm, TransformerBase)
+        assert isinstance(vlm, BaseModel)  # Should inherit from BaseModel through TransformerBase
+        # Check that the inheritance chain is correct
+        assert VLMHF.__mro__.index(TransformerBase) < VLMHF.__mro__.index(BaseModel)
+
+    @patch("lbm2.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
+    def test_vlm_hf_has_vlm_base_methods(self, mock_from_pretrained, vlm_hf_config):
+        """Test that VLMHF has all the methods from TransformerBase"""
+        # Mock the HF model
+        mock_model = Mock()
+        mock_config_obj = Mock()
+        mock_config_obj.hidden_size = 128
+        mock_config_obj.num_hidden_layers = 2
+        mock_model.config = mock_config_obj
+        mock_from_pretrained.return_value = mock_model
+
+        vlm = create_model(vlm_hf_config)
+
+        assert hasattr(vlm, "resize_token_embeddings")
+        assert hasattr(vlm, "set_grad_checkpointing")
+        assert hasattr(vlm, "hidden_dim")
+        assert hasattr(vlm, "num_hidden_layers")
+
+
+class TestVLMHFVocabularyExtension:
+    """Test the new vocabulary extension functionality in VLMHF"""
+
+    @pytest.fixture
+    def vlm_hf_config(self):
+        return load_experiment_params_from_yaml("tests/params/dummy_configs/dummy_vlm_hf_config.yaml").model
+
+    @patch("lbm2.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
+    def test_vlm_hf_resize_token_embeddings_with_token_id(self, mock_from_pretrained, vlm_hf_config):
+        """Test resize_token_embeddings with explicit token_id"""
+        # Mock the HF model with embeddings
+        mock_model = Mock()
+        mock_embeddings = Mock()
+        mock_embeddings.num_embeddings = 1000
+        mock_model.get_input_embeddings.return_value = mock_embeddings
+        mock_model.resize_token_embeddings = Mock()
+        mock_from_pretrained.return_value = mock_model
+
+        vlm = create_model(vlm_hf_config)
+
+        # Test extending to a larger vocabulary
+        new_token_id = 1500
+        result = vlm.resize_token_embeddings(new_token_id)
+
+        assert result == new_token_id
+        mock_model.resize_token_embeddings.assert_called_once_with(new_token_id, mean_resizing=False)
+
+    @patch("lbm2.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
+    def test_vlm_hf_resize_token_embeddings_without_token_id(self, mock_from_pretrained, vlm_hf_config):
+        """Test resize_token_embeddings without explicit token_id (auto-increment)"""
+        # Mock the HF model with embeddings
+        mock_model = Mock()
+        mock_embeddings = Mock()
+        mock_embeddings.num_embeddings = 1000
+        mock_model.get_input_embeddings.return_value = mock_embeddings
+        mock_model.resize_token_embeddings = Mock()
+        mock_from_pretrained.return_value = mock_model
+
+        vlm = create_model(vlm_hf_config)
+
+        # Test auto-increment
+        result = vlm.resize_token_embeddings()
+
+        assert result == 1001  # current + 1
+        mock_model.resize_token_embeddings.assert_called_once_with(1001, mean_resizing=False)
+
+    @patch("lbm2.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
+    def test_vlm_hf_resize_token_embeddings_no_resize_needed(self, mock_from_pretrained, vlm_hf_config):
+        """Test resize_token_embeddings when no resize is needed"""
+        # Mock the HF model with embeddings
+        mock_model = Mock()
+        mock_embeddings = Mock()
+        mock_embeddings.num_embeddings = 1000
+        mock_model.get_input_embeddings.return_value = mock_embeddings
+        mock_model.resize_token_embeddings = Mock()
+        mock_from_pretrained.return_value = mock_model
+
+        vlm = create_model(vlm_hf_config)
+
+        # Test with token_id that doesn't require resize
+        token_id = 500  # Less than current vocab size
+        result = vlm.resize_token_embeddings(token_id)
+
+        assert result == token_id
+        mock_model.resize_token_embeddings.assert_not_called()
+
+    @patch("lbm2.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
+    def test_vlm_hf_resize_token_embeddings_exact_size(self, mock_from_pretrained, vlm_hf_config):
+        """Test resize_token_embeddings when token_id equals current vocab size"""
+        # Mock the HF model with embeddings
+        mock_model = Mock()
+        mock_embeddings = Mock()
+        mock_embeddings.num_embeddings = 1000
+        mock_model.get_input_embeddings.return_value = mock_embeddings
+        mock_model.resize_token_embeddings = Mock()
+        mock_from_pretrained.return_value = mock_model
+
+        vlm = create_model(vlm_hf_config)
+
+        # Test with token_id equal to current vocab size
+        token_id = 1000
+        result = vlm.resize_token_embeddings(token_id)
+
+        assert result == token_id
+        mock_model.resize_token_embeddings.assert_not_called()

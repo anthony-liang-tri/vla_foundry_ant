@@ -1,12 +1,12 @@
 import torch
 from transformers import AutoModelForVision2Seq
 
-from lbm2.models.base_model import BaseModel
+from lbm2.models.transformer_base import TransformerBase
 from lbm2.models.utils import get_hidden_dim_hf, get_hidden_states_hf, get_num_hidden_layers_hf
 from lbm2.params.model_params import VLMHFParams
 
 
-class VLMHF(BaseModel):
+class VLMHF(TransformerBase):
     def __init__(self, model_params: VLMHFParams):
         super().__init__(model_params)
         self.model_name = model_params.hf_pretrained
@@ -49,6 +49,20 @@ class VLMHF(BaseModel):
 
         return out.logits.to(dtype=image.dtype), out.past_key_values, (hidden_states if output_hidden_states else None)
 
+    def resize_token_embeddings(self, token_id: int = None) -> int:
+        """Ensure the token embedding matrix can index the provided token.
+
+        If token_id is None, attempt to read it from the registry for this model name.
+        This should be called during model setup, not inside the forward loop.
+        """
+        if token_id is None:
+            token_id = int(self.model.get_input_embeddings().num_embeddings) + 1
+
+        if token_id > self.model.get_input_embeddings().num_embeddings:
+            print(f"Resizing token embeddings from {self.model.get_input_embeddings().num_embeddings} to {token_id}")
+            self.model.resize_token_embeddings(token_id, mean_resizing=False)
+        return token_id
+
     @torch.jit.ignore
     def set_grad_checkpointing(self, enable=True):
         if hasattr(self.model, "gradient_checkpointing_enable"):
@@ -64,9 +78,6 @@ class VLMHF(BaseModel):
     @property
     def num_hidden_layers(self) -> int:
         return get_num_hidden_layers_hf(self.model.config)
-
-    def set_num_action_layers(self, num_layers: int):
-        self._limit_hidden_states_to_last_n = num_layers
 
     def generate(self, input_ids, image, attention_mask, max_new_tokens=20):
         """Generate text tokens using the VLM HF model"""

@@ -5,7 +5,7 @@ from torch import nn
 
 from lbm2.activations import get_feed_forward
 from lbm2.attention import get_attn_func
-from lbm2.models.base_model import BaseModel
+from lbm2.models.transformer_base import TransformerBase
 from lbm2.norms import get_norm_class
 from lbm2.params.model_params import TransformerParams
 from lbm2.positional_embedding import get_pos_embed
@@ -139,11 +139,11 @@ class TransformerBlock(nn.Module):
         return out, past_key_value
 
 
-class Transformer(BaseModel):
+class Transformer(TransformerBase):
     def __init__(self, model_params: TransformerParams):
         super().__init__(model_params)
         # for convenience we often share param names with llama
-        self.hidden_dim = model_params.hidden_dim
+        self._hidden_dim = model_params.hidden_dim
         self.vocab_size = model_params.vocab_size
         self.n_layers = model_params.n_layers
         self.max_seq_len = model_params.max_seq_len
@@ -174,6 +174,14 @@ class Transformer(BaseModel):
         self.grad_checkpointing = False
         self.reset_parameters()
 
+    @property
+    def hidden_dim(self) -> int:
+        return self._hidden_dim
+
+    @property
+    def num_hidden_layers(self) -> int:
+        return self.n_layers
+
     def reset_parameters(self):
         # initialize weight 1/sqrt(dim)
         # this is 1/fan_in for output, as is default, and Maciej Kilian tried another option
@@ -185,6 +193,48 @@ class Transformer(BaseModel):
     @torch.jit.ignore
     def set_grad_checkpointing(self, enable=True):
         self.grad_checkpointing = enable
+
+    def resize_token_embeddings(self, token_id: int = None) -> int:
+        """Extend the embedding vocabulary of the underlying LM."""
+        if token_id is None:
+            # If no token_id provided, use the next available index
+            token_id = self.vocab_size
+
+        if token_id < self.vocab_size:
+            # Token already exists in vocabulary
+            return token_id
+
+        # Store original weights
+        old_embedding_weight = self.embeddings.weight.data.clone()
+        old_output_weight = self.output.weight.data.clone()
+
+        # Create new embedding layer with extended vocabulary
+        new_embeddings = nn.Embedding(token_id + 1, self.hidden_dim)
+        new_embeddings.weight.data[: self.vocab_size] = old_embedding_weight
+
+        # Initialize new token embeddings with small random values
+        std = 1.0 / math.sqrt(self.hidden_dim)
+        torch.nn.init.trunc_normal_(new_embeddings.weight.data[self.vocab_size :], std=std, a=-3 * std, b=3 * std)
+
+        # Create new output layer with extended vocabulary
+        new_output = nn.Linear(self.hidden_dim, token_id + 1, bias=False)
+        new_output.weight.data[: self.vocab_size] = old_output_weight
+
+        # Initialize new output weights for new tokens
+        torch.nn.init.trunc_normal_(new_output.weight.data[self.vocab_size :], std=std, a=-3 * std, b=3 * std)
+
+        # Replace the layers
+        self.embeddings = new_embeddings
+        self.output = new_output
+
+        # Update vocabulary size
+        self.vocab_size = token_id + 1
+
+        # Handle weight tying if enabled
+        if self.weight_tying:
+            self.embeddings.weight = self.output.weight
+
+        return token_id
 
     def forward(
         self,

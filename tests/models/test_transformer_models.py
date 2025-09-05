@@ -114,6 +114,186 @@ class TestTransformer:
         transformer.set_grad_checkpointing(False)
         assert transformer.grad_checkpointing is False
 
+    def test_resize_token_embeddings_extend_vocab(self, transformer):
+        """Test extending vocabulary with new tokens"""
+        original_vocab_size = transformer.vocab_size
+        original_embedding_weight = transformer.embeddings.weight.data.clone()
+        original_output_weight = transformer.output.weight.data.clone()
+
+        # Extend vocabulary by 100 tokens
+        new_token_id = original_vocab_size + 100
+        result_token_id = transformer.resize_token_embeddings(new_token_id)
+
+        # Check that vocabulary size was updated
+        assert transformer.vocab_size == new_token_id + 1
+        assert result_token_id == new_token_id
+
+        # Check that embedding layer was resized
+        assert transformer.embeddings.num_embeddings == new_token_id + 1
+        assert transformer.embeddings.embedding_dim == transformer.hidden_dim
+
+        # Check that output layer was resized
+        assert transformer.output.out_features == new_token_id + 1
+        assert transformer.output.in_features == transformer.hidden_dim
+
+        # Check that original weights were preserved
+        torch.testing.assert_close(transformer.embeddings.weight.data[:original_vocab_size], original_embedding_weight)
+        torch.testing.assert_close(transformer.output.weight.data[:original_vocab_size], original_output_weight)
+
+        # Check that new weights were initialized
+        assert transformer.embeddings.weight.data[original_vocab_size:].abs().sum() > 0
+        assert transformer.output.weight.data[original_vocab_size:].abs().sum() > 0
+
+    def test_resize_token_embeddings_without_token_id(self, transformer):
+        """Test extending vocabulary without specifying token_id (should use next available)"""
+        original_vocab_size = transformer.vocab_size
+        original_embedding_weight = transformer.embeddings.weight.data.clone()
+        original_output_weight = transformer.output.weight.data.clone()
+
+        # Extend vocabulary without specifying token_id
+        result_token_id = transformer.resize_token_embeddings()
+
+        # Check that vocabulary size was extended by 1
+        assert transformer.vocab_size == original_vocab_size + 1
+        assert result_token_id == original_vocab_size
+
+        # Check that embedding and output layers were resized
+        assert transformer.embeddings.num_embeddings == original_vocab_size + 1
+        assert transformer.output.out_features == original_vocab_size + 1
+
+        # Check that original weights were preserved
+        torch.testing.assert_close(transformer.embeddings.weight.data[:original_vocab_size], original_embedding_weight)
+        torch.testing.assert_close(transformer.output.weight.data[:original_vocab_size], original_output_weight)
+
+    def test_resize_token_embeddings_existing_token(self, transformer):
+        """Test resizing with an existing token_id (should return existing id)"""
+        original_vocab_size = transformer.vocab_size
+        original_embedding_weight = transformer.embeddings.weight.data.clone()
+        original_output_weight = transformer.output.weight.data.clone()
+
+        # Try to resize with existing token_id
+        existing_token_id = original_vocab_size - 1
+        result_token_id = transformer.resize_token_embeddings(existing_token_id)
+
+        # Check that nothing changed
+        assert transformer.vocab_size == original_vocab_size
+        assert result_token_id == existing_token_id
+        assert transformer.embeddings.num_embeddings == original_vocab_size
+        assert transformer.output.out_features == original_vocab_size
+
+        # Check that weights are unchanged
+        torch.testing.assert_close(transformer.embeddings.weight.data, original_embedding_weight)
+        torch.testing.assert_close(transformer.output.weight.data, original_output_weight)
+
+    def test_resize_token_embeddings_with_weight_tying(self, transformer_config):
+        """Test embedding resizing when weight tying is enabled"""
+        # Create config with weight tying enabled
+        config_dict = transformer_config.__dict__.copy()
+        config_dict["weight_tying"] = True
+        config_with_tying = TransformerParams(**config_dict)
+
+        transformer = create_model(config_with_tying)
+
+        # Verify weight tying is enabled
+        assert transformer.weight_tying is True
+        assert transformer.embeddings.weight is transformer.output.weight
+
+        original_vocab_size = transformer.vocab_size
+        original_weight = transformer.embeddings.weight.data.clone()
+
+        # Extend vocabulary
+        new_token_id = original_vocab_size + 50
+        result_token_id = transformer.resize_token_embeddings(new_token_id)
+
+        # Check that vocabulary was extended
+        assert transformer.vocab_size == new_token_id + 1
+        assert result_token_id == new_token_id
+
+        # Check that weight tying is maintained
+        assert transformer.embeddings.weight is transformer.output.weight
+
+        # Check that the shared weight tensor was resized
+        assert transformer.embeddings.weight.shape == (new_token_id + 1, transformer.hidden_dim)
+        assert transformer.output.weight.shape == (new_token_id + 1, transformer.hidden_dim)
+
+        # Check that original weights were preserved
+        torch.testing.assert_close(transformer.embeddings.weight.data[:original_vocab_size], original_weight)
+
+    def test_resize_token_embeddings_forward_pass_after_resize(self, transformer):
+        """Test that forward pass works correctly after resizing embeddings"""
+        # Extend vocabulary
+        new_token_id = transformer.vocab_size + 25
+        transformer.resize_token_embeddings(new_token_id)
+
+        # Test forward pass with new vocabulary size
+        batch_size, seq_len = 2, 10
+        input_ids = torch.randint(0, new_token_id + 1, (batch_size, seq_len))
+        attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+
+        logits, past_key_values, hidden_states = transformer(
+            input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=False
+        )
+
+        # Check that output has correct shape
+        assert logits.shape == (batch_size, seq_len, new_token_id + 1)
+        assert past_key_values is None
+        assert hidden_states is None
+
+    def test_resize_token_embeddings_multiple_resizes(self, transformer):
+        """Test multiple consecutive embedding resizes"""
+        original_vocab_size = transformer.vocab_size
+
+        # First resize
+        first_new_size = original_vocab_size + 100
+        transformer.resize_token_embeddings(first_new_size)
+        assert transformer.vocab_size == first_new_size + 1
+
+        # Second resize
+        second_new_size = first_new_size + 200
+        transformer.resize_token_embeddings(second_new_size)
+        assert transformer.vocab_size == second_new_size + 1
+
+        # Third resize
+        third_new_size = second_new_size + 50
+        transformer.resize_token_embeddings(third_new_size)
+        assert transformer.vocab_size == third_new_size + 1
+
+        # Verify final state
+        assert transformer.embeddings.num_embeddings == third_new_size + 1
+        assert transformer.output.out_features == third_new_size + 1
+
+        # Test forward pass with final vocabulary size
+        batch_size, seq_len = 2, 5
+        input_ids = torch.randint(0, third_new_size + 1, (batch_size, seq_len))
+        attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+
+        logits, _, _ = transformer(input_ids=input_ids, attention_mask=attention_mask)
+        assert logits.shape == (batch_size, seq_len, third_new_size + 1)
+
+    def test_resize_token_embeddings_preserves_model_state(self, transformer):
+        """Test that resizing preserves other model parameters and state"""
+        # Store original model state
+        original_hidden_dim = transformer.hidden_dim
+        original_n_layers = transformer.n_layers
+        original_n_heads = transformer.model_params.n_heads
+        original_ffn_type = transformer.model_params.ffn_type
+
+        # Extend vocabulary
+        new_token_id = transformer.vocab_size + 75
+        transformer.resize_token_embeddings(new_token_id)
+
+        # Check that other model parameters are unchanged
+        assert transformer.hidden_dim == original_hidden_dim
+        assert transformer.n_layers == original_n_layers
+        assert transformer.model_params.n_heads == original_n_heads
+        assert transformer.model_params.ffn_type == original_ffn_type
+
+        # Check that transformer layers are unchanged
+        assert len(transformer.layers) == original_n_layers
+        for layer in transformer.layers:
+            assert layer.hidden_dim == original_hidden_dim
+            assert layer.n_heads == original_n_heads
+
 
 class TestTransformerHF:
     @pytest.fixture
