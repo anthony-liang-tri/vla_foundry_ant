@@ -8,12 +8,11 @@ import json
 import os
 from types import SimpleNamespace
 
-import numpy as np
 import pytest
 import torch
 import yaml
 
-from lbm2.data.dataloader import get_datastring_input, get_wds_dataloader
+from lbm2.data.dataloader import get_wds_dataloader
 from lbm2.data.robotics.data_explorer_gradio import RoboticsDataLoader
 from lbm2.params.data_params import LBMDataParams
 
@@ -22,12 +21,12 @@ from lbm2.params.data_params import LBMDataParams
 def cleanup_resources():
     """Automatically clean up resources after each test to prevent accumulation."""
     yield  # Run the test
-    
+
     # Clean up GPU memory
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
         torch.cuda.synchronize()
-    
+
     # Force garbage collection
     gc.collect()
 
@@ -425,20 +424,28 @@ def test_different_tokenizers(dataset_path, manifest_data, mock_config, processo
     print(f"✅ Successfully loaded batch with tokenizer: {processor_name}")
 
 
-@pytest.mark.skip(reason="Action token test requires complex pipeline inspection that's fragile with num_workers=0")
 def test_with_action_token(dataset_path, manifest_data, mock_config):
     """Test dataloader with action token enabled."""
-    # This test is skipped because the pipeline inspection is too fragile
-    # with our performance optimizations (num_workers=0)
-    # The core action token functionality is tested elsewhere
-    pass
-    action_token_id = processor.tokenizer.encode("<|action|>")[0]
+    # Create datastring from manifest
+    test_shards = manifest_data[:1]  # Use just first shard for speed
+    datastring = create_datastring(dataset_path, test_shards)
 
-    if "input_ids" in batch:
-        for input_ids in batch["input_ids"]:
-            if action_token_id in input_ids:
-                action_token_found = True
-                print(f"  ✅ Found <|action|> in processor input_ids: {input_ids}")
+    # Create config with action token enabled
+    cfg = mock_config(dataset_path, batch_size=1, add_action_token=True)
+
+    # Get dataloader
+    num_samples_per_dataset = [sum(entry["num_sequences"] for entry in test_shards)]
+    dataloader_info = get_wds_dataloader(
+        datastrings=[datastring], num_samples_per_dataset=num_samples_per_dataset, checkpoint_num=0, cfg=cfg
+    )
+
+    dataloader = dataloader_info.dataloader
+
+    # Test loading one batch
+    batch_iter = iter(dataloader)
+    batch = next(batch_iter)
+
+    action_token_found = False
 
     # Check in lowdim_text_tokenized
     if "lowdim_text_tokenized" in batch:
@@ -573,9 +580,9 @@ def test_normalization(dataset_path, manifest_data, mock_config):
                 fields_processed += 1
                 # Limit processing to first 10 fields for performance
                 if fields_processed > 10:
-                    print(f"  ⚡ Limiting to first 10 fields for performance (processed {fields_processed-1})")
+                    print(f"  ⚡ Limiting to first 10 fields for performance (processed {fields_processed - 1})")
                     break
-                    
+
                 norm_data = batch_normalized["lowdim"][field_name]
                 no_norm_data = batch_no_norm["lowdim"][field_name]
 
@@ -622,18 +629,22 @@ def test_normalization(dataset_path, manifest_data, mock_config):
                             assert not torch.allclose(norm_data, no_norm_data, atol=1e-6), (
                                 f"Normalized data should differ from non-normalized for field {field_name}"
                             )
-                            
+
                             # Basic normalization checks for std method
-                            if hasattr(cfg_normalized.data.normalization, 'field_configs') and \
-                               field_name in cfg_normalized.data.normalization.field_configs:
+                            if (
+                                hasattr(cfg_normalized.data.normalization, "field_configs")
+                                and field_name in cfg_normalized.data.normalization.field_configs
+                            ):
                                 field_config = cfg_normalized.data.normalization.field_configs[field_name]
                                 if field_config.method == "std":
                                     # Check that normalized data is roughly standardized (lenient for test data)
                                     assert abs(norm_mean) < 3.0, (
-                                        f"Normalized data mean should be closer to 0 for field {field_name}, got {norm_mean}"
+                                        f"Normalized data mean should be closer to 0 for field {field_name}, "
+                                        f"got {norm_mean}"
                                     )
                                     assert norm_std >= 0.0, (
-                                        f"Normalized data std should be non-negative for field {field_name}, got {norm_std}"
+                                        f"Normalized data std should be non-negative for field {field_name}, "
+                                        f"got {norm_std}"
                                     )
                         else:
                             print(f"  ℹ️  Skipping difference check for {field_name} - original data has zero variance")
@@ -643,7 +654,10 @@ def test_normalization(dataset_path, manifest_data, mock_config):
 
     # Ensure we found at least some fields to normalize
     assert normalized_fields_found > 0, "Should have found at least one field that gets normalized"
-    print(f"✅ Normalization test passed! Found {normalized_fields_found} normalized fields and {excluded_fields_found} excluded fields")
+    print(
+        f"✅ Normalization test passed! Found {normalized_fields_found} normalized fields "
+        f"and {excluded_fields_found} excluded fields"
+    )
 
 
 @pytest.mark.slow
@@ -741,7 +755,6 @@ def test_normalization_consistency(dataset_path, manifest_data, mock_config):
 
 def test_compare_dataloader_and_roboticsdataloader(dataset_path, manifest_data, mock_config):
     """Test that get_wds_dataloader and RoboticsDataLoader produce matching lowdim data for all sample_ids."""
-    import torch
     import yaml
 
     # Load config
@@ -795,19 +808,15 @@ def test_compare_dataloader_and_roboticsdataloader(dataset_path, manifest_data, 
     data_loader = RoboticsDataLoader(data_cfg, max_samples=5, max_shards=1, use_dataloader=True)
     samples = data_loader.load_samples_auto()
     samples_files = {sample["metadata"]["sample_id"]: sample["lowdim"] for sample in samples}
-    cam_files = {
-        sample["metadata"]["sample_id"]: {"intrinsics": sample["intrinsics"], "extrinsics": sample["extrinsics"]}
-        for sample in samples
-    }
 
     # Simplified test: just verify both methods can load data successfully
     # Full comparison is too complex and fragile with performance optimizations
     assert len(samples_dataloader) > 0, f"Regular dataloader should load samples, got {len(samples_dataloader)}"
     assert len(samples_files) >= 0, f"RoboticsDataLoader should not fail, got {len(samples_files)}"  # Allow 0 for now
-    
+
     print(f"✅ Regular dataloader loaded {len(samples_dataloader)} samples")
     print(f"✅ RoboticsDataLoader loaded {len(samples_files)} samples")
-    print(f"✅ Both dataloader methods completed without crashing")
+    print("✅ Both dataloader methods completed without crashing")
 
 
 if __name__ == "__main__":
