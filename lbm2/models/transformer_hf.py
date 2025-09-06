@@ -12,17 +12,9 @@ class TransformerHF(TransformerBase):
         self.model_name = model_params.hf_pretrained
         self.model = AutoModelForCausalLM.from_pretrained(self.model_name)
 
-    def forward(
-        self,
-        *args,
-        output_hidden_states=False,
-        **kwargs,
-    ):
-        out = self.model(
-            *args,
-            **kwargs,
-        )
-        return out.logits, out.past_key_values, (out.hidden_states if output_hidden_states else None)
+    def forward(self, *args, **kwargs):
+        out = self.model(*args, **kwargs)
+        return out
 
     @torch.jit.ignore
     def set_grad_checkpointing(self, enable=True):

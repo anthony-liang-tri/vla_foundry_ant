@@ -2,7 +2,7 @@ import torch
 from transformers import AutoModelForVision2Seq
 
 from lbm2.models.transformer_base import TransformerBase
-from lbm2.models.utils import get_hidden_dim_hf, get_hidden_states_hf, get_num_hidden_layers_hf
+from lbm2.models.utils import get_hidden_dim_hf, get_num_hidden_layers_hf
 from lbm2.params.model_params import VLMHFParams
 
 
@@ -13,41 +13,19 @@ class VLMHF(TransformerBase):
         self.model = AutoModelForVision2Seq.from_pretrained(self.model_name)
         self._limit_hidden_states_to_last_n = None
 
-    def forward(self, input_ids, image, attention_mask=None, output_hidden_states=False):
+    def forward(self, input_ids, image, attention_mask=None, output_hidden_states=False, **kwargs):
         out = self.model(
             input_ids=input_ids,
             pixel_values=image.to(dtype=torch.bfloat16),
             attention_mask=attention_mask,
             output_hidden_states=output_hidden_states,
             return_dict=True,
+            **kwargs,
         )
-        if output_hidden_states:
-            # Try to pull text hidden states from common attributes
-            hidden_states = get_hidden_states_hf(out)
+        if self._limit_hidden_states_to_last_n is not None and output_hidden_states:
+            out.hidden_states = out.hidden_states[-self._limit_hidden_states_to_last_n :]
 
-            # Normalize to list of tensors [layers][-1 dims]
-            if hidden_states is None and hasattr(out, "last_hidden_state"):
-                last = out.last_hidden_state
-                hidden_states = [last for _ in range(self.num_hidden_layers)]
-            elif isinstance(hidden_states, tuple):
-                hidden_states = list(hidden_states)
-
-            # Optionally keep only the last N layers to reduce memory
-            if isinstance(hidden_states, list) and self._limit_hidden_states_to_last_n is not None:
-                n = self._limit_hidden_states_to_last_n
-                hidden_states = hidden_states[-n:] if n > 0 else []
-
-            # Ensure hidden_states is a list before iterating
-            if hidden_states is None:
-                hidden_states = []
-            elif not isinstance(hidden_states, list):
-                hidden_states = [hidden_states]
-
-            # Convert to image dtype if we have hidden states
-            if hidden_states:
-                hidden_states = [h.to(dtype=image.dtype) for h in hidden_states]
-
-        return out.logits.to(dtype=image.dtype), out.past_key_values, (hidden_states if output_hidden_states else None)
+        return out
 
     def resize_token_embeddings(self, token_id: int = None) -> int:
         """Ensure the token embedding matrix can index the provided token.
@@ -90,8 +68,8 @@ class VLMHF(TransformerBase):
         attn_mask = attention_mask.clone()
 
         for _ in range(max_new_tokens):
-            outputs, _, _ = self.forward(input_ids=generated, image=image, attention_mask=attn_mask)
-            last_output = outputs[:, -1, :]
+            outputs = self.forward(input_ids=generated, image=image, attention_mask=attn_mask)
+            last_output = outputs.logits[:, -1, :]
             next_token = torch.argmax(last_output, dim=-1, keepdim=True)
             generated = torch.cat([generated, next_token], dim=-1)
 

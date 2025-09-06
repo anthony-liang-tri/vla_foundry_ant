@@ -5,6 +5,7 @@ from torch import nn
 
 from lbm2.activations import get_feed_forward
 from lbm2.attention import get_attn_func
+from lbm2.models.model_outputs.llm_output import TransformerOutput
 from lbm2.models.transformer_base import TransformerBase
 from lbm2.norms import get_norm_class
 from lbm2.params.model_params import TransformerParams
@@ -285,7 +286,11 @@ class Transformer(TransformerBase):
         if self.model_params.cast_output_to_float32:
             output = output.float()
 
-        return output, past_key_values, (hidden_states if output_hidden_states else None)
+        return TransformerOutput(
+            logits=output,
+            past_key_values=past_key_values,
+            hidden_states=tuple(hidden_states) if output_hidden_states else None,
+        )
 
     def generate(self, input_ids, attention_mask, max_new_tokens=20):
         # Add batch dimension if needed
@@ -297,8 +302,8 @@ class Transformer(TransformerBase):
         attn_mask = attention_mask.clone()
 
         for _ in range(max_new_tokens):
-            outputs, _, _ = self.forward(input_ids=generated, attention_mask=attn_mask)
-            last_output = outputs[:, -1, :]
+            outputs = self.forward(input_ids=generated, attention_mask=attn_mask)
+            last_output = outputs.logits[:, -1, :]
             next_token = torch.argmax(last_output, dim=-1, keepdim=True)
             generated = torch.cat([generated, next_token], dim=-1)
 

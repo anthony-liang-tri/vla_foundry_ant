@@ -23,13 +23,11 @@ class TestTransformer:
         input_ids = torch.randint(0, 1000, (batch_size, seq_len))
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
-        logits, past_key_values, hidden_states = transformer(
-            input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=False
-        )
+        output = transformer(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=False)
 
-        assert logits.shape == (batch_size, seq_len, 1000)
-        assert past_key_values is None
-        assert hidden_states is None
+        assert output.logits.shape == (batch_size, seq_len, 1000)
+        assert output.past_key_values is None
+        assert output.hidden_states is None
 
     def test_transformer_forward_with_hidden_states(self, transformer):
         """Test forward pass with hidden states returned"""
@@ -37,16 +35,14 @@ class TestTransformer:
         input_ids = torch.randint(0, 1000, (batch_size, seq_len))
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
-        logits, past_key_values, hidden_states = transformer(
-            input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True
-        )
+        output = transformer(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
 
-        assert logits.shape == (batch_size, seq_len, 1000)
-        assert past_key_values is None
-        assert isinstance(hidden_states, list)
-        assert len(hidden_states) == 2  # n_layers = 2
-        assert hidden_states[0].shape == (batch_size, seq_len, 128)  # hidden_dim = 128
-        assert hidden_states[1].shape == (batch_size, seq_len, 128)
+        assert output.logits.shape == (batch_size, seq_len, 1000)
+        assert output.past_key_values is None
+        assert isinstance(output.hidden_states, tuple)
+        assert len(output.hidden_states) == 2  # n_layers = 2
+        assert output.hidden_states[0].shape == (batch_size, seq_len, 128)  # hidden_dim = 128
+        assert output.hidden_states[1].shape == (batch_size, seq_len, 128)
 
     def test_transformer_forward_with_input_embeds(self, transformer):
         """Test forward pass with input embeddings instead of input_ids"""
@@ -54,13 +50,11 @@ class TestTransformer:
         input_embeds = torch.randn(batch_size, seq_len, 128)
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
-        logits, past_key_values, hidden_states = transformer(
-            input_embeds=input_embeds, attention_mask=attention_mask, output_hidden_states=False
-        )
+        output = transformer(input_embeds=input_embeds, attention_mask=attention_mask, output_hidden_states=False)
 
-        assert logits.shape == (batch_size, seq_len, 1000)
-        assert past_key_values is None
-        assert hidden_states is None
+        assert output.logits.shape == (batch_size, seq_len, 1000)
+        assert output.past_key_values is None
+        assert output.hidden_states is None
 
     def test_transformer_forward_with_past_key_values(self, transformer):
         """Test forward pass with past key values for caching"""
@@ -78,7 +72,7 @@ class TestTransformer:
             for _ in range(transformer.n_layers)
         ]
 
-        logits, new_past_key_values, hidden_states = transformer(
+        output = transformer(
             input_ids=input_ids,
             attention_mask=None,
             past_key_values=past_key_values,
@@ -86,10 +80,10 @@ class TestTransformer:
             output_hidden_states=False,
         )
 
-        assert logits.shape == (batch_size, seq_len, 1000)
-        assert new_past_key_values is not None
-        assert len(new_past_key_values) == 2
-        assert hidden_states is None
+        assert output.logits.shape == (batch_size, seq_len, 1000)
+        assert output.past_key_values is not None
+        assert len(output.past_key_values) == 2
+        assert output.hidden_states is None
 
     def test_transformer_forward_error_no_input(self, transformer):
         """Test that error is raised when neither input_ids nor input_embeds provided"""
@@ -230,14 +224,12 @@ class TestTransformer:
         input_ids = torch.randint(0, new_token_id + 1, (batch_size, seq_len))
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
-        logits, past_key_values, hidden_states = transformer(
-            input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=False
-        )
+        outputs = transformer(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=False)
 
         # Check that output has correct shape
-        assert logits.shape == (batch_size, seq_len, new_token_id + 1)
-        assert past_key_values is None
-        assert hidden_states is None
+        assert outputs.logits.shape == (batch_size, seq_len, new_token_id + 1)
+        assert outputs.past_key_values is None
+        assert outputs.hidden_states is None
 
     def test_resize_token_embeddings_multiple_resizes(self, transformer):
         """Test multiple consecutive embedding resizes"""
@@ -267,8 +259,8 @@ class TestTransformer:
         input_ids = torch.randint(0, third_new_size + 1, (batch_size, seq_len))
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
-        logits, _, _ = transformer(input_ids=input_ids, attention_mask=attention_mask)
-        assert logits.shape == (batch_size, seq_len, third_new_size + 1)
+        outputs = transformer(input_ids=input_ids, attention_mask=attention_mask)
+        assert outputs.logits.shape == (batch_size, seq_len, third_new_size + 1)
 
     def test_resize_token_embeddings_preserves_model_state(self, transformer):
         """Test that resizing preserves other model parameters and state"""
@@ -318,6 +310,9 @@ class TestTransformerHF:
             mock_output = Mock()
             mock_output.logits = mock_model.logits
             mock_output.past_key_values = mock_model.past_key_values
+            # Set hidden_states based on output_hidden_states parameter
+            output_hidden_states = kwargs.get("output_hidden_states", False)
+            mock_output.hidden_states = None if not output_hidden_states else mock_model.hidden_states
             return mock_output
 
         mock_model.return_value = mock_forward()
@@ -329,13 +324,11 @@ class TestTransformerHF:
         input_ids = torch.randint(0, 1000, (batch_size, seq_len))
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
-        logits, past_key_values, hidden_states = transformer(
-            input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=False
-        )
+        outputs = transformer(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=False)
 
-        assert logits.shape == (batch_size, seq_len, 1000)
-        assert past_key_values is None
-        assert hidden_states is None
+        assert outputs.logits.shape == (batch_size, seq_len, 1000)
+        assert outputs.past_key_values is None
+        assert outputs.hidden_states is None
 
     @patch("lbm2.models.transformer_hf.AutoModelForCausalLM.from_pretrained")
     def test_transformer_hf_forward_with_hidden_states(self, mock_from_pretrained, transformer_hf_config):
@@ -344,7 +337,7 @@ class TestTransformerHF:
         mock_model = Mock()
         mock_model.logits = torch.randn(2, 10, 1000)
         mock_model.past_key_values = None
-        mock_model.hidden_states = [torch.randn(2, 10, 128) for _ in range(2)]
+        mock_model.hidden_states = tuple(torch.randn(2, 10, 128) for _ in range(2))
 
         # Mock the forward method to return the expected values
         def mock_forward(*args, **kwargs):
@@ -363,14 +356,12 @@ class TestTransformerHF:
         input_ids = torch.randint(0, 1000, (batch_size, seq_len))
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
-        logits, past_key_values, hidden_states = transformer(
-            input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True
-        )
+        outputs = transformer(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
 
-        assert logits.shape == (batch_size, seq_len, 1000)
-        assert past_key_values is None
-        assert isinstance(hidden_states, list)
-        assert len(hidden_states) == 2
+        assert outputs.logits.shape == (batch_size, seq_len, 1000)
+        assert outputs.past_key_values is None
+        assert isinstance(outputs.hidden_states, tuple)
+        assert len(outputs.hidden_states) == 2
 
     @patch("lbm2.models.transformer_hf.AutoModelForCausalLM.from_pretrained")
     def test_transformer_hf_properties(self, mock_from_pretrained, transformer_hf_config):

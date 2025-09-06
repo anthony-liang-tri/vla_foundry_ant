@@ -85,14 +85,14 @@ class VLM(TransformerBase):
         inputs_embeds = token_embd.masked_scatter(special_image_mask, image_embd)
 
         # Call transformer's forward method directly to get logits and past_key_values and hidden_states
-        logits, past_key_values, hidden_states = self.transformer(
+        output = self.transformer(
             input_embeds=inputs_embeds,
             attention_mask=attention_mask,
             output_hidden_states=output_hidden_states,
             use_cache=use_cache,
             **kwargs,
         )
-        return logits, past_key_values, hidden_states
+        return output
 
     def set_grad_checkpointing(self, enable: bool = True):
         """Optional: enable gradient checkpointing on the underlying LM if supported."""
@@ -127,8 +127,8 @@ class VLM(TransformerBase):
         attn_mask = attention_mask.clone()
 
         for _ in range(max_new_tokens):
-            outputs, _, _ = self.forward(input_ids=generated, image=image, attention_mask=attn_mask)
-            last_output = outputs[:, -1, :]
+            outputs = self.forward(input_ids=generated, image=image, attention_mask=attn_mask)
+            last_output = outputs.logits[:, -1, :]
             next_token = torch.argmax(last_output, dim=-1, keepdim=True)
             generated = torch.cat([generated, next_token], dim=-1)
 

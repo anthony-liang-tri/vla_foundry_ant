@@ -1,11 +1,9 @@
-from unittest.mock import Mock, patch
-
 import pytest
 import torch
 
 from lbm2.models import create_model
 from lbm2.models.utils import compute_num_image_tokens
-from lbm2.params.model_params import TransformerParams
+from lbm2.params.model_params import TransformerHFParams, TransformerParams, VLMHFParams
 from lbm2.params.train_experiment_params import load_experiment_params_from_yaml, load_params_from_yaml
 
 
@@ -32,36 +30,20 @@ class TestReturnHiddenStatesConsistency:
 
         # Test without hidden states
         result = transformer(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=False)
-        assert len(result) == 3
-        logits, past_key_values, hidden_states = result
-        assert logits is not None
-        assert past_key_values is None
-        assert hidden_states is None
+        assert result.logits is not None
+        assert result.past_key_values is None
+        assert result.hidden_states is None
 
         # Test with hidden states
         result = transformer(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
-        assert len(result) == 3
-        logits, past_key_values, hidden_states = result
-        assert logits is not None
-        assert past_key_values is None
-        assert hidden_states is not None
-        assert isinstance(hidden_states, list)
-        assert len(hidden_states) == 2  # n_layers = 2
+        assert result.logits is not None
+        assert result.past_key_values is None
+        assert result.hidden_states is not None
+        assert isinstance(result.hidden_states, tuple)
+        assert len(result.hidden_states) == 2  # n_layers = 2
 
-    @patch("lbm2.models.transformer_hf.AutoModelForCausalLM.from_pretrained")
-    def test_transformer_hf_return_format_consistency(self, mock_from_pretrained, transformer_config):
-        """Test that TransformerHF consistently returns 3 items"""
-        # Mock the HF model
-        mock_model = Mock()
-        mock_output = Mock()
-        mock_output.logits = torch.randn(2, 10, 1000)
-        mock_output.past_key_values = None
-        mock_output.hidden_states = [torch.randn(2, 10, 128) for _ in range(2)]
-        mock_model.return_value = mock_output
-        mock_from_pretrained.return_value = mock_model
-
-        # Create a new config with transformer_hf type
-        from lbm2.params.model_params import TransformerHFParams
+    def test_transformer_hf_return_format_consistency(self, transformer_config):
+        """Test that TransformerHF returns HF output objects"""
 
         transformer_hf_config = TransformerHFParams(
             hf_pretrained="microsoft/DialoGPT-small", resume_from_checkpoint=None, resume_weights_only=False
@@ -72,23 +54,29 @@ class TestReturnHiddenStatesConsistency:
         input_ids = torch.randint(0, 1000, (batch_size, seq_len))
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
-        # Test without hidden states
-        result = transformer(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=False)
-        assert len(result) == 3
-        logits, past_key_values, hidden_states = result
-        assert logits is not None
-        assert past_key_values is None
-        assert hidden_states is None
+        # Test without hidden states - HF models return HF objects
+        result = transformer(
+            input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=False, use_cache=False
+        )
+        assert hasattr(result, "logits")
+        assert hasattr(result, "past_key_values")
+        assert hasattr(result, "hidden_states")
+        assert result.logits is not None
+        assert result.past_key_values is None
+        assert result.hidden_states is None
 
         # Test with hidden states
-        result = transformer(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
-        assert len(result) == 3
-        logits, past_key_values, hidden_states = result
-        assert logits is not None
-        assert past_key_values is None
-        assert hidden_states is not None
-        assert isinstance(hidden_states, list)
-        assert len(hidden_states) == 2
+        result = transformer(
+            input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True, use_cache=False
+        )
+        assert hasattr(result, "logits")
+        assert hasattr(result, "past_key_values")
+        assert hasattr(result, "hidden_states")
+        assert result.logits is not None
+        assert result.past_key_values is None
+        assert result.hidden_states is not None
+        assert isinstance(result.hidden_states, tuple)
+        assert len(result.hidden_states) == 13  # DialoGPT-small has 13 layers
 
     def test_vlm_return_format_consistency(self, vlm_config):
         """Test that VLM consistently returns 3 items"""
@@ -103,69 +91,22 @@ class TestReturnHiddenStatesConsistency:
         input_ids[0, 0:num_image_tokens] = vlm.model_params.image_token_id
         input_ids[1, 0:num_image_tokens] = vlm.model_params.image_token_id
 
-        image = torch.randn(batch_size, 3, vit_cfg.img_size, vit_cfg.img_size)
+        image = torch.randn(batch_size, 1, 3, vit_cfg.img_size, vit_cfg.img_size)
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
         # Test without hidden states
         result = vlm(input_ids=input_ids, image=image, attention_mask=attention_mask, output_hidden_states=False)
-        assert len(result) == 3
-        logits, past_key_values, hidden_states = result
-        assert logits is not None
-        assert past_key_values is None
-        assert hidden_states is None
+        assert result.logits is not None
+        assert result.past_key_values is None
+        assert result.hidden_states is None
 
         # Test with hidden states
         result = vlm(input_ids=input_ids, image=image, attention_mask=attention_mask, output_hidden_states=True)
-        assert len(result) == 3
-        logits, past_key_values, hidden_states = result
-        assert logits is not None
-        assert past_key_values is None
-        assert hidden_states is not None
-        assert isinstance(hidden_states, list)
-        assert len(hidden_states) == 2  # n_layers = 2
-
-    @patch("lbm2.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
-    def test_vlm_hf_return_format_consistency(self, mock_from_pretrained, vlm_config):
-        """Test that VLMHF consistently returns 3 items"""
-        # Mock the HF model
-        mock_model = Mock()
-        mock_output = Mock()
-        mock_output.logits = torch.randn(2, 10, 1000)
-        mock_output.past_key_values = None
-        mock_output.hidden_states = [torch.randn(2, 10, 128) for _ in range(2)]
-        mock_model.return_value = mock_output
-        mock_from_pretrained.return_value = mock_model
-
-        # Create a new config with vlm_hf type
-        from lbm2.params.model_params import VLMHFParams
-
-        vlm_hf_config = VLMHFParams(
-            hf_pretrained="microsoft/git-base", resume_from_checkpoint=None, resume_weights_only=False
-        )
-        vlm = create_model(vlm_hf_config)
-
-        batch_size, seq_len = 2, 10
-        input_ids = torch.randint(0, 1000, (batch_size, seq_len))
-        image = torch.randn(batch_size, 3, 224, 224)
-        attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
-
-        # Test without hidden states
-        result = vlm(input_ids=input_ids, image=image, attention_mask=attention_mask, output_hidden_states=False)
-        assert len(result) == 3
-        logits, past_key_values, hidden_states = result
-        assert logits is not None
-        assert past_key_values is None
-        assert hidden_states is None
-
-        # Test with hidden states
-        result = vlm(input_ids=input_ids, image=image, attention_mask=attention_mask, output_hidden_states=True)
-        assert len(result) == 3
-        logits, past_key_values, hidden_states = result
-        assert logits is not None
-        assert past_key_values is None
-        assert hidden_states is not None
-        assert isinstance(hidden_states, list)
-        assert len(hidden_states) == 2
+        assert result.logits is not None
+        assert result.past_key_values is None
+        assert result.hidden_states is not None
+        assert isinstance(result.hidden_states, tuple)
+        assert len(result.hidden_states) == 2  # n_layers = 2
 
     def test_all_models_return_same_format(self, transformer_config, vlm_config):
         """Test that all models return the same format: (logits, past_key_values, hidden_states)"""
@@ -174,43 +115,23 @@ class TestReturnHiddenStatesConsistency:
         # Create all model types
         transformer = create_model(transformer_config)
 
-        # Mock HF models
-        with patch("lbm2.models.transformer_hf.AutoModelForCausalLM.from_pretrained") as mock_transformer_hf:
-            mock_model = Mock()
-            mock_output = Mock()
-            mock_output.logits = torch.randn(2, 10, 1000)
-            mock_output.past_key_values = None
-            mock_output.hidden_states = [torch.randn(2, 10, 128) for _ in range(2)]
-            mock_model.return_value = mock_output
-            mock_transformer_hf.return_value = mock_model
-
-            # Create a new config with transformer_hf type
-            from lbm2.params.model_params import TransformerHFParams
-
-            transformer_hf_config = TransformerHFParams(
-                hf_pretrained="microsoft/DialoGPT-small", resume_from_checkpoint=None, resume_weights_only=False
-            )
-            transformer_hf = create_model(transformer_hf_config)
+        transformer_hf_config = TransformerHFParams(
+            hf_pretrained="microsoft/git-base", resume_from_checkpoint=None, resume_weights_only=False
+        )
+        transformer_hf = create_model(transformer_hf_config)
 
         # Create VLM
         vlm = create_model(vlm_config.model)
 
-        with patch("lbm2.models.vlm_hf.AutoModelForVision2Seq.from_pretrained") as mock_vlm_hf:
-            mock_model = Mock()
-            mock_output = Mock()
-            mock_output.logits = torch.randn(2, 10, 1000)
-            mock_output.past_key_values = None
-            mock_output.hidden_states = [torch.randn(2, 10, 128) for _ in range(2)]
-            mock_model.return_value = mock_output
-            mock_vlm_hf.return_value = mock_model
+        vlm_hf_config = VLMHFParams(
+            hf_pretrained="microsoft/git-base", resume_from_checkpoint=None, resume_weights_only=False
+        )
+        vlm_hf = create_model(vlm_hf_config)
 
-            # Create a new config with vlm_hf type
-            from lbm2.params.model_params import VLMHFParams
-
-            vlm_hf_config = VLMHFParams(
-                hf_pretrained="microsoft/git-base", resume_from_checkpoint=None, resume_weights_only=False
-            )
-            vlm_hf = create_model(vlm_hf_config)
+        transformer.train()
+        transformer_hf.train()
+        vlm.train()
+        vlm_hf.train()
 
         # Test inputs
         vit_cfg = vlm.model_params.vit
@@ -227,24 +148,22 @@ class TestReturnHiddenStatesConsistency:
 
         # Test all models return same format
         models_and_inputs = [
-            (transformer, {"input_ids": input_ids, "attention_mask": attention_mask}),
-            (transformer_hf, {"input_ids": input_ids, "attention_mask": attention_mask}),
-            (vlm, {"input_ids": input_ids_vlm, "image": image, "attention_mask": attention_mask}),
-            (vlm_hf, {"input_ids": input_ids, "image": image, "attention_mask": attention_mask}),
+            (transformer, {"input_ids": input_ids, "attention_mask": attention_mask, "use_cache": False}),
+            (transformer_hf, {"input_ids": input_ids, "attention_mask": attention_mask, "use_cache": False}),
+            (vlm, {"input_ids": input_ids_vlm, "image": image, "attention_mask": attention_mask, "use_cache": False}),
+            (vlm_hf, {"input_ids": input_ids, "image": image, "attention_mask": attention_mask, "use_cache": False}),
         ]
 
         for model, inputs in models_and_inputs:
             # Test without hidden states
             result = model(**inputs, output_hidden_states=False)
-            assert len(result) == 3
-            logits, past_key_values, hidden_states = result
-            assert logits is not None
-            assert hidden_states is None
+            assert result.logits is not None
+            assert result.past_key_values is None
+            assert result.hidden_states is None
 
             # Test with hidden states
             result = model(**inputs, output_hidden_states=True)
-            assert len(result) == 3
-            logits, past_key_values, hidden_states = result
-            assert logits is not None
-            assert hidden_states is not None
-            assert isinstance(hidden_states, list)
+            assert result.logits is not None
+            assert result.past_key_values is None
+            assert result.hidden_states is not None
+            assert isinstance(result.hidden_states, tuple)

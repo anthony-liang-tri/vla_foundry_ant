@@ -2,6 +2,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 import torch
+from transformers.modeling_outputs import CausalLMOutputWithPast as HFCausalLMOutputWithPast
 
 from lbm2.models import create_model
 from lbm2.models.base_model import BaseModel
@@ -96,13 +97,11 @@ class TestVLM:
         image = torch.randn(batch_size, 3, vit_cfg.img_size, vit_cfg.img_size)
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
-        logits, past_key_values, hidden_states = vlm(
-            input_ids=input_ids, image=image, attention_mask=attention_mask, output_hidden_states=False
-        )
+        output = vlm(input_ids=input_ids, image=image, attention_mask=attention_mask, output_hidden_states=False)
 
-        assert logits.shape == (batch_size, seq_len, 1000)  # vocab_size = 1000
-        assert past_key_values is None
-        assert hidden_states is None
+        assert output.logits.shape == (batch_size, seq_len, 1000)  # vocab_size = 1000
+        assert output.past_key_values is None
+        assert output.hidden_states is None
 
     def test_vlm_forward_with_hidden_states(self, vlm):
         """Test forward pass with hidden states returned"""
@@ -120,14 +119,14 @@ class TestVLM:
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
         vlm.eval()
-        logits, past_key_values, hidden_states = vlm(
+        output = vlm(
             input_ids=input_ids, image=image, attention_mask=attention_mask, output_hidden_states=True, use_cache=True
         )
 
-        assert logits.shape == (batch_size, seq_len, 1000)
-        assert past_key_values is not None
-        assert isinstance(hidden_states, list)
-        assert len(hidden_states) == 2  # n_layers = 2
+        assert output.logits.shape == (batch_size, seq_len, 1000)
+        assert output.past_key_values is not None
+        assert isinstance(output.hidden_states, tuple)
+        assert len(output.hidden_states) == 2  # n_layers = 2
 
     def test_vlm_forward_image_token_mismatch(self, vlm):
         """Test error when image token count doesn't match image embedding count"""
@@ -141,7 +140,7 @@ class TestVLM:
         wrong = max(1, num_image_tokens // 2)
         input_ids[0, 0:wrong] = vlm.model_params.image_token_id  # mismatch count
 
-        image = torch.randn(batch_size, 3, vit_cfg.img_size, vit_cfg.img_size)
+        image = torch.randn(batch_size, 1, 3, vit_cfg.img_size, vit_cfg.img_size)
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
         with pytest.raises(AssertionError):
@@ -158,8 +157,12 @@ class TestVLM:
         num_image_tokens = compute_num_image_tokens(vit_cfg)
         batch_size, seq_len = 2, num_image_tokens + 10
         input_ids = torch.randint(0, 1000, (batch_size, seq_len))
+        # Make sure input_ids have no image tokens other than the first num_image_tokens
+        input_ids = torch.where(
+            input_ids == vlm.model_params.image_token_id, vlm.model_params.image_token_id + 1, input_ids
+        )
         input_ids[:, 0:num_image_tokens] = vlm.model_params.image_token_id
-        image = torch.randn(batch_size, 3, vit_cfg.img_size, vit_cfg.img_size)
+        image = torch.randn(batch_size, 1, 3, vit_cfg.img_size, vit_cfg.img_size)
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
         generated = vlm.generate(input_ids, image, attention_mask, max_new_tokens=5)
@@ -181,9 +184,13 @@ class TestVLMHF:
         mock_model.past_key_values = None
 
         # Mock the forward method to return the expected values
-        mock_output = Mock()
-        mock_output.logits = mock_model.logits
-        mock_output.past_key_values = mock_model.past_key_values
+        mock_output = HFCausalLMOutputWithPast(
+            logits=torch.randn(2, 10, 1000),
+            past_key_values=None,
+            hidden_states=None,
+            attentions=None,
+            loss=None,
+        )
         mock_model.return_value = mock_output
         mock_from_pretrained.return_value = mock_model
 
@@ -194,13 +201,11 @@ class TestVLMHF:
         image = torch.randn(batch_size, 3, 224, 224)
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
-        logits, past_key_values, hidden_states = vlm(
-            input_ids=input_ids, image=image, attention_mask=attention_mask, output_hidden_states=False
-        )
+        output = vlm(input_ids=input_ids, image=image, attention_mask=attention_mask, output_hidden_states=False)
 
-        assert logits.shape == (batch_size, seq_len, 1000)
-        assert past_key_values is None
-        assert hidden_states is None
+        assert output.logits.shape == (batch_size, seq_len, 1000)
+        assert output.past_key_values is None
+        assert output.hidden_states is None
 
     @patch("lbm2.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
     def test_vlm_hf_forward_with_hidden_states(self, mock_from_pretrained, vlm_hf_config):
@@ -209,12 +214,16 @@ class TestVLMHF:
         mock_model = Mock()
         mock_model.logits = torch.randn(2, 10, 1000)
         mock_model.past_key_values = None
-        mock_model.hidden_states = [torch.randn(2, 10, 128) for _ in range(2)]
+        mock_model.hidden_states = tuple(torch.randn(2, 10, 128) for _ in range(2))
 
         # Mock the forward method to return the expected values
-        mock_output = Mock()
-        mock_output.logits = mock_model.logits
-        mock_output.past_key_values = mock_model.past_key_values
+        mock_output = HFCausalLMOutputWithPast(
+            logits=torch.randn(2, 10, 1000),
+            past_key_values=None,
+            hidden_states=None,
+            attentions=None,
+            loss=None,
+        )
         mock_output.hidden_states = mock_model.hidden_states
         mock_model.return_value = mock_output
         mock_from_pretrained.return_value = mock_model
@@ -226,14 +235,12 @@ class TestVLMHF:
         image = torch.randn(batch_size, 3, 224, 224)
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
-        logits, past_key_values, hidden_states = vlm(
-            input_ids=input_ids, image=image, attention_mask=attention_mask, output_hidden_states=True
-        )
+        output = vlm(input_ids=input_ids, image=image, attention_mask=attention_mask, output_hidden_states=True)
 
-        assert logits.shape == (batch_size, seq_len, 1000)
-        assert past_key_values is None
-        assert isinstance(hidden_states, list)
-        assert len(hidden_states) == 2
+        assert output.logits.shape == (batch_size, seq_len, 1000)
+        assert output.past_key_values is None
+        assert isinstance(output.hidden_states, tuple)
+        assert len(output.hidden_states) == 2
 
     @patch("lbm2.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
     def test_vlm_hf_forward_hidden_states_fallback(self, mock_from_pretrained, vlm_hf_config):
@@ -242,12 +249,16 @@ class TestVLMHF:
         mock_model = Mock()
         mock_model.logits = torch.randn(2, 10, 1000)
         mock_model.past_key_values = None
-        mock_model.hidden_states = [torch.randn(2, 10, 128) for _ in range(2)]
+        mock_model.hidden_states = tuple(torch.randn(2, 10, 128) for _ in range(2))
 
         # Mock the forward method to return the expected values
-        mock_output = Mock()
-        mock_output.logits = mock_model.logits
-        mock_output.past_key_values = mock_model.past_key_values
+        mock_output = HFCausalLMOutputWithPast(
+            logits=torch.randn(2, 10, 1000),
+            past_key_values=None,
+            hidden_states=None,
+            attentions=None,
+            loss=None,
+        )
         mock_output.hidden_states = mock_model.hidden_states
         mock_model.return_value = mock_output
         mock_from_pretrained.return_value = mock_model
@@ -259,13 +270,11 @@ class TestVLMHF:
         image = torch.randn(batch_size, 3, 224, 224)
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
-        logits, past_key_values, hidden_states = vlm(
-            input_ids=input_ids, image=image, attention_mask=attention_mask, output_hidden_states=True
-        )
+        output = vlm(input_ids=input_ids, image=image, attention_mask=attention_mask, output_hidden_states=True)
 
-        assert logits.shape == (batch_size, seq_len, 1000)
-        assert past_key_values is None
-        assert isinstance(hidden_states, list)
+        assert output.logits.shape == (batch_size, seq_len, 1000)
+        assert output.past_key_values is None
+        assert isinstance(output.hidden_states, tuple)
         # Should create hidden states based on num_hidden_layers
 
     @patch("lbm2.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
@@ -325,9 +334,13 @@ class TestVLMHF:
         mock_model.past_key_values = None
 
         # Mock the forward method to return the expected values
-        mock_output = Mock()
-        mock_output.logits = mock_model.logits
-        mock_output.past_key_values = mock_model.past_key_values
+        mock_output = HFCausalLMOutputWithPast(
+            logits=torch.randn(2, 10, 1000),
+            past_key_values=None,
+            hidden_states=None,
+            attentions=None,
+            loss=None,
+        )
         mock_model.return_value = mock_output
         mock_from_pretrained.return_value = mock_model
 
