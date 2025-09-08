@@ -57,3 +57,12 @@ class NormalizationParams(BaseParams):
             "epsilon": self.epsilon,
             "field_configs": {k: v.to_dict() for k, v in self.field_configs.items()},
         }
+
+    def __post_init__(self):
+        self.check_asserts()
+
+    def check_asserts(self):
+        if self.method not in ["std", "percentile_5_95", "percentile_1_99"]:
+            raise ValueError(f"Invalid normalization method: {self.method}")
+        if self.scope not in ["global", "per_timestep"]:
+            raise ValueError(f"Invalid normalization scope: {self.scope}")

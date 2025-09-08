@@ -34,7 +34,7 @@ import webdataset as wds
 from tqdm import tqdm
 
 from lbm2.data.dataloader import get_datastring_input, get_wds_dataloader
-from lbm2.data.pipelines.robotics import process_robotics_sample
+from lbm2.data.pipelines.robotics import extract_robotics_fields
 from lbm2.data.robotics.normalization import RoboticsNormalizer
 from lbm2.data.robotics.utils import _get_rotation_matrix, rot_6d_to_matrix
 from lbm2.params.data_params import LBMDataParams
@@ -120,7 +120,7 @@ class RoboticsDataLoader:
                 # Handle S3 paths with pipe prefix for WebDataset
                 wds_path = f"pipe:aws s3 cp {shard_path} -" if shard_path.startswith("s3://") else shard_path
 
-                dataset = wds.WebDataset(wds_path).decode("pilrgb").map(process_robotics_sample)
+                dataset = wds.WebDataset(wds_path).decode("pilrgb").map(extract_robotics_fields)
 
                 for sample in dataset:
                     self.samples.append(sample)
@@ -425,7 +425,7 @@ class RoboticsDataLoader:
                             sample["images"][f"camera_{img_idx}"] = img_tensor.permute(1, 2, 0).float().cpu().numpy()
 
             # Extract masks
-            if "masks" in batch:
+            if "masks" in batch and batch["masks"] not in [[], {}, [{}]]:
                 sample["masks"] = {}
                 for key, value in batch["masks"].items():
                     if isinstance(value, torch.Tensor):

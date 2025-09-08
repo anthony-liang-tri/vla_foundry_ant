@@ -70,12 +70,6 @@ class RoboticsNormalizer:
         self.field_configs = self.config.normalization.field_configs
         self.exclude_fields = set(self.config.exclude_fields)
 
-        # Validate configuration
-        if self.method not in ["std", "percentile_5_95", "percentile_1_99"]:
-            raise ValueError(f"Invalid normalization method: {self.method}")
-        if self.scope not in ["global", "per_timestep"]:
-            raise ValueError(f"Invalid normalization scope: {self.scope}")
-
         logging.info(f"RoboticsNormalizer initialized: method={self.method}, scope={self.scope}")
 
     def _load_statistics(self, statistics_path: str) -> Dict[str, Any]:
@@ -146,12 +140,10 @@ class RoboticsNormalizer:
             return torch.zeros(1), torch.ones(1)
 
         if scope == "global":
-            # Use global statistics
             if method == "std":
                 center = torch.tensor(field_stats["mean"], dtype=torch.float32)
                 scale = torch.tensor(field_stats["std"], dtype=torch.float32)
             elif method == "percentile_5_95":
-                # Use percentile normalization
                 center = torch.tensor(field_stats["percentile_5"], dtype=torch.float32)
                 scale = torch.tensor(field_stats["percentile_95"], dtype=torch.float32) - torch.tensor(
                     field_stats["percentile_5"], dtype=torch.float32
@@ -164,12 +156,10 @@ class RoboticsNormalizer:
             else:
                 raise ValueError(f"Invalid normalization method: {method}")
         else:
-            # Use global statistics
             if method == "std":
                 center = torch.tensor(field_stats["mean_per_timestep"], dtype=torch.float32)
                 scale = torch.tensor(field_stats["std_per_timestep"], dtype=torch.float32)
             elif method == "percentile_5_95":
-                # Use percentile normalization
                 center = torch.tensor(field_stats["percentile_5_per_timestep"], dtype=torch.float32)
                 scale = torch.tensor(
                     field_stats["percentile_95_per_timestep"],
@@ -217,14 +207,10 @@ class RoboticsNormalizer:
         scale = scale.to(tensor.device)
         if scope == "global" or len(tensor.shape) == 2:
             # Global normalization or no time dimension
-            # Broadcast to match tensor dimensions
-            if len(tensor.shape) == 3:  # [B, T, D]
-                center = center.unsqueeze(0).unsqueeze(0)  # [1, 1, D]
-                scale = scale.unsqueeze(0).unsqueeze(0)  # [1, 1, D]
-            elif len(tensor.shape) == 2:  # [B, D]
-                center = center.unsqueeze(0)  # [1, D]
-                scale = scale.unsqueeze(0)  # [1, D]
-
+            # Broadcast to match tensor dimensions - add singleton dims for all but last
+            target_shape = [1] * (len(tensor.shape) - 1) + [-1]
+            center = center.view(target_shape)
+            scale = scale.view(target_shape)
             normalized = (tensor - center) / scale
 
         elif scope == "per_timestep" and len(tensor.shape) == 3:

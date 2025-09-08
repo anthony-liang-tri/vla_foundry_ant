@@ -233,7 +233,8 @@ class GradioDataExplorer:
                     extrinsics = extrinsics[calibration_timestep]
                 else:
                     # Fallback to anchor_idx if calibration_timestep is out of bounds
-                    anchor_idx = sample["metadata"]["anchor_timestep"] - sample["metadata"]["lowdim_start_timestep"]
+                    metadata = sample.get("metadata", {})
+                    anchor_idx = metadata.get("anchor_timestep", 0) - metadata.get("lowdim_start_timestep", 0)
                     if anchor_idx < extrinsics.shape[0]:
                         extrinsics = extrinsics[anchor_idx]
 
@@ -243,7 +244,8 @@ class GradioDataExplorer:
                     intrinsics = intrinsics[calibration_timestep]
                 else:
                     # Fallback to anchor_idx if calibration_timestep is out of bounds
-                    anchor_idx = sample["metadata"]["anchor_timestep"] - sample["metadata"]["lowdim_start_timestep"]
+                    metadata = sample.get("metadata", {})
+                    anchor_idx = metadata.get("anchor_timestep", 0) - metadata.get("lowdim_start_timestep", 0)
                     if anchor_idx < intrinsics.shape[0]:
                         intrinsics = intrinsics[anchor_idx]
 
@@ -305,7 +307,8 @@ class GradioDataExplorer:
         draw = ImageDraw.Draw(img_with_overlay)
 
         # Determine which timestep this image corresponds to
-        anchor_index = sample["metadata"]["anchor_timestep"] - sample["metadata"]["lowdim_start_timestep"]
+        metadata = sample.get("metadata", {})
+        anchor_index = metadata.get("anchor_timestep", 0) - metadata.get("lowdim_start_timestep", 0)
 
         # Parse the timestep offset from the format t{offset}
         image_offset = 0

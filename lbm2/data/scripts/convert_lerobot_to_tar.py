@@ -53,6 +53,13 @@ def create_metadata_and_lowdim_dicts(row, lowdim_columns, camera_names, excluded
     return metadata_dict, lowdim_dict
 
 
+def create_language_instructions_dict(row, tasks_dict, task_index_col):
+    """Create language instruction dictionary from a DataFrame row."""
+    language_instructions_dict = {}
+    language_instructions_dict["original"] = tasks_dict[row[task_index_col]]["task"]
+    return language_instructions_dict
+
+
 def add_metadata_json_to_tar(tar, file_prefix, metadata_dict):
     """Add JSON metadata file to tar archive."""
     json_bytes = json.dumps(make_json_serializable(metadata_dict), indent=2).encode("utf-8")
@@ -70,6 +77,14 @@ def add_npz_to_tar(tar, file_prefix, lowdim_dict):
     tarinfo_npz = tarfile.TarInfo(name=f"{file_prefix}.lowdim.npz")
     tarinfo_npz.size = len(npz_bytes)
     tar.addfile(tarinfo_npz, io.BytesIO(npz_bytes))
+
+
+def add_language_instructions_to_tar(tar, file_prefix, language_instructions_dict):
+    """Add language instruction file to tar archive."""
+    json_bytes = json.dumps(make_json_serializable(language_instructions_dict), indent=2).encode("utf-8")
+    tarinfo_json = tarfile.TarInfo(name=f"{file_prefix}.language_instructions.json")
+    tarinfo_json.size = len(json_bytes)
+    tar.addfile(tarinfo_json, io.BytesIO(json_bytes))
 
 
 def add_image_to_tar(tar, file_prefix, camera_name, image_bytes):
@@ -101,6 +116,7 @@ def parse_args():
     # File/column naming (probably no need to change any of these for standard LeRobot)
     parser.add_argument("--meta_episodes_path", type=str, default="meta/episodes.jsonl")
     parser.add_argument("--info_path", type=str, default="meta/info.json")
+    parser.add_argument("--tasks_path", type=str, default="meta/tasks.jsonl")
     parser.add_argument("--data_path", type=str, default="data")
     parser.add_argument("--videos_path", type=str, default="videos")
     parser.add_argument(
@@ -108,6 +124,7 @@ def parse_args():
     )
     parser.add_argument("--frame_index_col", type=str, default="frame_index")
     parser.add_argument("--episode_index_col", type=str, default="episode_index")
+    parser.add_argument("--task_index_col", type=str, default="task_index")
     parser.add_argument("--episode_file_pattern", type=str, default="episode_{:06d}.parquet")
     parser.add_argument("--video_file_pattern", type=str, default="episode_{:06d}.mp4")
     parser.add_argument("--output_prefix_pattern", type=str, default="episode_{:06d}_frame_{:06d}")
@@ -500,9 +517,17 @@ def write_tar_and_upload(shard_idx: int, slices: List[Tuple[int, int, int]], con
                                     excluded_columns=image_columns + config["lowdim_columns"],
                                 )
 
+                                # Create language_instructions dictionary
+                                language_instructions_dict = create_language_instructions_dict(
+                                    row=row,
+                                    tasks_dict=config["tasks_dict"],
+                                    task_index_col=config["task_index_col"],
+                                )
+
                                 # Add JSON and NPZ files to tar
                                 add_metadata_json_to_tar(tar, file_prefix, metadata_dict)
                                 add_npz_to_tar(tar, file_prefix, lowdim_dict)
+                                add_language_instructions_to_tar(tar, file_prefix, language_instructions_dict)
 
                                 # Process image columns
                                 for image_col in image_columns:
@@ -604,10 +629,16 @@ def write_tar_and_upload(shard_idx: int, slices: List[Tuple[int, int, int]], con
                                     row, config["lowdim_columns"], list(cameras.keys())
                                 )
 
+                                # Create language_instructions dictionary
+                                language_instructions_dict = create_language_instructions_dict(
+                                    row, config["tasks_dict"], config["task_index_col"]
+                                )
+
                                 # Create and add json file (only once per frame, not per camera)
                                 if camera_name == list(cameras.keys())[0]:  # Only for first camera to avoid duplicates
                                     add_metadata_json_to_tar(tar, file_prefix, metadata_dict)
                                     add_npz_to_tar(tar, file_prefix, lowdim_dict)
+                                    add_language_instructions_to_tar(tar, file_prefix, language_instructions_dict)
                                     num_sequences += 1
 
                                 # Add jpg file if extraction was successful
@@ -726,11 +757,13 @@ def main():
     # Resolve all paths relative to base path if provided
     args.meta_episodes_path = resolve_path(args.dataset_path, args.meta_episodes_path)
     args.info_path = resolve_path(args.dataset_path, args.info_path)
+    args.tasks_path = resolve_path(args.dataset_path, args.tasks_path)
     args.data_path = resolve_path(args.dataset_path, args.data_path)
     args.videos_path = resolve_path(args.dataset_path, args.videos_path)
 
     print(f"meta_episodes_path: {args.meta_episodes_path}")
     print(f"info_path: {args.info_path}")
+    print(f"tasks_path: {args.tasks_path}")
     print(f"data_path: {args.data_path}")
     print(f"videos_path: {args.videos_path}")
     print(f"s3_output_path: {args.s3_output_path}")
@@ -744,6 +777,10 @@ def main():
         assert video_chunks, "No video chunks found"
     else:
         video_chunks = []
+
+    # Read tasks metadata
+    tasks_dict = jsonl_load(args.tasks_path)
+    print(f"Loaded {len(tasks_dict)} tasks")
 
     # Pre-build episode lookup once and reuse it for all shards.
     episode_lookup = build_episode_lookup(data_chunks)
@@ -778,10 +815,12 @@ def main():
         "episode_lookup": episode_lookup,
         "video_lookup": video_lookup,
         "cameras": cameras,
+        "tasks_dict": tasks_dict,
         "tmp_dir": args.tmp_dir,
         "s3_output_path": args.s3_output_path,
         "lowdim_columns": args.lowdim_columns,
         "frame_index_col": args.frame_index_col,
+        "task_index_col": args.task_index_col,
         "episode_file_pattern": args.episode_file_pattern,
         "video_file_pattern": args.video_file_pattern,
         "output_prefix_pattern": args.output_prefix_pattern,

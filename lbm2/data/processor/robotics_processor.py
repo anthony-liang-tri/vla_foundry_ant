@@ -70,16 +70,13 @@ class RoboticsProcessor:
         # Run processor on entire batch
         processed = processor(images=batch_images, text=batch_text, padding=True, return_tensors="pt")
 
-        processed_batch = {}
+        processed_batch = batch.copy()
         processed_batch["input_ids"] = processed["input_ids"]
         processed_batch["attention_mask"] = processed["attention_mask"]
         _, c, h, w = processed["pixel_values"].shape
         processed_batch["pixel_values"] = processed["pixel_values"].reshape(len(batch_images), -1, c, h, w)
         processed_batch["camera_names"] = camera_names
         processed_batch["images"] = batch_images
-        processed_batch["metadata"] = batch["metadata"]
-        processed_batch["intrinsics"] = batch["intrinsics"]
-        processed_batch["extrinsics"] = batch["extrinsics"]
         processed_batch["lowdim"] = {}
         for k in batch["lowdim"][0]:
             if isinstance(batch["lowdim"][0][k][0], str):

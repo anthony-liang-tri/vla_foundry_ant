@@ -72,7 +72,7 @@ class LBMDataParams(DataParams):
     processor: str = field(default=None)
     img_num_tokens: int = field(default=256)
     image_size: int = field(default=224)
-    num_images: int = field(default=1)
+    num_images: int = field(default=None)
     add_action_token: bool = field(default=False)
     # Language instruction types to use: "original", "randomized", "verbose", "alternative"
     language_instruction_types: list[str] = field(default_factory=lambda: ["original"])

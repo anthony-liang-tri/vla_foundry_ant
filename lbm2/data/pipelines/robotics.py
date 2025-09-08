@@ -1,6 +1,5 @@
 import os
 import random
-from functools import partial
 
 import numpy as np
 import webdataset as wds
@@ -31,12 +30,14 @@ def select_language_instruction(language_instructions, instruction_types):
     available_instructions = []
     for instruction_type in instruction_types:
         if instruction_type in language_instructions:
+            if isinstance(language_instructions[instruction_type], str):
+                language_instructions[instruction_type] = [language_instructions[instruction_type]]
             available_instructions.extend(language_instructions[instruction_type])
     return random.choice(available_instructions) if available_instructions else ""
 
 
-def process_robotics_sample(sample, language_instruction_types=None):
-    """Process robotics sample into standardized format."""
+def extract_robotics_fields(sample, language_instruction_types=None):
+    """Extract robotics fields from sample."""
     # Extract data by file type
     images, data = {}, {}
     for key, value in sample.items():
@@ -111,9 +112,8 @@ class LBMPipeline(BaseWebDatasetPipeline):
             wds.decode("pilrgb", handler=log_and_continue),
             wds.select(filter_robotics_sample),
             wds.map(
-                partial(
-                    process_robotics_sample,
-                    language_instruction_types=self.data_configs.language_instruction_types,
+                lambda sample: extract_robotics_fields(
+                    sample, language_instruction_types=self.data_configs.language_instruction_types
                 ),
                 handler=log_and_continue,
             ),
@@ -129,8 +129,8 @@ class LBMPipeline(BaseWebDatasetPipeline):
                 handler=log_and_continue,
             ),
             wds.map(
-                partial(
-                    self.robotics_processor.add_action_and_proprioception_fields,
+                lambda batch: self.robotics_processor.add_action_and_proprioception_fields(
+                    batch,
                     action_fields=self.data_configs.action_fields,
                     proprioception_fields=self.data_configs.proprioception_fields,
                 ),
