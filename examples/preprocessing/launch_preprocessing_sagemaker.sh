@@ -1,0 +1,25 @@
+uv run --group sagemaker --group preprocessing sagemaker/launch_preprocessing.py \
+  --sagemaker.user jean.mercat \
+  --sagemaker.region us-west-2 \
+  --sagemaker.profile sagemaker \
+  --sagemaker.queue_name vla \
+  --sagemaker.instance_count 1 \
+  --sagemaker.instance_type p4de \
+  --sagemaker.arn $SAGEMAKER_ARN \
+  --sagemaker.max_run 2 \
+  --source_episodes "'include examples/preprocessing/stage_2.yaml'" \
+  --output_dir s3://sagemaker-us-west-2-124224456861/vlm_datasets/preprocess_stage_2_512_2/ \
+  --past_lowdim_steps 5 \
+  --future_lowdim_steps 20 \
+  --image_indices "[-5, 0]" \
+  --max_episodes -1 \
+  --samples_per_shard 100 \
+  --jpeg_quality 95 \
+  --num_workers 40 \
+  --filter_still_samples True \
+  --still_threshold 0.05 \
+  --shuffle_buffer_size 10000 \
+  --shuffle_input_files True \
+  --enable_incremental_updates True \
+  --update_frequency 10 \
+  --resize_images_size 512

@@ -1,3 +1,4 @@
+
 import copy
 import logging
 import random
@@ -253,7 +254,13 @@ def get_datastring_input(
     datastrings = []
     for i, manifest_path in enumerate(manifest_paths):
         shard_root_source = "/".join(manifest_path.split("/")[:-1]) + "/"
-        curr_datastring = shard_root_source + "{" + ",".join(shard_list_per_dataset[i]) + "}.tar"
+        if len(shard_list_per_dataset[i]) > 1:
+            curr_datastring = shard_root_source + "{" + ",".join(shard_list_per_dataset[i]) + "}.tar"
+        elif len(shard_list_per_dataset[i]) == 1:
+            curr_datastring = shard_root_source + shard_list_per_dataset[i][0] + ".tar"
+        else:
+            logging.debug(f"No shards found for dataset {i} in {manifest_path}")
+            continue
         if manifest_path.startswith("s3"):
             # Stream from S3 via pipe so WebDataset can read tar files from stdin.
             curr_datastring = f"pipe:aws s3 cp {curr_datastring} -"

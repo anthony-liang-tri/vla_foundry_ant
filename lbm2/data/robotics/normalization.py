@@ -3,6 +3,7 @@ Normalization utilities for robotics data.
 """
 
 import logging
+import math
 from typing import Any, Dict, Optional, Tuple, Union
 
 import draccus
@@ -11,6 +12,51 @@ import torch
 from lbm2.file_utils import json_load
 from lbm2.params.data_params import LBMDataParams
 from lbm2.params.robotics.normalization_params import FieldNormalizationParams, NormalizationParams
+
+
+def merge_statistics(statistics_data: list[dict[str, Any]]) -> dict[str, Any]:
+    """Merge statistics from multiple sources."""
+    # TODO: Jean handle statistics merging, this is currently wrong
+    num_mean = 0
+    merged_stats = {}
+    for stat in statistics_data:  # list of dicts
+        for key, value in stat.items():  # dict of field_names
+            if key not in merged_stats:
+                merged_stats[key] = {}
+            for k, v in value.items():  # dict of stat elements
+                if k not in merged_stats[key]:
+                    if k in ["mean", "std", "count", "percentile_sample_count"]:
+                        merged_stats[key][k] = 0
+                    elif k in ["min", "percentile_5"]:
+                        merged_stats[key][k] = float("inf")
+                    elif k in ["max", "percentile_95"]:
+                        merged_stats[key][k] = float("-inf")
+
+                if k == "mean":
+                    num_mean += 1
+                    merged_stats[key][k] += v
+                elif k == "std":
+                    merged_stats[key][k] += v * v
+                elif k == "min":
+                    merged_stats[key][k] = min(merged_stats[key][k], v)
+                elif k == "max":
+                    merged_stats[key][k] = max(merged_stats[key][k], v)
+                elif k == "percentile_5":
+                    merged_stats[key][k] = min(merged_stats[key][k], v)
+                elif k == "percentile_95":
+                    merged_stats[key][k] = max(merged_stats[key][k], v)
+                elif k == "percentile_sample_count" or k == "count":
+                    merged_stats[key][k] += v
+                else:
+                    raise ValueError(f"Invalid statistic element: {k}")
+
+    for key, value in merged_stats.items():
+        for k in value:
+            if k == "mean":
+                merged_stats[key][k] /= num_mean
+            elif k == "std":
+                merged_stats[key][k] = math.sqrt(merged_stats[key][k] / num_mean)
+    return merged_stats
 
 
 class RoboticsNormalizer:
@@ -71,6 +117,17 @@ class RoboticsNormalizer:
         self.exclude_fields = set(self.config.exclude_fields)
 
         logging.info(f"RoboticsNormalizer initialized: method={self.method}, scope={self.scope}")
+
+    def get_field_dimension(self, field_name: str) -> int:
+        """Get the dimension of a field."""
+        if field_name in self.stats:
+            return len(self.stats[field_name]["mean"])
+        else:
+            raise ValueError(f"Field {field_name} not found in dataset statistics")
+
+    def get_timestep_dimension(self) -> int:
+        """Get the dimension of a timestep."""
+        return len(self.stats[self.config.proprioception_fields[0]]["mean_per_timestep"])
 
     def _load_statistics(self, statistics_path: str) -> Dict[str, Any]:
         """Load statistics from JSON file."""
