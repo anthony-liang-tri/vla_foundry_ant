@@ -30,6 +30,7 @@ class TrainExperimentParams(BaseParams):
     total_train_samples: int = field(default=None)
     num_epochs: int = field(default=None)
     num_checkpoints: int = field(default=5)
+    max_checkpoint_limit: int = field(default=None)
 
     # Params Subclasses
     data: DataParams = field(default_factory=DataParams)

@@ -190,6 +190,7 @@ def main():
             cfg,
             checkpoint_num,
             checkpoint_path,
+            cfg.max_checkpoint_limit,
             model,
             optimizer,
             datastrings,

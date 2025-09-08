@@ -103,7 +103,9 @@ def parse_args():
     parser.add_argument("--info_path", type=str, default="meta/info.json")
     parser.add_argument("--data_path", type=str, default="data")
     parser.add_argument("--videos_path", type=str, default="videos")
-    parser.add_argument("--lowdim_columns", type=str, nargs="+", default=["action", "observation.state", "actions", "observations"])
+    parser.add_argument(
+        "--lowdim_columns", type=str, nargs="+", default=["action", "observation.state", "actions", "observations"]
+    )
     parser.add_argument("--frame_index_col", type=str, default="frame_index")
     parser.add_argument("--episode_index_col", type=str, default="episode_index")
     parser.add_argument("--episode_file_pattern", type=str, default="episode_{:06d}.parquet")

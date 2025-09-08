@@ -324,6 +324,7 @@ def save_checkpoint(
     cfg,
     checkpoint_num,
     checkpoint_path,
+    max_checkpoint_limit,
     model,
     optimizer,
     datastrings,
@@ -382,6 +383,15 @@ def save_checkpoint(
         path = os.path.join(checkpoint_path, f"{prefix}{checkpoint_num}.pt")
         print(f"Saving {prefix}{checkpoint_num} in {path}...")
         torch.save(prefixes[prefix], path)
+
+    # Clean up old checkpoints if max_checkpoints is specified
+    if max_checkpoint_limit is not None and checkpoint_num >= max_checkpoint_limit:
+        oldest_checkpoint = checkpoint_num - max_checkpoint_limit
+        for prefix in prefixes:
+            old_path = os.path.join(checkpoint_path, f"{prefix}{oldest_checkpoint}.pt")
+            if os.path.exists(old_path):
+                os.remove(old_path)
+                print(f"Removed old checkpoint: {prefix}{oldest_checkpoint}.pt")
 
 
 def remote_sync(local_dir, remote_dir):
