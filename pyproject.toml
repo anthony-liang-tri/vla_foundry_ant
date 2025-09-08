@@ -12,7 +12,8 @@ dependencies = [
     "timm==1.0.15",
     "wandb>=0.21.1",
     "s3fs>=2025.7.0",
-    "boto3==1.38.23",
+    "boto3>=1.39.5",
+    "botocore>=1.39.17",
     "nest-asyncio",
     "accelerate==1.7.0",
     "sentencepiece==0.2.0",
@@ -35,7 +36,7 @@ dependencies = [
 # Add `--group sagemaker` to sync the env with sagemaker
 # or run a script with sagemaker installed.
 sagemaker = [
-    "sagemaker==2.240.1.dev0",
+    "sagemaker>=2.251.0",
 ]
 
 # Add `--group preprocessing` to install preprocessing deps.
@@ -69,8 +70,7 @@ include = ["lbm2*"]
 exclude = ["install*", "sagemaker*", "examples*"]
 
 [tool.uv.sources]
-# This specifies the path to use in installing sagemaker in the above deps.
-sagemaker = { path = "./install/sagemaker-2.240.1.dev0.tar" }
+# This specifies custom sources for dependencies
 draccus = { git = "https://github.com/jmercat/draccus.git", rev = "jean/fix_include" }
 robot-gym = { workspace = true }
 grpc_workspace = { workspace = true }
