@@ -349,11 +349,11 @@ class EpisodeProcessor:
         camera_names: Optional[List[str]] = None,
         discard_keys: Optional[List[str]] = None,
         compute_statistics: bool = True,
-        resize_images_size: int = 0,
+        resize_images_size: List[int] = [256, 342], #From LBM1
         language_annotations: Optional[Dict] = None,
     ):
         if image_indices is None:
-            image_indices = [-1, 0]
+            image_indices = [-2, 0]
         self.past_lowdim_steps = past_lowdim_steps
         self.future_lowdim_steps = future_lowdim_steps
         self.image_indices = sorted(image_indices)
@@ -421,8 +421,30 @@ class EpisodeProcessor:
 
                 time.sleep(1)
 
-        # Skip actions (as in original)
+        # Load actions with retry
         actions = {}
+        actions_path = os.path.join(processed_path, "actions.npz")
+        for attempt in range(3):
+            try:
+                with fsspec.open(actions_path, "rb") as f:
+                    actions_archive = np.load(f, allow_pickle=True)
+                    # Extract the 'actions' key specifically
+                    if 'actions' in actions_archive:
+                        actions = {'actions': actions_archive['actions']}
+                        print(f"Loaded actions with shape: {actions['actions'].shape}")
+                    else:
+                        print(f"Warning: 'actions' key not found in {actions_path}")
+                        print(f"Available keys: {list(actions_archive.keys())}")
+                        actions = {}
+                break
+            except Exception as e:
+                if attempt == 2:
+                    # If actions.npz doesn't exist, continue with empty actions
+                    print(f"Warning: No actions.npz found for {episode_path}, continuing with empty actions")
+                    break
+                print(f"Retry {attempt + 1} loading actions for {episode_path}")
+                import time
+                time.sleep(1)
 
         # Load camera params (optional)
         intrinsics, extrinsics = {}, {}
@@ -475,6 +497,17 @@ class EpisodeProcessor:
             for key, value in observations.items()
             if len(value.shape) <= 2 or key.startswith(("robot__", "language_"))
         }
+
+    def extract_action_data(self, actions: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
+        """Extract action data - specifically handles 'actions' key."""
+        if not actions:
+            return {}
+        
+        # Return the 'actions' key if it exists, otherwise return empty dict
+        if 'actions' in actions:
+            return {'actions': actions['actions']}
+        else:
+            return {}
 
     def is_still_sample(self, lowdim_data: Dict[str, np.ndarray], start_idx: int, end_idx: int) -> bool:
         """Check if sample is still."""
@@ -616,6 +649,7 @@ class EpisodeProcessor:
             # Pre-extract data
             camera_data = self.extract_camera_data(observations, episode_data["metadata"])
             lowdim_data = self.extract_lowdim_data(observations)
+            action_data = self.extract_action_data(episode_data["actions"])
 
             # Generate samples
             for anchor_timestep in range(0, episode_length, self.stride):
@@ -660,6 +694,14 @@ class EpisodeProcessor:
                     if past_padding > 0 or future_padding > 0:
                         valid_data = self.pad_fn(valid_data, past_padding, future_padding)
                     sample_lowdim[key] = valid_data
+
+                # Process action data
+                sample_actions = {}
+                for key, data in action_data.items():
+                    valid_data = data[valid_start : valid_end + 1]
+                    if past_padding > 0 or future_padding > 0:
+                        valid_data = self.pad_fn(valid_data, past_padding, future_padding)
+                    sample_actions[key] = valid_data
 
                 # Add relative coordinates
                 anchor_relative_idx = self.past_lowdim_steps
@@ -711,7 +753,7 @@ class EpisodeProcessor:
                 yield {
                     "images": sample_images,
                     "lowdim": sample_lowdim,
-                    "actions": {},
+                    "actions": sample_actions,
                     "past_mask": past_mask,
                     "future_mask": future_mask,
                     "metadata": sample_metadata,

@@ -367,7 +367,7 @@ def extract_single_frame_ffmpeg(video_path: str, frame_index: int, output_path: 
 
 
 def extract_multiple_frames_ffmpeg(
-    video_path: str, frame_requests: List[Tuple[int, str]], fps: float = 30.0
+    video_path: str, frame_requests: List[Tuple[int, str]], fps: float = 10.0
 ) -> Dict[int, bool]:
     """Extract multiple frames from a video efficiently using ffmpeg filter. Much faster than individual extractions.
 

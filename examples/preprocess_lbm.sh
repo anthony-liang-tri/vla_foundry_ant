@@ -2,14 +2,14 @@
 uv run --group preprocessing python lbm2/data/preprocessing/preprocess_lbm_data.py \
     --source_episodes "['s3://robotics-manip-lbm/efs/data/tasks/PickAndPlaceBox/cabot/sim/bc/teleop/2025-02-11T17-04-00-05-00/']" \
     --output_dir s3://sagemaker-us-west-2-124224456861/vlm_datasets/preprocess_sample/lbm/PickAndPlaceBox/cabot/sim/ \
-    --past_lowdim_steps 5 \
-    --future_lowdim_steps 20 \
-    --image_indices "[-5, 0]" \
+    --past_lowdim_steps 2 \
+    --future_lowdim_steps 16 \
+    --image_indices "[-2, 0]" \
     --stride 1 \
     --max_padding_left 3 \
     --max_padding_right 15 \
     --padding_strategy zero \
-    --filter_still_samples True \
+    --filter_still_samples False \
     --still_threshold 0.05 \
     --discard_keys "include lbm2/config_presets/data/lbm_data_discard_key.yaml" \
     --camera_names "include lbm2/config_presets/data/lbm_data_camera_names.yaml" \
@@ -23,6 +23,6 @@ uv run --group preprocessing python lbm2/data/preprocessing/preprocess_lbm_data.
     --enable_incremental_updates True \
     --update_frequency 5 \
     --skip_git_tagging False \
-    --resize_images_size 512 \
+    --resize_images_size "[256, 342]" \
     --use_gpu_resize True \
     --resume False
