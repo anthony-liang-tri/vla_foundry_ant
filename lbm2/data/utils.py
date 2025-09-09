@@ -2,6 +2,7 @@ import hashlib
 import logging
 import random
 from multiprocessing import Value
+from typing import Iterable, Sequence
 
 import webdataset as wds
 from torch.utils.data import get_worker_info
@@ -94,7 +95,7 @@ class deterministic_shuffle(wds.PipelineStage):
         return wds.filters._shuffle(src, self.bufsize, self.initial, rng)
 
 
-def load_data_chunks(resume_from_checkpoint: str) -> Tuple[List[int], int]:
+def load_data_chunks(resume_from_checkpoint: str) -> tuple[list[int], int]:
     """
     Load dataloader cursor state from a checkpoint path.
 

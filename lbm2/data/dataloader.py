@@ -2,6 +2,7 @@ import copy
 import logging
 import random
 from dataclasses import dataclass
+from typing import List, Sequence, Tuple
 
 import numpy as np
 import torch

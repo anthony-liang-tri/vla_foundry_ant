@@ -2,27 +2,31 @@ import itertools
 import logging
 import math
 import time
+from typing import Callable
 
 import torch
 import torch.distributed as dist
+import torch.nn as nn
+import torch.optim as optim
 from torch.distributed.distributed_c10d import ReduceOp
 
 from lbm2.data.sampler import sample_chunk
 from lbm2.distributed import is_master
 from lbm2.meters import AverageMeter
+from lbm2.params.train_experiment_params import TrainExperimentParams
 from lbm2.precision import get_autocast
 
 
 def train_one_checkpoint(
     model: nn.Module,
-    dataloader: "_CheckpointedDataLoader",
+    dataloader,
     loss: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
     checkpoint_num: int,
     step: int,
     optimizer: optim.Optimizer,
     scheduler: Callable[[int], None],
-    cfg: "TrainExperimentParams",
-) -> Tuple[bool, int]:
+    cfg: TrainExperimentParams,
+) -> tuple[bool, int]:
     """
     Trains model for one checkpoint on the provided data.
 
