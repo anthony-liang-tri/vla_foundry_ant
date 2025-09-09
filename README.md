@@ -33,7 +33,7 @@ An example command is something like this:
 --remote_sync s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/vlm_paligemma_3b
 ```
 
-See `./examples` for more examples. [llm_11m.sh](examples/training/llm_11m.sh) is a good place to start. 
+See `./examples` for more examples. [llm_11m.sh](examples/training/llm_11m.sh) is a good place to start.
 
 ### Running on SageMaker
 Create a `secrets.env` file in the project's root directory:
@@ -89,9 +89,9 @@ A few usage notes:
 #### 1.2 Design Choices
 - Arguments are immutable by design, and we recommend developing around this. If really necessary, `object.__setattr__` can be used to modify an immutable argument.
 - Shared arguments
-    - Sometimes attributes may need to be accessed in multiple param classes. For example, we may want to have both `cfg.experiment.seed` and `cfg.data.seed`. 
-    - To prevent the user needing to supply the same argument twice, we pick an "owner" class for the attribute, then for the non-owner class, we list the attribute under the `init_shared_attributes()` function which is automatically called after initialization and populates all shared attributes. 
-- We can also have arguments with the same name but are not shared. For instance, `cfg.data.seq_len` and `cfg.model.seq_len` are defined separately. The one in `cfg.data` controls the padding/truncation during dataloading, while the one in `cfg.model` is used for the rotary embedding. 
+    - Sometimes attributes may need to be accessed in multiple param classes. For example, we may want to have both `cfg.experiment.seed` and `cfg.data.seed`.
+    - To prevent the user needing to supply the same argument twice, we pick an "owner" class for the attribute, then for the non-owner class, we list the attribute under the `init_shared_attributes()` function which is automatically called after initialization and populates all shared attributes.
+- We can also have arguments with the same name but are not shared. For instance, `cfg.data.seq_len` and `cfg.model.seq_len` are defined separately. The one in `cfg.data` controls the padding/truncation during dataloading, while the one in `cfg.model` is used for the rotary embedding.
     - (Note: Now updated to `cfg.model.max_seq_len` instead of just `cfg.model.seq_len`, but point still holds.)
 
 #### 1.3 Dynamic Selection
@@ -108,8 +108,8 @@ Here, the ViT can either be `ViTParams` or `ViTHFParams`. We can dynamically pic
 
 
 ### 2. Data
-Data are stored in shards. Each shard is a tar file. Within each tar file, each sample is distinguished by its unique prefix. 
-The structure of the directory is as follows: 
+Data are stored in shards. Each shard is a tar file. Within each tar file, each sample is distinguished by its unique prefix.
+The structure of the directory is as follows:
 
 ```
 dataset_name/
@@ -131,7 +131,7 @@ dataset_name/
 └── ...
 ```
 
-In the directory above, the `unique_name_or_hash_1_...` files make up the first sample, the `unique_name_or_hash_2_...` files make up the second sample, and so on. Each tar file can have hundreds or thousands of samples. 
+In the directory above, the `unique_name_or_hash_1_...` files make up the first sample, the `unique_name_or_hash_2_...` files make up the second sample, and so on. Each tar file can have hundreds or thousands of samples.
 
 The `manifest.jsonl` provides an overview of the tar files as follows:
 ```
@@ -143,16 +143,16 @@ The `manifest.jsonl` provides an overview of the tar files as follows:
 
 The dataset can be either local (not recommended) or on S3 (recommended). An example is `s3://tri-ml-datasets/datasets/datacompdr_1b/`.
 
-During dataloading, the code will read `manifest.jsonl`, shuffle the rows, then select the appropriate number of tar files for the given number of training steps. 
+During dataloading, the code will read `manifest.jsonl`, shuffle the rows, then select the appropriate number of tar files for the given number of training steps.
 
 #### 2.1 Multiple Datasets
-Use the `--data.dataset_manifest` argument to indicate which dataset to use for training. To use more than one dataset, you can supply multiple comma-separated manifests. For example, `--data.dataset_manifest ["s3://tri-ml-datasets/datasets/datacompdr_1b/manifest.jsonl","s3://some-other-dataset/manifest.jsonl"]`. 
+Use the `--data.dataset_manifest` argument to indicate which dataset to use for training. To use more than one dataset, you can supply multiple comma-separated manifests. For example, `--data.dataset_manifest ["s3://tri-ml-datasets/datasets/datacompdr_1b/manifest.jsonl","s3://some-other-dataset/manifest.jsonl"]`.
 
 Webdatasets also supports different dataset ratios. This is done through the `--data.dataset_weighting` argument. For example, `--data.dataset_weighting [0.4,0.6]`.
 
 
 ### 3. Dataloading Pipeline
-We use [webdatasets](https://github.com/webdataset/webdataset) to load the data. Each modality (e.g., image+caption, interleaved, image+actions) has its own pipeline where all the processing steps are defined at a high-level. This involves steps like untarring, shuffling, batching, etc. An example is [lbm2/data/pipelines/image_caption.py](lbm2/data/pipelines/image_caption.py). 
+We use [webdatasets](https://github.com/webdataset/webdataset) to load the data. Each modality (e.g., image+caption, interleaved, image+actions) has its own pipeline where all the processing steps are defined at a high-level. This involves steps like untarring, shuffling, batching, etc. An example is [lbm2/data/pipelines/image_caption.py](lbm2/data/pipelines/image_caption.py).
 
 You wil notice that in that file, there is a `self.processor` class that is invoked as a step within the pipeline. This is where all the lower-level processing operations (e.g., normalization, tokenization, padding) are abstracted to. An example is [lbm2/data/processor/stable_diffusion_processor.py](https://github.com/TRI-ML/lbm2/blob/sedrick/diffusion/lbm2/data/processor/stable_diffusion_processor.py).
 
@@ -178,7 +178,7 @@ for ckpt in range(num_checkpoints):
     train_one_checkpoint(model, dataloader)
     save_checkpoint(model)
 ```
-- `create_model()` -- The [create_model](lbm2/models/__init__.py) function creates the appropriate model based on the `--model.type` model selector and the other `cfg.model` arguments. 
+- `create_model()` -- The [create_model](lbm2/models/__init__.py) function creates the appropriate model based on the `--model.type` model selector and the other `cfg.model` arguments.
 - `datastring` -- This is a string containing a list of the tar files to be loaded for the current checkpoint. A new datastring is created at the beginning of every checkpoint. If using multiple datasets, this is a list of comma-separated strings. A sample datastring is shown below.
 ```bash
 ['pipe:aws s3 cp s3://tri-ml-datasets/datasets/datacompdr_1b/{00000037,00000078,00000005,00000099,00000015,00000007,00000063}.tar -']
@@ -193,7 +193,7 @@ for ckpt in range(num_checkpoints):
 Given these, we support setting both the `--hparams.per_gpu_batch_size` (try as high as possible), as well as the `--hparams.global_batch_size`. Accumulation is computed automatically.
 
 ### 6. Logging
-Logging is done automatically to [wandb](wandb.ai). We use `samples_per_sec_per_gpu` as the main measure of speed. To disable logging, set the `--wandb=False` flag.  
+Logging is done automatically to [wandb](wandb.ai). We use `samples_per_sec_per_gpu` as the main measure of speed. To disable logging, set the `--wandb=False` flag.
 
 ### 7. Linting
 We use [ruff](https://github.com/astral-sh/ruff) for formatting and linting. Ruff runs these in separate steps:
@@ -207,7 +207,7 @@ Tests are implemented with [pytest](https://docs.pytest.org/en/stable/). To run 
 ```
 uv run pytest
 ```
-To run more verbose tests, you can add `-v` for detailed per-test breakdowns and `-s` to display print statement outputs. 
+To run more verbose tests, you can add `-v` for detailed per-test breakdowns and `-s` to display print statement outputs.
 
 Please add tests for things you implement. To make it clearer on where to add new tests, we organize the `tests` folder in similar structure to the main `lbm2` folder (with subfolders `data`, `models`, etc.) You can run tests in a specific folder by calling something like
 ```

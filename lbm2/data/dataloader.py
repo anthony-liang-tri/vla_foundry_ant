@@ -2,6 +2,7 @@ import copy
 import logging
 import random
 from dataclasses import dataclass
+from typing import List, Sequence, Tuple
 
 import numpy as np
 import torch
@@ -14,7 +15,13 @@ from lbm2.data.utils import SharedCheckpointCounter
 from lbm2.file_utils import load_dataset_manifest
 
 
-def seed_worker(worker_id):
+def seed_worker(worker_id: int) -> None:
+    """
+    Seed NumPy and Python RNGs inside a dataloader worker process.
+
+    Args:
+        worker_id: The worker id provided by PyTorch's DataLoader.
+    """
     worker_seed = torch.initial_seed() % 2**32
     np.random.seed(worker_seed)
     random.seed(worker_seed)
@@ -22,30 +29,57 @@ def seed_worker(worker_id):
 
 @dataclass
 class DataInfo:
+    """
+    This is a wrapper around WebDataset's DataLoader that allows us to store a few extra information.
+    """
+
     dataloader: DataLoader
     sampler: DistributedSampler = None
     shared_checkpoint_counter: SharedCheckpointCounter = None
 
+    # Optional token IDs for padding and image tokenization.
     pad_token_id: int = None
     image_token_id: int = None
 
-    def set_checkpoint_num(self, checkpoint_num):
+    def set_checkpoint_num(self, checkpoint_num: int) -> None:
+        """
+        Propagate the current checkpoint window number to helpers.
+        """
         if self.shared_checkpoint_counter is not None:
             self.shared_checkpoint_counter.set_value(checkpoint_num)
         if self.sampler is not None and isinstance(self.sampler, DistributedSampler):
             self.sampler.set_checkpoint_num(checkpoint_num)
 
 
-def get_wds_dataloader(datastrings, num_samples_per_dataset, checkpoint_num, cfg):
+def get_wds_dataloader(
+    datastrings: Sequence[str],
+    num_samples_per_dataset: Sequence[int],
+    checkpoint_num: int,
+    cfg: object,
+) -> DataInfo:
+    """
+    Build a mixed WebDataset dataloader for a single checkpoint window.
+    Args:
+        datastrings: Per-dataset WebDataset input strings.
+        num_samples_per_dataset: The sample budget to draw from each dataset for this window.
+            These are used as mixing probabilities in `wds.mix.RandomMix`.
+        checkpoint_num: Current checkpoint window index.
+        cfg: Training configuration object.
+
+    Returns:
+        DataInfo: A wrapper containing the `WebLoader` and helper objects.
+    """
     shared_checkpoint_counter = SharedCheckpointCounter(checkpoint_num=checkpoint_num)
+
+    # Per-rank batch size (global batch is split evenly across ranks).
     if cfg.hparams.global_batch_size // cfg.distributed.world_size == 0:
         logging.error(
             f"Global batch size {cfg.hparams.global_batch_size} is smaller than world size "
             f"{cfg.distributed.world_size}, setting it to world size"
         )
-
     batch_size = max(cfg.hparams.global_batch_size // cfg.distributed.world_size, 1)
 
+    # Build one pipeline per dataset, then mix them by target sample counts.
     datasets = []
     for datastring, modality in zip(datastrings, cfg.data.dataset_modality, strict=False):
         datasets.append(create_wds_pipeline(datastring, modality, batch_size, checkpoint_num, cfg.data))
@@ -62,16 +96,19 @@ def get_wds_dataloader(datastrings, num_samples_per_dataset, checkpoint_num, cfg
         generator = None
         worker_init_fn = None
 
+    # WebDataset's DataLoader replacement; yields already-batched samples.
     dataloader = wds.WebLoader(
         dataset,
-        batch_size=None,
-        shuffle=False,
+        batch_size=None,  # batching handled in the pipeline
+        shuffle=False,  # mixing is handled by RandomMix
         num_workers=cfg.data.num_workers,
         persistent_workers=False,
         generator=generator,
         worker_init_fn=worker_init_fn,
     )
 
+    # Compute total batches/samples this loader will emit in this window.
+    # We want each worker to process the same number of shard-groups.
     if cfg.data.num_workers == 0:
         logging.warning("num_workers is <= 0, setting to 1 per GPU")
     num_workers_per_gpu = max(1, cfg.data.num_workers)
@@ -81,6 +118,7 @@ def get_wds_dataloader(datastrings, num_samples_per_dataset, checkpoint_num, cfg
 
     num_batches = num_worker_batches * num_workers_per_gpu
     num_samples = num_batches * cfg.hparams.global_batch_size
+
     dataloader.num_batches = num_batches
     dataloader.num_samples = num_samples
 
@@ -97,11 +135,44 @@ def get_datastring_input(
     allow_multiple_epochs: str,
     num_workers_per_gpu: int,
     world_size: int,
-):
+) -> Tuple[List[str], List[int], List[int], List[int]]:
+    """
+    Select shards for the next checkpoint window and build datastrings.
+
+    Given one or more dataset manifests, this function determines how many
+    samples to draw from each dataset (according to `dataset_weighting`), then
+    selects enough shards so that every worker across all ranks receives the
+    same count of shards. It returns WebDataset datastrings suitable for
+    `create_wds_pipeline`.
+
+    Args:
+        num_samples: Total number of samples to fetch across all
+            datasets for this window.
+        curr_shard_idx_per_dataset: Current shard cursor per dataset.
+        shard_shuffle_seed_per_dataset: Current shuffle seed per dataset.
+        manifest_paths: Paths/URIs to per-dataset manifest JSON files.
+        dataset_weighting: Optional per-dataset weights; if `None`,
+            uses uniform weighting.
+        allow_multiple_epochs: Whether to reshuffle and wrap around when
+            shards are exhausted.
+        num_workers_per_gpu: Number of dataloader workers per rank.
+        world_size: Total number of ranks in the distributed job.
+
+    Returns:
+        datastrings: Per-dataset WebDataset input strings (local or S3 pipe).
+        num_samples_list_per_dataset: Per-dataset total samples scheduled
+            for this window (after shard selection).
+        next_shard_idx_per_dataset: Updated shard cursors after accounting
+            for selected shards.
+        next_shard_shuffle_seed_per_dataset: Updated shuffle seeds.
+    """
+    # Load/reshuffle manifests per dataset with the provided seeds.
     manifests = [
         load_dataset_manifest(path, shard_shuffle_seed=seed)
         for path, seed in zip(manifest_paths, shard_shuffle_seed_per_dataset, strict=False)
     ]
+
+    # Default to uniform weighting if not provided.
     if dataset_weighting is None:
         dataset_weighting = [1 for i in range(len(manifests))]
 
@@ -116,10 +187,15 @@ def get_datastring_input(
 
     next_shard_idx_per_dataset = copy.deepcopy(curr_shard_idx_per_dataset)
     next_shard_shuffle_seed_per_dataset = copy.deepcopy(shard_shuffle_seed_per_dataset)
+
+    # Build lists of shard names and their sample counts selected for this window.
     shard_list_per_dataset = [[] for i in range(len(manifests))]
     num_samples_list_per_dataset = [[] for i in range(len(manifests))]
     total_num_workers = num_workers_per_gpu * world_size
 
+    # Greedily add shards until we satisfy both:
+    # (a) enough samples for the weighting target, and
+    # (b) at least one shard per worker (to balance work).
     for i in range(len(manifests)):
         while (
             len(shard_list_per_dataset[i]) < total_num_workers
@@ -132,7 +208,7 @@ def get_datastring_input(
                     "Adding data to ensure each worker has a shard."
                 )
             try:
-                # Add shards incrementally
+                # Take the next shard from the manifest and advance the cursor.
                 shard_idx = curr_shard_idx_per_dataset[i]
                 shard_list_per_dataset[i].append(manifests[i][shard_idx]["shard"])
                 num_samples_list_per_dataset[i].append(manifests[i][shard_idx]["num_sequences"])
@@ -157,6 +233,7 @@ def get_datastring_input(
                     )
                     raise e
 
+    # Normalize shard lists: ensure each dataset's shard count is divisible by total workers.
     for i in range(len(manifests)):
         # Ensure number of shards is a multiple of number of workers, so each worker has same number of shards.
         idx_div = (
@@ -172,13 +249,17 @@ def get_datastring_input(
         next_shard_shuffle_seed_per_dataset[i] += next_shard_idx_per_dataset[i] // len(manifests[i])
         next_shard_idx_per_dataset[i] = next_shard_idx_per_dataset[i] % len(manifests[i])
 
+    # Build WebDataset datastrings per dataset from selected shard names.
     datastrings = []
     for i, manifest_path in enumerate(manifest_paths):
         shard_root_source = "/".join(manifest_path.split("/")[:-1]) + "/"
         curr_datastring = shard_root_source + "{" + ",".join(shard_list_per_dataset[i]) + "}.tar"
         if manifest_path.startswith("s3"):
+            # Stream from S3 via pipe so WebDataset can read tar files from stdin.
             curr_datastring = f"pipe:aws s3 cp {curr_datastring} -"
         datastrings.append(curr_datastring)
 
-    num_samples_list_per_dataset = [sum(i) for i in num_samples_list_per_dataset]
-    return datastrings, num_samples_list_per_dataset, next_shard_idx_per_dataset, next_shard_shuffle_seed_per_dataset
+    # Collapse per-shard sample counts into per-dataset totals.
+    total_num_samples_per_dataset = [sum(i) for i in num_samples_list_per_dataset]
+
+    return datastrings, total_num_samples_per_dataset, next_shard_idx_per_dataset, next_shard_shuffle_seed_per_dataset
