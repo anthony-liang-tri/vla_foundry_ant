@@ -30,23 +30,6 @@ from lbm2.train import train_one_checkpoint
 from lbm2.utils import get_experiment_name, set_random_seed
 
 
-def setup_experiment_io(cfg: TrainExperimentParams, experiment_name: str) -> ExperimentPaths:
-    """Create experiment/, out.log, checkpoints/, dump config, do initial remote sync."""
-    base = cfg.save_path or "experiments"
-    root = os.path.join(base, experiment_name)
-    os.makedirs(root, exist_ok=True)
-    log = os.path.join(root, "out.log")
-    setup_logging(log, logging.INFO)
-    ckpt = os.path.join(root, "checkpoints")
-    os.makedirs(ckpt, exist_ok=True)
-    if is_master(cfg):
-        with open(os.path.join(root, "config.yaml"), "w") as f:
-            draccus.dump(cfg, f)
-        if cfg.remote_sync:
-            remote_sync(root, os.path.join(cfg.remote_sync, experiment_name))
-    return ExperimentPaths(root=root, log=log, ckpt=ckpt)
-
-
 def main():
     """
     Entry point for launching training.
@@ -71,7 +54,6 @@ def main():
 
     # Set path for experiment, log, checkpoints.
     experiment_name = get_experiment_name(cfg)
-    paths = setup_experiment_io(cfg, experiment_name)
     if cfg.save_path is None:
         experiment_path = os.path.join("experiments", experiment_name)
     else:
