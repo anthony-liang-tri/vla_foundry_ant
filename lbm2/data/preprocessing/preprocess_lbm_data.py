@@ -1,27 +1,4 @@
 #!/usr/bin/env python3
-"""
-Usage:
-    python preprocess_lbm_data_optimized.py \
-        --source_episodes \
-          "[s3://robotics-manip-lbm/efs/data/tasks/PickAndPlaceBox/cabot/sim/bc/teleop/2025-02-11T17-04-00-05-00/,]" \
-        --output_dir s3://my-bucket/processed-dataset/ \
-ba        --language_annotations_path lbm2/data/preprocessing/lbm_language_annotations.yaml \
-        --past_lowdim_steps 4 \
-        --future_lowdim_steps 16 \
-        --image_indices -1,0 \
-        --max_padding_per_side 5 \
-        --padding_strategy copy \
-        --filter_still_samples True \
-        --still_threshold 0.01 \
-        --samples_per_shard 1000 \
-        --stride 1 \
-        --jpeg_quality 95 \
-        --num_workers 16 \
-        --no_statistics True \
-        --resize_images_size 256, 342 \
-        --use_gpu_resize True \
-        --resume False
-"""
 
 import datetime
 import hashlib

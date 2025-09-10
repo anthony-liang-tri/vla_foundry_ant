@@ -12,7 +12,7 @@ uv run --group preprocessing python lbm2/data/preprocessing/preprocess_lbm_data.
     --max_padding_left 3 \
     --max_padding_right 16 \
     --samples_per_shard 1 \
-    --max_episodes 10 \
+    --max_episodes 5 \
     --jpeg_quality 95 \
     --filter_still_samples False \
     --still_threshold 0.05 \
