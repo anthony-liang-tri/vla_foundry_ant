@@ -7,11 +7,11 @@ uv run --group preprocessing python lbm2/data/preprocessing/preprocess_lbm_data.
     --camera_names "include lbm2/config_presets/data/lbm_data_camera_names.yaml" \
     --past_lowdim_steps 2 \
     --num_workers 5 \
-    --future_lowdim_steps 20 \
+    --future_lowdim_steps 14 \
     --image_indices "[-2, 0]" \
     --max_padding_left 3 \
     --max_padding_right 16 \
-    --samples_per_shard 5 \
+    --samples_per_shard 1 \
     --max_episodes 1 \
     --jpeg_quality 95 \
     --filter_still_samples False \

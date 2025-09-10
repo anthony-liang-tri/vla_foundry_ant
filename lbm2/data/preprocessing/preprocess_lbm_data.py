@@ -335,8 +335,8 @@ class EpisodeProcessor:
 
     def __init__(
         self,
-        past_lowdim_steps: int = 4,
-        future_lowdim_steps: int = 16,
+        past_lowdim_steps: int = 2,
+        future_lowdim_steps: int = 14,
         image_indices: List[int] = None,
         max_padding_left: int = 5,
         max_padding_right: int = 5,
@@ -533,27 +533,27 @@ class EpisodeProcessor:
 
         return True
 
-    def create_relative_lowdim_data(
-        self, lowdim_data: Dict[str, np.ndarray], anchor_relative_idx: int
-    ) -> Dict[str, np.ndarray]:
-        """Create relative coordinate data."""
-        relative_data = {}
+    # def create_relative_lowdim_data(
+    #     self, lowdim_data: Dict[str, np.ndarray], anchor_relative_idx: int
+    # ) -> Dict[str, np.ndarray]:
+    #     """Create relative coordinate data."""
+    #     relative_data = {}
 
-        for key, data in lowdim_data.items():
-            if not np.issubdtype(data.dtype, np.number):
-                continue
+    #     for key, data in lowdim_data.items():
+    #         if not np.issubdtype(data.dtype, np.number):
+    #             continue
 
-            try:
-                if "xyz" in key.lower() and data.shape[-1] == 3:
-                    relative_data[f"{key}_relative"] = xyz_to_relative(data, anchor_relative_idx)
-                elif "rot_6d" in key.lower() and data.shape[-1] == 6:
-                    relative_data[f"{key}_relative"] = rot_6d_to_relative(data, anchor_relative_idx)
-                elif any(pos_word in key.lower() for pos_word in ["position", "pose", "pos"]) and data.shape[-1] == 3:
-                    relative_data[f"{key}_relative"] = xyz_to_relative(data, anchor_relative_idx)
-            except Exception:
-                continue
+    #         try:
+    #             if "xyz" in key.lower() and data.shape[-1] == 3:
+    #                 relative_data[f"{key}_relative"] = xyz_to_relative(data, anchor_relative_idx)
+    #             elif "rot_6d" in key.lower() and data.shape[-1] == 6:
+    #                 relative_data[f"{key}_relative"] = rot_6d_to_relative(data, anchor_relative_idx)
+    #             elif any(pos_word in key.lower() for pos_word in ["position", "pose", "pos"]) and data.shape[-1] == 3:
+    #                 relative_data[f"{key}_relative"] = xyz_to_relative(data, anchor_relative_idx)
+    #         except Exception:
+    #             continue
 
-        return relative_data
+    #     return relative_data
 
     def transform_camera_calibration_keys(
         self, intrinsics: Dict[str, Any], extrinsics: Dict[str, Any], metadata: Dict[str, Any]
@@ -704,17 +704,17 @@ class EpisodeProcessor:
                     sample_actions[key] = valid_data
 
                 # Add relative coordinates
-                anchor_relative_idx = self.past_lowdim_steps
-                relative_data = self.create_relative_lowdim_data(sample_lowdim, anchor_relative_idx)
-                sample_lowdim.update(relative_data)
+                #anchor_relative_idx = self.past_lowdim_steps
+                #relative_data = self.create_relative_lowdim_data(sample_lowdim, anchor_relative_idx)
+                #sample_lowdim.update(relative_data)
 
                 # Create masks
                 total_length = self.past_lowdim_steps + self.future_lowdim_steps + 1
                 past_mask = np.ones(total_length, dtype=bool)
                 future_mask = np.ones(total_length, dtype=bool)
                 # Current time step is part of the future for low dim data
-                past_mask[anchor_relative_idx:] = False
-                future_mask[:anchor_relative_idx] = False
+                past_mask[self.past_lowdim_steps:] = False
+                future_mask[:self.past_lowdim_steps] = False
 
                 if past_padding > 0:
                     past_mask[:past_padding] = False

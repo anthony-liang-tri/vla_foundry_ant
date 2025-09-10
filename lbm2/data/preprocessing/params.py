@@ -10,8 +10,8 @@ class SampleMetadata:
 
     episode_id: str
     sample_id: str
-    anchor_timestep: int
-    anchor_relative_idx: int
+    anchor_timestep: Optional[int]
+    anchor_relative_idx: Optional[int]
     image_timesteps: List[int]
     lowdim_start_timestep: int
     lowdim_end_timestep: int
