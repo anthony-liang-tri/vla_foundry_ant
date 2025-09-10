@@ -41,7 +41,7 @@ class PreprocessParams(BaseParams):
     padding_strategy: str = field(default="copy")  # one of: copy, zero, reflect
 
     # Filtering
-    filter_still_samples: bool = field(default=True)
+    filter_still_samples: bool = field(default=False)
     still_threshold: float = field(default=0.01)
 
     # Cameras
@@ -49,7 +49,7 @@ class PreprocessParams(BaseParams):
     discard_keys: Optional[List[str]] = field(default=None)
 
     # Sharding / compression
-    samples_per_shard: int = field(default=100)
+    samples_per_shard: int = field(default=1)
     jpeg_quality: int = field(default=95)
 
     # Runtime
@@ -60,12 +60,12 @@ class PreprocessParams(BaseParams):
     shuffle_input_files: bool = field(default=True)
 
     # Statistics and reproducibility
-    no_statistics: bool = field(default=False)
+    no_statistics: bool = field(default=True)
     no_auto_tag: bool = field(default=False)
 
     # Incremental updates and resume capability
     enable_incremental_updates: bool = field(default=True)
-    update_frequency: int = field(default=5)  # Update metadata every N shards
+    update_frequency: int = field(default=10)  # Update metadata every N shards
     resume: bool = field(default=False)  # Whether to resume from existing progress
 
     # Testing flags

@@ -1,6 +1,6 @@
 # LBM Data Preprocessing
 
-This folder containts python files to preprocess LBM data and convert them to various formats. In general, these scripts convert processed robotics demonstration data from S3 storage into WebDataset tar files or LeRobot formats for LBM2 training. This tool takes episodic robot data (images, actions, observations) and packages them into training-ready format with temporal sequences and language annotations. Note that this README and this folder is still under development and will be updated frequently with additional support and documentation being added.
+This folder containts python files to preprocess LBM data and convert them to various formats. In general, these scripts convert processed robotics demonstration data from S3 storage into WebDataset tar files or LeRobot formats for LBM2 training. This tool takes episodic robot data (images, actions, observations) and packages them into training-ready format with temporal sequences and language annotations. Note that this README and this folder is still under development and will be updated frequently with additional support and documentation being added. 
 
 ## What it does
 
@@ -28,6 +28,8 @@ s3://bucket/path/to/episode/
 
 ## Output Format (LBM2 shards)
 
+
+
 Generates WebDataset tar files:
 ```
 output_directory/
@@ -41,30 +43,34 @@ output_directory/
 ## Basic Usage
 
 ```bash
-python preprocess_lbm_data_optimized.py \
-        --source_episodes \
-          "[s3://robotics-manip-lbm/efs/data/tasks/PickAndPlaceBox/cabot/sim/bc/teleop/2025-02-11T17-04-00-05-00/,]" \
-        --output_dir s3://my-bucket/processed-dataset/ \
-        --language_annotations_path lbm2/data/preprocessing/lbm_language_annotations.yaml \
-        --past_lowdim_steps 2 \
-        --future_lowdim_steps 14 \
-        --image_indices -2,0 \
-        --max_padding_left 3 \
-        --max_padding_right 16 \
-        --padding_strategy copy \
-        --filter_still_samples True \
-        --still_threshold 0.01 \
-        --samples_per_shard 1000 \
-        --stride 1 \
-        --jpeg_quality 95 \
-        --num_workers 16 \
-        --no_statistics True \
-        --resize_images_size 256, 342 \
-        --use_gpu_resize True \
-        --resume False
+uv run --group preprocessing python lbm2/data/preprocessing/preprocess_lbm_data.py \
+    --source_episodes "['s3://robotics-manip-lbm/efs/data/tasks/PickAndPlaceBox/cabot/sim/bc/teleop/2025-02-11T17-04-00-05-00/']" \
+    --output_dir s3://tri-ml-datasets/preprocess_test_tiny/lbm/PickAndPlaceBox/cabot/sim/ \
+    --language_annotations_path lbm2/data/preprocessing/lbm_language_annotations.yaml \
+    --discard_keys "include lbm2/config_presets/data/lbm_data_discard_key.yaml" \
+    --camera_names "include lbm2/config_presets/data/lbm_data_camera_names.yaml" \
+    --past_lowdim_steps 2 \
+    --num_workers 5 \
+    --future_lowdim_steps 14 \
+    --image_indices "[-2, 0]" \
+    --max_padding_left 3 \
+    --max_padding_right 16 \
+    --samples_per_shard 1 \
+    --max_episodes 5 \
+    --jpeg_quality 95 \
+    --filter_still_samples False \
+    --still_threshold 0.05 \
+    --resize_images_size "[256, 342]" \
+    --shuffle_buffer_size 100 \
+    --shuffle_input_files True \
+    --enable_incremental_updates False \
+    --resume False \
+    --update_frequency 10
 ```
 
 ## Key Configuration
+
+The full list of options and parameters for converting from *processed* LBM data to LBM2 shards can be found in `params.py`. 
 
 ### Temporal Windows
 - `--past_lowdim_steps`: Past timesteps for low-dim data (default: 2)
@@ -75,7 +81,7 @@ python preprocess_lbm_data_optimized.py \
 - `--resize_images_size`: Target image size [height, width] (default: [256, 342])
 - `--padding_strategy`: How to pad sequences - "copy", "zero", "reflect" (default: "copy")
 - `--filter_still_samples`: Remove static samples (default: True)
-- `--samples_per_shard`: Samples per tar file (default: 1000)
+- `--samples_per_shard`: Samples per tar file (default: 1)
 
 ### Language Annotations
 
