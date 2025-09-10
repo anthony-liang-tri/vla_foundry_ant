@@ -659,6 +659,8 @@ class EpisodeProcessor:
                 lowdim_start = anchor_timestep - self.past_lowdim_steps
                 lowdim_end = anchor_timestep + self.future_lowdim_steps
 
+                print("range: ", lowdim_end - lowdim_start)
+
                 # Check padding
                 past_padding = max(0, -lowdim_start)
                 future_padding = max(0, lowdim_end - episode_length + 1)
@@ -737,8 +739,8 @@ class EpisodeProcessor:
                 sample_metadata = SampleMetadata(
                     episode_id=episode_id,
                     sample_id=f"{uuid.uuid4()}_{episode_id}_t{anchor_timestep:04d}",
-                    anchor_timestep=int(anchor_timestep),
-                    anchor_relative_idx=int(anchor_relative_idx),
+                    anchor_timestep=None,
+                    anchor_relative_idx=None,
                     image_timesteps=actual_image_timesteps,
                     lowdim_start_timestep=int(lowdim_start),
                     lowdim_end_timestep=int(lowdim_end),
@@ -959,8 +961,8 @@ def main():
     print(f"Resume: {'enabled' if cfg.resume else 'disabled'}")
     if cfg.enable_incremental_updates:
         print(f"Metadata update frequency: every {cfg.update_frequency} shards")
-    if cfg.resize_images_size > 0:
-        print(f"Image resize to {cfg.resize_images_size}x{cfg.resize_images_size}")
+    if cfg.resize_images_size and len(cfg.resize_images_size) == 2:
+        print(f"Image resize to {cfg.resize_images_size[0]}x{cfg.resize_images_size[1]}")
     else:
         print("Image resize disabled")
 
@@ -1017,7 +1019,7 @@ def main():
         cfg.output_dir,
         cfg.samples_per_shard,
         cfg.jpeg_quality,
-        gpu_resize=(cfg.resize_images_size > 0 and cfg.use_gpu_resize),
+        gpu_resize=(cfg.resize_images_size and len(cfg.resize_images_size) == 2 and cfg.use_gpu_resize),
         enable_incremental_updates=cfg.enable_incremental_updates,
         update_frequency=cfg.update_frequency,
         resume=cfg.resume,
@@ -1061,7 +1063,7 @@ def main():
     counters: Dict[str, int] = {"total_samples": 0}
 
     def consumer():
-        target = (cfg.resize_images_size, cfg.resize_images_size) if cfg.resize_images_size > 0 else None
+        target = tuple(cfg.resize_images_size) if cfg.resize_images_size and len(cfg.resize_images_size) == 2 else None
         buffer_size = max(0, int(cfg.shuffle_buffer_size))
 
         # Reservoir sampling buffer for true random shuffle with bounded memory

@@ -34,7 +34,7 @@ class PreprocessParams(BaseParams):
     # Sampling/windowing
     past_lowdim_steps: int = field(default=5)
     future_lowdim_steps: int = field(default=20)
-    image_indices: List[int] = field(default_factory=lambda: [-5, 0])
+    image_indices: List[int] = field(default_factory=lambda: [-2, 0])
     stride: int = field(default=1)
     max_padding_left: int = field(default=5)
     max_padding_right: int = field(default=5)
@@ -72,7 +72,7 @@ class PreprocessParams(BaseParams):
     skip_git_tagging: bool = field(default=False)  # Skip git operations for testing
 
     # Image preprocessing
-    resize_images_size: int = field(default=0)
+    resize_images_size: List[int] = field(default_factory=lambda: [256, 342])
     use_gpu_resize: bool = field(default=True)
 
     # Language annotations
