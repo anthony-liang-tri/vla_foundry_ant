@@ -1,3 +1,7 @@
+"""
+Need to first install the RoboCasa repo and set up the environment variables to run this.
+See https://github.com/robocasa/robocasa for more details.
+"""
 from robocasa.utils.env_utils import create_env
 from lbm2.eval.runners.base_eval_runner import BaseEvalRunner
 

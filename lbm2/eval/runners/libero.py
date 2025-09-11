@@ -1,3 +1,7 @@
+"""
+Need to first install the LIBERO repo and set up the environment variables to run this.
+See https://github.com/Lifelong-Robot-Learning/LIBERO for more details.
+"""
 import os
 from libero.libero import benchmark, get_libero_path
 from libero.libero.envs import OffScreenRenderEnv
