@@ -42,7 +42,7 @@ class PreprocessParams(BaseParams):
 
     # Filtering
     filter_still_samples: bool = field(default=False)
-    still_threshold: float = field(default=0.01)ß
+    still_threshold: float = field(default=0.01)
 
     # Cameras
     camera_names: Optional[List[str]] = field(default=None)

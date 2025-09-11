@@ -15,6 +15,7 @@ uv run --group preprocessing python lbm2/data/preprocessing/preprocess_lbm_data.
     --max_episodes_to_process 5 \
     --jpeg_quality 95 \
     --filter_still_samples False \
+    --no_statistics False \
     --still_threshold 0.05 \
     --resize_images_size "[256, 342]" \
     --shuffle_buffer_size 100 \

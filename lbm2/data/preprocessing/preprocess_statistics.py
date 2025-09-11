@@ -158,6 +158,11 @@ class StreamingDatasetStatistics:
                     sample_lowdim[key] = data[None, ...]
                 else:
                     sample_lowdim[key] = np.concatenate([sample_lowdim[key], data[None, ...]], axis=0)
+            for key, data in sample["actions"].items():
+                if key not in sample_lowdim:
+                    sample_lowdim[key] = data[None, ...]
+                else:
+                    sample_lowdim[key] = np.concatenate([sample_lowdim[key], data[None, ...]], axis=0)
             if "past_mask" in sample and "future_mask" in sample:
                 mask = np.logical_or(sample["past_mask"], sample["future_mask"])
                 if "mask" not in sample_lowdim:
