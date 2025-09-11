@@ -12,7 +12,7 @@ import draccus
 import sagemaker
 from lbm2.params.base_params import BaseParams
 from lbm2.params.train_experiment_params import TrainExperimentParams
-from sagemaker.batch_queueing.queue import Queue
+from sagemaker.aws_batch.training_queue import TrainingQueue as Queue
 from sagemaker.pytorch import PyTorch
 
 NAME = "lbm2"
