@@ -12,7 +12,7 @@ uv run --group sagemaker --group preprocessing sagemaker/launch_preprocessing.py
   --past_lowdim_steps 5 \
   --future_lowdim_steps 20 \
   --image_indices "[-5, 0]" \
-  --max_episodes -1 \
+  --max_episodes_to_process -1 \
   --samples_per_shard 100 \
   --jpeg_quality 95 \
   --num_workers 40 \

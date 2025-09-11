@@ -47,7 +47,7 @@ uv run --group preprocessing python lbm2/data/preprocessing/preprocess_lbm_data.
     --source_episodes "['s3://robotics-manip-lbm/efs/data/tasks/PickAndPlaceBox/cabot/sim/bc/teleop/2025-02-11T17-04-00-05-00/']" \
     --output_dir s3://tri-ml-datasets/preprocess_test_tiny/lbm/PickAndPlaceBox/cabot/sim/ \
     --language_annotations_path lbm2/data/preprocessing/lbm_language_annotations.yaml \
-    --discard_keys "include lbm2/config_presets/data/lbm_data_discard_key.yaml" \
+    --camera_discard_keys "include lbm2/config_presets/data/lbm_data_discard_key.yaml" \
     --camera_names "include lbm2/config_presets/data/lbm_data_camera_names.yaml" \
     --past_lowdim_steps 2 \
     --num_workers 5 \
@@ -56,7 +56,7 @@ uv run --group preprocessing python lbm2/data/preprocessing/preprocess_lbm_data.
     --max_padding_left 3 \
     --max_padding_right 16 \
     --samples_per_shard 1 \
-    --max_episodes 5 \
+    --max_episodes_to_process 5 \
     --jpeg_quality 95 \
     --filter_still_samples False \
     --still_threshold 0.05 \

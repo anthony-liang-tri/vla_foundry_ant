@@ -11,12 +11,12 @@ uv run --group preprocessing python lbm2/data/preprocessing/preprocess_lbm_data.
     --padding_strategy zero \
     --filter_still_samples False \
     --still_threshold 0.05 \
-    --discard_keys "include lbm2/config_presets/data/lbm_data_discard_key.yaml" \
+    --camera_discard_keys "include lbm2/config_presets/data/lbm_data_discard_key.yaml" \
     --camera_names "include lbm2/config_presets/data/lbm_data_camera_names.yaml" \
     --samples_per_shard 100 \
     --jpeg_quality 95 \
     --num_workers 40 \
-    --max_episodes -1 \
+    --max_episodes_to_process -1 \
     --fail_on_nan True \
     --shuffle_buffer_size 10000 \
     --shuffle_input_files True \

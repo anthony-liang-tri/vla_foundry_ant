@@ -30,14 +30,14 @@ class RawRoboticsDataLoader:
         self,
         episode_paths: List[str],
         max_samples: int = -1,
-        max_episodes: int = -1,
+        max_episodes_to_process: int = -1,
         camera_names: Optional[List[str]] = None,
         trajectory_length: int = 50,
         stride: int = 1,
     ):
         self.episode_paths = episode_paths
         self.max_samples = max_samples
-        self.max_episodes = max_episodes
+        self.max_episodes_to_process = max_episodes_to_process
         self.camera_names = camera_names
         self.trajectory_length = trajectory_length
         self.stride = stride
@@ -221,8 +221,8 @@ class RawRoboticsDataLoader:
         print(f"🔍 Loading raw episode data from {len(self.episode_paths)} episodes...")
 
         episodes_to_process = self.episode_paths
-        if self.max_episodes > 0:
-            episodes_to_process = episodes_to_process[: self.max_episodes]
+        if self.max_episodes_to_process > 0:
+            episodes_to_process = episodes_to_process[: self.max_episodes_to_process]
 
         for episode_path in tqdm(episodes_to_process, desc="Loading episodes"):
             episode_data = self.load_episode_data(episode_path)
@@ -241,7 +241,7 @@ class RawRoboticsDataLoader:
         return self.samples
 
 
-def discover_raw_episodes(source_paths: List[str], max_episodes: int = -1) -> List[str]:
+def discover_raw_episodes(source_paths: List[str], max_episodes_to_process: int = -1) -> List[str]:
     """Discover raw episode directories."""
     if isinstance(source_paths, str):
         source_paths = [source_paths]
@@ -257,7 +257,7 @@ def discover_raw_episodes(source_paths: List[str], max_episodes: int = -1) -> Li
                 processed_path = os.path.join(source_path, "processed")
                 if fs.exists(processed_path if not source_path.startswith("s3://") else processed_path[5:]):
                     episodes.append(source_path)
-                    if max_episodes > 0 and len(episodes) >= max_episodes:
+                    if max_episodes_to_process > 0 and len(episodes) >= max_episodes_to_process:
                         return sorted(episodes)
                 continue
 
@@ -278,7 +278,7 @@ def discover_raw_episodes(source_paths: List[str], max_episodes: int = -1) -> Li
                     try:
                         if fs.exists(fs_processed_path):
                             episodes.append(full_item_path)
-                            if max_episodes > 0 and len(episodes) >= max_episodes:
+                            if max_episodes_to_process > 0 and len(episodes) >= max_episodes_to_process:
                                 return sorted(episodes)
                     except Exception:
                         continue
@@ -304,7 +304,7 @@ def discover_raw_episodes(source_paths: List[str], max_episodes: int = -1) -> Li
                                 try:
                                     if fs.exists(fs_processed_path):
                                         episodes.append(full_sub_path)
-                                        if max_episodes > 0 and len(episodes) >= max_episodes:
+                                        if max_episodes_to_process > 0 and len(episodes) >= max_episodes_to_process:
                                             return sorted(episodes)
                                 except Exception:
                                     continue

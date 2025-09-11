@@ -323,7 +323,7 @@ class EpisodeProcessor:
         jpeg_quality: int = 95,
         fail_on_nan: bool = True,
         camera_names: Optional[List[str]] = None,
-        discard_keys: Optional[List[str]] = None,
+        camera_discard_keys: Optional[List[str]] = None,
         compute_statistics: bool = True,
         resize_images_size: List[int] = [256, 342], #From LBM1
         language_annotations: Optional[Dict] = None,
@@ -341,7 +341,7 @@ class EpisodeProcessor:
         self.camera_names = camera_names
         self.filter_still_samples = filter_still_samples
         self.still_threshold = still_threshold
-        self.discard_keys = discard_keys or []
+        self.camera_discard_keys = camera_discard_keys or []
         self.compute_statistics = compute_statistics
         self.resize_images_size = resize_images_size
         self.language_annotations = language_annotations or {}
@@ -387,7 +387,7 @@ class EpisodeProcessor:
             try:
                 with fsspec.open(obs_path, "rb") as f:
                     observations = np.load(f, allow_pickle=True)
-                    observations = {k: v for k, v in observations.items() if k not in self.discard_keys}
+                    observations = {k: v for k, v in observations.items() if k not in self.camera_discard_keys}
                 break
             except Exception as e:
                 if attempt == 2:
@@ -407,7 +407,6 @@ class EpisodeProcessor:
                     # Extract the 'actions' key specifically
                     if 'actions' in actions_archive:
                         actions = {'actions': actions_archive['actions']}
-                        print(f"Loaded actions with shape: {actions['actions'].shape}")
                     else:
                         print(f"Warning: 'actions' key not found in {actions_path}")
                         print(f"Available keys: {list(actions_archive.keys())}")
@@ -635,8 +634,6 @@ class EpisodeProcessor:
                 lowdim_start = anchor_timestep - self.past_lowdim_steps
                 lowdim_end = anchor_timestep + self.future_lowdim_steps
 
-                print("range: ", lowdim_end - lowdim_start)
-
                 # Check padding
                 past_padding = max(0, -lowdim_start)
                 future_padding = max(0, lowdim_end - episode_length + 1)
@@ -754,7 +751,7 @@ def make_fs_path(full_path: str, is_s3: bool) -> str:
     return full_path[5:] if is_s3 and full_path.startswith("s3://") else full_path
 
 
-def discover_episodes_targeted(source_paths: List[str], max_episodes: int = -1) -> List[str]:
+def discover_episodes_targeted(source_paths: List[str], max_episodes_to_process: int = -1) -> List[str]:
     """Discover episodes efficiently, with different behavior based on whether 'diffusion_spartan' is in the path."""
     if isinstance(source_paths, str):
         source_paths = [source_paths]
@@ -805,7 +802,7 @@ def discover_episodes_targeted(source_paths: List[str], max_episodes: int = -1) 
         
         # Second pass: validate episode directories
         for episode_basename in episode_dirs:
-            if max_episodes > 0 and len(episodes) >= max_episodes:
+            if max_episodes_to_process > 0 and len(episodes) >= max_episodes_to_process:
                 break
                 
             # Construct full episode path
@@ -824,7 +821,7 @@ def discover_episodes_targeted(source_paths: List[str], max_episodes: int = -1) 
         if depth > max_depth:
             return
         
-        if max_episodes > 0 and len(episodes) >= max_episodes:
+        if max_episodes_to_process > 0 and len(episodes) >= max_episodes_to_process:
             return
             
         fs_current_path = make_fs_path(current_path, is_s3)
@@ -843,7 +840,7 @@ def discover_episodes_targeted(source_paths: List[str], max_episodes: int = -1) 
         
         # Only recurse into directories, skip all files
         for item in items:
-            if max_episodes > 0 and len(episodes) >= max_episodes:
+            if max_episodes_to_process > 0 and len(episodes) >= max_episodes_to_process:
                 break
                 
             item_name = item["name"] if isinstance(item, dict) else item
@@ -961,7 +958,7 @@ def main():
         "jpeg_quality": cfg.jpeg_quality,
         "fail_on_nan": cfg.fail_on_nan,
         "camera_names": camera_names,
-        "discard_keys": cfg.discard_keys,
+        "camera_discard_keys": cfg.camera_discard_keys,
         "compute_statistics": not cfg.no_statistics,
         "resize_images_size": cfg.resize_images_size,
         "language_annotations": language_annotations,
@@ -985,7 +982,7 @@ def main():
 
     # Discover episodes
     print("🔍 Discovering episodes...")
-    episodes = discover_episodes_targeted(cfg.source_episodes, cfg.max_episodes)
+    episodes = discover_episodes_targeted(cfg.source_episodes, cfg.max_episodes_to_process)
     print(f"Found {len(episodes)} episodes")
 
     # If running on SageMaker Processing with multiple instances, split work across hosts

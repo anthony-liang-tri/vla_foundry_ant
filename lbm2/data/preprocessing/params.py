@@ -32,21 +32,21 @@ class PreprocessParams(BaseParams):
     output_dir: Optional[str] = field(default=None)
 
     # Sampling/windowing
-    past_lowdim_steps: int = field(default=5)
-    future_lowdim_steps: int = field(default=20)
+    past_lowdim_steps: int = field(default=2)
+    future_lowdim_steps: int = field(default=14)
     image_indices: List[int] = field(default_factory=lambda: [-2, 0])
     stride: int = field(default=1)
-    max_padding_left: int = field(default=5)
-    max_padding_right: int = field(default=5)
+    max_padding_left: int = field(default=1)
+    max_padding_right: int = field(default=7)
     padding_strategy: str = field(default="copy")  # one of: copy, zero, reflect
 
     # Filtering
     filter_still_samples: bool = field(default=False)
-    still_threshold: float = field(default=0.01)
+    still_threshold: float = field(default=0.01)ß
 
     # Cameras
     camera_names: Optional[List[str]] = field(default=None)
-    discard_keys: Optional[List[str]] = field(default=None)
+    camera_discard_keys: Optional[List[str]] = field(default=None)
 
     # Sharding / compression
     samples_per_shard: int = field(default=1)
@@ -54,7 +54,7 @@ class PreprocessParams(BaseParams):
 
     # Runtime
     num_workers: int = field(default=40)
-    max_episodes: int = field(default=-1)
+    max_episodes_to_process: int = field(default=-1)
     fail_on_nan: bool = field(default=False)
     shuffle_buffer_size: int = field(default=1000)
     shuffle_input_files: bool = field(default=True)

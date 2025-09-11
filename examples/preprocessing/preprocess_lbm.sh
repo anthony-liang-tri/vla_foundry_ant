@@ -5,7 +5,7 @@ uv run --group preprocessing torchrun --nproc_per_node=2 lbm2/data/preprocessing
     --num_workers 40 \
     --future_lowdim_steps 20 \
     --image_indices "[-5, 0]" \
-    --max_episodes -1 \
+    --max_episodes_to_process -1 \
     --samples_per_shard 100 \
     --jpeg_quality 95 \
     --filter_still_samples True \
