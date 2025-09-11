@@ -1,6 +1,7 @@
 import hashlib
 import logging
 import random
+import traceback
 from multiprocessing import Value
 from typing import Iterable, Sequence
 
@@ -33,7 +34,8 @@ class SharedCheckpointCounter:
 
 def log_and_continue(exn: BaseException) -> bool:
     """Call in an exception handler to ignore any exception, issue a warning, and continue."""
-    logging.warning(f"Handling webdataset error ({repr(exn)}). Ignoring.")
+    tb_str = "".join(traceback.format_tb(exn.__traceback__))
+    logging.warning(f"Handling webdataset error ({repr(exn)}):\n{tb_str}Ignoring.")
     return True
 
 
