@@ -16,12 +16,12 @@ class BaseEvalRunner:
         obs = self.env.step(action)
         self.obs = obs
         return obs
-    
+
     def env_close(self):
         self.env.close()
 
     def extract_from_obs(self, obs):
-        return {'images': None, 'text': None}
+        return {"images": None, "text": None}
 
     def get_obs_tensor(self, obs):
         return obs
