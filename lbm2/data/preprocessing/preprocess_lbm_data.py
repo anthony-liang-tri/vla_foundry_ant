@@ -311,11 +311,11 @@ class EpisodeProcessor:
 
     def __init__(
         self,
-        past_lowdim_steps: int = 2,
+        past_lowdim_steps: int = 1,
         future_lowdim_steps: int = 14,
-        image_indices: List[int] = None,
-        max_padding_left: int = 5,
-        max_padding_right: int = 5,
+        image_indices: List[int] = [-1, 0],
+        max_padding_left: int = 1,
+        max_padding_right: int = 7,
         padding_strategy: str = "copy",
         filter_still_samples: bool = False,
         still_threshold: float = 0.01,

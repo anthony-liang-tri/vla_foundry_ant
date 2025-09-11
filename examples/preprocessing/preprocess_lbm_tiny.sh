@@ -5,10 +5,10 @@ uv run --group preprocessing python lbm2/data/preprocessing/preprocess_lbm_data.
     --language_annotations_path lbm2/data/preprocessing/lbm_language_annotations.yaml \
     --camera_discard_keys "include lbm2/config_presets/data/lbm_data_discard_key.yaml" \
     --camera_names "include lbm2/config_presets/data/lbm_data_camera_names.yaml" \
-    --past_lowdim_steps 2 \
+    --past_lowdim_steps 1 \
     --num_workers 5 \
     --future_lowdim_steps 14 \
-    --image_indices "[-2, 0]" \
+    --image_indices "[-1, 0]" \
     --max_padding_left 1 \
     --max_padding_right 15 \
     --samples_per_shard 1 \
