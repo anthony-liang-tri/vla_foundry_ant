@@ -7,11 +7,13 @@ Dataset gets organized at task-level, and task name is appened to repo_id when p
 
 LeRobot Format Structure:
 - data/chunk-000/episode_XXXXXX.parquet: Main episode data with observation.state, action, timestamps, etc.
-- videos/{camera_name}/chunk-000/episode_XXXXXX.mp4: Video files for each camera
+- videos/chunk-000/{camera_name}/episode_XXXXXX.mp4: Video files for each camera
 - meta/episodes.jsonl: Episode metadata with tasks and lengths
 - meta/stats.jsonl: Statistics for each field
 - meta/tasks.jsonl: Task definitions
 - meta/info.json: Dataset metadata and feature definitions
+- additional_data/depth/chunk-000/{camera_name}/episode_XXXXXX.npz: Optional depth data
+- additional_data/label/chunk-000/{camera_name}/episode_XXXXXX.npz: Optional label data
 
 Usage:
     # Create separate datasets for each task and push to HF
@@ -68,7 +70,6 @@ def encode_video_frames_from_array(
     crf: int | None = 30,
     fast_decode: int = 0,
     log_level: int | None = None,
-    overwrite: bool = True,
 ) -> None:
     """Encode video frames from numpy array using PyAV (adapted from LeRobot)."""
 
@@ -89,6 +90,7 @@ def encode_video_frames_from_array(
         raise ValueError(f"Expected frames shape (N, H, W, 3), got {frames.shape}")
 
     num_frames, height, width = frames.shape[:3]
+    print(f"Encoding video at {fps} FPS, {width}x{height}, codec={vcodec}, pix_fmt={pix_fmt}")
 
     if num_frames == 0:
         raise ValueError("No frames to encode")
@@ -217,8 +219,8 @@ class LeRobotPreprocessParams(BaseParams):
 
     # Dataset metadata
     dataset_name: str = field(default="lbm_dataset")
-    robot_type: str = field(default="dual_panda")
-    fps: int = field(default=30)
+    robot_type: str = field(default="lbm_bimanual_panda")
+    fps: int = field(default=10)
 
     # Processing options
     chunk_size: int = field(default=1000)  # Episodes per chunk
@@ -261,7 +263,7 @@ class LeRobotDatasetWriter:
         dataset_name: str,
         robot_type: str,
         fps: int = 30,
-        video_codec: str = "av1",
+        video_codec: str = "libsvtav1",
         preserve_depth: bool = True,
         preserve_segmentation: bool = True,
         preserve_calibration: bool = True,
@@ -308,10 +310,6 @@ class LeRobotDatasetWriter:
 
         # Create video chunk dirs for each camera (will be created as needed)
         return data_chunk_dir, chunk_name
-
-    def process_episode_ray(self, episode_path: str, episode_index: int, chunk_index: int = 0) -> Dict[str, Any]:
-        """Ray remote wrapper for processing a single episode and converting to LeRobot format."""
-        return self.process_episode(episode_path, episode_index, chunk_index)
 
     def process_episode(self, episode_path: str, episode_index: int, chunk_index: int = 0) -> Dict[str, Any]:
         """Process a single episode and convert to LeRobot format."""
@@ -363,7 +361,7 @@ class LeRobotDatasetWriter:
             timestamps = self.create_timestamps(episode_length)
 
             # Extract task information
-            task_info = self.extract_task_info(observations, metadata, episode_path)
+            task_info = self.extract_task_info(observations, episode_path)
             task_index = self.register_task(task_info)
 
             # Create DataFrame for this episode
@@ -473,8 +471,17 @@ class LeRobotDatasetWriter:
         try:
             actions_path = os.path.join(processed_path, "actions.npz")
             with fsspec.open(actions_path, "rb") as f:
-                actions = dict(np.load(f, allow_pickle=True))
-        except Exception:
+                actions_archive = np.load(f, allow_pickle=True)
+                # Extract the 'actions' key specifically
+                if "actions" in actions_archive:
+                    actions = {"actions": actions_archive["actions"]}
+                    print(f"Loaded actions with shape: {actions['actions'].shape}")
+                else:
+                    print(f"Warning: 'actions' key not found in {actions_path}")
+                    print(f"Available keys: {list(actions_archive.keys())}")
+                    actions = {}
+        except Exception as e:
+            print(f"Warning: Could not load actions from {actions_path}: {e}")
             pass
 
         # Load summary (optional)
@@ -614,28 +621,16 @@ class LeRobotDatasetWriter:
         """Extract action data."""
         action_data = {}
 
-        # Define action keys
-        action_keys = [
-            "robot__desired__poses__left::panda__xyz",
-            "robot__desired__poses__right::panda__xyz",
-            "robot__desired__poses__left::panda__rot_6d",
-            "robot__desired__poses__right::panda__rot_6d",
-            "robot__desired__grippers__left::panda_hand",
-            "robot__desired__grippers__right::panda_hand",
-        ]
-
-        # First try to get actions from actions dict
-        for key in action_keys:
-            if key in actions:
-                action_data[key] = actions[key]
-            elif key in observations:
-                action_data[key] = observations[key]
-
-        # If no actions found, use desired states from observations
-        if not action_data:
-            for key, value in observations.items():
-                if "desired" in key and len(value.shape) <= 2:
-                    action_data[key] = value
+        # Check if we have the 'actions' key from actions.npz
+        if "actions" in actions:
+            # Use the actions directly from the actions.npz file
+            action_data["action"] = actions["actions"]
+            print(f"Using actions from actions.npz with shape: {actions['actions'].shape}")
+            print(f"Action data type: {actions['actions'].dtype}")
+            print(f"Action range: [{actions['actions'].min():.3f}, {actions['actions'].max():.3f}]")
+            return action_data
+        else:
+            print("No 'actions' key found in actions.npz, returning empty action data.")
 
         return action_data
 
@@ -655,7 +650,6 @@ class LeRobotDatasetWriter:
     def extract_task_info(
         self,
         observations: Dict[str, np.ndarray],
-        metadata: Dict[str, Any],
         episode_path: str,
     ) -> Dict[str, str]:
         """Extract task information."""
@@ -711,7 +705,7 @@ class LeRobotDatasetWriter:
             frames=images,
             video_path=video_path,
             fps=self.fps,
-            vcodec=self.video_codec if self.video_codec in ["h264", "hevc", "libsvtav1"] else "h264",
+            vcodec=self.video_codec if self.video_codec in ["h264", "hevc", "libsvtav1"] else "libsvtav1",
             crf=23,  # Good quality default
             log_level=av.logging.ERROR,
         )
@@ -738,7 +732,9 @@ class LeRobotDatasetWriter:
         for camera_id, semantic_name in camera_mapping.items():
             data_key = f"{camera_id}{suffix}"
             if data_key in observations:
-                data_path = additional_dir / f"episode_{episode_index:06d}_{semantic_name}{suffix}.npz"
+                inner_additional_dir = additional_dir / f"observation.images.{semantic_name}"
+                inner_additional_dir.mkdir(parents=True, exist_ok=True)
+                data_path = inner_additional_dir / f"episode_{episode_index:06d}.npz"
                 np.savez_compressed(data_path, data=observations[data_key])
                 saved_paths[f"{semantic_name}{suffix}"] = str(data_path.relative_to(self.output_dir))
 
@@ -777,6 +773,7 @@ class LeRobotDatasetWriter:
             obs_state_combined = np.array([]).reshape(episode_length, 0)
             obs_state_names = []
 
+        print(f"Observation state combined shape: {obs_state_combined.shape}")
         # Combine action data into arrays
         if action_data:
             # Stack all action values into a single array
@@ -799,6 +796,7 @@ class LeRobotDatasetWriter:
             action_combined = np.array([]).reshape(episode_length, 0)
             action_names = []
 
+        print(f"Action combined shape: {action_combined.shape}")
         # Create base DataFrame
         df_data = {
             "timestamp": timestamps,
@@ -1124,9 +1122,9 @@ class LeRobotDatasetWriter:
                     "video.height": height,
                     "video.width": width,
                     "video.channels": 3,
-                    "video.codec": self.video_codecs.get(camera_name, "mp4v")
+                    "video.codec": self.video_codecs.get(camera_name, "libsvtav1")
                     if hasattr(self, "video_codecs")
-                    else "mp4v",
+                    else "libsvtav1",
                     "video.pix_fmt": "yuv420p",
                     "video.is_depth_map": False,
                     "has_audio": False,
@@ -1397,6 +1395,7 @@ def main():
         "Either --source_episodes or --source_eps_csv_path is required"
     )
     assert cfg.output_dir is not None, "--output_dir is required"
+    object.__setattr__(cfg, "output_dir", str(Path(cfg.output_dir).resolve()))
 
     print("🚀 Starting LBM to LeRobot conversion")
     print(f"Dataset name: {cfg.dataset_name}")
@@ -1424,15 +1423,15 @@ def main():
         print("❌ No episodes found!")
         return
 
-    excludes = [
-        "/home/swatigupta/lbm2/tests/shared/tiny_model/checkpoint.pt",
-        "/home/swatigupta/lbm2/.git/objects/pack/pack-69ba1b3dc47c051c4f691dbe3c05dcfe33ebb904.pack",
-    ]
     if cfg.ray_address:
         ray.init(address=cfg.ray_address)
         print(f"Connected to Ray cluster at {cfg.ray_address}")
     else:
-        ray.init(address="auto", num_cpus=cfg.ray_num_cpus, runtime_env={"excludes": excludes})
+        ray.init(
+            address="auto",
+            num_cpus=cfg.ray_num_cpus,
+            runtime_env={"excludes": [".git", "*.pt", "*.pyc", "__pycache__", ".pytest_cache"]},
+        )
         print(f"Started auto Ray cluster with num_cpus={cfg.ray_num_cpus}")
 
     # Group episodes by task and create separate datasets
@@ -1498,6 +1497,17 @@ def main():
         print("📋 Creating metadata files...")
         ray.get(writer.finalize_dataset.remote())
 
+        # Verify output directory has content
+        task_output_dir = Path(cfg.output_dir) / task_name
+        if task_output_dir.exists():
+            print(f"✅ Task output directory exists: {task_output_dir}")
+            if any(task_output_dir.iterdir()):
+                print("✅ Task output directory is not empty")
+            else:
+                print("❌ Task output directory is empty!")
+        else:
+            print(f"❌ Task output directory missing: {task_output_dir}")
+
         total_processed += num_processed
 
         # Push task dataset to hub if requested
@@ -1506,31 +1516,17 @@ def main():
             try:
                 ray.get(writer.push_dataset_to_hub.remote(repo_id=task_repo_id, private=cfg.private))
                 print(f"🚀 Task dataset pushed to: https://huggingface.co/datasets/{task_repo_id}")
+                # Remove local copy to save space
+                shutil.rmtree(task_output_dir)
             except Exception as e:
                 print(f"❌ Error pushing task {task_name} to hub: {e}")
-
-    num_processed_episodes = total_processed
-
-    # Push to Hugging Face Hub if requested
-    if cfg.push_to_hub:
-        if not cfg.repo_id:
-            print("❌ Error: --repo_id is required when --push_to_hub is True")
-            return
-
-        try:
-            ray.get(writer.push_dataset_to_hub.remote(repo_id=cfg.repo_id))
-            # Delete the local dataset directory after pushing to hub to save space locally
-            shutil.rmtree(cfg.output_dir)
-        except Exception as e:
-            print(f"❌ Error pushing to hub: {e}")
-            print("Dataset was still saved locally.")
 
     ray.shutdown()
 
     print("✅ Conversion complete!")
-    print(f"📊 Processed {num_processed_episodes} episodes successfully")
+    print(f"📊 Processed {total_processed} episodes successfully")
     print(f"📁 Dataset saved to: {cfg.output_dir}")
-    if cfg.task_level_datasets and task_groups:
+    if task_groups:
         print("📋 Task-level datasets created:")
         for task_name in task_groups:
             task_output_dir = Path(cfg.output_dir) / task_name
@@ -1543,9 +1539,9 @@ def main():
     print("  - meta/stats.jsonl: Field statistics")
     print("  - meta/tasks.jsonl: Task definitions")
     print("  - meta/info.json: Dataset info")
+    print("  - additional_data/ (optional): Preserved LBM-specific data")
     if cfg.push_to_hub:
         print("  - README.md: Dataset documentation")
-        print("  - additional_data/ (optional): Preserved LBM-specific data")
 
 
 if __name__ == "__main__":
