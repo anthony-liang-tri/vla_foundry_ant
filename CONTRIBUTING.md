@@ -1,4 +1,15 @@
 # Contributing to LBM
+
+## Guidelines
+- Code should generally have test coverage.
+- Code should generally be documented and follow the style guidelines below.
+- Code should always be reviewed by at least one feature reviewer.
+- Keep PRs as small as possible. For changes over a few hundred lines of actual code (not configs, etc), break these up into smaller PRs.
+- Branches should be attached to issues; we can consider naming branches like <user>/issue_num>_<description>. Branches can resolve more than one issue but keeping branches scoped to a single issue will help with PRs.
+- We should as much as possible not work on each other's branches.
+- Prefer merging in incomplete code that clearly documents the known limitations/problems/incomplete parts than having very long lived branches and working on each other's branches.
+
+
 ## Development Process
 1. Fork the project.
 Go to [LBM2](https://github.com/TRI-ML/lbm2) and click the "fork" button to create your own copy of the project.
@@ -76,17 +87,16 @@ After doing this you'll need to commit the updated `uv.lock` file to git.
 #### Generating the `uv.lock` file
 If the `uv.lock` file doesn't exist, it can be created by running `uv sync`.
 
-## Guidelines
-1. Code should generally have test coverage.
-2. Code should generally be documented and follow the style guidelines below.
-3. Code should always be reviewed by at least one feature reviewer.
-
 ### Stylistic Guidelines
 We generally follow the same guidelines as
 [Anzu](https://github.shared-services.aws.tri.global/robotics/anzu),
 which basically follows these [amended google python style guidelines](https://drake.mit.edu/styleguide/pyguide.html).
 It's helpful to set up your editor to have a hotkey for formatting python code.
-We use [black](https://github.com/psf/black) for formatting code.
+We use [ruff](https://github.com/astral-sh/ruff) for formatting and linting. Ruff runs these in separate steps:
+```bash
+uv run ruff format
+uv run ruff check --fix
+```
 
 ### Test Coverage
 This codebase uses [pytest](https://docs.pytest.org/en/stable/). Pytest has many useful
@@ -95,13 +105,8 @@ features (e.g., [`@pytest.mark.parametrize`](https://docs.pytest.org/en/stable/h
 To run tests locally:
 ```bash
 # Run all the tests:
-pytest .
+uv run pytest tests
 
 # Run a specific test:
-pytest /path/to/my/test.py -s -k partial_string_in_test_name
+uv run pytest /path/to/my/test.py -s -k partial_string_in_test_name
 ```
-
-### Reviewing
-Generally try to follow these
-[guidelines](https://google.github.io/eng-practices/review/reviewer/standard.html)
-when reviewing.

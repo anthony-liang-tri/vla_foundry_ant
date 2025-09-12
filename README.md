@@ -11,6 +11,9 @@ uv pip install -e .
 The recommended workflow is to run scripts directly with `uv` via `uv run <script> <args>`.
 Alternatively, to activate the virtual env you can then run `source .venv/bin/activate` then proceed as usual (though should still use `uv` for package and depedendency management).
 
+## Contributing Guidelines
+Please see [CONTRIBUTING.md](CONTRIBUTING.md)
+
 ## Quickstart
 The main entrypoint is `lbm2/main.py`.
 
@@ -205,7 +208,7 @@ uv run ruff check --fix
 ### 8. Tests
 Tests are implemented with [pytest](https://docs.pytest.org/en/stable/). To run tests, you can call
 ```
-uv run pytest
+uv run pytest tests
 ```
 To run more verbose tests, you can add `-v` for detailed per-test breakdowns and `-s` to display print statement outputs.
 
