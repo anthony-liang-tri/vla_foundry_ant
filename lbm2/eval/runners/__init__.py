@@ -1,6 +1,6 @@
+from lbm2.eval.runners.lbm_eval import LBMEval
 from lbm2.eval.runners.libero import LiberoRunner
 from lbm2.eval.runners.robocasa import RoboCasaEvalRunner
-from lbm2.eval.runners.lbm_eval import LBMEval
 
 
 def get_eval_runner(eval_params):

@@ -8,15 +8,11 @@ uv run lbm2/eval/run_eval.py --env lbm_eval --task pick_and_place_box
 
 """
 
-from pathlib import Path
 import copy
-import numpy as np
 from dataclasses import dataclass
+from pathlib import Path
 
-from pydrake.common.yaml import yaml_load
-
-# evaluate must be imported before the other anzu libraries
-from lbm_eval import evaluate
+import numpy as np
 from anzu.common.anzu_model_directives import MakeDefaultAnzuPackageMap
 from anzu.intuitive.typing_ import from_dict
 from anzu.intuitive.visuomotor.bases import (
@@ -26,8 +22,11 @@ from anzu.intuitive.visuomotor.demonstration_seed import get_demonstration_seed
 from anzu.intuitive.visuomotor.multiarm_simulations import (
     HardwareStationScenarioSimulationEnvConfig,
 )
-from robot_gym.multiarm_spaces import PosesAndGrippers
+
+# evaluate must be imported before the other anzu libraries
 from lbm_eval.evaluate import _LastStepRecorder
+from pydrake.common.yaml import yaml_load
+from robot_gym.multiarm_spaces import PosesAndGrippers
 
 # lbm2 imports
 from lbm2.eval.runners.base_eval_runner import BaseEvalRunner
@@ -75,9 +74,7 @@ class LBMEval(BaseEvalRunner):
         simulation_config_raw["num_sample_processes"] = 1
         random_seed = get_demonstration_seed(self.scenario_index, use_eval_seed)
         simulation_config_raw["random_seed"] = random_seed
-        env_config = from_dict(
-            HardwareStationScenarioSimulationEnvConfig, env_config_raw
-        )
+        env_config = from_dict(HardwareStationScenarioSimulationEnvConfig, env_config_raw)
         env_config.simulation_scenario_package = "anzu.sim.station.open_source"
 
         anzu_env = env_config.create()
@@ -139,24 +136,20 @@ class LBMEval(BaseEvalRunner):
             def get_action(self, obs) -> PosesAndGrippers:
                 if self._initial_poses is None:
                     self._initial_poses = copy.deepcopy(obs.robot.actual.poses)
-                    self._initial_grippers = copy.deepcopy(
-                        obs.robot.actual.grippers
-                    )
+                    self._initial_grippers = copy.deepcopy(obs.robot.actual.grippers)
 
                 grippers = copy.deepcopy(self._initial_grippers)
                 poses = copy.deepcopy(self._initial_poses)
                 offset = (
                     0.2
-                    * np.sin(
-                        self._counter * 2 * np.pi / 50 + np.array([0.0, np.pi / 2, 0.0])
-                    )
+                    * np.sin(self._counter * 2 * np.pi / 50 + np.array([0.0, np.pi / 2, 0.0]))
                     * np.array([1.0, 1.0, 0.0])
                 )
                 offset_grippers = 0.05 * np.sin(self._counter)
-                for robot_name, pose in self._initial_poses.items():
+                for robot_name, _pose in self._initial_poses.items():
                     observed_xyz = self._initial_poses[robot_name].translation()
                     poses[robot_name].set_translation(observed_xyz + offset)
-                for gripper_name in self._initial_grippers.keys():
+                for gripper_name in self._initial_grippers:
                     grippers[gripper_name] = offset_grippers
                 self._counter += 1
                 return PosesAndGrippers(poses=poses, grippers=grippers)
