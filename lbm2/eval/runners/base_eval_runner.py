@@ -37,7 +37,7 @@ class BaseEvalRunner:
             def __init__(self, env):
                 self.env = env
 
-            def get_action(self, images, text):
+            def get_action(self, obs):
                 # import numpy as np
                 # action = np.random.uniform(low=self.env.action_spec[0], high=self.env.action_spec[1])
                 # return action

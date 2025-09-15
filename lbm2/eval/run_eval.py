@@ -31,7 +31,7 @@ def run_eval(args):
         obs = eval_runner.env_reset()
         for _step_i in range(args.num_steps):
             obs_extracted = eval_runner.extract_from_obs(obs)
-            action = eval_runner.model.get_action(obs_extracted["images"], obs_extracted["text"])
+            action = eval_runner.model.get_action(obs_extracted)
 
             obs = eval_runner.env_step(action)
             obs = eval_runner.get_obs_tensor(obs)
