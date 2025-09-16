@@ -32,9 +32,9 @@ class PreprocessParams(BaseParams):
     output_dir: Optional[str] = field(default=None)
 
     # Sampling/windowing
-    past_lowdim_steps: int = field(default=2)
+    past_lowdim_steps: int = field(default=1)
     future_lowdim_steps: int = field(default=14)
-    image_indices: List[int] = field(default_factory=lambda: [-2, 0])
+    image_indices: List[int] = field(default_factory=lambda: [-1, 0])
     stride: int = field(default=1)
     max_padding_left: int = field(default=1)
     max_padding_right: int = field(default=7)
