@@ -25,6 +25,7 @@ Notes
 - Uses tarfile streaming mode ("r|*") for constant memory iteration.
 - Contact sheets are saved as PNG files; one per tar.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -36,12 +37,12 @@ from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Tuple
 
 import fsspec
-import numpy as np
-from PIL import Image
-from tqdm import tqdm
 
 # Matplotlib is imported lazily so headless servers without a DISPLAY still work when --save only
 import matplotlib
+import numpy as np
+from PIL import Image
+from tqdm import tqdm
 
 SUPPORTED_IMG_EXTS = {".jpg", ".jpeg", ".png"}
 LOWDIM_EXTS = {".npz"}
@@ -104,36 +105,35 @@ def scan_tar_stream(s3_path: str, max_images: int = -1) -> TarReport:
 
     # Open one streaming reader we will iterate exactly once; because streaming tar
     # cannot seek backwards, we must read members and their bytes on the fly.
-    with open_s3(s3_path) as fo:
-        with tarfile.open(fileobj=fo, mode="r|*") as tf:
-            for m in tf:
-                if not m.isfile():
-                    continue
-                name = m.name
-                # Load content now; after this iteration we cannot come back.
-                f = tf.extractfile(m)
-                if f is None:
-                    continue
-                data = f.read()
+    with open_s3(s3_path) as fo, tarfile.open(fileobj=fo, mode="r|*") as tf:
+        for m in tf:
+            if not m.isfile():
+                continue
+            name = m.name
+            # Load content now; after this iteration we cannot come back.
+            f = tf.extractfile(m)
+            if f is None:
+                continue
+            data = f.read()
 
-                if is_lowdim(name):
+            if is_lowdim(name):
+                try:
+                    with np.load(io.BytesIO(data), allow_pickle=True) as npz:
+                        keys = list(npz.keys())
+                        shapes = {k: tuple(np.array(npz[k]).shape) for k in keys}
+                    lowdim_summaries.append(LowdimSummary(name, keys, shapes))
+                except Exception:
+                    lowdim_summaries.append(LowdimSummary(name + " (failed)", ["error"], {"error": tuple()}))
+            elif is_image(name):
+                if max_images == -1 or len(image_entries) < max_images:
                     try:
-                        with np.load(io.BytesIO(data), allow_pickle=True) as npz:
-                            keys = list(npz.keys())
-                            shapes = {k: tuple(np.array(npz[k]).shape) for k in keys}
-                        lowdim_summaries.append(LowdimSummary(name, keys, shapes))
-                    except Exception as e:
-                        lowdim_summaries.append(LowdimSummary(name + " (failed)", ["error"], {"error": tuple()}))
-                elif is_image(name):
-                    if max_images == -1 or len(image_entries) < max_images:
-                        try:
-                            im = Image.open(io.BytesIO(data)).convert("RGB")
-                            image_entries.append((name, im))
-                        except Exception:
-                            pass
-                else:
-                    # ignore other payloads
-                    pass
+                        im = Image.open(io.BytesIO(data)).convert("RGB")
+                        image_entries.append((name, im))
+                    except Exception:
+                        pass
+            else:
+                # ignore other payloads
+                pass
 
     return TarReport(s3_path=s3_path, lowdim_summaries=lowdim_summaries, image_entries=image_entries)
 
@@ -154,7 +154,7 @@ def render_contact_sheet(images: List[Tuple[str, Image.Image]], title: str, save
 
     n = len(images)
     # grid heuristic: ~square
-    cols = int(max(1, round(n ** 0.5)))
+    cols = int(max(1, round(n**0.5)))
     rows = (n + cols - 1) // cols
 
     fig_w = min(16, max(6, cols * 3))
@@ -229,10 +229,9 @@ def main():
         print("No .tar files found for given URI and options.")
         sys.exit(2)
 
-    if not args.show and not args.save:
+    if not args.show and not args.save and len(targets) == 1:
         # default to showing interactively for a single target, otherwise only print
-        if len(targets) == 1:
-            args.show = True
+        args.show = True
 
     for s3_path in tqdm(targets, desc="Tars"):
         try:

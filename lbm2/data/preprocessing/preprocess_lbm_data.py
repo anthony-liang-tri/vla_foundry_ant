@@ -310,7 +310,7 @@ class EpisodeProcessor:
         self,
         past_lowdim_steps: int = 1,
         future_lowdim_steps: int = 14,
-        image_indices: List[int] = [-1, 0],
+        image_indices: List[int] = None,
         max_padding_left: int = 1,
         max_padding_right: int = 7,
         padding_strategy: str = "copy",
@@ -322,11 +322,13 @@ class EpisodeProcessor:
         camera_names: Optional[List[str]] = None,
         camera_discard_keys: Optional[List[str]] = None,
         compute_statistics: bool = True,
-        resize_images_size: List[int] = [256, 342], #From LBM1
+        resize_images_size: List[int] = None,  # From LBM1
         language_annotations: Optional[Dict] = None,
     ):
+        if resize_images_size is None:
+            resize_images_size = [256, 342]
         if image_indices is None:
-            image_indices = [-2, 0]
+            image_indices = [-1, 0]
         self.past_lowdim_steps = past_lowdim_steps
         self.future_lowdim_steps = future_lowdim_steps
         self.image_indices = sorted(image_indices)
@@ -402,20 +404,21 @@ class EpisodeProcessor:
                 with fsspec.open(actions_path, "rb") as f:
                     actions_archive = np.load(f, allow_pickle=True)
                     # Extract the 'actions' key specifically
-                    if 'actions' in actions_archive:
-                        actions = {'actions': actions_archive['actions']}
+                    if "actions" in actions_archive:
+                        actions = {"actions": actions_archive["actions"]}
                     else:
                         print(f"Warning: 'actions' key not found in {actions_path}")
                         print(f"Available keys: {list(actions_archive.keys())}")
                         actions = {}
                 break
-            except Exception as e:
+            except Exception:
                 if attempt == 2:
                     # If actions.npz doesn't exist, continue with empty actions
                     print(f"Warning: No actions.npz found for {episode_path}, continuing with empty actions")
                     break
                 print(f"Retry {attempt + 1} loading actions for {episode_path}")
                 import time
+
                 time.sleep(1)
 
         # Load camera params (optional)
@@ -463,20 +466,20 @@ class EpisodeProcessor:
         return {sname: observations[cid] for cid, sname in filtered_mapping.items()}
 
     def extract_lowdim_data(
-        self, 
-        observations: Dict[str, np.ndarray], 
-        actions: Dict[str, np.ndarray]
+        self, observations: Dict[str, np.ndarray], actions: Dict[str, np.ndarray]
     ) -> Dict[str, np.ndarray]:
         """Extract low-dimensional observation data and handle 'actions' key if present."""
         result = {}
 
         # Extract low-dimensional observations
         if observations:
-            result.update({
-                key: value
-                for key, value in observations.items()
-                if len(value.shape) <= 2 or key.startswith(("robot__", "language_"))
-            })
+            result.update(
+                {
+                    key: value
+                    for key, value in observations.items()
+                    if len(value.shape) <= 2 or key.startswith(("robot__", "language_"))
+                }
+            )
 
         # Extract 'actions' if available
         if actions and "actions" in actions:
@@ -652,8 +655,8 @@ class EpisodeProcessor:
                 past_mask = np.ones(total_length, dtype=bool)
                 future_mask = np.ones(total_length, dtype=bool)
                 # Current time step is part of the future for low dim data
-                past_mask[self.past_lowdim_steps:] = False
-                future_mask[:self.past_lowdim_steps] = False
+                past_mask[self.past_lowdim_steps :] = False
+                future_mask[: self.past_lowdim_steps] = False
 
                 if past_padding > 0:
                     past_mask[:past_padding] = False
@@ -719,16 +722,16 @@ def discover_episodes_targeted(source_paths: List[str], max_episodes_to_process:
     if isinstance(source_paths, str):
         source_paths = [source_paths]
     episodes = []
-    
+
     def check_episode_validity(fs, episode_path: str, is_s3: bool) -> bool:
         """Check if an episode directory has valid processed data."""
         processed_path = os.path.join(episode_path, "processed")
         fs_processed_path = make_fs_path(processed_path, is_s3)
-        
+
         try:
             if not fs.exists(fs_processed_path):
                 return False
-            
+
             # Check for required files
             required_files = ["metadata.yaml", "observations.npz"]
             for required_file in required_files:
@@ -743,82 +746,88 @@ def discover_episodes_targeted(source_paths: List[str], max_episodes_to_process:
     def search_diffusion_spartan_directory(fs, diffusion_spartan_path: str, is_s3: bool) -> None:
         """Search within a diffusion_spartan directory for episode_* folders."""
         fs_path = make_fs_path(diffusion_spartan_path, is_s3)
-        
+
         try:
             items = fs.listdir(fs_path)
             print(f"Found {len(items)} items in diffusion_spartan directory")
         except Exception as e:
             print(f"Warning: Cannot list directory {diffusion_spartan_path}: {e}")
             return
-        
+
         episode_dirs = []
         # First pass: identify episode directories only
         for item in items:
             item_name = item["name"] if isinstance(item, dict) else item
             item_basename = os.path.basename(item_name.rstrip("/"))
-            
+
             # Only process directories that start with "episode_" - skip all files
-            if item_basename.startswith("episode_") and not any(item_basename.endswith(ext) for ext in ['.pkl', '.npz', '.txt', '.json', '.yaml', '.tar', '.gz']):
+            if item_basename.startswith("episode_") and not any(
+                item_basename.endswith(ext) for ext in [".pkl", ".npz", ".txt", ".json", ".yaml", ".tar", ".gz"]
+            ):
                 episode_dirs.append(item_basename)
-        
+
         print(f"Found {len(episode_dirs)} potential episode directories")
-        
+
         # Second pass: validate episode directories
         for episode_basename in episode_dirs:
             if max_episodes_to_process > 0 and len(episodes) >= max_episodes_to_process:
                 break
-                
+
             # Construct full episode path
             episode_path = os.path.join(diffusion_spartan_path, episode_basename)
-            
+
             if check_episode_validity(fs, episode_path, is_s3):
                 episodes.append(episode_path)
                 print(f"Added valid episode: {episode_basename}")
             else:
                 print(f"Skipped invalid episode: {episode_basename}")
-        
+
         print(f"Total valid episodes found: {len(episodes)}")
 
-    def crawl_directory_for_diffusion_spartan(fs, current_path: str, is_s3: bool, depth: int = 0, max_depth: int = 5) -> None:
+    def crawl_directory_for_diffusion_spartan(
+        fs, current_path: str, is_s3: bool, depth: int = 0, max_depth: int = 5
+    ) -> None:
         """Recursively search for diffusion_spartan directories, but don't recurse into files."""
         if depth > max_depth:
             return
-        
+
         if max_episodes_to_process > 0 and len(episodes) >= max_episodes_to_process:
             return
-            
+
         fs_current_path = make_fs_path(current_path, is_s3)
-        
+
         try:
             items = fs.listdir(fs_current_path)
         except Exception as e:
             print(f"Warning: Cannot list directory {current_path}: {e}")
             return
-        
+
         # Check if current directory is diffusion_spartan
         current_basename = os.path.basename(current_path.rstrip("/"))
         if current_basename == "diffusion_spartan":
             search_diffusion_spartan_directory(fs, current_path, is_s3)
             return
-        
+
         # Only recurse into directories, skip all files
         for item in items:
             if max_episodes_to_process > 0 and len(episodes) >= max_episodes_to_process:
                 break
-                
+
             item_name = item["name"] if isinstance(item, dict) else item
             item_basename = os.path.basename(item_name.rstrip("/"))
-            
+
             # Skip all files by extension
-            if any(item_basename.endswith(ext) for ext in ['.pkl', '.npz', '.txt', '.json', '.yaml', '.tar', '.gz', '.log']):
+            if any(
+                item_basename.endswith(ext) for ext in [".pkl", ".npz", ".txt", ".json", ".yaml", ".tar", ".gz", ".log"]
+            ):
                 continue
-                
+
             # Skip hidden directories and obvious non-directories
-            if item_basename.startswith('.'):
+            if item_basename.startswith("."):
                 continue
-                
+
             item_path = os.path.join(current_path, item_basename)
-            
+
             try:
                 # Check if it's actually a directory before recursing
                 fs_item_path = make_fs_path(item_path, is_s3)
@@ -832,15 +841,15 @@ def discover_episodes_targeted(source_paths: List[str], max_episodes_to_process:
         print(f"Scanning source path: {source_path}")
         fs, fsspec_path = fsspec.core.url_to_fs(source_path)
         is_s3 = source_path.startswith("s3://")
-        
+
         # Check if 'diffusion_spartan' is in the source path
-        if 'diffusion_spartan' in source_path:
+        if "diffusion_spartan" in source_path:
             print("Found 'diffusion_spartan' in source path - searching only this directory")
             search_diffusion_spartan_directory(fs, source_path, is_s3)
         else:
             print("No 'diffusion_spartan' in source path - performing recursive search")
             crawl_directory_for_diffusion_spartan(fs, source_path, is_s3)
-    
+
     print(f"Total episodes discovered: {len(episodes)}")
     return sorted(episodes)
 

@@ -15,20 +15,20 @@ Notes
 - Uses tarfile streaming mode ("r|*") for constant-memory iteration
 - Gallery can be limited by a slider; set to -1 to load all images
 """
+
 from __future__ import annotations
 
 import io
 import os
 import tarfile
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 import fsspec
 import gradio as gr
 import numpy as np
 import pandas as pd
 from PIL import Image
-from tqdm import tqdm
 
 SUPPORTED_IMG_EXTS = {".jpg", ".jpeg", ".png"}
 LOWDIM_EXTS = {".npz"}
@@ -83,48 +83,50 @@ def scan_tar_stream(s3_path: str, max_images: int = -1):
         return pd.DataFrame(), []
 
     fs, _ = fsspec.core.url_to_fs(s3_path)
-    with fs.open(s3_path, "rb") as fo:
-        # Streaming read
-        with tarfile.open(fileobj=fo, mode="r|*") as tf:
-            for m in tf:
-                if not m.isfile():
-                    continue
-                name = m.name
-                ef = tf.extractfile(m)
-                if ef is None:
-                    continue
-                data = ef.read()
+    with fs.open(s3_path, "rb") as fo, tarfile.open(fileobj=fo, mode="r|*") as tf:
+        for m in tf:
+            if not m.isfile():
+                continue
+            name = m.name
+            ef = tf.extractfile(m)
+            if ef is None:
+                continue
+            data = ef.read()
 
-                if is_lowdim(name):
-                    try:
-                        with np.load(io.BytesIO(data), allow_pickle=True) as npz:
-                            for k in npz.keys():
-                                arr = np.array(npz[k])
-                                lowdim_rows.append({
+            if is_lowdim(name):
+                try:
+                    with np.load(io.BytesIO(data), allow_pickle=True) as npz:
+                        for k in npz:
+                            arr = np.array(npz[k])
+                            lowdim_rows.append(
+                                {
                                     "member": name,
                                     "key": k,
                                     "shape": str(tuple(arr.shape)),
                                     "dtype": str(arr.dtype),
-                                })
-                    except Exception as e:
-                        lowdim_rows.append({
+                                }
+                            )
+                except Exception as e:
+                    lowdim_rows.append(
+                        {
                             "member": name,
                             "key": "<error>",
                             "shape": "-",
                             "dtype": f"{type(e).__name__}",
-                        })
-                elif is_image(name):
-                    if max_images == -1 or len(gallery_items) < max_images:
-                        try:
-                            img = Image.open(io.BytesIO(data)).convert("RGB")
-                            # optional: thumbnail to keep UI snappy
-                            img.thumbnail((1024, 1024))
-                            gallery_items.append((img, os.path.basename(name)))
-                        except Exception:
-                            pass
-                else:
-                    # ignore other members
-                    pass
+                        }
+                    )
+            elif is_image(name):
+                if max_images == -1 or len(gallery_items) < max_images:
+                    try:
+                        img = Image.open(io.BytesIO(data)).convert("RGB")
+                        # optional: thumbnail to keep UI snappy
+                        img.thumbnail((1024, 1024))
+                        gallery_items.append((img, os.path.basename(name)))
+                    except Exception:
+                        pass
+            else:
+                # ignore other members
+                pass
 
     df = pd.DataFrame(lowdim_rows)
     return df, gallery_items
@@ -134,6 +136,7 @@ def scan_tar_stream(s3_path: str, max_images: int = -1):
 # Gradio UI
 # =====================
 
+
 def ui_scan(prefix: str, recursive: bool):
     tars = list_s3_targets(prefix.strip(), recursive)
     msg = f"Found {len(tars)} tar(s)." if tars else "No .tar files found."
@@ -142,7 +145,7 @@ def ui_scan(prefix: str, recursive: bool):
 
 def ui_load(s3_tar: str, max_images: int):
     if not s3_tar:
-        return pd.DataFrame(), [], f"Select a tar first."
+        return pd.DataFrame(), [], "Select a tar first."
     df, gallery = scan_tar_stream(s3_tar, max_images=max_images)
     note = f"Loaded {len(gallery)} image(s)." if gallery else "No images in this tar."
     return df, gallery, note
@@ -156,7 +159,9 @@ def build_app():
         """)
 
         with gr.Row():
-            s3_prefix = gr.Textbox(label="S3 URI (prefix or .tar)", placeholder="s3://bucket/path or s3://bucket/key.tar")
+            s3_prefix = gr.Textbox(
+                label="S3 URI (prefix or .tar)", placeholder="s3://bucket/path or s3://bucket/key.tar"
+            )
             recursive = gr.Checkbox(label="Recursive", value=True)
             scan_btn = gr.Button("Scan")
         scan_status = gr.Markdown(visible=True)
@@ -167,7 +172,9 @@ def build_app():
             load_btn = gr.Button("Load TAR")
 
         with gr.Tab("Lowdim"):
-            lowdim_table = gr.Dataframe(headers=["member", "key", "shape", "dtype"], row_count=(1, "dynamic"), wrap=True)
+            lowdim_table = gr.Dataframe(
+                headers=["member", "key", "shape", "dtype"], row_count=(1, "dynamic"), wrap=True
+            )
         with gr.Tab("Images"):
             gallery = gr.Gallery(label="Images", columns=4, height=700, preview=True)
         note = gr.Markdown()
