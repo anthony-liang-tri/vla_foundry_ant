@@ -1,6 +1,5 @@
 import itertools
 import logging
-import math
 import time
 from typing import Callable
 
@@ -12,7 +11,7 @@ from torch.distributed.distributed_c10d import ReduceOp
 
 from lbm2.data.sampler import sample_chunk
 from lbm2.distributed import is_master
-from lbm2.meters import AverageMeter
+from lbm2.meters import Metrics
 from lbm2.params.train_experiment_params import TrainExperimentParams
 from lbm2.precision import get_autocast
 
@@ -63,13 +62,7 @@ def train_one_checkpoint(
     num_batches_per_checkpoint = dataloader.dataloader.num_batches
 
     # Meters for logging.
-    losses_m = AverageMeter()
-    batch_time_m = AverageMeter()
-    data_time_m = AverageMeter()
-    forward_time_m = AverageMeter()
-    backward_time_m = AverageMeter()
-    optim_step_time_m = AverageMeter()
-    sync_time_m = AverageMeter()
+    metrics = Metrics()
 
     end = time.time()
     data_iterator = iter(dataloader.dataloader)
@@ -105,7 +98,7 @@ def train_one_checkpoint(
             else None
         )
 
-        data_time_m.update(time.time() - end)
+        metrics.stats["data_time"].update(time.time() - end)
         optimizer.zero_grad()
 
         if cfg.hparams.accum_freq == 1:
@@ -118,7 +111,7 @@ def train_one_checkpoint(
                 if cfg.model.type == "transformer" or cfg.model.type == "transformer_hf":
                     outputs = model(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=False)
                     logits = outputs.logits
-                    forward_time_m.update(time.time() - forward_start)
+                    metrics.stats["forward_time"].update(time.time() - forward_start)
                     targets = targets.long()
                     vocab_size = logits.shape[-1]
                     total_loss = loss(logits.reshape(-1, vocab_size), targets.reshape(-1))
@@ -127,7 +120,7 @@ def train_one_checkpoint(
                         input_ids=input_ids, image=image, attention_mask=attention_mask, output_hidden_states=False
                     )
                     logits = outputs.logits
-                    forward_time_m.update(time.time() - forward_start)
+                    metrics.stats["forward_time"].update(time.time() - forward_start)
                     targets = targets.long()
                     # Mask out padding and image-token positions when computing loss.
                     ignore_mask = (targets == cfg.data.pad_token_id) | (targets == cfg.data.image_token_id)
@@ -147,7 +140,7 @@ def train_one_checkpoint(
             # Backward for single-step case.
             backward_start = time.time()
             total_loss.backward()
-            backward_time_m.update(time.time() - backward_start)
+            metrics.stats["backward_time"].update(time.time() - backward_start)
 
         else:
             # Gradient accumulation path.
@@ -223,8 +216,8 @@ def train_one_checkpoint(
                 backward_total_time += time.time() - backward_start
                 total_lm_loss += local_loss
 
-            forward_time_m.update(forward_total_time)
-            backward_time_m.update(backward_total_time)
+            metrics.stats["forward_time"].update(forward_total_time)
+            metrics.stats["backward_time"].update(backward_total_time)
             total_loss = total_lm_loss
 
         # Optimizer step
@@ -233,7 +226,7 @@ def train_one_checkpoint(
         if cfg.hparams.grad_clip_norm is not None:
             torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.hparams.grad_clip_norm, norm_type=2.0)
         optimizer.step()
-        optim_step_time_m.update(time.time() - optim_step_start)
+        metrics.stats["optim_step_time"].update(time.time() - optim_step_start)
 
         # For logging: clone a tensor copy of the loss and average across ranks.
         global_loss_tensor = total_loss.detach().clone()
@@ -241,10 +234,10 @@ def train_one_checkpoint(
         sync_start = time.time()
         if cfg.distributed.world_size > 1:
             dist.all_reduce(global_loss_tensor, op=ReduceOp.AVG)
-        sync_time_m.update(time.time() - sync_start)
+        metrics.stats["sync_time"].update(time.time() - sync_start)
 
         # Update timing meters for this iteration.
-        batch_time_m.update(time.time() - end)
+        metrics.stats["batch_time"].update(time.time() - end)
         end = time.time()
 
         batch_count = i + 1
@@ -255,7 +248,7 @@ def train_one_checkpoint(
             batch_size = len(input_ids)
             # update the loss meter with the global loss tensor every iteration,
             # so that the logging is of the avg of loss of the last cfg.log_every_n_steps iterations
-            losses_m.update(global_loss_tensor.item(), batch_size)
+            metrics.stats["loss"].update(global_loss_tensor.item(), batch_size)
 
             # Periodic log or end-of-window/end-of-training log.
             if (
@@ -263,66 +256,16 @@ def train_one_checkpoint(
                 or batch_count == num_batches_per_checkpoint
                 or step == total_steps - 1
             ):
-                num_samples = batch_count * batch_size * cfg.distributed.world_size
-                samples_per_checkpoint = dataloader.dataloader.num_samples
-                percent_complete = 100.0 * batch_count / num_batches_per_checkpoint
-
-                # Throughput stats (samples / tokens per second).
-                samples_per_second = batch_size * cfg.distributed.world_size / batch_time_m.val
-                samples_per_second_per_gpu = batch_size / batch_time_m.val
-                tokens_per_second = input_ids.numel() * cfg.distributed.world_size / batch_time_m.val
-                tokens_per_second_per_gpu = input_ids.numel() / batch_time_m.val
-
-                loss_str = f"Loss: {losses_m.avg:.3f}"
-                sample_digits = math.ceil(math.log(dataloader.dataloader.num_samples + 1, 10))
-                logging.info(
-                    f"Train Checkpoint: {checkpoint_num} "
-                    f"[{num_samples:>{sample_digits}}/{samples_per_checkpoint} "
-                    f"({percent_complete:.0f}%)] "
-                    f"{loss_str} "
-                    f"Data (t): {data_time_m.avg:.3f} "
-                    f"Batch (t): {batch_time_m.avg:.3f}, "
-                    f"{samples_per_second:#g}/s, "
-                    f"{samples_per_second_per_gpu:#g}/s/gpu "
-                    f"LR: {optimizer.param_groups[0]['lr']:5f} "
+                metrics.update_and_log_state(
+                    cfg=cfg,
+                    batch_size=batch_size,
+                    batch_num_tokens=input_ids.numel(),
+                    batch_count=batch_count,
+                    num_batches_per_checkpoint=num_batches_per_checkpoint,
+                    step=step,
+                    dataloader=dataloader,
+                    lr=optimizer.param_groups[0]["lr"],
+                    checkpoint_num=checkpoint_num,
                 )
-
-                # Save train loss / etc. Using non avg meter values as loggers have their own smoothing
-                log_data = {
-                    "loss": losses_m.val,
-                    "data_time": data_time_m.val,
-                    "batch_time": batch_time_m.val,
-                    "forward_time": forward_time_m.val,
-                    "backward_time": backward_time_m.val,
-                    "optim_step_time": optim_step_time_m.val,
-                    "sync_time": sync_time_m.val,
-                    "samples_per_second": samples_per_second,
-                    "samples_per_second_per_gpu": samples_per_second_per_gpu,
-                    "tokens_per_second": tokens_per_second,
-                    "tokens_per_second_per_gpu": tokens_per_second_per_gpu,
-                    "lr": optimizer.param_groups[0]["lr"],
-                    "tokens": (step + 1) * cfg.hparams.global_batch_size * cfg.data.seq_len,
-                    "samples": (step + 1) * cfg.hparams.global_batch_size,
-                    "expected_steps_epoch": dataloader.dataloader.num_batches,
-                    "seen_steps_epoch": batch_count,
-                }
-
-                for name, val in log_data.items():
-                    name = "train/" + name
-                    if cfg.wandb:
-                        import wandb
-
-                        wandb.log(
-                            {name: val, "step": step, "tokens": log_data["tokens"], "samples": log_data["samples"]}
-                        )
-
-                # Reset short-horizon meters so next window reflects recent perf.
-                batch_time_m.reset()
-                data_time_m.reset()
-                forward_time_m.reset()
-                backward_time_m.reset()
-                optim_step_time_m.reset()
-                sync_time_m.reset()
-                losses_m.reset()
 
     return True, step
