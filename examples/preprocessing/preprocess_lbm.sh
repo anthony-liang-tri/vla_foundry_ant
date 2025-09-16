@@ -1,17 +1,17 @@
 uv run --group preprocessing torchrun --nproc_per_node=2 lbm2/data/preprocessing/preprocess_lbm_data.py \
     --source_episodes "['s3://robotics-manip-lbm/efs/data/tasks/PickAndPlaceBox/cabot/sim/bc/teleop/2025-02-11T17-04-00-05-00/',]" \
     --output_dir s3://sagemaker-us-west-2-124224456861/vlm_datasets/preprocess_512_shuffle/lbm/PickAndPlaceBox/cabot/sim/ \
-    --past_lowdim_steps 5 \
+    --past_lowdim_steps 1 \
     --num_workers 40 \
-    --future_lowdim_steps 20 \
-    --image_indices "[-5, 0]" \
+    --future_lowdim_steps 14 \
+    --image_indices "[-1, 0]" \
     --max_episodes_to_process -1 \
-    --samples_per_shard 100 \
+    --samples_per_shard 1 \
     --jpeg_quality 95 \
-    --filter_still_samples True \
+    --filter_still_samples False \
     --still_threshold 0.01 \
     --shuffle_buffer_size 10000 \
     --shuffle_input_files True \
     --update_frequency 100 \
     --use_distributed True \
-    --resize_images_size 512
+    --resize_images_size "[256, 342]

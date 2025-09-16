@@ -647,7 +647,7 @@ class EpisodeProcessor:
                 valid_start = max(0, lowdim_start)
                 valid_end = min(episode_length - 1, lowdim_end)
 
-                # Check stillness
+                # Check if robot is stationary (e.g. to filter pauses)
                 if self.is_still_sample(lowdim_data, valid_start, valid_end):
                     self.still_samples_filtered += 1
                     continue
