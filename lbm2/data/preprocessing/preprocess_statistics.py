@@ -50,12 +50,15 @@ class StreamingDatasetStatistics:
                 if key not in self.counts:
                     sum_mask = np.sum(mask, axis=0)
                     sum_data = np.sum(data, axis=0)
-                    self.running_means[key] = np.where(sum_mask > 0, sum_data / sum_mask, 0.0)
+                    mask_sum_mask = sum_mask > 0
+                    # Use modified sum_mask only for division to avoid division by zero
+                    sum_mask_for_division = np.where(mask_sum_mask, sum_mask, 1)
+                    self.running_means[key] = np.where(mask_sum_mask, sum_data / sum_mask_for_division, 0.0)
                     # Handle potential NaN/inf values in initial computation
                     self.running_means[key] = np.nan_to_num(self.running_means[key], nan=0.0, posinf=0.0, neginf=0.0)
 
                     self.running_m2s[key] = np.where(
-                        sum_mask > 0, np.sum((data - self.running_means[key]) ** 2, axis=0), 0.0
+                        mask_sum_mask, np.sum((data - self.running_means[key]) ** 2, axis=0), 0.0
                     )
                     self.running_m2s[key] = np.nan_to_num(self.running_m2s[key], nan=0.0, posinf=0.0, neginf=0.0)
                     self.counts[key] = sum_mask
@@ -84,12 +87,15 @@ class StreamingDatasetStatistics:
                     delta = mean_b - mean_a
                     total_count = n_a + n_b
 
+                    mask_total_count = total_count > 0
+                    # Use modified total_count only for division to avoid division by zero
+                    total_count_for_division = np.where(mask_total_count, total_count, 1)
                     self.running_means[key] = np.where(
-                        total_count > 0, (n_a * mean_a + n_b * mean_b) / total_count, 0.0
+                        mask_total_count, (n_a * mean_a + n_b * mean_b) / total_count_for_division, 0.0
                     )
 
                     self.running_m2s[key] = (
-                        m2_a + m2_b + np.where(total_count > 0, delta**2 * (n_a * n_b / total_count), 0.0)
+                        m2_a + m2_b + np.where(mask_total_count, delta**2 * (n_a * n_b / total_count_for_division), 0.0)
                     )
 
                     self.counts[key] = total_count
@@ -172,7 +178,9 @@ class StreamingDatasetStatistics:
                 if any(self.counts[key] > 1):
                     # Safe division for variance calculation
                     count_minus_one = self.counts[key] - 1
-                    variance = np.where(count_minus_one > 0, self.running_m2s[key] / count_minus_one, 0.0)
+                    mask_count_minus_one = count_minus_one > 0
+                    count_minus_one = np.where(mask_count_minus_one, count_minus_one, 1)
+                    variance = np.where(mask_count_minus_one, self.running_m2s[key] / count_minus_one, 0.0)
                     # Handle potential NaN/inf values in variance
                     variance = np.nan_to_num(variance, nan=0.0, posinf=0.0, neginf=0.0)
                     std = np.sqrt(np.maximum(variance, 0.0)).tolist()  # Ensure non-negative before sqrt

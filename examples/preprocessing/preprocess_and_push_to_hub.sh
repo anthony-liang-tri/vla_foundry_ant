@@ -14,7 +14,7 @@ uv run --group preprocessing python lbm2/data/preprocessing/preprocess_lbm_to_le
     --fps 10 \
     --chunk_size 10 \
     --num_workers 8 \
-    --max_episodes 2 \
+    --max_episodes_to_process 2 \
     --preserve_depth False \
     --preserve_segmentation True \
     --preserve_calibration True \

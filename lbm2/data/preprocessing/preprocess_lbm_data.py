@@ -1,28 +1,4 @@
 #!/usr/bin/env python3
-"""
-Usage:
-    python preprocess_lbm_data_optimized.py \
-        --source_episodes \
-          "[s3://robotics-manip-lbm/efs/data/tasks/PickAndPlaceBox/cabot/sim/bc/teleop/2025-02-11T17-04-00-05-00/,]" \
-        --output_dir s3://my-bucket/processed-dataset/ \
-ba        --language_annotations_path lbm2/data/preprocessing/lbm_language_annotations.yaml \
-        --past_lowdim_steps 4 \
-        --future_lowdim_steps 16 \
-        --image_indices -1,0 \
-        --max_padding_per_side 5 \
-        --padding_strategy copy \
-        --filter_still_samples True \
-        --still_threshold 0.01 \
-        --samples_per_shard 1000 \
-        --stride 1 \
-        --jpeg_quality 95 \
-        --num_workers 16 \
-        --no_statistics True \
-        --batch_episodes 8 \
-        --resize_images_size 224 \
-        --use_gpu_resize True \
-        --resume False
-"""
 
 import datetime
 import hashlib
@@ -54,9 +30,6 @@ from lbm2.data.preprocessing.image_utils import init_jpeg_encoder
 from lbm2.data.preprocessing.params import PreprocessParams, SampleMetadata
 from lbm2.data.preprocessing.preprocess_statistics import StreamingDatasetStatistics
 from lbm2.data.preprocessing.streaming_shard_writer import StreamingShardWriter
-
-# Add import for relative coordinate utilities
-from lbm2.data.robotics.utils import rot_6d_to_relative, xyz_to_relative
 
 # Global flag for graceful shutdown
 _shutdown_requested = False
@@ -335,11 +308,11 @@ class EpisodeProcessor:
 
     def __init__(
         self,
-        past_lowdim_steps: int = 4,
-        future_lowdim_steps: int = 16,
-        image_indices: List[int] = None,
-        max_padding_left: int = 5,
-        max_padding_right: int = 5,
+        past_lowdim_steps: int = 1,
+        future_lowdim_steps: int = 14,
+        image_indices: List[int] = [-1, 0],
+        max_padding_left: int = 1,
+        max_padding_right: int = 7,
         padding_strategy: str = "copy",
         filter_still_samples: bool = False,
         still_threshold: float = 0.01,
@@ -347,13 +320,13 @@ class EpisodeProcessor:
         jpeg_quality: int = 95,
         fail_on_nan: bool = True,
         camera_names: Optional[List[str]] = None,
-        discard_keys: Optional[List[str]] = None,
+        camera_discard_keys: Optional[List[str]] = None,
         compute_statistics: bool = True,
-        resize_images_size: int = 0,
+        resize_images_size: List[int] = [256, 342], #From LBM1
         language_annotations: Optional[Dict] = None,
     ):
         if image_indices is None:
-            image_indices = [-1, 0]
+            image_indices = [-2, 0]
         self.past_lowdim_steps = past_lowdim_steps
         self.future_lowdim_steps = future_lowdim_steps
         self.image_indices = sorted(image_indices)
@@ -365,7 +338,7 @@ class EpisodeProcessor:
         self.camera_names = camera_names
         self.filter_still_samples = filter_still_samples
         self.still_threshold = still_threshold
-        self.discard_keys = discard_keys or []
+        self.camera_discard_keys = camera_discard_keys or []
         self.compute_statistics = compute_statistics
         self.resize_images_size = resize_images_size
         self.language_annotations = language_annotations or {}
@@ -411,7 +384,7 @@ class EpisodeProcessor:
             try:
                 with fsspec.open(obs_path, "rb") as f:
                     observations = np.load(f, allow_pickle=True)
-                    observations = {k: v for k, v in observations.items() if k not in self.discard_keys}
+                    observations = {k: v for k, v in observations.items() if k not in self.camera_discard_keys}
                 break
             except Exception as e:
                 if attempt == 2:
@@ -421,8 +394,29 @@ class EpisodeProcessor:
 
                 time.sleep(1)
 
-        # Skip actions (as in original)
+        # Load actions with retry
         actions = {}
+        actions_path = os.path.join(processed_path, "actions.npz")
+        for attempt in range(3):
+            try:
+                with fsspec.open(actions_path, "rb") as f:
+                    actions_archive = np.load(f, allow_pickle=True)
+                    # Extract the 'actions' key specifically
+                    if 'actions' in actions_archive:
+                        actions = {'actions': actions_archive['actions']}
+                    else:
+                        print(f"Warning: 'actions' key not found in {actions_path}")
+                        print(f"Available keys: {list(actions_archive.keys())}")
+                        actions = {}
+                break
+            except Exception as e:
+                if attempt == 2:
+                    # If actions.npz doesn't exist, continue with empty actions
+                    print(f"Warning: No actions.npz found for {episode_path}, continuing with empty actions")
+                    break
+                print(f"Retry {attempt + 1} loading actions for {episode_path}")
+                import time
+                time.sleep(1)
 
         # Load camera params (optional)
         intrinsics, extrinsics = {}, {}
@@ -468,13 +462,27 @@ class EpisodeProcessor:
 
         return {sname: observations[cid] for cid, sname in filtered_mapping.items()}
 
-    def extract_lowdim_data(self, observations: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
-        """Extract low-dimensional data."""
-        return {
-            key: value
-            for key, value in observations.items()
-            if len(value.shape) <= 2 or key.startswith(("robot__", "language_"))
-        }
+    def extract_lowdim_data(
+        self, 
+        observations: Dict[str, np.ndarray], 
+        actions: Dict[str, np.ndarray]
+    ) -> Dict[str, np.ndarray]:
+        """Extract low-dimensional observation data and handle 'actions' key if present."""
+        result = {}
+
+        # Extract low-dimensional observations
+        if observations:
+            result.update({
+                key: value
+                for key, value in observations.items()
+                if len(value.shape) <= 2 or key.startswith(("robot__", "language_"))
+            })
+
+        # Extract 'actions' if available
+        if actions and "actions" in actions:
+            result["actions"] = actions["actions"]
+
+        return result
 
     def is_still_sample(self, lowdim_data: Dict[str, np.ndarray], start_idx: int, end_idx: int) -> bool:
         """Check if sample is still."""
@@ -499,28 +507,6 @@ class EpisodeProcessor:
                     return False
 
         return True
-
-    def create_relative_lowdim_data(
-        self, lowdim_data: Dict[str, np.ndarray], anchor_relative_idx: int
-    ) -> Dict[str, np.ndarray]:
-        """Create relative coordinate data."""
-        relative_data = {}
-
-        for key, data in lowdim_data.items():
-            if not np.issubdtype(data.dtype, np.number):
-                continue
-
-            try:
-                if "xyz" in key.lower() and data.shape[-1] == 3:
-                    relative_data[f"{key}_relative"] = xyz_to_relative(data, anchor_relative_idx)
-                elif "rot_6d" in key.lower() and data.shape[-1] == 6:
-                    relative_data[f"{key}_relative"] = rot_6d_to_relative(data, anchor_relative_idx)
-                elif any(pos_word in key.lower() for pos_word in ["position", "pose", "pos"]) and data.shape[-1] == 3:
-                    relative_data[f"{key}_relative"] = xyz_to_relative(data, anchor_relative_idx)
-            except Exception:
-                continue
-
-        return relative_data
 
     def transform_camera_calibration_keys(
         self, intrinsics: Dict[str, Any], extrinsics: Dict[str, Any], metadata: Dict[str, Any]
@@ -615,7 +601,7 @@ class EpisodeProcessor:
 
             # Pre-extract data
             camera_data = self.extract_camera_data(observations, episode_data["metadata"])
-            lowdim_data = self.extract_lowdim_data(observations)
+            lowdim_data = self.extract_lowdim_data(observations, episode_data["actions"])
 
             # Generate samples
             for anchor_timestep in range(0, episode_length, self.stride):
@@ -636,7 +622,7 @@ class EpisodeProcessor:
                 valid_start = max(0, lowdim_start)
                 valid_end = min(episode_length - 1, lowdim_end)
 
-                # Check stillness
+                # Check if robot is stationary (e.g. to filter pauses)
                 if self.is_still_sample(lowdim_data, valid_start, valid_end):
                     self.still_samples_filtered += 1
                     continue
@@ -653,7 +639,7 @@ class EpisodeProcessor:
                         key = f"{camera_name}_t{img_offset}"
                         sample_images[key] = camera_images[img_timestep]
 
-                # Process lowdim data
+                # Process lowdim data (which includes actions)
                 sample_lowdim = {}
                 for key, data in lowdim_data.items():
                     valid_data = data[valid_start : valid_end + 1]
@@ -661,18 +647,13 @@ class EpisodeProcessor:
                         valid_data = self.pad_fn(valid_data, past_padding, future_padding)
                     sample_lowdim[key] = valid_data
 
-                # Add relative coordinates
-                anchor_relative_idx = self.past_lowdim_steps
-                relative_data = self.create_relative_lowdim_data(sample_lowdim, anchor_relative_idx)
-                sample_lowdim.update(relative_data)
-
                 # Create masks
                 total_length = self.past_lowdim_steps + self.future_lowdim_steps + 1
                 past_mask = np.ones(total_length, dtype=bool)
                 future_mask = np.ones(total_length, dtype=bool)
                 # Current time step is part of the future for low dim data
-                past_mask[anchor_relative_idx:] = False
-                future_mask[:anchor_relative_idx] = False
+                past_mask[self.past_lowdim_steps:] = False
+                future_mask[:self.past_lowdim_steps] = False
 
                 if past_padding > 0:
                     past_mask[:past_padding] = False
@@ -695,8 +676,8 @@ class EpisodeProcessor:
                 sample_metadata = SampleMetadata(
                     episode_id=episode_id,
                     sample_id=f"{uuid.uuid4()}_{episode_id}_t{anchor_timestep:04d}",
-                    anchor_timestep=int(anchor_timestep),
-                    anchor_relative_idx=int(anchor_relative_idx),
+                    anchor_timestep=None,
+                    anchor_relative_idx=None,
                     image_timesteps=actual_image_timesteps,
                     lowdim_start_timestep=int(lowdim_start),
                     lowdim_end_timestep=int(lowdim_end),
@@ -711,7 +692,6 @@ class EpisodeProcessor:
                 yield {
                     "images": sample_images,
                     "lowdim": sample_lowdim,
-                    "actions": {},
                     "past_mask": past_mask,
                     "future_mask": future_mask,
                     "metadata": sample_metadata,
@@ -734,97 +714,134 @@ def make_fs_path(full_path: str, is_s3: bool) -> str:
     return full_path[5:] if is_s3 and full_path.startswith("s3://") else full_path
 
 
-def discover_episodes_targeted(source_paths: List[str], max_episodes: int = -1) -> List[str]:
-    """Discover episodes efficiently."""
+def discover_episodes_targeted(source_paths: List[str], max_episodes_to_process: int = -1) -> List[str]:
+    """Discover episodes efficiently, with different behavior based on whether 'diffusion_spartan' is in the path."""
     if isinstance(source_paths, str):
         source_paths = [source_paths]
     episodes = []
-    for source_path in source_paths:
-        fs, fsspec_path = fsspec.core.url_to_fs(source_path)
-
-        is_s3 = source_path.startswith("s3://")
-
+    
+    def check_episode_validity(fs, episode_path: str, is_s3: bool) -> bool:
+        """Check if an episode directory has valid processed data."""
+        processed_path = os.path.join(episode_path, "processed")
+        fs_processed_path = make_fs_path(processed_path, is_s3)
+        
         try:
-            # Handle the case where source_path is already an episode directory
-            source_base = os.path.basename(source_path.rstrip("/"))
-            if source_base.startswith("episode_"):
-                processed_path = os.path.join(source_path, "processed")
-                if fs.exists(make_fs_path(processed_path, is_s3)):
-                    episodes.append(source_path)
-                    if max_episodes > 0 and len(episodes) >= max_episodes:
-                        return sorted(episodes)
-                continue
+            if not fs.exists(fs_processed_path):
+                return False
+            
+            # Check for required files
+            required_files = ["metadata.yaml", "observations.npz"]
+            for required_file in required_files:
+                file_path = os.path.join(processed_path, required_file)
+                fs_file_path = make_fs_path(file_path, is_s3)
+                if not fs.exists(fs_file_path):
+                    return False
+            return True
+        except Exception:
+            return False
 
-            # Handle the case where source_path is exactly a diffusion_spartan directory
-            if source_base == "diffusion_spartan":
-                try:
-                    episode_items = fs.listdir(fsspec_path)
-                    for episode_item in episode_items:
-                        episode_relative = episode_item["name"] if isinstance(episode_item, dict) else episode_item
-                        episode_path = make_full_path(episode_relative, is_s3)
-                        episode_name = os.path.basename(episode_path.rstrip("/"))
-                        if episode_name.startswith("episode_"):
-                            processed_path = os.path.join(episode_path, "processed")
-                            if fs.exists(make_fs_path(processed_path, is_s3)):
-                                episodes.append(episode_path)
-                                if max_episodes > 0 and len(episodes) >= max_episodes:
-                                    return sorted(episodes)
-                except Exception:
-                    pass
-                continue
-
-            # General case: list items under source_path
-            date_dirs = fs.listdir(fsspec_path)
-
-            for date_item in date_dirs:
-                date_relative = date_item["name"] if isinstance(date_item, dict) else date_item
-                date_path = make_full_path(date_relative, is_s3)
-
-                base_name = os.path.basename(date_path.rstrip("/"))
-
-                # If the item itself is an episode directory, add directly
-                if base_name.startswith("episode_"):
-                    processed_path = os.path.join(date_path, "processed")
-                    try:
-                        if fs.exists(make_fs_path(processed_path, is_s3)):
-                            episodes.append(date_path)
-                            if max_episodes > 0 and len(episodes) >= max_episodes:
-                                return sorted(episodes)
-                    except Exception:
-                        continue
-                    continue
-
-                # Determine diffusion_spartan path for this item
-                if base_name == "diffusion_spartan":
-                    diffusion_path = date_path
-                else:
-                    diffusion_path = os.path.join(date_path, "diffusion_spartan")
-                fs_diffusion_path = make_fs_path(diffusion_path, is_s3)
-
-                try:
-                    if fs.exists(fs_diffusion_path):
-                        episode_items = fs.listdir(fs_diffusion_path)
-
-                        for episode_item in episode_items:
-                            episode_relative = episode_item["name"] if isinstance(episode_item, dict) else episode_item
-                            episode_path = make_full_path(episode_relative, is_s3)
-                            episode_name = os.path.basename(episode_path.rstrip("/"))
-
-                            if episode_name.startswith("episode_"):
-                                processed_path = os.path.join(episode_path, "processed")
-                                fs_processed_path = make_fs_path(processed_path, is_s3)
-
-                                if fs.exists(fs_processed_path):
-                                    episodes.append(episode_path)
-                                    if max_episodes > 0 and len(episodes) >= max_episodes:
-                                        return sorted(episodes)
-
-                except Exception:
-                    continue
-
+    def search_diffusion_spartan_directory(fs, diffusion_spartan_path: str, is_s3: bool) -> None:
+        """Search within a diffusion_spartan directory for episode_* folders."""
+        fs_path = make_fs_path(diffusion_spartan_path, is_s3)
+        
+        try:
+            items = fs.listdir(fs_path)
+            print(f"Found {len(items)} items in diffusion_spartan directory")
         except Exception as e:
-            print(f"Error scanning source path {source_path}: {e}")
+            print(f"Warning: Cannot list directory {diffusion_spartan_path}: {e}")
+            return
+        
+        episode_dirs = []
+        # First pass: identify episode directories only
+        for item in items:
+            item_name = item["name"] if isinstance(item, dict) else item
+            item_basename = os.path.basename(item_name.rstrip("/"))
+            
+            # Only process directories that start with "episode_" - skip all files
+            if item_basename.startswith("episode_") and not any(item_basename.endswith(ext) for ext in ['.pkl', '.npz', '.txt', '.json', '.yaml', '.tar', '.gz']):
+                episode_dirs.append(item_basename)
+        
+        print(f"Found {len(episode_dirs)} potential episode directories")
+        
+        # Second pass: validate episode directories
+        for episode_basename in episode_dirs:
+            if max_episodes_to_process > 0 and len(episodes) >= max_episodes_to_process:
+                break
+                
+            # Construct full episode path
+            episode_path = os.path.join(diffusion_spartan_path, episode_basename)
+            
+            if check_episode_validity(fs, episode_path, is_s3):
+                episodes.append(episode_path)
+                print(f"Added valid episode: {episode_basename}")
+            else:
+                print(f"Skipped invalid episode: {episode_basename}")
+        
+        print(f"Total valid episodes found: {len(episodes)}")
 
+    def crawl_directory_for_diffusion_spartan(fs, current_path: str, is_s3: bool, depth: int = 0, max_depth: int = 5) -> None:
+        """Recursively search for diffusion_spartan directories, but don't recurse into files."""
+        if depth > max_depth:
+            return
+        
+        if max_episodes_to_process > 0 and len(episodes) >= max_episodes_to_process:
+            return
+            
+        fs_current_path = make_fs_path(current_path, is_s3)
+        
+        try:
+            items = fs.listdir(fs_current_path)
+        except Exception as e:
+            print(f"Warning: Cannot list directory {current_path}: {e}")
+            return
+        
+        # Check if current directory is diffusion_spartan
+        current_basename = os.path.basename(current_path.rstrip("/"))
+        if current_basename == "diffusion_spartan":
+            search_diffusion_spartan_directory(fs, current_path, is_s3)
+            return
+        
+        # Only recurse into directories, skip all files
+        for item in items:
+            if max_episodes_to_process > 0 and len(episodes) >= max_episodes_to_process:
+                break
+                
+            item_name = item["name"] if isinstance(item, dict) else item
+            item_basename = os.path.basename(item_name.rstrip("/"))
+            
+            # Skip all files by extension
+            if any(item_basename.endswith(ext) for ext in ['.pkl', '.npz', '.txt', '.json', '.yaml', '.tar', '.gz', '.log']):
+                continue
+                
+            # Skip hidden directories and obvious non-directories
+            if item_basename.startswith('.'):
+                continue
+                
+            item_path = os.path.join(current_path, item_basename)
+            
+            try:
+                # Check if it's actually a directory before recursing
+                fs_item_path = make_fs_path(item_path, is_s3)
+                if fs.isdir(fs_item_path):
+                    crawl_directory_for_diffusion_spartan(fs, item_path, is_s3, depth + 1, max_depth)
+            except Exception:
+                # If we can't check if it's a directory, skip it
+                continue
+
+    for source_path in source_paths:
+        print(f"Scanning source path: {source_path}")
+        fs, fsspec_path = fsspec.core.url_to_fs(source_path)
+        is_s3 = source_path.startswith("s3://")
+        
+        # Check if 'diffusion_spartan' is in the source path
+        if 'diffusion_spartan' in source_path:
+            print("Found 'diffusion_spartan' in source path - searching only this directory")
+            search_diffusion_spartan_directory(fs, source_path, is_s3)
+        else:
+            print("No 'diffusion_spartan' in source path - performing recursive search")
+            crawl_directory_for_diffusion_spartan(fs, source_path, is_s3)
+    
+    print(f"Total episodes discovered: {len(episodes)}")
     return sorted(episodes)
 
 
@@ -904,7 +921,7 @@ def main():
         "jpeg_quality": cfg.jpeg_quality,
         "fail_on_nan": cfg.fail_on_nan,
         "camera_names": camera_names,
-        "discard_keys": cfg.discard_keys,
+        "camera_discard_keys": cfg.camera_discard_keys,
         "compute_statistics": not cfg.no_statistics,
         "resize_images_size": cfg.resize_images_size,
         "language_annotations": language_annotations,
@@ -917,8 +934,8 @@ def main():
     print(f"Resume: {'enabled' if cfg.resume else 'disabled'}")
     if cfg.enable_incremental_updates:
         print(f"Metadata update frequency: every {cfg.update_frequency} shards")
-    if cfg.resize_images_size > 0:
-        print(f"Image resize to {cfg.resize_images_size}x{cfg.resize_images_size}")
+    if cfg.resize_images_size and len(cfg.resize_images_size) == 2:
+        print(f"Image resize to {cfg.resize_images_size[0]}x{cfg.resize_images_size[1]}")
     else:
         print("Image resize disabled")
 
@@ -928,7 +945,7 @@ def main():
 
     # Discover episodes
     print("🔍 Discovering episodes...")
-    episodes = discover_episodes_targeted(cfg.source_episodes, cfg.max_episodes)
+    episodes = discover_episodes_targeted(cfg.source_episodes, cfg.max_episodes_to_process)
     print(f"Found {len(episodes)} episodes")
 
     # If running on SageMaker Processing with multiple instances, split work across hosts
@@ -975,7 +992,7 @@ def main():
         cfg.output_dir,
         cfg.samples_per_shard,
         cfg.jpeg_quality,
-        gpu_resize=(cfg.resize_images_size > 0 and cfg.use_gpu_resize),
+        gpu_resize=(cfg.resize_images_size and len(cfg.resize_images_size) == 2 and cfg.use_gpu_resize),
         enable_incremental_updates=cfg.enable_incremental_updates,
         update_frequency=cfg.update_frequency,
         resume=cfg.resume,
@@ -1019,7 +1036,7 @@ def main():
     counters: Dict[str, int] = {"total_samples": 0}
 
     def consumer():
-        target = (cfg.resize_images_size, cfg.resize_images_size) if cfg.resize_images_size > 0 else None
+        target = tuple(cfg.resize_images_size) if cfg.resize_images_size and len(cfg.resize_images_size) == 2 else None
         buffer_size = max(0, int(cfg.shuffle_buffer_size))
 
         # Reservoir sampling buffer for true random shuffle with bounded memory

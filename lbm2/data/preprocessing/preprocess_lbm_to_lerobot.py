@@ -225,7 +225,7 @@ class LeRobotPreprocessParams(BaseParams):
     # Processing options
     chunk_size: int = field(default=1000)  # Episodes per chunk
     num_workers: int = field(default=16)
-    max_episodes: int = field(default=-1)
+    max_episodes_to_process: int = field(default=-1)
 
     # Ray configuration
     ray_address: Optional[str] = field(default=None)  # Ray cluster address
@@ -1411,7 +1411,7 @@ def main():
         print(f"Loaded {len(episodes)} episodes from CSV")
     elif cfg.source_episodes:
         print(f"Using source episodes from: {cfg.source_episodes}")
-        episodes = discover_episodes_targeted(cfg.source_episodes, cfg.max_episodes)
+        episodes = discover_episodes_targeted(cfg.source_episodes, cfg.max_episodes_to_process)
 
     print(f"Found {len(episodes)} episodes")
     # Useful debug prints

@@ -3,6 +3,7 @@ Normalization utilities for robotics data.
 """
 
 import logging
+import math
 from typing import Any, Dict, Optional, Tuple, Union
 
 import draccus
@@ -71,6 +72,17 @@ class RoboticsNormalizer:
         self.exclude_fields = set(self.config.exclude_fields)
 
         logging.info(f"RoboticsNormalizer initialized: method={self.method}, scope={self.scope}")
+
+    def get_field_dimension(self, field_name: str) -> int:
+        """Get the dimension of a field."""
+        if field_name in self.stats:
+            return len(self.stats[field_name]["mean"])
+        else:
+            raise ValueError(f"Field {field_name} not found in dataset statistics")
+
+    def get_timestep_dimension(self) -> int:
+        """Get the dimension of a timestep."""
+        return len(self.stats[self.config.proprioception_fields[0]]["mean_per_timestep"])
 
     def _load_statistics(self, statistics_path: str) -> Dict[str, Any]:
         """Load statistics from JSON file."""

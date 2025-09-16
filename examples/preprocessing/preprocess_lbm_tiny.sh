@@ -1,23 +1,24 @@
     # --source_episodes "include examples/preprocessing/test_list.yaml" \
 uv run --group preprocessing python lbm2/data/preprocessing/preprocess_lbm_data.py \
     --source_episodes "['s3://robotics-manip-lbm/efs/data/tasks/PickAndPlaceBox/cabot/sim/bc/teleop/2025-02-11T17-04-00-05-00/']" \
-    --output_dir s3://sagemaker-us-west-2-124224456861/vlm_datasets/preprocess_test_tiny/lbm/PickAndPlaceBox/cabot/sim/ \
+    --output_dir s3://tri-ml-datasets/preprocess_lbm_test/lbm/PickAndPlaceBox/cabot/sim/ \
     --language_annotations_path lbm2/data/preprocessing/lbm_language_annotations.yaml \
-    --discard_keys "include lbm2/config_presets/data/lbm_data_discard_key.yaml" \
+    --camera_discard_keys "include lbm2/config_presets/data/lbm_data_discard_key.yaml" \
     --camera_names "include lbm2/config_presets/data/lbm_data_camera_names.yaml" \
-    --past_lowdim_steps 5 \
+    --past_lowdim_steps 1 \
     --num_workers 5 \
-    --future_lowdim_steps 20 \
-    --image_indices "[-5, 0]" \
-    --max_padding_left 3 \
-    --max_padding_right 16 \
-    --samples_per_shard 5 \
-    --max_episodes 1 \
-    --jpeg_quality 10 \
-    --filter_still_samples True \
+    --future_lowdim_steps 14 \
+    --image_indices "[-1, 0]" \
+    --max_padding_left 1 \
+    --max_padding_right 15 \
+    --samples_per_shard 1 \
+    --max_episodes_to_process 5 \
+    --jpeg_quality 95 \
+    --filter_still_samples False \
+    --no_statistics False \
     --still_threshold 0.05 \
-    --resize_images_size 128 \
-    --shuffle_buffer_size 10 \
+    --resize_images_size "[256, 342]" \
+    --shuffle_buffer_size 100 \
     --shuffle_input_files True \
     --enable_incremental_updates False \
     --resume False \

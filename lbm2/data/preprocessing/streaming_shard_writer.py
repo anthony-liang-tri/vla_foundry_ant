@@ -339,7 +339,7 @@ class StreamingShardWriter:
         info = tarfile.TarInfo(name=f"{sample_id}.lowdim.npz")
         info.size = len(lowdim_buf.getbuffer())
         self.current_shard_tar.addfile(tarinfo=info, fileobj=lowdim_buf)
-
+        
         # Write masks as NPZ
         masks_buf = io.BytesIO()
         np.savez_compressed(masks_buf, past_mask=sample["past_mask"], future_mask=sample["future_mask"])
