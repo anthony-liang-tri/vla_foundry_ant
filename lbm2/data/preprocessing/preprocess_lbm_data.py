@@ -31,9 +31,6 @@ from lbm2.data.preprocessing.params import PreprocessParams, SampleMetadata
 from lbm2.data.preprocessing.preprocess_statistics import StreamingDatasetStatistics
 from lbm2.data.preprocessing.streaming_shard_writer import StreamingShardWriter
 
-# Add import for relative coordinate utilities
-from lbm2.data.robotics.utils import rot_6d_to_relative, xyz_to_relative
-
 # Global flag for graceful shutdown
 _shutdown_requested = False
 
@@ -510,28 +507,6 @@ class EpisodeProcessor:
                     return False
 
         return True
-
-    # def create_relative_lowdim_data(
-    #     self, lowdim_data: Dict[str, np.ndarray], anchor_relative_idx: int
-    # ) -> Dict[str, np.ndarray]:
-    #     """Create relative coordinate data."""
-    #     relative_data = {}
-
-    #     for key, data in lowdim_data.items():
-    #         if not np.issubdtype(data.dtype, np.number):
-    #             continue
-
-    #         try:
-    #             if "xyz" in key.lower() and data.shape[-1] == 3:
-    #                 relative_data[f"{key}_relative"] = xyz_to_relative(data, anchor_relative_idx)
-    #             elif "rot_6d" in key.lower() and data.shape[-1] == 6:
-    #                 relative_data[f"{key}_relative"] = rot_6d_to_relative(data, anchor_relative_idx)
-    #             elif any(pos_word in key.lower() for pos_word in ["position", "pose", "pos"]) and data.shape[-1] == 3:
-    #                 relative_data[f"{key}_relative"] = xyz_to_relative(data, anchor_relative_idx)
-    #         except Exception:
-    #             continue
-
-    #     return relative_data
 
     def transform_camera_calibration_keys(
         self, intrinsics: Dict[str, Any], extrinsics: Dict[str, Any], metadata: Dict[str, Any]
