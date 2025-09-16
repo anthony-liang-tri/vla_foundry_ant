@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-WDS TAR Viewer — Gradio edition (stream from S3, view lowdim + images)
+Webdataset TAR Viewer — Gradio edition (stream from S3, view lowdim + images)
 
 Features
 - Point at an S3 prefix or single shard and scan for .tar files
