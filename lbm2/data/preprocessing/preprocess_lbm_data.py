@@ -465,24 +465,27 @@ class EpisodeProcessor:
 
         return {sname: observations[cid] for cid, sname in filtered_mapping.items()}
 
-    def extract_lowdim_data(self, observations: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
-        """Extract low-dimensional data."""
-        return {
-            key: value
-            for key, value in observations.items()
-            if len(value.shape) <= 2 or key.startswith(("robot__", "language_"))
-        }
+    def extract_lowdim_data(
+        self, 
+        observations: Dict[str, np.ndarray], 
+        actions: Dict[str, np.ndarray]
+    ) -> Dict[str, np.ndarray]:
+        """Extract low-dimensional observation data and handle 'actions' key if present."""
+        result = {}
 
-    def extract_action_data(self, actions: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
-        """Extract action data - specifically handles 'actions' key."""
-        if not actions:
-            return {}
-        
-        # Return the 'actions' key if it exists, otherwise return empty dict
-        if 'actions' in actions:
-            return {'actions': actions['actions']}
-        else:
-            return {}
+        # Extract low-dimensional observations
+        if observations:
+            result.update({
+                key: value
+                for key, value in observations.items()
+                if len(value.shape) <= 2 or key.startswith(("robot__", "language_"))
+            })
+
+        # Extract 'actions' if available
+        if actions and "actions" in actions:
+            result["actions"] = actions["actions"]
+
+        return result
 
     def is_still_sample(self, lowdim_data: Dict[str, np.ndarray], start_idx: int, end_idx: int) -> bool:
         """Check if sample is still."""
@@ -623,8 +626,7 @@ class EpisodeProcessor:
 
             # Pre-extract data
             camera_data = self.extract_camera_data(observations, episode_data["metadata"])
-            lowdim_data = self.extract_lowdim_data(observations)
-            action_data = self.extract_action_data(episode_data["actions"])
+            lowdim_data = self.extract_lowdim_data(observations, episode_data["actions"])
 
             # Generate samples
             for anchor_timestep in range(0, episode_length, self.stride):
@@ -662,26 +664,13 @@ class EpisodeProcessor:
                         key = f"{camera_name}_t{img_offset}"
                         sample_images[key] = camera_images[img_timestep]
 
-                # Process lowdim data
+                # Process lowdim data (which includes actions)
                 sample_lowdim = {}
                 for key, data in lowdim_data.items():
                     valid_data = data[valid_start : valid_end + 1]
                     if past_padding > 0 or future_padding > 0:
                         valid_data = self.pad_fn(valid_data, past_padding, future_padding)
                     sample_lowdim[key] = valid_data
-
-                # Process action data
-                sample_actions = {}
-                for key, data in action_data.items():
-                    valid_data = data[valid_start : valid_end + 1]
-                    if past_padding > 0 or future_padding > 0:
-                        valid_data = self.pad_fn(valid_data, past_padding, future_padding)
-                    sample_actions[key] = valid_data
-
-                # Add relative coordinates
-                #anchor_relative_idx = self.past_lowdim_steps
-                #relative_data = self.create_relative_lowdim_data(sample_lowdim, anchor_relative_idx)
-                #sample_lowdim.update(relative_data)
 
                 # Create masks
                 total_length = self.past_lowdim_steps + self.future_lowdim_steps + 1
@@ -728,7 +717,6 @@ class EpisodeProcessor:
                 yield {
                     "images": sample_images,
                     "lowdim": sample_lowdim,
-                    "actions": sample_actions,
                     "past_mask": past_mask,
                     "future_mask": future_mask,
                     "metadata": sample_metadata,
