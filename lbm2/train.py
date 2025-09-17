@@ -9,9 +9,9 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.distributed.distributed_c10d import ReduceOp
 
-from lbm2.data.sampler import sample_chunk
 from lbm2.distributed import is_master
 from lbm2.meters import Metrics
+from lbm2.models.batch_handlers import create_batch_handler
 from lbm2.params.train_experiment_params import TrainExperimentParams
 from lbm2.precision import get_autocast
 
@@ -55,7 +55,11 @@ def train_one_checkpoint(
     device = torch.device(cfg.distributed.device)
     autocast = get_autocast(cfg.hparams.precision)
 
+    # Create batch handler for the model type
+    batch_handler = create_batch_handler(cfg.model.type)
+
     model.train()
+    model_dtype = next(model.parameters()).dtype
 
     # Let the dataloader know which window/checkpoint it's on.
     dataloader.set_checkpoint_num(checkpoint_num)
@@ -90,52 +94,23 @@ def train_one_checkpoint(
         if has_data < cfg.distributed.world_size:  # Not all gpus have data
             break
 
-        input_ids = batch["input_ids"].to(device)
-        image = batch["pixel_values"].to(device) if "pixel_values" in batch else None
-        attention_mask = (
-            batch["attention_mask"].to(device)
-            if "attention_mask" in batch and batch["attention_mask"] is not None
-            else None
-        )
-
         metrics.stats["data_time"].update(time.time() - end)
         optimizer.zero_grad()
+
+        # Prepare model inputs and targets (including chunking) using batch handler
+        model_inputs, targets = batch_handler.prepare_inputs_and_targets(batch, device, model_dtype, cfg)
 
         if cfg.hparams.accum_freq == 1:
             # No gradient accumulation
             with autocast():
                 forward_start = time.time()
-                # Sample a contiguous chunk to the configured sequence length.
-                input_ids, attention_mask, targets = sample_chunk(input_ids, attention_mask, cfg.data.seq_len)
 
-                if cfg.model.type == "transformer" or cfg.model.type == "transformer_hf":
-                    outputs = model(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=False)
-                    logits = outputs.logits
-                    metrics.stats["forward_time"].update(time.time() - forward_start)
-                    targets = targets.long()
-                    vocab_size = logits.shape[-1]
-                    total_loss = loss(logits.reshape(-1, vocab_size), targets.reshape(-1))
-                elif cfg.model.type == "vlm" or cfg.model.type == "vlm_hf":
-                    outputs = model(
-                        input_ids=input_ids, image=image, attention_mask=attention_mask, output_hidden_states=False
-                    )
-                    logits = outputs.logits
-                    metrics.stats["forward_time"].update(time.time() - forward_start)
-                    targets = targets.long()
-                    # Mask out padding and image-token positions when computing loss.
-                    ignore_mask = (targets == cfg.data.pad_token_id) | (targets == cfg.data.image_token_id)
-                    targets = targets.masked_fill(ignore_mask, -100)
-                    vocab_size = logits.shape[-1]
-                    total_loss = loss(logits.reshape(-1, vocab_size), targets.reshape(-1))
-                elif cfg.model.type == "stable_diffusion":
-                    noise = torch.randn_like(image)
-                    predicted_noise = model(
-                        input_ids=input_ids, image=image, attention_mask=attention_mask, noise=noise
-                    )
-                    if getattr(cfg.model, "diffusion_use_flow_matching_scheduler", False):
-                        # In flow-matching variant: predict (image -> noise) direction.
-                        noise = noise - image
-                    total_loss = loss(predicted_noise, noise)
+                # Forward pass - same for all model types!
+                outputs = model(**model_inputs)
+                metrics.stats["forward_time"].update(time.time() - forward_start)
+
+                # Compute loss using batch handler
+                total_loss = batch_handler.compute_loss(outputs, targets, loss, cfg)
 
             # Backward for single-step case.
             backward_start = time.time()
@@ -144,7 +119,6 @@ def train_one_checkpoint(
 
         else:
             # Gradient accumulation path.
-            input_ids, attention_mask, targets = sample_chunk(input_ids, attention_mask, cfg.data.seq_len)
 
             forward_total_time = 0
             backward_total_time = 0
@@ -161,54 +135,25 @@ def train_one_checkpoint(
                 with autocast():
                     forward_start = time.time()
                     # Slice the microbatch for this accumulation step.
-                    inputs_ii = input_ids[
-                        ii * cfg.hparams.per_gpu_batch_size : (ii + 1) * cfg.hparams.per_gpu_batch_size
-                    ]
-                    mask_ii = (
-                        attention_mask[ii * cfg.hparams.per_gpu_batch_size : (ii + 1) * cfg.hparams.per_gpu_batch_size]
-                        if attention_mask is not None
-                        else None
-                    )
-                    if inputs_ii.shape[0] == 0:
-                        break
-                    targets_ii = targets[
-                        ii * cfg.hparams.per_gpu_batch_size : (ii + 1) * cfg.hparams.per_gpu_batch_size
-                    ]
-                    if image is not None:
-                        images_ii = image[
-                            ii * cfg.hparams.per_gpu_batch_size : (ii + 1) * cfg.hparams.per_gpu_batch_size
-                        ]
+                    start_idx = ii * cfg.hparams.per_gpu_batch_size
+                    end_idx = (ii + 1) * cfg.hparams.per_gpu_batch_size
+                    model_inputs_ii = batch_handler.slice_inputs_for_accumulation(model_inputs, start_idx, end_idx)
 
-                    if cfg.model.type == "transformer" or cfg.model.type == "transformer_hf":
-                        outputs = model(input_ids=inputs_ii, attention_mask=mask_ii, output_hidden_states=False)
-                        logits = outputs.logits
-                        forward_total_time += time.time() - forward_start
-                        targets_ii = targets_ii.long()
-                        vocab_size = logits.shape[-1]
-                        local_loss = loss(logits.reshape(-1, vocab_size), targets_ii.reshape(-1)) * (
-                            inputs_ii.shape[0] / input_ids.shape[0]
-                        )
-                    elif cfg.model.type == "vlm" or cfg.model.type == "vlm_hf":
-                        outputs = model(
-                            input_ids=inputs_ii, image=images_ii, attention_mask=mask_ii, output_hidden_states=False
-                        )
-                        logits = outputs.logits
-                        forward_total_time += time.time() - forward_start
-                        targets_ii = targets_ii.long()
-                        ignore_mask = (targets_ii == cfg.data.pad_token_id) | (targets_ii == cfg.data.image_token_id)
-                        targets_ii = targets_ii.masked_fill(ignore_mask, -100)
-                        vocab_size = logits.shape[-1]
-                        local_loss = loss(logits.reshape(-1, vocab_size), targets_ii.reshape(-1)) * (
-                            inputs_ii.shape[0] / input_ids.shape[0]
-                        )
-                    elif cfg.model.type == "stable_diffusion":
-                        noise = torch.randn_like(images_ii)
-                        predicted_noise = model(
-                            input_ids=inputs_ii, image=images_ii, attention_mask=mask_ii, noise=noise
-                        )
-                        if getattr(cfg.model, "diffusion_use_flow_matching_scheduler", False):
-                            noise = noise - images_ii  # Predict the direction from image to noise
-                        local_loss = loss(predicted_noise, noise) * (inputs_ii.shape[0] / input_ids.shape[0])
+                    if model_inputs_ii["input_ids"].shape[0] == 0:
+                        break
+
+                    targets_ii = targets[start_idx:end_idx]
+
+                    # Forward pass - same for all model types!
+                    outputs = model(**model_inputs_ii)
+                    forward_total_time += time.time() - forward_start
+
+                    local_loss = batch_handler.compute_loss(outputs, targets_ii, loss, cfg)
+
+                    # Scale loss by microbatch size ratio
+                    local_loss = local_loss * (
+                        model_inputs_ii["input_ids"].shape[0] / model_inputs["input_ids"].shape[0]
+                    )
 
                 # Backward per microbatch.
                 backward_start = time.time()
@@ -245,7 +190,7 @@ def train_one_checkpoint(
 
         # Master-only logging & W&B
         if is_master(cfg):
-            batch_size = len(input_ids)
+            batch_size = len(model_inputs["input_ids"])
             # update the loss meter with the global loss tensor every iteration,
             # so that the logging is of the avg of loss of the last cfg.log_every_n_steps iterations
             metrics.stats["loss"].update(global_loss_tensor.item(), batch_size)
@@ -259,7 +204,7 @@ def train_one_checkpoint(
                 metrics.update_and_log_state(
                     cfg=cfg,
                     batch_size=batch_size,
-                    batch_num_tokens=input_ids.numel(),
+                    batch_num_tokens=model_inputs["input_ids"].numel(),
                     batch_count=batch_count,
                     num_batches_per_checkpoint=num_batches_per_checkpoint,
                     step=step,

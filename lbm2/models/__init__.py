@@ -1,6 +1,7 @@
 import torch.nn as nn
 from transformers import AutoConfig, AutoModelForCausalLM, AutoModelForVision2Seq
 
+from lbm2.models.batch_handlers import create_batch_handler
 from lbm2.models.diffusion.noise_scheduler import NoiseSchedulerDDPM
 from lbm2.models.diffusion.noise_scheduler_diffusers import FlowMatchingScheduler, NoiseSchedulerDDPMDiffusers
 from lbm2.models.diffusion.stable_diffusion import StableDiffusion
