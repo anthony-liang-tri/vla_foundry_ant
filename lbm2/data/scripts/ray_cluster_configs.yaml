@@ -57,26 +57,25 @@ rsync_exclude:
 setup_commands:
     - sudo apt-get update -y
     - sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" ffmpeg
-    - wget https://repo.anaconda.com/miniconda/Miniconda3-py310_23.3.1-0-Linux-x86_64.sh -O miniconda.sh
     - sudo mkfs -t xfs /dev/nvme1n1
     - sudo mount /dev/nvme1n1 /tmp
     - sudo chown -R $USER /tmp
     # NOTE: This seems to be necessary at TRI AWS due to some permissions issue.
     - sudo chmod 1777 /tmp
-    - bash ~/miniconda.sh -f -b -p /tmp/miniconda3/
-    - echo 'export PATH="/tmp/miniconda3/bin/:$PATH"' >> ~/.bashrc
-    - echo 'export HF_TOKEN=$(cat /home/ubuntu/.cache/huggingface/token)' >> ~/.bashrc
     - mkdir -p ~/.cache/huggingface/
-    - pip install --upgrade pip setuptools wheel
-    - pip install -U "ray[default] @ https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-3.0.0.dev0-cp310-cp310-manylinux2014_x86_64.whl"
-    - pip install boto3==1.26.90
-    - pip install s3fs==2022.11.0
-    - pip install 'pandas==2.1.4'
-    - pip install psutil
-    - pip install pyarrow
-    - pip install --upgrade transformers
-    - pip install --upgrade boto3 botocore
-    - pip install --upgrade s3fs
-    - pip install awscli
-    - pip install img2dataset
-    - pip install numpy==1.26.0
+    - curl -LsSf https://astral.sh/uv/install.sh | sh
+    - echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc
+    # Symlink everything in /tmp because the root filesystem is too small.
+    - mv /home/ubuntu/.cache /tmp/.cache && ln -s /tmp/.cache /home/ubuntu/.cache
+    - mkdir -p lbm2/.venv && mv lbm2/.venv /tmp/.venv && ln -s /tmp/.venv lbm2/.venv
+    - cd lbm2 && UV_PROJECT_ENVIRONMENT=/home/ubuntu/lbm2/.venv uv sync
+    - echo 'export HF_TOKEN=$(cat /home/ubuntu/.cache/huggingface/token)' >> ~/.bashrc
+    - echo 'source /home/ubuntu/lbm2/.venv/bin/activate' >> ~/.bashrc
+
+head_setup_commands:
+    - source /home/ubuntu/lbm2/.venv/bin/activate && ray stop --force || true
+    - source /home/ubuntu/lbm2/.venv/bin/activate && ray start --head --port=6379 --dashboard-host=0.0.0.0
+
+worker_setup_commands:
+    - source /home/ubuntu/lbm2/.venv/bin/activate && ray stop --force || true
+    - source /home/ubuntu/lbm2/.venv/bin/activate && ray start --address="$RAY_HEAD_IP:6379"
