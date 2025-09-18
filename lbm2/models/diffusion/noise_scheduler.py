@@ -39,13 +39,39 @@ class NoiseSchedulerDDPM(nn.Module, NoiseScheduler):
         # Calculations for posterior q(x_{t-1} | x_t, x_0)
         self.register_buffer("posterior_variance", betas * (1 - alphas_cumprod_prev) / (1 - alphas_cumprod))
 
-    def add_noise(self, x_start, noise, timesteps):
+    def add_noise(self, x_start, noise, timesteps, mask=None):
         # x_start, noise shape [bsz, channels, h, w]
         # self.sqrt_alphas_cumprod[timesteps] shape [bsz]
-        return (
-            self.sqrt_alphas_cumprod[timesteps].view(-1, 1, 1, 1) * x_start
-            + self.sqrt_one_minus_alphas_cumprod[timesteps].view(-1, 1, 1, 1) * noise
-        )  # [bsz, channels, h, w]
+
+        # Determine how many dimensions to add by comparing timesteps and x_start shapes
+        # timesteps is typically (batch_size,) and x_start is (batch_size, ..., feature)
+        # We need to add dimensions to timesteps to match x_start's broadcasting requirements
+        target_ndim = x_start.ndim
+        current_ndim = timesteps.ndim
+        dims_to_add = target_ndim - current_ndim
+
+        # Create the view shape: keep first dimension (-1), add 1s for the remaining dimensions
+        view_shape = [-1] + [1] * dims_to_add
+
+        if mask is not None:
+            # Ensure mask can broadcast with x_start by expanding missing dimensions
+            # mask should have first dimensions matching x_start, and we'll expand the rest
+            mask_expanded = mask
+            while mask_expanded.ndim < x_start.ndim:
+                mask_expanded = mask_expanded.unsqueeze(-1)
+            # When mask=1: should behave exactly like no mask
+            # When mask=0: should return original x_start (no noise)
+            # Formula: mask * (normal_noisy_result) + (1 - mask) * x_start
+            normal_result = (
+                self.sqrt_alphas_cumprod[timesteps].view(*view_shape) * x_start
+                + self.sqrt_one_minus_alphas_cumprod[timesteps].view(*view_shape) * noise
+            ).to(dtype=x_start.dtype)
+            return mask_expanded * normal_result + (1 - mask_expanded) * x_start
+        else:
+            return (
+                self.sqrt_alphas_cumprod[timesteps].view(*view_shape) * x_start
+                + self.sqrt_one_minus_alphas_cumprod[timesteps].view(*view_shape) * noise
+            ).to(dtype=x_start.dtype)  # [bsz, channels, h, w]
 
     def step(self, model_output, timestep, sample):
         """Reverse process single step"""
