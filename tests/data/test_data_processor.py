@@ -20,7 +20,7 @@ class TestProcessorPaliGemma:
 
         num_img_tokens = paligemma_processor.image_seq_length
         result = paligemma_processor(
-            images=sample["image"],
+            images=[sample["image"]],
             text=sample["text"],
             return_tensors="pt",
             padding="max_length",

@@ -1,6 +1,6 @@
 uv run --group preprocessing torchrun --nproc_per_node=2 lbm2/data/preprocessing/preprocess_lbm_data.py \
     --source_episodes "['s3://robotics-manip-lbm/efs/data/tasks/PickAndPlaceBox/cabot/sim/bc/teleop/2025-02-11T17-04-00-05-00/',]" \
-    --output_dir s3://sagemaker-us-west-2-124224456861/vlm_datasets/preprocess_512_shuffle/lbm/PickAndPlaceBox/cabot/sim/ \
+    --output_dir s3://tri-ml-datasets-uw2/vlm_datasets/preprocess_512_shuffle/lbm/PickAndPlaceBox/cabot/sim/ \
     --past_lowdim_steps 1 \
     --num_workers 40 \
     --future_lowdim_steps 14 \

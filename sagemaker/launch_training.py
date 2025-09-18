@@ -177,7 +177,9 @@ def main():
     environment = {
         "SM_USE_RESERVED_CAPACITY": "1",
         "WANDB_PROJECT": "lbm2",
+        "NCCL_DEBUG": "INFO",
         "TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS": "1",
+        "SAGEMAKER_PROGRAM": "/opt/ml/code/lbm2/main.py",
     }
     with open("secrets.env", "r") as f:
         for line in f:

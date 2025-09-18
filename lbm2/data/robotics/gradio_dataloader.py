@@ -424,17 +424,11 @@ class RoboticsDataLoader:
                             # Fallback naming if camera names not available
                             sample["images"][f"camera_{img_idx}"] = img_tensor.permute(1, 2, 0).float().cpu().numpy()
 
-            # Extract masks
-            if "masks" in batch and batch["masks"] not in [[], {}, [{}]]:
-                sample["masks"] = {}
-                for key, value in batch["masks"].items():
-                    if isinstance(value, torch.Tensor):
-                        if value.dim() > 0:
-                            sample["masks"][key] = value[i].float().cpu().numpy()
-                        else:
-                            sample["masks"][key] = value.float().cpu().numpy()
-                    else:
-                        sample["masks"][key] = value
+            # Extract past and future masks
+            if "past_mask" in batch:
+                sample["past_mask"] = batch["past_mask"][i].float().cpu().numpy()
+            if "future_mask" in batch:
+                sample["future_mask"] = batch["future_mask"][i].float().cpu().numpy()
 
             # Extract actions
             if "actions" in batch:
@@ -531,17 +525,11 @@ class RoboticsDataLoader:
                             img_numpy = RoboticsDataLoader._convert_image_tensor_to_numpy(img_tensor)
                             sample["images"][f"camera_{img_idx}"] = img_numpy
 
-            # Extract masks
-            if "masks" in batch:
-                sample["masks"] = {}
-                for key, value in batch["masks"].items():
-                    if isinstance(value, torch.Tensor):
-                        if value.dim() > 0:
-                            sample["masks"][key] = value[i].float().cpu().numpy()
-                        else:
-                            sample["masks"][key] = value.float().cpu().numpy()
-                    else:
-                        sample["masks"][key] = value
+            # Extract past and future masks
+            if "past_mask" in batch:
+                sample["past_mask"] = batch["past_mask"][i].float().cpu().numpy()
+            if "future_mask" in batch:
+                sample["future_mask"] = batch["future_mask"][i].float().cpu().numpy()
 
             # Extract actions
             if "actions" in batch:

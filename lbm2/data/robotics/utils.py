@@ -221,8 +221,8 @@ def extract_and_aggregate_proprioception(
         proprioception = proprioception[:, -1, :]  # [B, D]
     elif aggregation_method == "masked_mean":
         # Use past mask if available for masked mean
-        if "masks" in batch and "past_mask" in batch["masks"]:
-            past_mask = batch["masks"]["past_mask"]
+        if "past_mask" in batch:
+            past_mask = batch["past_mask"]
             if device is not None:
                 past_mask = past_mask.to(device)
 
@@ -266,8 +266,8 @@ def extract_and_aggregate_actions(
         return actions.mean(dim=1)  # [B, D]
     elif aggregation_method == "future_only":
         # Use future mask if available
-        if "masks" in batch and "future_mask" in batch["masks"]:
-            future_mask = batch["masks"]["future_mask"]
+        if "future_mask" in batch:
+            future_mask = batch["future_mask"]
             if device is not None:
                 future_mask = future_mask.to(device)
 

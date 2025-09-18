@@ -1,7 +1,7 @@
 #    --camera_names "include lbm2/config_presets/data/lbm_data_camera_names.yaml" \
 uv run --group preprocessing python lbm2/data/preprocessing/preprocess_lbm_data.py \
     --source_episodes "['s3://robotics-manip-lbm/efs/data/tasks/PickAndPlaceBox/cabot/sim/bc/teleop/2025-02-11T17-04-00-05-00/']" \
-    --output_dir s3://sagemaker-us-west-2-124224456861/vlm_datasets/preprocess_sample/lbm/PickAndPlaceBox/cabot/sim/ \
+    --output_dir s3://tri-ml-datasets-uw2/vlm_datasets/preprocess_sample/lbm/PickAndPlaceBox/cabot/sim/ \
     --past_lowdim_steps 1 \
     --future_lowdim_steps 14 \
     --image_indices "[-1, 0]" \

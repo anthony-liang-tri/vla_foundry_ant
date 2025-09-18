@@ -7,6 +7,7 @@ from lbm2.models.diffusion.noise_scheduler_diffusers import FlowMatchingSchedule
 from lbm2.models.diffusion.stable_diffusion import StableDiffusion
 from lbm2.models.diffusion.unet import CrossAttentionBlock, ResnetBlock, SelfAttentionBlock, UNet
 from lbm2.models.diffusion.unet_diffusers import UNetDiffusers
+from lbm2.models.fake_policy import FakePolicy
 from lbm2.models.transformer import Transformer, TransformerBlock
 from lbm2.models.transformer_hf import TransformerHF
 from lbm2.models.vit import ViT
@@ -40,6 +41,8 @@ def create_model(model_params: ModelParams):
         else:
             noise_scheduler = NoiseSchedulerDDPM(model_params.noise_scheduler)
         model = StableDiffusion(model_params, noise_scheduler, unet)
+    elif model_params.type == "fake_policy":
+        model = FakePolicy(model_params)
     else:
         raise ValueError(f"{model_params.type} not supported!")
     return model

@@ -1,5 +1,11 @@
 type: robotics
 
+dataset_manifest:
+  - tests/test_assets/small_lbm_dataset/manifest.jsonl
+
+dataset_statistics:
+  - tests/test_assets/small_lbm_dataset/dataset_statistics.json
+
 dataset_weighting:
   - 1.0
 

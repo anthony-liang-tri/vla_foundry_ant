@@ -698,7 +698,7 @@ class TestPipelineCreation:
         cfg = self.create_mock_cfg("text")
 
         with pytest.raises(ValueError, match="unsupported_modality webdataset pipeline not supported"):
-            create_wds_pipeline("dummy", "unsupported_modality", 4, 0, cfg)
+            create_wds_pipeline("dummy", "unsupported_modality", 4, 0, cfg.data)
 
 
 class TestFiniteDataPipeline:

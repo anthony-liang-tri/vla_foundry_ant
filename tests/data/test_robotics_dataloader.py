@@ -219,7 +219,8 @@ def test_batch_loading(dataset_path, manifest_data, mock_config):
             "lowdim",
             "lowdim_text",
             "lowdim_text_tokenized",
-            "masks",
+            "past_mask",
+            "future_mask",
             "actions",
             "metadata",
         ]

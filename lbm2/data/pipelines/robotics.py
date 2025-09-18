@@ -63,7 +63,8 @@ def extract_robotics_fields(sample, language_instruction_types=None):
     return {
         "images": images,
         "lowdim": data.get("lowdim.npz"),
-        "masks": data.get("masks.npz", {}),
+        "past_mask": data.get("masks.npz", {}).get("past_mask", None),
+        "future_mask": data.get("masks.npz", {}).get("future_mask", None),
         "metadata": data.get("metadata.json", {}),
         "intrinsics": data.get("intrinsics.npz", {}),
         "extrinsics": data.get("extrinsics.npz", {}),

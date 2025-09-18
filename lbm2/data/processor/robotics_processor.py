@@ -14,11 +14,6 @@ class RoboticsProcessor:
                     action_data.append(batch["lowdim"][key])
             batch["actions"] = torch.cat(action_data, dim=-1)  # [B, T, D]
 
-            # Explicitly extract future_mask and past_mask for convenience
-            if "masks" in batch and "future_mask" in batch["masks"] and "past_mask" in batch["masks"]:
-                batch["future_mask"] = batch["masks"]["future_mask"]
-                batch["past_mask"] = batch["masks"]["past_mask"]
-
         if proprioception_fields:
             proprioception_data = []
             num_past_steps = batch.get("metadata", [{}])[0].get("anchor_relative_idx", 0)
@@ -73,7 +68,7 @@ class RoboticsProcessor:
         processed_batch = batch.copy()
         processed_batch["input_ids"] = processed["input_ids"]
         processed_batch["attention_mask"] = processed["attention_mask"]
-        _, c, h, w = processed["pixel_values"].shape
+        c, h, w = processed["pixel_values"].shape[-3:]
         processed_batch["pixel_values"] = processed["pixel_values"].reshape(len(batch_images), -1, c, h, w)
         processed_batch["camera_names"] = camera_names
         processed_batch["images"] = batch_images

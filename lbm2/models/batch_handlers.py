@@ -223,6 +223,35 @@ class StableDiffusionBatchHandler(BatchHandler):
         return loss_fn(predicted_noise, targets)
 
 
+class FakePolicyBatchHandler(BatchHandler):
+    """Handles batch preparation for fake_policy models."""
+
+    def prepare_inputs(self, batch, device, model_dtype, cfg):
+        inputs = {
+            "input_ids": batch["input_ids"].to(device, non_blocking=True, dtype=torch.long),
+        }
+
+        inputs["image"] = batch["pixel_values"].to(device, non_blocking=True, dtype=model_dtype)
+        inputs["actions"] = batch["actions"].to(device, non_blocking=True, dtype=model_dtype)
+        inputs["proprioception"] = batch["proprioception"].to(device, non_blocking=True, dtype=model_dtype)
+        inputs["past_mask"] = batch["past_mask"].to(device, non_blocking=True, dtype=model_dtype)
+        inputs["future_mask"] = batch["future_mask"].to(device, non_blocking=True, dtype=model_dtype)
+
+        if "attention_mask" in batch and batch["attention_mask"] is not None:
+            inputs["attention_mask"] = batch["attention_mask"].to(device, non_blocking=True, dtype=torch.bool)
+
+        return inputs
+
+    def prepare_inputs_and_targets(self, batch, device, model_dtype, cfg):
+        inputs = self.prepare_inputs(batch, device, model_dtype, cfg)
+        targets = batch["actions"].to(device, non_blocking=True, dtype=model_dtype)
+        return inputs, targets
+
+    def compute_loss(self, outputs, targets, loss_fn, cfg):
+        # For fake_policy, the model already computes the loss internally
+        return outputs.loss
+
+
 def create_batch_handler(model_type: str) -> BatchHandler:
     """
     Factory function to create the appropriate batch handler for a model type.
@@ -239,5 +268,7 @@ def create_batch_handler(model_type: str) -> BatchHandler:
         return VLMBatchHandler()
     elif model_type == "stable_diffusion":
         return StableDiffusionBatchHandler()
+    elif model_type == "fake_policy":
+        return FakePolicyBatchHandler()
     else:
         raise ValueError(f"Batch handler not supported for model type: {model_type}")

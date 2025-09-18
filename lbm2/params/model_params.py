@@ -176,3 +176,9 @@ class DiffusionParams(ModelParams):
     @property
     def image_size(self):
         return self.unet.image_size
+
+
+@register_model_params("fake_policy")
+@dataclass(frozen=True)
+class FakePolicyParams(ModelParams):
+    pass
