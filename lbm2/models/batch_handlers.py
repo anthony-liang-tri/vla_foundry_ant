@@ -212,7 +212,7 @@ class StableDiffusionBatchHandler(BatchHandler):
 
         # For diffusion, targets are the noise (or noise direction for flow matching)
         targets = noise
-        if getattr(cfg.model, "diffusion_use_flow_matching_scheduler", False):
+        if cfg.model.use_flow_matching_scheduler:
             # In flow-matching variant: target is (noise - image) direction
             targets = noise - image
 

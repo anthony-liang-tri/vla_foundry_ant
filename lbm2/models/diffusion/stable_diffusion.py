@@ -5,11 +5,11 @@ from tqdm import tqdm
 from lbm2.models.base_model import BaseModel
 from lbm2.models.diffusion.noise_scheduler import NoiseScheduler
 from lbm2.models.diffusion.unet import UNet
-from lbm2.params.model_params import DiffusionParams
+from lbm2.params.model_params import StableDiffusionParams
 
 
 class StableDiffusion(BaseModel):
-    def __init__(self, model_params: DiffusionParams, scheduler: NoiseScheduler, unet: UNet):
+    def __init__(self, model_params: StableDiffusionParams, scheduler: NoiseScheduler, unet: UNet):
         super().__init__(model_params)
         self.scheduler = scheduler
         self.unet = unet

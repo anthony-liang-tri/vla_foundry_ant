@@ -159,13 +159,13 @@ class UNetParams(ModelParams):
 @dataclass(frozen=True)
 class NoiseSchedulerParams(ModelParams):
     num_timesteps: int = field(default=1000)
-    beta_start: int = field(default=0.0001)
-    beta_end: int = field(default=0.02)
+    beta_start: float = field(default=0.0001)
+    beta_end: float = field(default=0.02)
 
 
 @register_model_params("stable_diffusion")
 @dataclass(frozen=True)
-class DiffusionParams(ModelParams):
+class StableDiffusionParams(ModelParams):
     unet: UNetParams = field(default_factory=UNetParams)
     noise_scheduler: NoiseSchedulerParams = field(default_factory=NoiseSchedulerParams)
 
