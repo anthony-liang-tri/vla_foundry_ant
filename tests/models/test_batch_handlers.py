@@ -305,13 +305,13 @@ class TestStableDiffusionBatchHandler:
     @pytest.fixture
     def mock_cfg_diffusion(self):
         cfg = Mock()
-        cfg.model.diffusion_use_flow_matching_scheduler = False
+        cfg.model.use_flow_matching_scheduler = False
         return cfg
 
     @pytest.fixture
     def mock_cfg_flow_matching(self):
         cfg = Mock()
-        cfg.model.diffusion_use_flow_matching_scheduler = True
+        cfg.model.use_flow_matching_scheduler = True
         return cfg
 
     @pytest.fixture
