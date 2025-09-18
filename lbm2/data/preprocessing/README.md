@@ -13,6 +13,12 @@ This preprocessor transforms robotics episodes stored in S3 into structured trai
 - **WebDataset format**: Outputs compressed tar shards compatible with LBM2 training pipeline
 - **LeRobot format**: Outputs compressed tar shards compatible with LBM2 training pipeline
 
+It works by running two sets of Ray parallel jobs.
+1. First, it will process each file individually and create frames on s3. Each frame of each episode will have its own tar shard. These episodes will all be in the same bucket and be called episode\_{X}\_frame\_{Y}.tar. In terms of parallelism, each worker will be assigned one episode to process.
+2. List out all tar shards generated in the previous step. Randomly shuffle and group together by shard\_size. Each worker is assigned one shard and will untar the component frames, combine the contents, then tar them back.
+
+The `stats.json` is built up by the workers of Step 1, and the `manifest.jsonl` is built up by the workers of Step 2.
+
 ## Input Data Format
 
 Expects processed episodes in S3 with this structure:
@@ -28,44 +34,43 @@ s3://bucket/path/to/episode/
 
 ## Output Format (LBM2 shards)
 
-
-
 Generates WebDataset tar files:
 ```
 output_directory/
-├── shard_000000.tar          # Training data shards
-├── shard_000001.tar
-├── manifest.jsonl            # Shard index
-├── dataset_statistics.json   # Dataset statistics
-└── processing_metadata.json  # Processing provenance
+├── episode_{X}_frame_{Y}.tar     # Intermediate tar shards
+├── [...]
+└── shards
+    ├── shard_000000.tar          # Training data shards
+    ├── shard_000001.tar
+    ├── manifest.jsonl            # Shard index
+    └── stats.json                # Dataset statistics
 ```
 
 ## Basic Usage
 
+Note Ray doesn't work well with `uv run` right now. You can still use the uv requirements with with `source .venv/bin/activate`.
+
 ```bash
-uv run --group preprocessing python lbm2/data/preprocessing/preprocess_lbm_data.py \
+python lbm2/data/preprocessing/preprocess_lbm_data.py \
     --source_episodes "['s3://robotics-manip-lbm/efs/data/tasks/PickAndPlaceBox/cabot/sim/bc/teleop/2025-02-11T17-04-00-05-00/']" \
-    --output_dir s3://tri-ml-datasets/preprocess_test_tiny/lbm/PickAndPlaceBox/cabot/sim/ \
-    --language_annotations_path lbm2/data/preprocessing/lbm_language_annotations.yaml \
-    --camera_discard_keys "include lbm2/config_presets/data/lbm_data_discard_key.yaml" \
-    --camera_names "include lbm2/config_presets/data/lbm_data_camera_names.yaml" \
-    --past_lowdim_steps 2 \
-    --num_workers 5 \
+    --output_dir s3://tri-ml-datasets-uw2/scratch/tmp/lbmpreprocess \
+    --past_lowdim_steps 1 \
     --future_lowdim_steps 14 \
-    --image_indices "[-2, 0]" \
+    --image_indices "[-1, 0]" \
+    --stride 1 \
     --max_padding_left 3 \
-    --max_padding_right 16 \
-    --samples_per_shard 1 \
-    --max_episodes_to_process 5 \
-    --jpeg_quality 95 \
+    --max_padding_right 15 \
+    --padding_strategy copy \
     --filter_still_samples False \
     --still_threshold 0.05 \
-    --resize_images_size "[256, 342]" \
-    --shuffle_buffer_size 100 \
-    --shuffle_input_files True \
-    --enable_incremental_updates False \
-    --resume False \
-    --update_frequency 10
+    --camera_discard_keys "include lbm2/config_presets/data/lbm_data_discard_key.yaml" \
+    --camera_names "include lbm2/config_presets/data/lbm_data_camera_names.yaml" \
+    --samples_per_shard 100 \
+    --jpeg_quality 95 \
+    --max_episodes_to_process -1 \
+    --fail_on_nan True \
+    --skip_git_tagging False \
+    --resize_images_size "[224, 224]"
 ```
 
 ## Key Configuration
@@ -105,15 +110,3 @@ Each processed sample contains:
 - **Language instructions**: Task descriptions in multiple formats
 - **Metadata**: Timing, padding, and provenance information
 - **Camera calibration**: Intrinsics/extrinsics for the sequence timespan
-
-## Resume and Recovery
-
-The tool supports resuming interrupted processing:
-```bash
-python preprocess_lbm_data_optimized.py \
-    --resume True \
-    --enable_incremental_updates True \
-    [other options]
-```
-
-Processing metadata includes git commit tracking and full reproducibility information.

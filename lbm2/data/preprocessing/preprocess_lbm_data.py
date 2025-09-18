@@ -1,227 +1,44 @@
 #!/usr/bin/env python3
 
 import datetime
-import hashlib
+import io
 import json
 import os
-import platform
 import random
-import signal
-import sys
-import threading
+import tarfile
+import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from queue import Queue
+from dataclasses import asdict
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
+import boto3
 import draccus
 import fsspec
 import numpy as np
-
-# Optional torch for GPU-accelerated resize
+import ray
 import yaml
-from draccus.parsers import encoding as _draccus_encoding
-from tqdm import tqdm
 
-from lbm2.data.preprocessing.git_utils import get_git_info
-from lbm2.data.preprocessing.image_utils import init_jpeg_encoder
+from lbm2.data.preprocessing.image_utils import image_to_bytes, init_jpeg_encoder
 
 # Params base class
 from lbm2.data.preprocessing.params import PreprocessParams, SampleMetadata
 from lbm2.data.preprocessing.preprocess_statistics import StreamingDatasetStatistics
-from lbm2.data.preprocessing.streaming_shard_writer import StreamingShardWriter
-
-# Global flag for graceful shutdown
-_shutdown_requested = False
+from lbm2.data.preprocessing.utils import create_processing_metadata, discover_episodes_targeted
+from lbm2.file_utils import list_directory
 
 
-def signal_handler(signum, frame):
-    """Handle shutdown signals gracefully."""
-    global _shutdown_requested
-    print(f"\n⚠️  Received signal {signum}, initiating graceful shutdown...")
-    print("📋 Saving current progress and cleaning up...")
-    _shutdown_requested = True
-
-
-def get_source_data_info(source_path: str, episodes: List[str]) -> Dict[str, Any]:
-    """Get information about the source data."""
-    source_info = {
-        "source_path": source_path,
-        "num_episodes": len(episodes),
-        "episode_paths": episodes[:10],  # Store first 10 for reference
-        "total_episodes_available": len(episodes),
-    }
-
-    # Try to get modification times of some episodes for data versioning
-    try:
-        fs, _ = fsspec.core.url_to_fs(source_path)
-        sample_episodes = episodes[:3]  # Check first 3 episodes
-        mod_times = []
-
-        for episode in sample_episodes:
-            try:
-                if source_path.startswith("s3://"):
-                    # For S3, try to get object info
-                    fs_path = episode[5:] if episode.startswith("s3://") else episode
-                    info = fs.info(fs_path)
-                    if "LastModified" in info:
-                        mod_times.append(info["LastModified"].isoformat())
-                else:
-                    # For local files
-                    stat = fs.stat(episode)
-                    mod_times.append(datetime.datetime.fromtimestamp(stat["mtime"]).isoformat())
-            except Exception:
-                continue
-
-        source_info["sample_episode_modification_times"] = mod_times
-
-        # Create a simple hash of episode paths for data version tracking
-        episode_hash = hashlib.md5("\n".join(sorted(episodes)).encode()).hexdigest()
-        source_info["episode_list_hash"] = episode_hash
-
-    except Exception as e:
-        source_info["source_data_info_error"] = str(e)
-
-    return source_info
-
-
-def create_processing_metadata(
-    args: PreprocessParams, episodes: List[str], total_samples: int, processing_stats: Dict[str, int]
-) -> Dict[str, Any]:
-    """Create comprehensive metadata about the processing run."""
-
-    # Get command line information
-    command_line = {
-        "script_name": sys.argv[0],
-        "full_command": " ".join(sys.argv),
-        "arguments": _draccus_encoding.encode(args),
-    }
-
-    # Get environment information
-    environment = {
-        "python_version": sys.version,
-        "platform": platform.platform(),
-        "hostname": platform.node(),
-        "processor": platform.processor(),
-        "python_executable": sys.executable,
-        "working_directory": os.getcwd(),
-        "user": os.environ.get("USER", "unknown"),
-        "timestamp_captured": datetime.datetime.now().isoformat(),
-    }
-
-    # Get git information (skip if testing flag is set)
-    if args.skip_git_tagging:
-        git_info = {"skip_git_tagging": True, "commit_hash": "test", "branch": "test"}
-    else:
-        git_info = get_git_info(auto_tag=not args.no_auto_tag)
-
-    # Get source data information
-    source_data_info = get_source_data_info(args.source_episodes, episodes)
-
-    # Processing statistics
-    processing_info = {
-        "total_samples_created": total_samples,
-        "filtering_statistics": processing_stats,
-        "estimated_dataset_size_gb": 0,  # Will be updated later
-    }
-
-    # Package versions (try to get key dependencies)
-    try:
-        # Use modern importlib.metadata instead of deprecated pkg_resources
-        try:
-            from importlib.metadata import PackageNotFoundError, version
-        except ImportError:
-            # Fallback for Python < 3.8
-            from importlib_metadata import PackageNotFoundError, version
-
-        key_packages = ["numpy", "fsspec", "PIL", "tqdm", "boto3", "webdataset"]
-        package_versions = {}
-        for pkg in key_packages:
-            try:
-                # Handle special case for PIL package name
-                pkg_name = "Pillow" if pkg == "PIL" else pkg
-                package_versions[pkg] = version(pkg_name)
-            except PackageNotFoundError:
-                package_versions[pkg] = "not_found"
-            except Exception:
-                package_versions[pkg] = "unknown"
-        environment["package_versions"] = package_versions
-    except ImportError:
-        # If importlib.metadata is not available, fall back gracefully
-        environment["package_versions"] = "unavailable_importlib_metadata_missing"
-    except Exception:
-        environment["package_versions"] = "unavailable"
-
-    # Create reproducibility instructions based on git state
-    reproducibility_notes = []
-
-    if git_info.get("preprocessing_tag"):
-        # If we created a tag, use that for reproduction
-        reproducibility_notes.extend(
-            [
-                f"EXACT REPRODUCTION: Use git tag '{git_info['preprocessing_tag']}'",
-                "Commands to reproduce:",
-                f"  git clone {git_info.get('remote_url', 'REPO_URL')}",
-                f"  git checkout {git_info['preprocessing_tag']}",
-                f"  {command_line['full_command']}",
-                "",
-                "This tag captures the exact code state including uncommitted changes used for this dataset.",
-            ]
-        )
-    elif git_info.get("has_uncommitted_changes"):
-        # If there are uncommitted changes but no tag was created
-        reproducibility_notes.extend(
-            [
-                f"WARNING: Dataset created with uncommitted changes to commit {git_info.get('commit_hash', 'unknown')}",
-                "For exact reproduction, the following files had uncommitted changes:",
-            ]
-        )
-        for file in git_info.get("preprocessing_related_files", []):
-            reproducibility_notes.append(f"  - {file}")
-        reproducibility_notes.extend(
-            [
-                "",
-                "Basic reproduction (may differ due to uncommitted changes):",
-                f"  git clone {git_info.get('remote_url', 'REPO_URL')}",
-                f"  git checkout {git_info.get('commit_hash', 'COMMIT_HASH')}",
-                f"  {command_line['full_command']}",
-            ]
-        )
-    else:
-        # Clean state - straightforward reproduction
-        reproducibility_notes.extend(
-            [
-                "CLEAN REPRODUCTION: No uncommitted changes",
-                "Commands to reproduce:",
-                f"  git clone {git_info.get('remote_url', 'REPO_URL')}",
-                f"  git checkout {git_info.get('commit_hash', 'COMMIT_HASH')}",
-                f"  {command_line['full_command']}",
-            ]
-        )
-
-    reproducibility_notes.extend(
-        [
-            "",
-            "Additional requirements:",
-            "- Ensure the source data at the specified paths is unchanged (check episode_list_hash)",
-            "- Use the same package versions if possible for identical results",
-            "- Use the same hardware/OS for identical performance characteristics",
-        ]
+def upload_dict_to_s3(dict_data: Dict, s3_path: str, file_name: str):
+    # Used to upload manifest.jsonl and stats.json
+    bucket_name, s3_prefix = s3_path.removeprefix("s3://").split("/", 1)
+    body = "\n".join(json.dumps(record) for record in dict_data) if "jsonl" in file_name else json.dumps(dict_data)
+    s3_key = f"{s3_prefix.rstrip('/')}/{file_name}"
+    boto3.client("s3").put_object(
+        Bucket=bucket_name,
+        Key=s3_key,
+        Body=body.encode("utf-8"),
+        ContentType="application/json",
     )
-
-    # Combine all metadata
-    metadata = {
-        "metadata_version": "1.0",
-        "created_at": datetime.datetime.now().isoformat(),
-        "command_line": command_line,
-        "environment": environment,
-        "git_info": git_info,
-        "source_data": source_data_info,
-        "processing": processing_info,
-        "reproducibility_notes": reproducibility_notes,
-    }
-
-    return metadata
+    print(f"Uploaded {file_name} to s3://{bucket_name}/{s3_key}")
 
 
 class PaddingStrategy:
@@ -299,8 +116,91 @@ def get_language_instructions(
         if instruction_type in task_annotations:
             instructions_by_type[instruction_type] = task_annotations[instruction_type]
 
-    print(f"Found {len(instructions_by_type)} language instructions for task {task_name}")
     return instructions_by_type
+
+
+def upload_sample_to_s3(
+    sample_data: Dict[str, Any],
+    output_dir: str,
+    episode_id: str,
+    frame_idx: int,
+    jpeg_quality: int = 95,
+    resize_images_size: List[int] = None,
+    s3_client=None,
+) -> None:
+    """Upload sample data to S3 as tar file."""
+    if resize_images_size is None:
+        resize_images_size = [224, 224]
+    if s3_client is None:
+        s3_client = boto3.client("s3")
+    tar_buffer = io.BytesIO()
+    uuid_prefix = str(uuid.uuid4())
+
+    with tarfile.open(fileobj=tar_buffer, mode="w") as tar:
+        for key, value in sample_data.items():
+            data_buffer = io.BytesIO()
+
+            if key == "images":
+                # Use image_to_bytes to convert numpy arrays to JPEG bytes
+                for img_key, img_data in value.items():
+                    jpeg_bytes, _ = image_to_bytes(img_data, jpeg_quality, resize_images_size)
+                    tarinfo = tarfile.TarInfo(name=f"{uuid_prefix}.{img_key}.jpg")
+                    tarinfo.size = len(jpeg_bytes)
+                    tar.addfile(tarinfo, io.BytesIO(jpeg_bytes))
+            elif key in ["metadata", "language_instructions"]:
+                # Save as JSON
+                if isinstance(value, dict):
+                    json_str = json.dumps(value, indent=2, default=str)
+                else:
+                    json_str = json.dumps(asdict(value), indent=2, default=str)
+                data_buffer.write(json_str.encode("utf-8"))
+                data_buffer.seek(0)
+                tarinfo = tarfile.TarInfo(name=f"{uuid_prefix}.{key}.json")
+                tarinfo.size = len(data_buffer.getvalue())
+                tar.addfile(tarinfo, data_buffer)
+            else:
+                # Everything else as NPZ
+                if isinstance(value, dict):
+                    np.savez_compressed(data_buffer, **value)
+                else:
+                    np.savez_compressed(data_buffer, data=value)
+                data_buffer.seek(0)
+                tarinfo = tarfile.TarInfo(name=f"{uuid_prefix}.{key}.npz")
+                tarinfo.size = len(data_buffer.getvalue())
+                tar.addfile(tarinfo, data_buffer)
+
+    tar_buffer.seek(0)
+    bucket_name, s3_prefix = output_dir.removeprefix("s3://").split("/", 1)
+    s3_key = f"{s3_prefix.rstrip('/')}/{episode_id}_frame_{frame_idx}.tar"
+    s3_client.upload_fileobj(tar_buffer, bucket_name, s3_key)
+    print(f"Uploaded {bucket_name.rstrip('/')}/{s3_key}")
+
+
+@ray.remote
+def create_shard(shard_files: List[str], shard_idx: int, output_dir: str) -> str:
+    """Download tar files from S3 and create a shard."""
+    s3_client = boto3.client("s3")
+    shard_buffer = io.BytesIO()
+
+    with tarfile.open(fileobj=shard_buffer, mode="w") as shard_tar:
+        for s3_key in shard_files:
+            # Download tar file from S3
+            obj_buffer = io.BytesIO()
+            bucket_name, s3_prefix = output_dir.removeprefix("s3://").split("/", 1)
+            s3_key = f"{s3_prefix.rstrip('/')}/{s3_key}"
+            s3_client.download_fileobj(bucket_name, s3_key, obj_buffer)
+            obj_buffer.seek(0)
+
+            # Extract contents and add to shard
+            with tarfile.open(fileobj=obj_buffer, mode="r") as tar:
+                for member in tar.getmembers():
+                    shard_tar.addfile(member, tar.extractfile(member))
+
+    # Upload shard back to S3
+    shard_buffer.seek(0)
+    shard_key = f"shard_{shard_idx:06d}.tar"
+    s3_client.upload_fileobj(shard_buffer, bucket_name, f"{s3_prefix.rstrip('/')}/shards/{shard_key}")
+    return (shard_key.rstrip(".tar"), len(shard_files))
 
 
 class EpisodeProcessor:
@@ -308,6 +208,7 @@ class EpisodeProcessor:
 
     def __init__(
         self,
+        output_dir: str,
         past_lowdim_steps: int = 1,
         future_lowdim_steps: int = 14,
         image_indices: List[int] = None,
@@ -326,9 +227,10 @@ class EpisodeProcessor:
         language_annotations: Optional[Dict] = None,
     ):
         if resize_images_size is None:
-            resize_images_size = [256, 342]
+            resize_images_size = [224, 224]
         if image_indices is None:
             image_indices = [-1, 0]
+        self.output_dir = output_dir
         self.past_lowdim_steps = past_lowdim_steps
         self.future_lowdim_steps = future_lowdim_steps
         self.image_indices = sorted(image_indices)
@@ -353,6 +255,9 @@ class EpisodeProcessor:
         # Initialize JPEG encoder
         init_jpeg_encoder(jpeg_quality)
 
+        # Create S3 client once for reuse
+        self.s3_client = boto3.client("s3")
+
         # Set padding function
         self.pad_functions = {
             "copy": PaddingStrategy.copy_edge,
@@ -376,8 +281,6 @@ class EpisodeProcessor:
                 if attempt == 2:
                     raise e
                 print(f"Retry {attempt + 1} loading metadata for {episode_path}")
-                import time
-
                 time.sleep(1)
 
         # Load observations with retry
@@ -392,8 +295,6 @@ class EpisodeProcessor:
                 if attempt == 2:
                     raise e
                 print(f"Retry {attempt + 1} loading observations for {episode_path}")
-                import time
-
                 time.sleep(1)
 
         # Load actions with retry
@@ -417,8 +318,6 @@ class EpisodeProcessor:
                     print(f"Warning: No actions.npz found for {episode_path}, continuing with empty actions")
                     break
                 print(f"Retry {attempt + 1} loading actions for {episode_path}")
-                import time
-
                 time.sleep(1)
 
         # Load camera params (optional)
@@ -428,11 +327,9 @@ class EpisodeProcessor:
             extrinsics_path = os.path.join(processed_path, "extrinsics.npz")
             with fsspec.open(intrinsics_path, "rb") as f:
                 intrinsics_archive = np.load(f)
-                # Convert to regular dict to avoid lazy loading issues
                 intrinsics = {key: intrinsics_archive[key] for key in intrinsics_archive.files}
             with fsspec.open(extrinsics_path, "rb") as f:
                 extrinsics_archive = np.load(f)
-                # Convert to regular dict to avoid lazy loading issues
                 extrinsics = {key: extrinsics_archive[key] for key in extrinsics_archive.files}
         except Exception:
             pass
@@ -588,7 +485,9 @@ class EpisodeProcessor:
 
         return sample_intrinsics, sample_extrinsics
 
-    def process_episode_streaming(self, episode_path: str) -> Iterator[Dict[str, Any]]:
+    def process_episode(
+        self, episode_path: str, statistics_ray_actor: StreamingDatasetStatistics
+    ) -> Iterator[Dict[str, Any]]:
         """Process episode with streaming output."""
         try:
             episode_data = self.load_episode_data(episode_path)
@@ -606,6 +505,7 @@ class EpisodeProcessor:
             camera_data = self.extract_camera_data(observations, episode_data["metadata"])
             lowdim_data = self.extract_lowdim_data(observations, episode_data["actions"])
 
+            print(f"Processing episode {episode_id} with length {episode_length}")
             # Generate samples
             for anchor_timestep in range(0, episode_length, self.stride):
                 self.total_potential_samples += 1
@@ -692,7 +592,8 @@ class EpisodeProcessor:
                     is_padded=bool(past_padding > 0 or future_padding > 0),
                 )
 
-                yield {
+                # Upload to S3 instead of yielding
+                sample_data = {
                     "images": sample_images,
                     "lowdim": sample_lowdim,
                     "past_mask": past_mask,
@@ -702,213 +603,53 @@ class EpisodeProcessor:
                     "extrinsics": sample_extrinsics,
                     "language_instructions": language_instructions,
                 }
+                statistics_ray_actor.merge_from_samples.remote([sample_data])
+                upload_sample_to_s3(
+                    sample_data,
+                    self.output_dir,
+                    episode_id,
+                    anchor_timestep,
+                    self.jpeg_quality,
+                    self.resize_images_size,
+                    self.s3_client,
+                )
+            return True
 
         except Exception as e:
             if self.fail_on_nan:
                 raise e
             print(f"Warning: Failed to process episode {episode_path}: {e}")
-
-
-def make_full_path(relative_path: str, is_s3: bool) -> str:
-    return f"s3://{relative_path}" if is_s3 else relative_path
-
-
-def make_fs_path(full_path: str, is_s3: bool) -> str:
-    return full_path[5:] if is_s3 and full_path.startswith("s3://") else full_path
-
-
-def discover_episodes_targeted(source_paths: List[str], max_episodes_to_process: int = -1) -> List[str]:
-    """Discover episodes efficiently, with different behavior based on whether 'diffusion_spartan' is in the path."""
-    if isinstance(source_paths, str):
-        source_paths = [source_paths]
-    episodes = []
-
-    def check_episode_validity(fs, episode_path: str, is_s3: bool) -> bool:
-        """Check if an episode directory has valid processed data."""
-        processed_path = os.path.join(episode_path, "processed")
-        fs_processed_path = make_fs_path(processed_path, is_s3)
-
-        try:
-            if not fs.exists(fs_processed_path):
-                return False
-
-            # Check for required files
-            required_files = ["metadata.yaml", "observations.npz"]
-            for required_file in required_files:
-                file_path = os.path.join(processed_path, required_file)
-                fs_file_path = make_fs_path(file_path, is_s3)
-                if not fs.exists(fs_file_path):
-                    return False
-            return True
-        except Exception:
             return False
 
-    def search_diffusion_spartan_directory(fs, diffusion_spartan_path: str, is_s3: bool) -> None:
-        """Search within a diffusion_spartan directory for episode_* folders."""
-        fs_path = make_fs_path(diffusion_spartan_path, is_s3)
 
-        try:
-            items = fs.listdir(fs_path)
-            print(f"Found {len(items)} items in diffusion_spartan directory")
-        except Exception as e:
-            print(f"Warning: Cannot list directory {diffusion_spartan_path}: {e}")
-            return
-
-        episode_dirs = []
-        # First pass: identify episode directories only
-        for item in items:
-            item_name = item["name"] if isinstance(item, dict) else item
-            item_basename = os.path.basename(item_name.rstrip("/"))
-
-            # Only process directories that start with "episode_" - skip all files
-            if item_basename.startswith("episode_") and not any(
-                item_basename.endswith(ext) for ext in [".pkl", ".npz", ".txt", ".json", ".yaml", ".tar", ".gz"]
-            ):
-                episode_dirs.append(item_basename)
-
-        print(f"Found {len(episode_dirs)} potential episode directories")
-
-        # Second pass: validate episode directories
-        for episode_basename in episode_dirs:
-            if max_episodes_to_process > 0 and len(episodes) >= max_episodes_to_process:
-                break
-
-            # Construct full episode path
-            episode_path = os.path.join(diffusion_spartan_path, episode_basename)
-
-            if check_episode_validity(fs, episode_path, is_s3):
-                episodes.append(episode_path)
-                print(f"Added valid episode: {episode_basename}")
-            else:
-                print(f"Skipped invalid episode: {episode_basename}")
-
-        print(f"Total valid episodes found: {len(episodes)}")
-
-    def crawl_directory_for_diffusion_spartan(
-        fs, current_path: str, is_s3: bool, depth: int = 0, max_depth: int = 5
-    ) -> None:
-        """Recursively search for diffusion_spartan directories, but don't recurse into files."""
-        if depth > max_depth:
-            return
-
-        if max_episodes_to_process > 0 and len(episodes) >= max_episodes_to_process:
-            return
-
-        fs_current_path = make_fs_path(current_path, is_s3)
-
-        try:
-            items = fs.listdir(fs_current_path)
-        except Exception as e:
-            print(f"Warning: Cannot list directory {current_path}: {e}")
-            return
-
-        # Check if current directory is diffusion_spartan
-        current_basename = os.path.basename(current_path.rstrip("/"))
-        if current_basename == "diffusion_spartan":
-            search_diffusion_spartan_directory(fs, current_path, is_s3)
-            return
-
-        # Only recurse into directories, skip all files
-        for item in items:
-            if max_episodes_to_process > 0 and len(episodes) >= max_episodes_to_process:
-                break
-
-            item_name = item["name"] if isinstance(item, dict) else item
-            item_basename = os.path.basename(item_name.rstrip("/"))
-
-            # Skip all files by extension
-            if any(
-                item_basename.endswith(ext) for ext in [".pkl", ".npz", ".txt", ".json", ".yaml", ".tar", ".gz", ".log"]
-            ):
-                continue
-
-            # Skip hidden directories and obvious non-directories
-            if item_basename.startswith("."):
-                continue
-
-            item_path = os.path.join(current_path, item_basename)
-
-            try:
-                # Check if it's actually a directory before recursing
-                fs_item_path = make_fs_path(item_path, is_s3)
-                if fs.isdir(fs_item_path):
-                    crawl_directory_for_diffusion_spartan(fs, item_path, is_s3, depth + 1, max_depth)
-            except Exception:
-                # If we can't check if it's a directory, skip it
-                continue
-
-    for source_path in source_paths:
-        print(f"Scanning source path: {source_path}")
-        fs, fsspec_path = fsspec.core.url_to_fs(source_path)
-        is_s3 = source_path.startswith("s3://")
-
-        # Check if 'diffusion_spartan' is in the source path
-        if "diffusion_spartan" in source_path:
-            print("Found 'diffusion_spartan' in source path - searching only this directory")
-            search_diffusion_spartan_directory(fs, source_path, is_s3)
-        else:
-            print("No 'diffusion_spartan' in source path - performing recursive search")
-            crawl_directory_for_diffusion_spartan(fs, source_path, is_s3)
-
-    print(f"Total episodes discovered: {len(episodes)}")
-    return sorted(episodes)
-
-
-def process_episode_worker(args):
-    """Worker function for processing episodes."""
-    episode_path, processor_config = args
-
-    try:
-        # Initialize processor in worker thread to avoid S3 connection sharing issues
-        processor = EpisodeProcessor(**processor_config)
-        samples = []
-
-        # print(f"Processing episode: {os.path.basename(episode_path)}")
-        for sample in processor.process_episode_streaming(episode_path):
-            samples.append(sample)
-
-        # print(f"Completed episode: {os.path.basename(episode_path)} - {len(samples)} samples")
-        return (
-            samples,
-            processor.total_potential_samples,
-            processor.still_samples_filtered,
-            processor.padding_samples_filtered,
-        )
-    except Exception as e:
-        print(f"Error processing {episode_path}: {e}")
-        import traceback
-
-        traceback.print_exc()
-        return [], 0, 0, 0
-
-
+@ray.remote
 def streaming_episode_worker(
-    episode_path: str, processor_config: Dict[str, Any], out_queue: Queue
+    episode_path: str, processor_config: Dict[str, Any], statistics_ray_actor: StreamingDatasetStatistics
 ) -> Tuple[str, int, int, int]:
-    """Stream samples from one episode into a queue and return counters."""
     processor = EpisodeProcessor(**processor_config)
-    for sample in processor.process_episode_streaming(episode_path):
-        out_queue.put(sample)
-    return (
-        episode_path,
-        processor.total_potential_samples,
-        processor.still_samples_filtered,
-        processor.padding_samples_filtered,
-    )
+    return processor.process_episode(episode_path, statistics_ray_actor)
 
 
 def main():
     """Optimized robotics preprocessing using draccus-configured params."""
-    # Register signal handlers for graceful shutdown
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
-
     # Parse CLI into dataclass
     cfg = draccus.parse(config_class=PreprocessParams)
 
     # Validate required paths
     assert cfg.source_episodes is not None, "--source_episodes is required (or set in config_path)"
     assert cfg.output_dir is not None, "--output_dir is required (or set in config_path)"
+
+    # Initialize Ray
+    if cfg.ray_address:
+        ray.init(address=cfg.ray_address)
+        print(f"Connected to Ray cluster at {cfg.ray_address}")
+    else:
+        ray.init(
+            address="auto",
+            num_cpus=cfg.ray_num_cpus,
+            runtime_env={"excludes": [".git", "*.pt", "*.pyc", "__pycache__", ".pytest_cache"]},
+        )
+        print(f"Started auto Ray cluster with num_cpus={cfg.ray_num_cpus}")
 
     camera_names = cfg.camera_names
 
@@ -918,6 +659,7 @@ def main():
     print(f"Loaded language annotations for {len(language_annotations)} tasks")
 
     processor_config = {
+        "output_dir": cfg.output_dir,
         "past_lowdim_steps": cfg.past_lowdim_steps,
         "future_lowdim_steps": cfg.future_lowdim_steps,
         "image_indices": cfg.image_indices,
@@ -937,12 +679,7 @@ def main():
     }
 
     print("🚀 Starting optimized preprocessing")
-    print(f"Workers: {cfg.num_workers}")
     print(f"Statistics: {'disabled' if cfg.no_statistics else 'enabled'}")
-    print(f"Incremental updates: {'enabled' if cfg.enable_incremental_updates else 'disabled'}")
-    print(f"Resume: {'enabled' if cfg.resume else 'disabled'}")
-    if cfg.enable_incremental_updates:
-        print(f"Metadata update frequency: every {cfg.update_frequency} shards")
     if cfg.resize_images_size and len(cfg.resize_images_size) == 2:
         print(f"Image resize to {cfg.resize_images_size[0]}x{cfg.resize_images_size[1]}")
     else:
@@ -956,28 +693,6 @@ def main():
     print("🔍 Discovering episodes...")
     episodes = discover_episodes_targeted(cfg.source_episodes, cfg.max_episodes_to_process)
     print(f"Found {len(episodes)} episodes")
-
-    # If running on SageMaker Processing with multiple instances, split work across hosts
-    try:
-        sm_hosts = os.environ.get("SM_HOSTS")
-        sm_current_host = os.environ.get("SM_CURRENT_HOST")
-        if sm_hosts and sm_current_host:
-            hosts = json.loads(sm_hosts)
-            if isinstance(hosts, list) and len(hosts) > 1:
-                host_index = hosts.index(sm_current_host)
-                total_hosts = len(hosts)
-                # Chunk episodes evenly across hosts
-                episodes = episodes[host_index::total_hosts]
-                print(
-                    f"Distributed across {total_hosts} hosts. Current host {host_index}"
-                    f" processing {len(episodes)} episodes"
-                )
-    except Exception as e:
-        print(f"Warning: failed to split episodes across hosts: {e}")
-
-    # Optionally shuffle input episode processing order
-    if cfg.shuffle_input_files and len(episodes) > 1:
-        random.shuffle(episodes)
 
     # Create initial processing metadata with placeholder stats
     initial_processing_stats = {
@@ -996,264 +711,43 @@ def main():
         print("❌ No episodes found!")
         return
 
-    # Initialize shard writer with incremental updates
-    shard_writer = StreamingShardWriter(
-        cfg.output_dir,
-        cfg.samples_per_shard,
-        cfg.jpeg_quality,
-        gpu_resize=(cfg.resize_images_size and len(cfg.resize_images_size) == 2 and cfg.use_gpu_resize),
-        enable_incremental_updates=cfg.enable_incremental_updates,
-        update_frequency=cfg.update_frequency,
-        resume=cfg.resume,
-    )
+    # Ray Phase 1: Process frame individually and upload to S3
+    print(f"🚀 Processing {len(episodes)} episodes and uploading to S3...")
+    statistics_ray_actor = StreamingDatasetStatistics.remote(compute_stats=cfg.no_statistics)
+    futures = [streaming_episode_worker.remote(episode, processor_config, statistics_ray_actor) for episode in episodes]
+    ray.get(futures)
+    print("✅ Upload phase complete! Starting sharding phase...")
 
-    # Filter out already processed episodes for resume capability
-    original_episode_count = len(episodes)
-    if cfg.resume:
-        episodes = shard_writer.get_unprocessed_episodes(episodes)
-        if len(episodes) == 0:
-            print("✅ All episodes already processed! Processing complete.")
-            if original_episode_count > 0:
-                print(f"📊 Skipped {original_episode_count} already processed episodes")
-            return
-        print(f"📂 Resume mode: {len(episodes)} episodes remaining to process")
-    else:
-        print("🔄 Starting fresh processing (resume disabled)")
+    # Get and save statistics
+    statistics_state = statistics_ray_actor.get_statistics.remote()
+    statistics_state = ray.get(statistics_state)
+    upload_dict_to_s3(statistics_state, f"{cfg.output_dir.rstrip('/')}/shards", "stats.json")
 
-    # Process episodes in parallel with streaming to a bounded queue
-    print("⚙️  Processing episodes...")
+    # Ray Phase 2: List files and group them together to create shards
+    all_files = list_directory(cfg.output_dir)
+    all_files = [f for f in all_files if f.startswith("episode_")]
+    print(f"Found {len(all_files)} files to shard")
 
-    # Try to load existing statistics state for resume capability
-    stats_state_path = os.path.join(shard_writer.shard_dir, "processing_statistics.json")
-    if cfg.resume and cfg.enable_incremental_updates and os.path.exists(stats_state_path):
-        print(f"📊 Loading existing statistics state from {stats_state_path}")
-        global_stats = StreamingDatasetStatistics.from_saved_state(
-            stats_state_path, compute_stats=not cfg.no_statistics
-        )
-        print("✅ Statistics state loaded successfully")
-    else:
-        global_stats = StreamingDatasetStatistics(not cfg.no_statistics)
+    # Shuffle and create shard assignments
+    random.shuffle(all_files)
+    shards = [all_files[i : i + cfg.samples_per_shard] for i in range(0, len(all_files), cfg.samples_per_shard)]
+    print(f"Creating {len(shards)} shards with up to {cfg.samples_per_shard} samples each")
 
-    # Initialize filtering counters from recovered state or start fresh
-    total_samples = 0
-    total_potential = shard_writer.total_potential_samples
-    total_still_filtered = shard_writer.total_still_filtered
-    total_padding_filtered = shard_writer.total_padding_filtered
+    # Create shards in parallel
+    shard_futures = [create_shard.remote(shard_files, i, cfg.output_dir) for i, shard_files in enumerate(shards)]
+    shard_results = ray.get(shard_futures)
 
-    sample_queue: Queue = Queue(maxsize=max(1, cfg.num_workers * 4))
+    print(f"✅ Created {len(shard_results)} shards.")
 
-    counters: Dict[str, int] = {"total_samples": 0}
+    # Upload manifest to S3 in the same directory as the tar files
+    manifest_lines = []
+    for shard_name, num_sequences in shard_results:
+        manifest_entry = {"shard": shard_name, "num_sequences": num_sequences}
+        manifest_lines.append(manifest_entry)
+    upload_dict_to_s3(manifest_lines, f"{cfg.output_dir.rstrip('/')}/shards", "manifest.jsonl")
 
-    def consumer():
-        target = tuple(cfg.resize_images_size) if cfg.resize_images_size and len(cfg.resize_images_size) == 2 else None
-        buffer_size = max(0, int(cfg.shuffle_buffer_size))
-
-        # Reservoir sampling buffer for true random shuffle with bounded memory
-        reservoir: List[Dict[str, Any]] = []
-        samples_seen = 0
-
-        def write_one(out_sample: Dict[str, Any]):
-            shard_writer.add_sample(out_sample, target_image_size=target)
-            counters["total_samples"] += 1
-            global_stats.merge_from_samples([out_sample])
-
-            # Periodic metadata and statistics updates
-            if (
-                shard_writer.enable_incremental_updates
-                and len(shard_writer.manifest_data) > 0
-                and len(shard_writer.manifest_data) % shard_writer.update_frequency == 0
-            ):
-                # Update metadata with current progress
-                current_metadata = dict(metadata)  # Copy the original metadata
-                current_stats = global_stats.get_statistics() if not cfg.no_statistics else None
-                shard_writer.update_metadata_files(current_metadata, current_stats, global_stats)
-
-        def maybe_write_from_reservoir():
-            """Write a random sample from reservoir if it's full"""
-            if len(reservoir) > buffer_size:
-                # Randomly select and remove one item to write
-                idx = random.randrange(len(reservoir))
-                sample_to_write = reservoir.pop(idx)
-                write_one(sample_to_write)
-
-        while True:
-            # Check for shutdown signal
-            if _shutdown_requested:
-                print("⚠️  Consumer shutting down due to signal...")
-                # Flush remaining reservoir samples before shutdown
-                while reservoir:
-                    idx = random.randrange(len(reservoir)) if len(reservoir) > 1 else 0
-                    write_one(reservoir.pop(idx))
-                sample_queue.task_done()
-                break
-
-            sample = sample_queue.get()
-            if sample is None:
-                # Flush all remaining reservoir samples in random order
-                while reservoir:
-                    idx = random.randrange(len(reservoir)) if len(reservoir) > 1 else 0
-                    write_one(reservoir.pop(idx))
-                sample_queue.task_done()
-                break
-
-            samples_seen += 1
-
-            if buffer_size <= 0:
-                # No shuffling - write immediately
-                write_one(sample)
-            else:
-                if len(reservoir) < buffer_size:
-                    # Reservoir not full yet - just add
-                    reservoir.append(sample)
-                else:
-                    # Reservoir full - use reservoir sampling algorithm
-                    # Probability of replacing an existing item: buffer_size / samples_seen
-                    if random.random() < buffer_size / samples_seen:
-                        # Replace a random item in reservoir with new sample
-                        replace_idx = random.randrange(buffer_size)
-                        write_one(reservoir[replace_idx])  # Write the displaced sample
-                        reservoir[replace_idx] = sample  # Replace with new sample
-                    else:
-                        # Don't add to reservoir - write immediately
-                        write_one(sample)
-
-                # Always try to write from reservoir to maintain flow
-                maybe_write_from_reservoir()
-
-            sample_queue.task_done()
-
-    consumer_thread = threading.Thread(target=consumer, daemon=True)
-    consumer_thread.start()
-
-    with ThreadPoolExecutor(max_workers=cfg.num_workers) as executor:
-        futures = [
-            executor.submit(streaming_episode_worker, episode, processor_config, sample_queue) for episode in episodes
-        ]
-
-        for fut in tqdm(as_completed(futures), total=len(futures), desc="Episodes"):
-            # Check for shutdown signal
-            if _shutdown_requested:
-                print("⚠️  Shutdown requested, canceling remaining episodes...")
-                for remaining_fut in futures:
-                    if not remaining_fut.done():
-                        remaining_fut.cancel()
-                break
-
-            episode_path, potential, still_filtered, padding_filtered = fut.result()
-            total_potential += potential
-            total_still_filtered += still_filtered
-            total_padding_filtered += padding_filtered
-
-            # Update shard writer's filtering statistics for recovery
-            shard_writer.update_filtering_statistics(potential, still_filtered, padding_filtered)
-
-            # Mark episode as completed for resume capability
-            shard_writer.mark_episode_completed(episode_path)
-
-    # Stop consumer and wait for processing to drain
-    sample_queue.put(None)
-    sample_queue.join()
-    consumer_thread.join()
-
-    total_samples = counters["total_samples"]
-
-    print(f"✅ Processed {total_samples} samples")
-
-    # Print stats
-    if total_potential > 0:
-        print("📊 Filtering stats:")
-        print(f"  Potential: {total_potential}")
-        print(f"  Created: {total_samples}")
-        print(f"  Still filtered: {total_still_filtered}")
-        print(f"  Padding filtered: {total_padding_filtered}")
-
-    # Finalize
-    manifest_data, shard_dir = shard_writer.finalize()
-
-    # Save statistics
-    if not cfg.no_statistics:
-        stats = global_stats.get_statistics()
-        stats_path = os.path.join(shard_dir, "dataset_statistics.json")
-        with open(stats_path, "w") as f:
-            json.dump(stats, f, indent=2)
-        # Queue upload ASAP
-        if cfg.output_dir.startswith("s3://"):
-            shard_writer.upload_path(stats_path, os.path.basename(stats_path))
-
-        # Save final statistics state for potential future resume
-        if cfg.enable_incremental_updates:
-            stats_state_path = os.path.join(shard_dir, "processing_statistics.json")
-            global_stats.save_state(stats_state_path)
-            if cfg.output_dir.startswith("s3://"):
-                shard_writer.upload_path(stats_state_path, os.path.basename(stats_state_path))
-
-    # Update metadata with final processing statistics
-    print("📋 Updating processing metadata with final statistics...")
-    metadata["processing"]["total_samples_created"] = total_samples
-    metadata["processing"]["filtering_statistics"] = {
-        "total_potential_samples": total_potential,
-        "samples_created": total_samples,
-        "still_samples_filtered": total_still_filtered,
-        "padding_samples_filtered": total_padding_filtered,
-        "episodes_processed": len(episodes),
-    }
-
-    # Estimate dataset size
-    try:
-        dataset_size_bytes = 0
-        for root, _dirs, files in os.walk(shard_dir):
-            for file in files:
-                if file.endswith(".tar"):
-                    dataset_size_bytes += os.path.getsize(os.path.join(root, file))
-        metadata["processing"]["estimated_dataset_size_gb"] = dataset_size_bytes / (1024**3)
-    except Exception:
-        metadata["processing"]["estimated_dataset_size_gb"] = "unknown"
-
-    # Add completion timestamp
-    metadata["processing"]["timestamp_completed"] = datetime.datetime.now().isoformat()
-
-    # Save metadata
-    metadata_path = os.path.join(shard_dir, "processing_metadata.json")
-    with open(metadata_path, "w") as f:
-        json.dump(metadata, f, indent=2)
-    if cfg.output_dir.startswith("s3://"):
-        shard_writer.upload_path(metadata_path, os.path.basename(metadata_path))
-
-    print("✅ Saved processing metadata to processing_metadata.json")
-
-    # Handle shutdown state
-    if _shutdown_requested:
-        print("⚠️  Processing interrupted by signal - saving current state...")
-        print(f"📊 Processed {total_samples} samples in {len(manifest_data)} shards before interruption")
-
-    # Ensure any background uploads complete and cleanup temp space
-    if cfg.output_dir.startswith("s3://"):
-        print("☁️  Waiting for background uploads to complete...")
-        shard_writer.wait_for_uploads()
-        shard_writer.cleanup()
-
-    if _shutdown_requested:
-        print("✅ Graceful shutdown completed - processing can be resumed later")
-        sys.exit(1)  # Exit with error code to indicate interruption
-    else:
-        print(f"🎉 Complete! {total_samples} samples in {len(manifest_data)} shards")
-    print("📋 Metadata files:")
-    print("  - manifest.jsonl: Shard manifest")
-    if not cfg.no_statistics:
-        print("  - dataset_statistics.json: Dataset statistics")
-    if cfg.enable_incremental_updates and not cfg.no_statistics:
-        print("  - processing_statistics.json: Statistics state for resume capability")
-    print("  - processing_metadata.json: Full processing metadata for reproducibility")
-    print("📊 Dataset info:")
-    print(f"  - Git commit: {metadata['git_info'].get('commit_hash', 'unknown')[:8]}...")
-    if metadata["git_info"].get("preprocessing_tag"):
-        print(f"  - Git tag: {metadata['git_info']['preprocessing_tag']}")
-    print(f"  - Command: {' '.join(sys.argv)}")
-    dataset_size = metadata.get("processing", {}).get("estimated_dataset_size_gb", "unknown")
-    if isinstance(dataset_size, (int, float)):
-        print(f"  - Size: {dataset_size:.2f} GB")
-    else:
-        print(f"  - Size: {dataset_size}")
+    ray.shutdown()
+    print("🎉 Complete! All samples uploaded and sharded.")
 
 
 if __name__ == "__main__":

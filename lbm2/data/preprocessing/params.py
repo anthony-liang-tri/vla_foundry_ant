@@ -53,29 +53,24 @@ class PreprocessParams(BaseParams):
     jpeg_quality: int = field(default=95)
 
     # Runtime
-    num_workers: int = field(default=40)
     max_episodes_to_process: int = field(default=-1)
     fail_on_nan: bool = field(default=False)
-    shuffle_buffer_size: int = field(default=1000)
-    shuffle_input_files: bool = field(default=True)
 
     # Statistics and reproducibility
     no_statistics: bool = field(default=True)
     no_auto_tag: bool = field(default=False)
 
-    # Incremental updates and resume capability
-    enable_incremental_updates: bool = field(default=True)
-    update_frequency: int = field(default=10)  # Update metadata every N shards
-    resume: bool = field(default=False)  # Whether to resume from existing progress
-
     # Testing flags
     skip_git_tagging: bool = field(default=False)  # Skip git operations for testing
 
     # Image preprocessing
-    resize_images_size: List[int] = field(default_factory=lambda: [256, 342])
-    use_gpu_resize: bool = field(default=True)
+    resize_images_size: List[int] = field(default=None)
 
     # Language annotations
     language_annotations_path: str = field(
         default="lbm2/data/preprocessing/lbm_language_annotations.yaml",
     )
+
+    # Ray configuration
+    ray_address: str = field(default=None)  # Ray cluster address, default to auto-detect
+    ray_num_cpus: int = field(default=None)  # Number of CPUs for Ray, default to auto-detect

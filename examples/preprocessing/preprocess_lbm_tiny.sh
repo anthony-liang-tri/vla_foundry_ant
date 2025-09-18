@@ -1,12 +1,10 @@
-    # --source_episodes "include examples/preprocessing/test_list.yaml" \
-uv run --group preprocessing python lbm2/data/preprocessing/preprocess_lbm_data.py \
+python lbm2/data/preprocessing/preprocess_lbm_data.py \
     --source_episodes "['s3://robotics-manip-lbm/efs/data/tasks/PickAndPlaceBox/cabot/sim/bc/teleop/2025-02-11T17-04-00-05-00/']" \
-    --output_dir s3://tri-ml-datasets/preprocess_lbm_test/lbm/PickAndPlaceBox/cabot/sim/ \
+    --output_dir s3://tri-ml-datasets-uw2/preprocess_lbm_test/lbm/PickAndPlaceBox/cabot/sim/ \
     --language_annotations_path lbm2/data/preprocessing/lbm_language_annotations.yaml \
     --camera_discard_keys "include lbm2/config_presets/data/lbm_data_discard_key.yaml" \
     --camera_names "include lbm2/config_presets/data/lbm_data_camera_names.yaml" \
     --past_lowdim_steps 1 \
-    --num_workers 5 \
     --future_lowdim_steps 14 \
     --image_indices "[-1, 0]" \
     --max_padding_left 1 \
@@ -17,9 +15,4 @@ uv run --group preprocessing python lbm2/data/preprocessing/preprocess_lbm_data.
     --filter_still_samples False \
     --no_statistics False \
     --still_threshold 0.05 \
-    --resize_images_size "[256, 342]" \
-    --shuffle_buffer_size 100 \
-    --shuffle_input_files True \
-    --enable_incremental_updates False \
-    --resume False \
-    --update_frequency 10
+    --resize_images_size "[224, 224]"
