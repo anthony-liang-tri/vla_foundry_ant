@@ -22,7 +22,7 @@ from lbm2.data.preprocessing.image_utils import image_to_bytes, init_jpeg_encode
 
 # Params base class
 from lbm2.data.preprocessing.params import PreprocessParams, SampleMetadata
-from lbm2.data.preprocessing.preprocess_statistics import StreamingDatasetStatistics
+from lbm2.data.preprocessing.preprocess_statistics import StreamingDatasetStatisticsRayActor
 from lbm2.data.preprocessing.utils import create_processing_metadata, discover_episodes_targeted
 from lbm2.file_utils import list_directory
 
@@ -486,7 +486,7 @@ class EpisodeProcessor:
         return sample_intrinsics, sample_extrinsics
 
     def process_episode(
-        self, episode_path: str, statistics_ray_actor: StreamingDatasetStatistics
+        self, episode_path: str, statistics_ray_actor: StreamingDatasetStatisticsRayActor
     ) -> Iterator[Dict[str, Any]]:
         """Process episode with streaming output."""
         try:
@@ -624,7 +624,7 @@ class EpisodeProcessor:
 
 @ray.remote
 def streaming_episode_worker(
-    episode_path: str, processor_config: Dict[str, Any], statistics_ray_actor: StreamingDatasetStatistics
+    episode_path: str, processor_config: Dict[str, Any], statistics_ray_actor: StreamingDatasetStatisticsRayActor
 ) -> Tuple[str, int, int, int]:
     processor = EpisodeProcessor(**processor_config)
     return processor.process_episode(episode_path, statistics_ray_actor)
@@ -713,7 +713,7 @@ def main():
 
     # Ray Phase 1: Process frame individually and upload to S3
     print(f"🚀 Processing {len(episodes)} episodes and uploading to S3...")
-    statistics_ray_actor = StreamingDatasetStatistics.remote(compute_stats=cfg.no_statistics)
+    statistics_ray_actor = StreamingDatasetStatisticsRayActor.remote(compute_stats=cfg.no_statistics)
     futures = [streaming_episode_worker.remote(episode, processor_config, statistics_ray_actor) for episode in episodes]
     ray.get(futures)
     print("✅ Upload phase complete! Starting sharding phase...")

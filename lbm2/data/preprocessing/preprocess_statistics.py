@@ -5,7 +5,6 @@ import numpy as np
 import ray
 
 
-@ray.remote
 class StreamingDatasetStatistics:
     """Thread-safe memory-efficient streaming statistics computation."""
 
@@ -285,3 +284,8 @@ class StreamingDatasetStatistics:
         if compute_stats:
             instance.load_state(filepath)
         return instance
+
+
+@ray.remote
+class StreamingDatasetStatisticsRayActor(StreamingDatasetStatistics):
+    pass

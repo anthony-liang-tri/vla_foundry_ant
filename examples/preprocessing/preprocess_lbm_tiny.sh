@@ -1,4 +1,4 @@
-python lbm2/data/preprocessing/preprocess_lbm_data.py \
+source .venv/bin/activate && python lbm2/data/preprocessing/preprocess_lbm_data.py \
     --source_episodes "['s3://robotics-manip-lbm/efs/data/tasks/PickAndPlaceBox/cabot/sim/bc/teleop/2025-02-11T17-04-00-05-00/']" \
     --output_dir s3://tri-ml-datasets-uw2/preprocess_lbm_test/lbm/PickAndPlaceBox/cabot/sim/ \
     --language_annotations_path lbm2/data/preprocessing/lbm_language_annotations.yaml \
