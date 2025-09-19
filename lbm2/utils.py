@@ -21,23 +21,12 @@ def set_random_seed(seed: int = 42, rank: int = 0) -> None:
 
 
 def get_experiment_name(cfg):
-    """
-    Resolve and return a canonical experiment name, updating ``cfg.name`` in-place.
-
-    The naming scheme is as follows:
-      * If ``cfg.name`` is ``None``, constructs a name of the form
-        ``YYYY_MM_DD-HH_MM_SS-model_<type>-lr_<lr>-bsz_<global_batch_size>``.
-        In distributed runs, the timestamp is broadcast from the master rank so
-        all processes use the exact same name.
-      * If ``cfg.name`` is set, it is used as-is.
-      * The resulting name is sanitized by replacing forward
-        slashes (``/``) with hyphens (``-``).
-      * The resolved name is written back to the cfg.
-
-    Args:
-        cfg: A TrainExperimentParams config.
-    """
-    if cfg.name is None:
+    if cfg.name is not None:
+        name = cfg.name
+    elif cfg.model.resume_from_checkpoint is not None:
+        # Save in the same directory as the existing checkpoint
+        name = cfg.model.resume_from_checkpoint.split('/checkpoints/')[0].split('/')[-1]
+    else:
         date_str = datetime.now().strftime("%Y_%m_%d-%H_%M_%S")
         if cfg.distributed.use_distributed:
             # sync date_str from master to all ranks
@@ -50,8 +39,6 @@ def get_experiment_name(cfg):
                 f"bsz_{cfg.hparams.global_batch_size}",
             ]
         )
-    else:
-        name = cfg.name
 
     # sanitize model name for filesystem / uri use
     name.replace("/", "-")
