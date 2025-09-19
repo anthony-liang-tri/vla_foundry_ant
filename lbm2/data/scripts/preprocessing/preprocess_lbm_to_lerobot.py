@@ -54,7 +54,7 @@ from huggingface_hub import HfApi
 from PIL import Image
 from tqdm import tqdm
 
-from lbm2.data.preprocessing.preprocess_lbm_data import discover_episodes_targeted
+from lbm2.data.scripts.preprocessing.preprocess_lbm_to_tar import discover_episodes_targeted
 from lbm2.params.base_params import BaseParams
 
 HF_AVAILABLE = True

@@ -18,12 +18,12 @@ import numpy as np
 import ray
 import yaml
 
-from lbm2.data.preprocessing.image_utils import image_to_bytes, init_jpeg_encoder
+from lbm2.data.scripts.preprocessing.image_utils import image_to_bytes, init_jpeg_encoder
 
 # Params base class
-from lbm2.data.preprocessing.params import PreprocessParams, SampleMetadata
-from lbm2.data.preprocessing.preprocess_statistics import StreamingDatasetStatisticsRayActor
-from lbm2.data.preprocessing.utils import create_processing_metadata, discover_episodes_targeted
+from lbm2.data.scripts.preprocessing.params import PreprocessParams, SampleMetadata
+from lbm2.data.scripts.preprocessing.preprocess_statistics import StreamingDatasetStatisticsRayActor
+from lbm2.data.scripts.preprocessing.utils import create_processing_metadata, discover_episodes_targeted
 from lbm2.file_utils import list_directory
 
 

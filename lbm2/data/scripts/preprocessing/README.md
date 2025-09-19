@@ -1,3 +1,5 @@
+The following README specifially discusses the file [preprocess_lbm_to_tar.py](preprocess_lbm_to_tar.py). For a more general README, please see the [README in the scripts folder](./../README.md).
+
 # LBM Data Preprocessing
 
 This folder containts python files to preprocess LBM data and convert them to various formats. In general, these scripts convert processed robotics demonstration data from S3 storage into WebDataset tar files or LeRobot formats for LBM2 training. This tool takes episodic robot data (images, actions, observations) and packages them into training-ready format with temporal sequences and language annotations. Note that this README and this folder is still under development and will be updated frequently with additional support and documentation being added. 
@@ -51,7 +53,7 @@ output_directory/
 Note Ray doesn't work well with `uv run` right now. You can still use the uv requirements with with `source .venv/bin/activate`.
 
 ```bash
-python lbm2/data/preprocessing/preprocess_lbm_data.py \
+python lbm2/data/scripts/preprocessing/preprocess_lbm_to_tar.py \
     --source_episodes "['s3://robotics-manip-lbm/efs/data/tasks/PickAndPlaceBox/cabot/sim/bc/teleop/2025-02-11T17-04-00-05-00/']" \
     --output_dir s3://tri-ml-datasets-uw2/scratch/tmp/lbmpreprocess \
     --past_lowdim_steps 1 \

@@ -1,4 +1,4 @@
-# This file is a dump of some of the functions we use in functions such as preprocess_lbm_data.py
+# This file is a dump of some of the functions we use in functions such as preprocess_lbm_to_tar.py
 # We keep these one-off functions here to keep the main files clean and digestible.
 
 import datetime
@@ -11,8 +11,8 @@ from typing import Any, Dict, List
 import fsspec
 from draccus.parsers import encoding as _draccus_encoding
 
-from lbm2.data.preprocessing.git_utils import get_git_info
-from lbm2.data.preprocessing.params import PreprocessParams
+from lbm2.data.scripts.preprocessing.git_utils import get_git_info
+from lbm2.data.scripts.preprocessing.params import PreprocessParams
 
 
 def make_fs_path(full_path: str, is_s3: bool) -> str:
