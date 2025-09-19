@@ -1,7 +1,7 @@
 # .github/workflows/tests.yml
 name: Tests
 
-on: [push, pull_request]
+on: [push, pull_request, pull_request_target]
 
 permissions:
   contents: read
