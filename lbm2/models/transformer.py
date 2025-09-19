@@ -126,10 +126,10 @@ class TransformerBlock(nn.Module):
             std = std / math.sqrt(2 * (self.layer_id + 1))
             torch.nn.init.trunc_normal_(self.feed_forward[2].weight, std=std, a=-3 * std, b=3 * std)
 
-    def forward(self, x, past_key_value=None, use_cache=False, attention_mask=None):
+    def forward(self, x, past_key_value=None, use_cache=False, attention_mask=None, is_causal=True):
         h, past_key_value = self.attention(
             self.attention_norm(x),
-            is_causal=True,
+            is_causal=is_causal,
             past_key_value=past_key_value,
             use_cache=use_cache,
             attention_mask=attention_mask,
@@ -245,6 +245,7 @@ class Transformer(TransformerBase):
         use_cache=False,
         attention_mask=None,
         output_hidden_states=False,
+        is_causal=True,
     ):
         """
         Args:
@@ -255,6 +256,7 @@ class Transformer(TransformerBase):
                 attended to. attention_mask[s, i] = False indicates that token i should not be attended to by any other
                 token for sequence s.
             output_hidden_states (bool): Whether to return the hidden states of the transformer.
+            is_causal (bool): Whether the transformer is causal.
         """
         if input_ids is not None:
             x = self.embeddings(input_ids)
@@ -273,10 +275,12 @@ class Transformer(TransformerBase):
         for i, layer in enumerate(self.layers):
             if self.grad_checkpointing:
                 x, past_key_values[i] = torch.utils.checkpoint.checkpoint(
-                    layer, x, past_key_values[i], use_cache, attention_mask
+                    layer, x, past_key_values[i], use_cache, attention_mask, is_causal
                 )
             else:
-                x, past_key_values[i] = layer(x, past_key_values[i], use_cache=use_cache, attention_mask=attention_mask)
+                x, past_key_values[i] = layer(
+                    x, past_key_values[i], use_cache=use_cache, attention_mask=attention_mask, is_causal=is_causal
+                )
             if output_hidden_states:
                 hidden_states.append(x)
         if past_key_values[0] is None:
