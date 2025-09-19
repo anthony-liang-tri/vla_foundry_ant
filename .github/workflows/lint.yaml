@@ -1,12 +1,7 @@
 # .github/workflows/lint.yml
 name: Lint
 
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-    types: [opened, synchronize, reopened]
+on: [push, pull_request]
 
 permissions:
   contents: read
