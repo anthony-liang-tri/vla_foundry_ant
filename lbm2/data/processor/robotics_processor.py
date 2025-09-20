@@ -2,8 +2,9 @@ import torch
 
 
 class RoboticsProcessor:
-    def __init__(self):
-        pass
+    def __init__(self, vlm_processor, normalizer):
+        self.vlm_processor = vlm_processor
+        self.normalizer = normalizer
 
     def add_action_and_proprioception_fields(self, batch, action_fields=None, proprioception_fields=None):
         # Pre-extract concatenated actions if action fields are provided
@@ -24,7 +25,7 @@ class RoboticsProcessor:
 
         return batch
 
-    def tokenize_inputs(self, batch, processor, num_images=None, max_text_seq_len=None):
+    def process_inputs(self, batch, num_images=None, max_text_seq_len=None):
         """Convert with padding for specific sequence fields in lowdim data too.
         Args:
             batch: Batch of samples to convert to tensors.
@@ -40,16 +41,18 @@ class RoboticsProcessor:
             sample_num_images = len(sample_images)
 
             # Apply chat template if available
-            if processor.chat_template:
+            if self.vlm_processor.chat_template:
                 content = [{"type": "image"} for _ in range(sample_num_images)]
                 content.append({"type": "text", "text": instruction})
                 messages = [{"role": "user", "content": content}]
-                instruction = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
-            elif processor.tokenizer and processor.tokenizer.chat_template:
+                instruction = self.vlm_processor.apply_chat_template(
+                    messages, tokenize=False, add_generation_prompt=False
+                )
+            elif self.vlm_processor.tokenizer and self.vlm_processor.tokenizer.chat_template:
                 content = [{"type": "image"} for _ in range(sample_num_images)]
                 content.append({"type": "text", "text": instruction})
                 messages = [{"role": "user", "content": content}]
-                instruction = processor.tokenizer.apply_chat_template(
+                instruction = self.vlm_processor.tokenizer.apply_chat_template(
                     messages, tokenize=False, add_generation_prompt=False
                 )
             else:
@@ -63,7 +66,7 @@ class RoboticsProcessor:
             batch_images.append(sample_images)
 
         # Run processor on entire batch
-        processed = processor(images=batch_images, text=batch_text, padding=True, return_tensors="pt")
+        processed = self.vlm_processor(images=batch_images, text=batch_text, padding=True, return_tensors="pt")
 
         processed_batch = batch.copy()
         processed_batch["input_ids"] = processed["input_ids"]
@@ -79,4 +82,5 @@ class RoboticsProcessor:
             values = [sample_lowdim[k] for sample_lowdim in batch["lowdim"]]
             processed_batch["lowdim"][k] = torch.stack([torch.as_tensor(v, dtype=torch.float32) for v in values])
 
-        return processed_batch
+        normalized_batch = self.normalizer.normalize_batch(processed_batch) if self.normalizer else processed_batch
+        return normalized_batch

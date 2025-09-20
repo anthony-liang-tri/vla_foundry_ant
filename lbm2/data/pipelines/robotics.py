@@ -79,7 +79,6 @@ class LBMPipeline(BaseWebDatasetPipeline):
         os.environ["TOKENIZERS_PARALLELISM"] = "true"
         self.data_configs = data_configs
         self.vlm_processor = get_processor(data_configs)
-        self.robotics_processor = RoboticsProcessor()
 
         # Initialize normalizer
         self.statistics = [json_load(s) for s in data_configs.dataset_statistics]
@@ -88,6 +87,8 @@ class LBMPipeline(BaseWebDatasetPipeline):
             self.normalizer = RoboticsNormalizer(dataset_config=self.data_configs, statistics_data=self.statistics)
         else:
             self.normalizer = None
+
+        self.robotics_processor = RoboticsProcessor(self.vlm_processor, self.normalizer)
 
     def __len__(self):
         """Return the number of samples in the dataset (cached)."""
@@ -120,13 +121,9 @@ class LBMPipeline(BaseWebDatasetPipeline):
             ),
             wds.batched(self.batch_size, partial=False),
             wds.map(
-                lambda batch: self.robotics_processor.tokenize_inputs(
-                    batch, processor=self.vlm_processor, num_images=self.data_configs.num_images, max_text_seq_len=None
+                lambda batch: self.robotics_processor.process_inputs(
+                    batch, num_images=self.data_configs.num_images, max_text_seq_len=None
                 ),
-                handler=log_and_continue,
-            ),
-            wds.map(
-                lambda batch: self.normalizer.normalize_batch(batch) if self.normalizer else batch,
                 handler=log_and_continue,
             ),
             wds.map(
