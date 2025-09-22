@@ -25,7 +25,7 @@ def get_experiment_name(cfg):
         name = cfg.name
     elif cfg.model.resume_from_checkpoint is not None:
         # Save in the same directory as the existing checkpoint
-        name = cfg.model.resume_from_checkpoint.split('/checkpoints/')[0].split('/')[-1]
+        name = cfg.model.resume_from_checkpoint.split("/checkpoints/")[0].split("/")[-1]
     else:
         date_str = datetime.now().strftime("%Y_%m_%d-%H_%M_%S")
         if cfg.distributed.use_distributed:
