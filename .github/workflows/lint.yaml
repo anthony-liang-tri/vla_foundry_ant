@@ -24,4 +24,5 @@ jobs:
     - name: Run ruff
       run: |
         # See https://docs.astral.sh/uv/guides/tools/#running-tools
+        uv run ruff format --check
         uv run ruff check
