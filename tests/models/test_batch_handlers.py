@@ -5,6 +5,7 @@ import torch
 
 from lbm2.losses import get_loss_function
 from lbm2.models.batch_handlers import (
+    FakePolicyBatchHandler,
     StableDiffusionBatchHandler,
     TransformerBatchHandler,
     VLMBatchHandler,
@@ -113,7 +114,7 @@ class TestTransformerBatchHandler:
         device = torch.device("cpu")
         model_dtype = torch.float32
 
-        model_inputs, targets = handler.prepare_inputs_and_targets(sample_batch, device, model_dtype, mock_cfg)
+        model_inputs, targets, mask = handler.prepare_inputs_and_targets(sample_batch, device, model_dtype, mock_cfg)
 
         # Check model inputs
         assert "input_ids" in model_inputs
@@ -127,12 +128,17 @@ class TestTransformerBatchHandler:
         assert targets.shape == (2, 8)
         assert targets.dtype == torch.long
 
+        # Check mask - TransformerBatchHandler should return None
+        assert mask is None
+
     def test_prepare_inputs_and_targets_without_mask(self, handler, sample_batch_no_mask, mock_cfg):
         """Test prepare_inputs_and_targets without attention mask."""
         device = torch.device("cpu")
         model_dtype = torch.float32
 
-        model_inputs, targets = handler.prepare_inputs_and_targets(sample_batch_no_mask, device, model_dtype, mock_cfg)
+        model_inputs, targets, mask = handler.prepare_inputs_and_targets(
+            sample_batch_no_mask, device, model_dtype, mock_cfg
+        )
 
         # Check model inputs
         assert "input_ids" in model_inputs
@@ -142,6 +148,9 @@ class TestTransformerBatchHandler:
 
         # Check targets
         assert targets.shape == (2, 8)
+
+        # Check mask - TransformerBatchHandler should return None
+        assert mask is None
 
     def test_compute_loss(self, handler, mock_cfg):
         """Test compute_loss method."""
@@ -249,7 +258,9 @@ class TestVLMBatchHandler:
         device = torch.device("cpu")
         model_dtype = torch.float32
 
-        model_inputs, targets = handler.prepare_inputs_and_targets(sample_vlm_batch, device, model_dtype, mock_cfg_vlm)
+        model_inputs, targets, mask = handler.prepare_inputs_and_targets(
+            sample_vlm_batch, device, model_dtype, mock_cfg_vlm
+        )
 
         # Check model inputs
         assert "input_ids" in model_inputs
@@ -262,12 +273,17 @@ class TestVLMBatchHandler:
         # Check targets
         assert targets.shape == (2, 8)
 
+        # Check mask - VLMBatchHandler should return a mask based on pad and image tokens
+        assert mask is not None
+        assert mask.shape == (2, 8)
+        assert mask.dtype == torch.bool
+
     def test_prepare_inputs_and_targets_vlm_hf(self, handler, sample_vlm_batch, mock_cfg_vlm_hf):
         """Test prepare_inputs_and_targets for VLM HF."""
         device = torch.device("cpu")
         model_dtype = torch.float32
 
-        model_inputs, targets = handler.prepare_inputs_and_targets(
+        model_inputs, targets, mask = handler.prepare_inputs_and_targets(
             sample_vlm_batch, device, model_dtype, mock_cfg_vlm_hf
         )
 
@@ -278,14 +294,70 @@ class TestVLMBatchHandler:
         assert "image" not in model_inputs
         assert model_inputs["pixel_values"].shape == (2, 3, 224, 224)
 
+        # Check mask - VLMBatchHandler should return a mask based on pad and image tokens
+        assert mask is not None
+        assert mask.shape == (2, 8)
+        assert mask.dtype == torch.bool
+
+    def test_prepare_inputs_and_targets_vlm_mask_creation(self, handler, mock_cfg_vlm):
+        """Test VLM mask creation with specific pad and image tokens."""
+        device = torch.device("cpu")
+        model_dtype = torch.float32
+
+        # Create a batch with known pad and image tokens
+        batch_with_special_tokens = {
+            "input_ids": torch.tensor(
+                [
+                    [1, 2, mock_cfg_vlm.data.pad_token_id, mock_cfg_vlm.data.image_token_id, 5, 6, 7, 8, 9, 10, 11, 12],
+                    [
+                        13,
+                        mock_cfg_vlm.data.image_token_id,
+                        15,
+                        16,
+                        mock_cfg_vlm.data.pad_token_id,
+                        18,
+                        19,
+                        20,
+                        21,
+                        22,
+                        23,
+                        24,
+                    ],
+                ]
+            ),
+            "attention_mask": torch.ones(2, 12, dtype=torch.bool),
+            "pixel_values": torch.randn(2, 3, 224, 224),
+        }
+
+        model_inputs, targets, mask = handler.prepare_inputs_and_targets(
+            batch_with_special_tokens, device, model_dtype, mock_cfg_vlm
+        )
+
+        # Check that mask correctly identifies pad and image tokens
+        assert mask is not None
+        assert mask.shape == (2, 8)  # seq_len from config
+        assert mask.dtype == torch.bool
+
+        # Check specific positions where we expect mask to be True
+        # Note: targets are chunked to seq_len=8, so positions may shift
+        # We'll check that at least some positions are masked
+        assert mask.any(), "Mask should have some True values for pad/image tokens"
+
+        # Verify that mask corresponds to pad_token_id and image_token_id in targets
+        pad_positions = targets == mock_cfg_vlm.data.pad_token_id
+        image_positions = targets == mock_cfg_vlm.data.image_token_id
+        expected_mask = pad_positions | image_positions
+
+        assert torch.equal(mask, expected_mask), "Mask should match pad and image token positions"
+
     def test_compute_loss_with_masking(self, handler, mock_cfg_vlm):
         """Test compute_loss with pad and image token masking."""
         # Mock model outputs
         outputs = Mock()
-        outputs.logits = torch.randn(2, 8, 1000)
+        outputs.logits = torch.randn(2, 8, 50000)  # Large vocab to accommodate image_token_id=32000
 
         # Create targets with pad and image tokens
-        targets = torch.randint(1, 1000, (2, 8))
+        targets = torch.randint(1, 1000, (2, 8)).long()
         targets[0, 0] = mock_cfg_vlm.data.pad_token_id  # Add pad token
         targets[0, 1] = mock_cfg_vlm.data.image_token_id  # Add image token
 
@@ -296,6 +368,31 @@ class TestVLMBatchHandler:
         assert isinstance(loss, torch.Tensor)
         assert loss.dim() == 0
         assert not torch.isnan(loss)
+
+    def test_compute_loss_with_mask_parameter(self, handler, mock_cfg_vlm):
+        """Test compute_loss with explicit mask parameter."""
+        # Mock model outputs
+        outputs = Mock()
+        outputs.logits = torch.randn(2, 8, 50000)
+
+        # Create targets and mask
+        targets = torch.randint(1, 1000, (2, 8)).long()
+        mask = torch.zeros(2, 8, dtype=torch.bool)
+        mask[0, 0] = True  # Mask first position
+        mask[1, 3] = True  # Mask another position
+
+        loss_fn = get_loss_function("cross_entropy", mock_cfg_vlm)
+
+        # Test loss computation with mask
+        loss = handler.compute_loss(outputs, targets, loss_fn, mock_cfg_vlm, mask=mask)
+
+        assert isinstance(loss, torch.Tensor)
+        assert loss.dim() == 0
+        assert not torch.isnan(loss)
+
+        # Verify that masked positions are set to -100 (ignore index for cross entropy)
+        # This is done internally by the VLMBatchHandler.compute_loss method
+        # We can't directly inspect the modified targets, but we can verify the loss is computed
 
 
 class TestStableDiffusionBatchHandler:
@@ -370,7 +467,7 @@ class TestStableDiffusionBatchHandler:
         # Set seed for reproducible noise
         torch.manual_seed(42)
 
-        model_inputs, targets = handler.prepare_inputs_and_targets(
+        model_inputs, targets, mask = handler.prepare_inputs_and_targets(
             sample_diffusion_batch, device, model_dtype, mock_cfg_diffusion
         )
 
@@ -386,6 +483,9 @@ class TestStableDiffusionBatchHandler:
         assert targets.shape == (2, 3, 64, 64)
         assert torch.allclose(targets, model_inputs["noise"])
 
+        # Check mask - StableDiffusionBatchHandler should return None
+        assert mask is None
+
     def test_prepare_inputs_and_targets_flow_matching(self, handler, sample_diffusion_batch, mock_cfg_flow_matching):
         """Test prepare_inputs_and_targets for flow matching."""
         device = torch.device("cpu")
@@ -394,7 +494,7 @@ class TestStableDiffusionBatchHandler:
         # Set seed for reproducible noise
         torch.manual_seed(42)
 
-        model_inputs, targets = handler.prepare_inputs_and_targets(
+        model_inputs, targets, mask = handler.prepare_inputs_and_targets(
             sample_diffusion_batch, device, model_dtype, mock_cfg_flow_matching
         )
 
@@ -408,6 +508,9 @@ class TestStableDiffusionBatchHandler:
         expected_targets = model_inputs["noise"] - model_inputs["image"]
         assert torch.allclose(targets, expected_targets)
 
+        # Check mask - StableDiffusionBatchHandler should return None
+        assert mask is None
+
     def test_compute_loss(self, handler, mock_cfg_diffusion):
         """Test compute_loss method."""
         # Mock model outputs (predicted noise)
@@ -420,6 +523,42 @@ class TestStableDiffusionBatchHandler:
         assert isinstance(loss, torch.Tensor)
         assert loss.dim() == 0
         assert not torch.isnan(loss)
+
+
+class TestFakePolicyBatchHandler:
+    """Test the FakePolicyBatchHandler class."""
+
+    @pytest.fixture
+    def handler(self):
+        return FakePolicyBatchHandler()
+
+    @pytest.fixture
+    def sample_policy_batch(self):
+        return {
+            "input_ids": torch.randint(1, 1000, (2, 10)),
+            "pixel_values": torch.randn(2, 3, 64, 64),
+            "actions": torch.randn(2, 10, 7),  # 7 action dimensions
+            "proprioception": torch.randn(2, 10, 8),  # 8 proprioception dimensions
+            "past_mask": torch.ones(2, 10, dtype=torch.float32),
+            "future_mask": torch.ones(2, 10, dtype=torch.float32),
+        }
+
+    def test_prepare_inputs_and_targets_returns_none_mask(self, handler, sample_policy_batch):
+        """Test that FakePolicyBatchHandler returns None for mask."""
+        device = torch.device("cpu")
+        model_dtype = torch.float32
+        cfg = Mock()
+
+        model_inputs, targets, mask = handler.prepare_inputs_and_targets(sample_policy_batch, device, model_dtype, cfg)
+
+        # Check that mask is None
+        assert mask is None
+
+        # Basic checks for inputs and targets
+        assert "input_ids" in model_inputs
+        assert "image" in model_inputs
+        assert "actions" in model_inputs
+        assert targets.shape == (2, 10, 7)
 
 
 class TestBatchHandlerFactory:
@@ -449,6 +588,11 @@ class TestBatchHandlerFactory:
         """Test creating stable_diffusion batch handler."""
         handler = create_batch_handler("stable_diffusion")
         assert isinstance(handler, StableDiffusionBatchHandler)
+
+    def test_create_fake_policy_handler(self):
+        """Test creating fake_policy batch handler."""
+        handler = create_batch_handler("fake_policy")
+        assert isinstance(handler, FakePolicyBatchHandler)
 
     def test_create_handler_unsupported_type(self):
         """Test creating handler for unsupported model type."""

@@ -172,7 +172,8 @@ class VLMBatchHandler(BatchHandler):
     def compute_loss(self, outputs, targets, loss_fn, cfg, mask=None):
         logits = outputs.logits
         targets = targets.long()
-        targets = targets.masked_fill(mask, -100)
+        if mask is not None:
+            targets = targets.masked_fill(mask, -100)
         vocab_size = logits.shape[-1]
         return loss_fn(logits.reshape(-1, vocab_size), targets.reshape(-1), mask=mask)
 
