@@ -17,7 +17,7 @@ LeRobot Format Structure:
 
 Usage:
     # Create separate datasets for each task and push to HF
-    uv run --group preprocessing python lbm2/data/preprocessing/preprocess_lbm_to_lerobot.py \
+    uv run --group preprocessing python lbm2/data/scripts/preprocessing/preprocess_lbm_to_lerobot.py \
         --source_eps_csv_path examples/preprocessing/s3_episodes_list.csv \
         --output_dir lerobot/task_datasets/ \
         --dataset_name "lbm_eval" \

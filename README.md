@@ -195,6 +195,14 @@ for ckpt in range(num_checkpoints):
 
 Given these, we support setting both the `--hparams.per_gpu_batch_size` (try as high as possible), as well as the `--hparams.global_batch_size`. Accumulation is computed automatically.
 
+#### 5.2 Single GPU Training
+For single GPU training, run `python lbm2/main.py` directly (no `torchrun`(specifically for distributed training), skip the `--nproc_per_node` and `--nnodes` args). 
+(If using torchrun, set `--nproc_per_node` to 1.)
+
+Set `--distributed.fsdp` to False.
+
+If you run out of memory, reduce the batch size `--hparams.per_gpu_batch_size` and/or `--data.seq_len`
+
 ### 6. Logging
 Logging is done automatically to [wandb](wandb.ai). We use `samples_per_sec_per_gpu` as the main measure of speed. To disable logging, set the `--wandb=False` flag.
 
