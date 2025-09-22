@@ -43,12 +43,12 @@ class BatchHandler(ABC):
             cfg: Training configuration
 
         Returns:
-            Tuple of (model_inputs_dict, targets_tensor)
+            Tuple of (model_inputs_dict, targets_tensor, mask_tensor)
         """
         pass
 
     @abstractmethod
-    def compute_loss(self, outputs, targets, loss_fn, cfg):
+    def compute_loss(self, outputs, targets, loss_fn, cfg, mask=None):
         """
         Compute loss from model outputs and targets.
 
@@ -57,6 +57,7 @@ class BatchHandler(ABC):
             targets: Target tensor (if needed)
             loss_fn: Loss function
             cfg: Training configuration
+            mask: Mask of valid actions (should be broadcastable to the shape of outputs)
 
         Returns:
             Loss tensor
@@ -107,13 +108,13 @@ class TransformerBatchHandler(BatchHandler):
         if attention_mask is not None:
             model_inputs["attention_mask"] = attention_mask
 
-        return model_inputs, targets
+        return model_inputs, targets, None
 
-    def compute_loss(self, outputs, targets, loss_fn, cfg):
+    def compute_loss(self, outputs, targets, loss_fn, cfg, mask=None):
         logits = outputs.logits
         targets = targets.long()
         vocab_size = logits.shape[-1]
-        return loss_fn(logits.reshape(-1, vocab_size), targets.reshape(-1))
+        return loss_fn(logits.reshape(-1, vocab_size), targets.reshape(-1), mask=mask)
 
 
 class VLMBatchHandler(BatchHandler):
@@ -164,16 +165,16 @@ class VLMBatchHandler(BatchHandler):
         if attention_mask is not None:
             model_inputs["attention_mask"] = attention_mask
 
-        return model_inputs, targets
+        mask = (targets == cfg.data.pad_token_id) | (targets == cfg.data.image_token_id)
 
-    def compute_loss(self, outputs, targets, loss_fn, cfg):
+        return model_inputs, targets, mask
+
+    def compute_loss(self, outputs, targets, loss_fn, cfg, mask=None):
         logits = outputs.logits
         targets = targets.long()
-        # Mask out padding and image-token positions when computing loss
-        ignore_mask = (targets == cfg.data.pad_token_id) | (targets == cfg.data.image_token_id)
-        targets = targets.masked_fill(ignore_mask, -100)
+        targets = targets.masked_fill(mask, -100)
         vocab_size = logits.shape[-1]
-        return loss_fn(logits.reshape(-1, vocab_size), targets.reshape(-1))
+        return loss_fn(logits.reshape(-1, vocab_size), targets.reshape(-1), mask=mask)
 
 
 class StableDiffusionBatchHandler(BatchHandler):
@@ -216,11 +217,11 @@ class StableDiffusionBatchHandler(BatchHandler):
             # In flow-matching variant: target is (noise - image) direction
             targets = noise - image
 
-        return model_inputs, targets
+        return model_inputs, targets, None
 
-    def compute_loss(self, outputs, targets, loss_fn, cfg):
-        predicted_noise = outputs
-        return loss_fn(predicted_noise, targets)
+    def compute_loss(self, outputs, targets, loss_fn, cfg, mask=None):
+        predicted_direction = outputs
+        return loss_fn(predicted_direction, targets, mask=mask)
 
 
 class FakePolicyBatchHandler(BatchHandler):
@@ -245,9 +246,9 @@ class FakePolicyBatchHandler(BatchHandler):
     def prepare_inputs_and_targets(self, batch, device, model_dtype, cfg):
         inputs = self.prepare_inputs(batch, device, model_dtype, cfg)
         targets = batch["actions"].to(device, non_blocking=True, dtype=model_dtype)
-        return inputs, targets
+        return inputs, targets, None
 
-    def compute_loss(self, outputs, targets, loss_fn, cfg):
+    def compute_loss(self, outputs, targets, loss_fn, cfg, mask=None):
         # For fake_policy, the model already computes the loss internally
         return outputs.loss
 

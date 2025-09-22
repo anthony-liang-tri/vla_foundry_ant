@@ -2,8 +2,8 @@ from unittest.mock import Mock
 
 import pytest
 import torch
-import torch.nn.functional as F
 
+from lbm2.losses import get_loss_function
 from lbm2.models.batch_handlers import (
     StableDiffusionBatchHandler,
     TransformerBatchHandler,
@@ -60,6 +60,7 @@ class TestTransformerBatchHandler:
         cfg = Mock()
         cfg.data.seq_len = 8
         cfg.data.pad_token_id = 0
+        cfg.z_loss_coefficient = 1e-4
         return cfg
 
     @pytest.fixture
@@ -149,7 +150,7 @@ class TestTransformerBatchHandler:
         outputs.logits = torch.randn(2, 8, 1000)  # batch_size=2, seq_len=8, vocab_size=1000
 
         targets = torch.randint(0, 1000, (2, 8))
-        loss_fn = F.cross_entropy
+        loss_fn = get_loss_function("cross_entropy", mock_cfg)
 
         loss = handler.compute_loss(outputs, targets, loss_fn, mock_cfg)
 
@@ -172,6 +173,7 @@ class TestVLMBatchHandler:
         cfg.data.seq_len = 8
         cfg.data.pad_token_id = 0
         cfg.data.image_token_id = 32000
+        cfg.z_loss_coefficient = 1e-4
         return cfg
 
     @pytest.fixture
@@ -181,6 +183,7 @@ class TestVLMBatchHandler:
         cfg.data.seq_len = 8
         cfg.data.pad_token_id = 0
         cfg.data.image_token_id = 32000
+        cfg.z_loss_coefficient = 1e-4
         return cfg
 
     @pytest.fixture
@@ -286,7 +289,7 @@ class TestVLMBatchHandler:
         targets[0, 0] = mock_cfg_vlm.data.pad_token_id  # Add pad token
         targets[0, 1] = mock_cfg_vlm.data.image_token_id  # Add image token
 
-        loss_fn = F.cross_entropy
+        loss_fn = get_loss_function("cross_entropy", mock_cfg_vlm)
 
         loss = handler.compute_loss(outputs, targets, loss_fn, mock_cfg_vlm)
 
@@ -410,7 +413,7 @@ class TestStableDiffusionBatchHandler:
         # Mock model outputs (predicted noise)
         predicted_noise = torch.randn(2, 3, 64, 64)
         targets = torch.randn(2, 3, 64, 64)
-        loss_fn = F.mse_loss
+        loss_fn = get_loss_function("mse", mock_cfg_diffusion)
 
         loss = handler.compute_loss(predicted_noise, targets, loss_fn, mock_cfg_diffusion)
 
