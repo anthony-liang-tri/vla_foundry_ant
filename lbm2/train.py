@@ -1,7 +1,7 @@
 import itertools
 import logging
 import time
-from typing import Callable
+from typing import Callable, Optional
 
 import torch
 import torch.distributed as dist
@@ -19,7 +19,7 @@ from lbm2.precision import get_autocast
 def train_one_checkpoint(
     model: nn.Module,
     dataloader,
-    loss: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+    loss: Callable[[torch.Tensor, torch.Tensor, Optional[torch.Tensor]], torch.Tensor],
     checkpoint_num: int,
     step: int,
     optimizer: optim.Optimizer,
@@ -41,7 +41,7 @@ def train_one_checkpoint(
     Args:
         model: torch.nn.Module or a distributed-wrapped module.
         dataloader: dataloader object.
-        loss: Callable loss function mapping (logits, targets) -> scalar loss.
+        loss: Callable loss function mapping (logits, targets, mask) -> scalar loss.
         checkpoint_num: Index of the current checkpoint window (for logs).
         step: Current global training step **before** this window starts.
         optimizer: torch.optim.Optimizer instance.
@@ -98,7 +98,7 @@ def train_one_checkpoint(
         optimizer.zero_grad()
 
         # Prepare model inputs and targets (including chunking) using batch handler
-        model_inputs, targets = batch_handler.prepare_inputs_and_targets(batch, device, model_dtype, cfg)
+        model_inputs, targets, mask = batch_handler.prepare_inputs_and_targets(batch, device, model_dtype, cfg)
 
         if cfg.hparams.accum_freq == 1:
             # No gradient accumulation
@@ -110,7 +110,7 @@ def train_one_checkpoint(
                 metrics.stats["forward_time"].update(time.time() - forward_start)
 
                 # Compute loss using batch handler
-                total_loss = batch_handler.compute_loss(outputs, targets, loss, cfg)
+                total_loss = batch_handler.compute_loss(outputs, targets, loss, cfg, mask=model_inputs["future_mask"])
 
             # Backward for single-step case.
             backward_start = time.time()
@@ -148,7 +148,9 @@ def train_one_checkpoint(
                     outputs = model(**model_inputs_ii)
                     forward_total_time += time.time() - forward_start
 
-                    local_loss = batch_handler.compute_loss(outputs, targets_ii, loss, cfg)
+                    local_loss = batch_handler.compute_loss(
+                        outputs, targets_ii, loss, cfg, mask=model_inputs_ii["future_mask"]
+                    )
 
                     # Scale loss by microbatch size ratio
                     local_loss = local_loss * (

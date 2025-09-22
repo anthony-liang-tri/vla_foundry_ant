@@ -82,6 +82,8 @@ class LBMDataParams(DataParams):
     exclude_fields: list[str] = field(default_factory=list)
     normalization: NormalizationParams = field(default_factory=NormalizationParams)
 
+    action_dim: int = field(default=None)
+
     def __post_init__(self):
         super().__post_init__()
 
@@ -117,6 +119,25 @@ class LBMDataParams(DataParams):
                 epsilon=epsilon,
             ),
         )
+
+        # Compute action dimension by summing the dimension of all action fields (known from normalization parameters)
+        # Need to import here to avoid circular import
+        from lbm2.data.robotics.normalization import RoboticsNormalizer
+
+        normalizer = RoboticsNormalizer(dataset_config=self, statistics_path=self.dataset_statistics)
+        action_dim = 0
+        for field_name in self.action_fields:
+            action_dim += len(normalizer.stats[field_name]["mean"])
+        if self.action_dim is None:
+            object.__setattr__(self, "action_dim", action_dim)
+        else:
+            assert self.action_dim == action_dim, (
+                f"Action dimension mismatch, \
+            the user-provided action dimension {self.action_dim} does not match \
+            the computed action dimension {action_dim}. Please provide the correct action dimension or \
+            set action_dim to None to automatically compute it from the action fields. \
+            This could also be a discrepancy between the action fields and the normalization parameters."
+            )
 
     def init_shared_attributes(self, cfg):
         super().init_shared_attributes(cfg)

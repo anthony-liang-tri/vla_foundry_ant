@@ -42,11 +42,8 @@ class RoboticsNormalizer:
 
         self.enabled = self.config.normalization.enabled
 
-        if not self.enabled:
-            self.stats = None
-            return
-
-        # Load statistics
+        # Always load statistics when available, regardless of whether normalization is enabled
+        # This allows action dimension computation even when normalization is disabled
         if statistics_data is not None:
             self.stats = statistics_data
         elif statistics_path is not None:
