@@ -89,7 +89,7 @@ def create_processing_metadata(
     if args.skip_git_tagging:
         git_info = {"skip_git_tagging": True, "commit_hash": "test", "branch": "test"}
     else:
-        git_info = get_git_info(auto_tag=not args.no_auto_tag)
+        git_info = get_git_info(auto_tag=args.auto_tag)
 
     # Get source data information
     source_data_info = get_source_data_info(args.source_episodes, episodes)

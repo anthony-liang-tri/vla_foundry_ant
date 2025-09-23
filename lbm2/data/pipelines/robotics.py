@@ -48,7 +48,8 @@ def extract_robotics_fields(sample, language_instruction_types=None):
         else:
             suffix_map = [
                 "lowdim.npz",
-                "masks.npz",
+                "past_mask.npz",
+                "future_mask.npz",
                 "metadata.json",
                 "intrinsics.npz",
                 "extrinsics.npz",
@@ -63,8 +64,8 @@ def extract_robotics_fields(sample, language_instruction_types=None):
     return {
         "images": images,
         "lowdim": data.get("lowdim.npz"),
-        "past_mask": data.get("masks.npz", {}).get("past_mask", None),
-        "future_mask": data.get("masks.npz", {}).get("future_mask", None),
+        "past_mask": data.get("past_mask.npz")["data"],
+        "future_mask": data.get("future_mask.npz")["data"],
         "metadata": data.get("metadata.json", {}),
         "intrinsics": data.get("intrinsics.npz", {}),
         "extrinsics": data.get("extrinsics.npz", {}),

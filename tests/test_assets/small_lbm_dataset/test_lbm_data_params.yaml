@@ -4,7 +4,7 @@ dataset_manifest:
   - s3://robotics-manip-lbm/vlm_datasets/preprocess_test/lbm/PickAndPlaceBox/cabot/sim/manifest.jsonl
 
 dataset_statistics:
-  - s3://robotics-manip-lbm/vlm_datasets/preprocess_test/lbm/PickAndPlaceBox/cabot/sim/dataset_statistics.json
+  - s3://robotics-manip-lbm/vlm_datasets/preprocess_test/lbm/PickAndPlaceBox/cabot/sim/stats.json
 
 dataset_weighting:
   - 1.0

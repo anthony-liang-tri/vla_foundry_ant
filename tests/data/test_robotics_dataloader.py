@@ -60,7 +60,7 @@ def mock_config():
                 "processor": processor_name,  # No processor for basic tests
                 "add_action_token": add_action_token,
                 "seq_len": 512,
-                "dataset_statistics": [dataset_path + "/dataset_statistics.json"],
+                "dataset_statistics": [dataset_path + "/stats.json"],
                 "dataset_manifest": [dataset_path + "/manifest.jsonl"],
                 "num_images": None,  # Let processor infer number of images
                 "img_num_tokens": 49,  # Set image sequence length for PaliGemma
@@ -508,7 +508,7 @@ def test_normalization(dataset_path, manifest_data, mock_config):
                 "processor": "google/paligemma-3b-pt-224",
                 "add_action_token": False,
                 "seq_len": 512,
-                "dataset_statistics": [dataset_path + "/dataset_statistics.json"],
+                "dataset_statistics": [dataset_path + "/stats.json"],
                 "dataset_manifest": [dataset_path + "/manifest.jsonl"],
                 "num_images": None,
                 "img_num_tokens": 49,
@@ -683,7 +683,7 @@ def test_normalization_consistency(dataset_path, manifest_data, mock_config):
             "processor": "google/paligemma-3b-pt-224",
             "add_action_token": False,
             "seq_len": 512,
-            "dataset_statistics": [dataset_path + "/dataset_statistics.json"],
+            "dataset_statistics": [dataset_path + "/stats.json"],
             "dataset_manifest": [dataset_path + "/manifest.jsonl"],
         }
     )
@@ -769,7 +769,7 @@ def test_compare_dataloader_and_roboticsdataloader(dataset_path, manifest_data, 
             "processor": "google/paligemma-3b-pt-224",
             "add_action_token": False,
             "seq_len": 512,
-            "dataset_statistics": [f"{dataset_path}/dataset_statistics.json"],
+            "dataset_statistics": [f"{dataset_path}/stats.json"],
             "dataset_manifest": [f"{dataset_path}/manifest.jsonl"],
             "normalization": {"enabled": False},
         }

@@ -7,12 +7,13 @@ source .venv/bin/activate && python lbm2/data/scripts/preprocessing/preprocess_l
     --past_lowdim_steps 1 \
     --future_lowdim_steps 14 \
     --image_indices "[-1, 0]" \
-    --max_padding_left 1 \
-    --max_padding_right 15 \
-    --samples_per_shard 1 \
-    --max_episodes_to_process 5 \
-    --jpeg_quality 95 \
+    --stride 1 \
+    --max_padding_left 3 \
+    --max_padding_right 12 \
+    --samples_per_shard 5 \
+    --max_episodes_to_process 1 \
+    --jpeg_quality 5 \
     --filter_still_samples False \
-    --no_statistics False \
+    --compute_statistics True \
     --still_threshold 0.05 \
     --resize_images_size "[224, 224]"

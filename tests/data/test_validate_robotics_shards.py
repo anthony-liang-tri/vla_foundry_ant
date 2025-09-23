@@ -259,7 +259,7 @@ class TestDatasetValidation:
     @pytest.mark.integration
     def test_load_dataset_statistics(self, dataset_config):
         """Test loading dataset statistics."""
-        stats = json_load(os.path.join(dataset_config["path"], "dataset_statistics.json"))
+        stats = json_load(os.path.join(dataset_config["path"], "stats.json"))
 
         # Statistics might not exist, but if they do, check structure
         if stats is not None:

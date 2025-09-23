@@ -426,9 +426,9 @@ class RoboticsDataLoader:
 
             # Extract past and future masks
             if "past_mask" in batch:
-                sample["past_mask"] = batch["past_mask"][i].float().cpu().numpy()
+                sample["past_mask"] = batch["past_mask"][i]["data"].float().cpu().numpy()
             if "future_mask" in batch:
-                sample["future_mask"] = batch["future_mask"][i].float().cpu().numpy()
+                sample["future_mask"] = batch["future_mask"][i]["data"].float().cpu().numpy()
 
             # Extract actions
             if "actions" in batch:

@@ -137,16 +137,28 @@ def upload_sample_to_s3(
     uuid_prefix = str(uuid.uuid4())
 
     with tarfile.open(fileobj=tar_buffer, mode="w") as tar:
+        original_image_sizes = {}
         for key, value in sample_data.items():
-            data_buffer = io.BytesIO()
-
             if key == "images":
                 # Use image_to_bytes to convert numpy arrays to JPEG bytes
                 for img_key, img_data in value.items():
-                    jpeg_bytes, _ = image_to_bytes(img_data, jpeg_quality, resize_images_size)
+                    jpeg_bytes, original_image_size = image_to_bytes(img_data, jpeg_quality, resize_images_size)
+
+                    # Log original image sizes
+                    camera_name_without_timestep = img_key.rsplit("_t", 1)[0]
+                    assert camera_name_without_timestep in sample_data["metadata"].camera_names
+                    original_image_sizes[camera_name_without_timestep] = original_image_size
+
                     tarinfo = tarfile.TarInfo(name=f"{uuid_prefix}.{img_key}.jpg")
                     tarinfo.size = len(jpeg_bytes)
                     tar.addfile(tarinfo, io.BytesIO(jpeg_bytes))
+
+        sample_data["metadata"].original_image_sizes = original_image_sizes
+
+        for key, value in sample_data.items():
+            data_buffer = io.BytesIO()
+            if key == "images":  # Already added
+                continue
             elif key in ["metadata", "language_instructions"]:
                 # Save as JSON
                 if isinstance(value, dict):
@@ -579,8 +591,8 @@ class EpisodeProcessor:
                 sample_metadata = SampleMetadata(
                     episode_id=episode_id,
                     sample_id=f"{uuid.uuid4()}_{episode_id}_t{anchor_timestep:04d}",
-                    anchor_timestep=None,
-                    anchor_relative_idx=None,
+                    anchor_timestep=int(anchor_timestep),
+                    anchor_relative_idx=int(self.past_lowdim_steps),
                     image_timesteps=actual_image_timesteps,
                     lowdim_start_timestep=int(lowdim_start),
                     lowdim_end_timestep=int(lowdim_end),
@@ -588,7 +600,7 @@ class EpisodeProcessor:
                     future_padding=int(future_padding),
                     camera_names=list(camera_data.keys()),
                     original_episode_length=int(episode_length),
-                    original_image_sizes={},
+                    original_image_sizes={},  # To be filled in after image resizing
                     is_padded=bool(past_padding > 0 or future_padding > 0),
                 )
 
@@ -673,13 +685,13 @@ def main():
         "fail_on_nan": cfg.fail_on_nan,
         "camera_names": camera_names,
         "camera_discard_keys": cfg.camera_discard_keys,
-        "compute_statistics": not cfg.no_statistics,
+        "compute_statistics": cfg.compute_statistics,
         "resize_images_size": cfg.resize_images_size,
         "language_annotations": language_annotations,
     }
 
     print("🚀 Starting optimized preprocessing")
-    print(f"Statistics: {'disabled' if cfg.no_statistics else 'enabled'}")
+    print(f"Statistics: {'enabled' if cfg.compute_statistics else 'disabled'}")
     if cfg.resize_images_size and len(cfg.resize_images_size) == 2:
         print(f"Image resize to {cfg.resize_images_size[0]}x{cfg.resize_images_size[1]}")
     else:
@@ -713,7 +725,7 @@ def main():
 
     # Ray Phase 1: Process frame individually and upload to S3
     print(f"🚀 Processing {len(episodes)} episodes and uploading to S3...")
-    statistics_ray_actor = StreamingDatasetStatisticsRayActor.remote(compute_stats=cfg.no_statistics)
+    statistics_ray_actor = StreamingDatasetStatisticsRayActor.remote(compute_stats=cfg.compute_statistics)
     futures = [streaming_episode_worker.remote(episode, processor_config, statistics_ray_actor) for episode in episodes]
     ray.get(futures)
     print("✅ Upload phase complete! Starting sharding phase...")

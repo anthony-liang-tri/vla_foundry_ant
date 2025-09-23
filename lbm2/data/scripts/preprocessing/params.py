@@ -57,8 +57,8 @@ class PreprocessParams(BaseParams):
     fail_on_nan: bool = field(default=False)
 
     # Statistics and reproducibility
-    no_statistics: bool = field(default=True)
-    no_auto_tag: bool = field(default=False)
+    compute_statistics: bool = field(default=True)
+    auto_tag: bool = field(default=True)
 
     # Testing flags
     skip_git_tagging: bool = field(default=False)  # Skip git operations for testing

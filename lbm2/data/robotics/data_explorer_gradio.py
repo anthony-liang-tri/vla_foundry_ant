@@ -77,7 +77,7 @@ def main():
             "processor": "google/paligemma-3b-pt-224",
             "add_action_token": False,
             "seq_len": 512,
-            "dataset_statistics": [f"{args.dataset_path}/dataset_statistics.json"],
+            "dataset_statistics": [f"{args.dataset_path}/stats.json"],
             "dataset_manifest": [f"{args.dataset_path}/manifest.jsonl"],
             "normalization": {"enabled": False},
         }
