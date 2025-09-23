@@ -14,9 +14,9 @@ from pathlib import Path
 import numpy as np
 
 # evaluate must be imported before the other anzu libraries
-from lbm_eval.evaluate import _LastStepRecorder
-from pydrake.common.yaml import yaml_load
-from robot_gym.multiarm_spaces import PosesAndGrippers
+from lbm_eval.evaluate import _LastStepRecorder # noqa
+from pydrake.common.yaml import yaml_load # noqa
+from robot_gym.multiarm_spaces import PosesAndGrippers # noqa
 
 from anzu.common.anzu_model_directives import MakeDefaultAnzuPackageMap
 from anzu.intuitive.typing_ import from_dict
