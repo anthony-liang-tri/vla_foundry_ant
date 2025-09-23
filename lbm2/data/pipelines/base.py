@@ -9,3 +9,7 @@ class BaseWebDatasetPipeline:
 
     def create_pipeline(self, datastring: str, checkpoint_num: int):
         raise NotImplementedError("Implemented in individual classes.")
+
+    def save_configs(self, experiment_path: str):
+        # Save any necessary dataloader/pipeline configs (e.g., normalization config)
+        pass

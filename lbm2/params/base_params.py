@@ -3,6 +3,8 @@ from dataclasses import dataclass, fields
 
 import draccus
 
+from lbm2.file_utils import copy_to_temp_file
+
 
 @dataclass(frozen=True)
 class BaseParams:
@@ -34,7 +36,11 @@ class BaseParams:
 
     @classmethod
     def from_file(cls, file_path):
-        cfg_new = draccus.load(cls, file_path)
+        if file_path.startswith("s3"):
+            with copy_to_temp_file(file_path) as temp_path:
+                cfg_new = draccus.load(cls, temp_path)
+        else:
+            cfg_new = draccus.load(cls, file_path)
         return cfg_new
 
     @classmethod

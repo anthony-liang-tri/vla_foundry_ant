@@ -34,6 +34,7 @@ class DataInfo:
     """
 
     dataloader: DataLoader
+    dataset_pipelines: List[wds.DataPipeline] = None
     sampler: DistributedSampler = None
     shared_checkpoint_counter: SharedCheckpointCounter = None
 
@@ -49,6 +50,10 @@ class DataInfo:
             self.shared_checkpoint_counter.set_value(checkpoint_num)
         if self.sampler is not None and isinstance(self.sampler, DistributedSampler):
             self.sampler.set_checkpoint_num(checkpoint_num)
+
+    def save_configs(self, experiment_path: str):
+        for dataset_pipeline in self.dataset_pipelines:
+            dataset_pipeline.save_configs(experiment_path)
 
 
 def get_wds_dataloader(
@@ -80,10 +85,10 @@ def get_wds_dataloader(
     batch_size = max(cfg.hparams.global_batch_size // cfg.distributed.world_size, 1)
 
     # Build one pipeline per dataset, then mix them by target sample counts.
-    datasets = []
+    dataset_pipelines = []
     for datastring, modality in zip(datastrings, cfg.data.dataset_modality, strict=False):
-        datasets.append(create_wds_pipeline(datastring, modality, batch_size, checkpoint_num, cfg.data))
-    dataset = wds.mix.RandomMix(datasets, probs=num_samples_per_dataset, longest=True)
+        dataset_pipelines.append(create_wds_pipeline(datastring, modality, batch_size, checkpoint_num, cfg.data))
+    dataset = wds.mix.RandomMix(dataset_pipelines, probs=num_samples_per_dataset, longest=True)
 
     # Start a generator to have control over reproducibility.
     if cfg.data.seed is not None:
@@ -122,7 +127,9 @@ def get_wds_dataloader(
     dataloader.num_batches = num_batches
     dataloader.num_samples = num_samples
 
-    dataloader = DataInfo(dataloader=dataloader, shared_checkpoint_counter=shared_checkpoint_counter)
+    dataloader = DataInfo(
+        dataloader=dataloader, dataset_pipelines=dataset_pipelines, shared_checkpoint_counter=shared_checkpoint_counter
+    )
     return dataloader
 
 

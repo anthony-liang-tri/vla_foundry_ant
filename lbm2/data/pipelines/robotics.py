@@ -5,11 +5,8 @@ import numpy as np
 import webdataset as wds
 
 from lbm2.data.pipelines.base import BaseWebDatasetPipeline
-from lbm2.data.processor import get_processor
 from lbm2.data.processor.robotics_processor import RoboticsProcessor
-from lbm2.data.robotics.normalization import RoboticsNormalizer
 from lbm2.data.utils import deterministic_shuffle, log_and_continue
-from lbm2.file_utils import json_load
 from lbm2.params.data_params import LBMDataParams
 
 
@@ -79,17 +76,7 @@ class LBMPipeline(BaseWebDatasetPipeline):
         super().__init__(modality, data_configs, batch_size)
         os.environ["TOKENIZERS_PARALLELISM"] = "true"
         self.data_configs = data_configs
-        self.vlm_processor = get_processor(data_configs)
-
-        # Initialize normalizer
-        self.statistics = [json_load(s) for s in data_configs.dataset_statistics]
-        self.normalization_config = data_configs.normalization
-        if self.data_configs.normalization.enabled:
-            self.normalizer = RoboticsNormalizer(dataset_config=self.data_configs, statistics_data=self.statistics)
-        else:
-            self.normalizer = None
-
-        self.robotics_processor = RoboticsProcessor(self.vlm_processor, self.normalizer)
+        self.robotics_processor = RoboticsProcessor(data_configs)
 
     def __len__(self):
         """Return the number of samples in the dataset (cached)."""
@@ -139,3 +126,12 @@ class LBMPipeline(BaseWebDatasetPipeline):
         ]
 
         return pipeline
+
+    def save_configs(self, experiment_path: str):
+        # Save normalizer config
+        # Can be loaded with RoboticsNormalizer.load(config_path, statistics_path)
+        self.robotics_processor.normalizer.save(experiment_path)
+
+        # Save processor config
+        # Can be loaded with RoboticsProcessor.load(config_path)
+        self.robotics_processor.save(experiment_path)

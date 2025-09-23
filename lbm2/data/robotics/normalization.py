@@ -2,7 +2,9 @@
 Normalization utilities for robotics data.
 """
 
+import json
 import logging
+import os
 from typing import Any, Dict, Optional, Tuple, Union
 
 import draccus
@@ -68,6 +70,23 @@ class RoboticsNormalizer:
         self.exclude_fields = set(self.config.exclude_fields)
 
         logging.info(f"RoboticsNormalizer initialized: method={self.method}, scope={self.scope}")
+
+    def save(self, experiment_path: str):
+        with open(os.path.join(experiment_path, "config_normalizer.yaml"), "w") as f:
+            draccus.dump(self.config, f)
+        with open(os.path.join(experiment_path, "stats_normalizer.json"), "w") as f:
+            json.dump(self.stats, f)
+
+    @classmethod
+    def load(cls, config_path: str, statistics_path: str):
+        return cls(NormalizationParams.from_file(config_path), statistics_path=statistics_path)
+
+    @classmethod
+    def from_pretrained(cls, config_path: str):
+        return cls(
+            NormalizationParams.from_file(os.path.join(config_path, "config_normalizer.yaml")),
+            statistics_path=os.path.join(config_path, "stats_normalizer.json"),
+        )
 
     def get_field_dimension(self, field_name: str) -> int:
         """Get the dimension of a field."""
@@ -449,55 +468,6 @@ class RoboticsNormalizer:
             raise ValueError("action_fields not specified in dataset config")
 
         return self.denormalize_batch(batch_data, self.config.action_fields)
-
-
-def create_normalizer_from_config(
-    dataset_config: Union[Dict[str, Any], "LBMDataParams"],
-    statistics_path: Optional[str] = None,
-    statistics_data: Optional[Dict[str, Any]] = None,
-) -> Optional[RoboticsNormalizer]:
-    """
-    Create a normalizer from configuration.
-
-    Args:
-        dataset_config: LBMDataParams instance with field definitions and normalization settings
-        statistics_path: Path to statistics JSON file (optional)
-        statistics_data: Pre-computed statistics dict (optional)
-        auto_compute_stats: Whether to auto-compute statistics from data
-        dataloader_samples: Iterator over dataset samples (for auto computation)
-
-    Returns:
-        RoboticsNormalizer instance or None if disabled
-    """
-    # Handle both dict and dataclass formats
-    if isinstance(dataset_config, dict):
-        if "normalization" in dataset_config and not dataset_config.normalization.enabled:
-            logging.info("Normalization disabled in config")
-            return None
-    else:
-        if not dataset_config.normalization.enabled:
-            logging.info("Normalization disabled in config")
-            return None
-
-    # Try different sources of statistics in order of preference
-    if statistics_data is not None:
-        # Use provided statistics data
-        try:
-            normalizer = RoboticsNormalizer(dataset_config=dataset_config, statistics_data=statistics_data)
-            return normalizer
-        except Exception as e:
-            logging.error(f"Failed to create normalizer from statistics_data: {e}")
-
-    if statistics_path is not None:
-        # Use statistics file
-        try:
-            normalizer = RoboticsNormalizer(dataset_config=dataset_config, statistics_path=statistics_path)
-            return normalizer
-        except Exception as e:
-            logging.error(f"Failed to create normalizer from statistics_path: {e}")
-
-    logging.warning("No valid statistics source available - normalization disabled")
-    return None
 
 
 @draccus.encode.register

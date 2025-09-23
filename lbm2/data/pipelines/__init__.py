@@ -1,4 +1,5 @@
 from itertools import islice
+from typing import Callable
 
 import webdataset as wds
 
@@ -9,7 +10,8 @@ from lbm2.data.pipelines.text_untokenized import TextUntokenizedPipeline
 
 
 class FiniteDataPipeline(wds.DataPipeline):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, save_configs: Callable[[str], None] = None, **kwargs):
+        self.save_configs = save_configs  # This is a function
         super().__init__(*args, **kwargs)
 
     def __iter__(self):
@@ -38,4 +40,5 @@ def create_wds_pipeline(datastring, modality, batch_size, checkpoint_num, data_p
     else:
         raise ValueError(f"{modality} webdataset pipeline not supported")
 
-    return FiniteDataPipeline(*pipeline.create_pipeline(datastring, checkpoint_num))
+    pipeline_components = pipeline.create_pipeline(datastring, checkpoint_num)
+    return FiniteDataPipeline(*pipeline_components, save_configs=pipeline.save_configs)

@@ -1,10 +1,42 @@
+import os
+
+import draccus
 import torch
+
+from lbm2.data.processor import get_processor
+from lbm2.data.robotics.normalization import RoboticsNormalizer
+from lbm2.file_utils import json_load
+from lbm2.params.data_params import LBMDataParams
 
 
 class RoboticsProcessor:
-    def __init__(self, vlm_processor, normalizer):
-        self.vlm_processor = vlm_processor
-        self.normalizer = normalizer
+    """
+    This class handles tokenization and normalization of robotics data.
+    It also handles image loading and processing.
+    """
+
+    def __init__(self, data_configs: LBMDataParams):
+        self.data_configs = data_configs
+        self.vlm_processor = get_processor(data_configs)
+
+        # Normalize contained entirely within the processor
+        self.statistics = [json_load(s) for s in data_configs.dataset_statistics]
+        if self.data_configs.normalization.enabled:
+            self.normalizer = RoboticsNormalizer(dataset_config=self.data_configs, statistics_data=self.statistics)
+        else:
+            self.normalizer = None
+
+    def save(self, experiment_path: str):
+        with open(os.path.join(experiment_path, "config_processor.yaml"), "w") as f:
+            draccus.dump(self.data_configs, f)
+
+    @classmethod
+    def load(cls, config_path: str):
+        return cls(LBMDataParams.from_file(config_path))
+
+    @classmethod
+    def from_pretrained(cls, config_path: str):
+        return cls(LBMDataParams.from_file(os.path.join(config_path, "config_processor.yaml")))
 
     def add_action_and_proprioception_fields(self, batch, action_fields=None, proprioception_fields=None):
         # Pre-extract concatenated actions if action fields are provided
