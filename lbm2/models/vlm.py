@@ -86,7 +86,7 @@ class VLM(TransformerBase):
 
         # Call transformer's forward method directly to get logits and past_key_values and hidden_states
         output = self.transformer(
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             output_hidden_states=output_hidden_states,
             use_cache=use_cache,

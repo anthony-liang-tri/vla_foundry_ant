@@ -76,19 +76,12 @@ class RoboticsDataLoader:
         img_numpy = img_tensor.permute(1, 2, 0).float().cpu().numpy()  # [H, W, C]
 
         # Handle different pixel value ranges
-        if img_numpy.max() <= 1.0 and img_numpy.min() >= -1.0:
-            # in [-1,1] range
-            img_numpy = (np.clip((img_numpy + 1) / 2, 0, 1) * 255).astype(np.uint8)
-        elif img_numpy.max() <= 1.0 and img_numpy.min() >= 0.0:
-            # in [0,1] range
-            img_numpy = (img_numpy * 255).astype(np.uint8)
-        elif img_numpy.max() <= 255.0:
-            # in [0,255] range
-            img_numpy = img_numpy.astype(np.uint8)
-        else:
-            # Assume it's in some other range, normalize to [0,255]
-            img_numpy = ((img_numpy - img_numpy.min()) / (img_numpy.max() - img_numpy.min()) * 255).astype(np.uint8)
-
+        min_val = img_numpy.min()
+        max_val = img_numpy.max()
+        img_numpy = img_numpy - min_val
+        img_numpy = img_numpy / (max_val - min_val)
+        img_numpy = img_numpy * 255
+        img_numpy = img_numpy.astype(np.uint8)
         return img_numpy
 
     def load_samples(self) -> List[Dict[str, Any]]:
@@ -304,7 +297,6 @@ class RoboticsDataLoader:
                             batch["input_ids"].to(self.device, dtype=torch.long),
                             batch["pixel_values"].to(self.device, dtype=self.dtype),
                             actions.to(self.device, dtype=self.dtype),
-                            batch["proprioception"].to(self.device, dtype=self.dtype),
                             batch["attention_mask"].to(self.device, dtype=torch.bool),
                             past_mask=batch["past_mask"].to(self.device, dtype=torch.bool),
                             num_inference_steps=num_inference_steps,
@@ -426,9 +418,9 @@ class RoboticsDataLoader:
 
             # Extract past and future masks
             if "past_mask" in batch:
-                sample["past_mask"] = batch["past_mask"][i]["data"].float().cpu().numpy()
+                sample["past_mask"] = batch["past_mask"][i].float().cpu().numpy()
             if "future_mask" in batch:
-                sample["future_mask"] = batch["future_mask"][i]["data"].float().cpu().numpy()
+                sample["future_mask"] = batch["future_mask"][i].float().cpu().numpy()
 
             # Extract actions
             if "actions" in batch:

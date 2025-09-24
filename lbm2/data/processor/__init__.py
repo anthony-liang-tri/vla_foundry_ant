@@ -41,7 +41,7 @@ def get_processor(data_params: DataParams):
         image_size = data_params.get("image_size")
         if image_size and hasattr(processor, "image_processor"):
             # Different processors expect different size formats
-            if "paligemma" in processor_name or "pali-gemma" in processor_name:
+            if "paligemma" in processor_name.lower() or "clip" in processor_name.lower():
                 # PaliGemma expects height and width
                 processor.image_processor.size = {"height": int(image_size), "width": int(image_size)}
                 logging.debug(

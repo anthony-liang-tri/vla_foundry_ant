@@ -55,6 +55,7 @@ class TransformerParams(ModelParams):
     weight_tying: bool = field(default=False)
     cast_output_to_float32: bool = field(default=False)
     max_seq_len: int = field(default=2048)
+    is_causal: bool = field(default=True)
 
 
 @register_model_params("transformer_hf")
@@ -178,7 +179,27 @@ class StableDiffusionParams(ModelParams):
         return self.unet.image_size
 
 
-@register_model_params("fake_policy")
+@register_model_params("clip_hf")
 @dataclass(frozen=True)
-class FakePolicyParams(ModelParams):
-    pass
+class CLIPHFParams(ModelParams):
+    hf_pretrained: str = field(default=None)
+    freeze_text_encoder: bool = field(default=False)
+    freeze_image_encoder: bool = field(default=False)
+
+
+@register_model_params("diffusion_policy")
+@dataclass(frozen=True)
+class DiffusionPolicyParams(ModelParams):
+    clip: CLIPHFParams = field(default_factory=CLIPHFParams)
+    transformer: Union[TransformerParams, TransformerHFParams] = field(default_factory=ModelParams)
+    noise_scheduler: NoiseSchedulerParams = field(default_factory=NoiseSchedulerParams)
+
+    use_diffusers_scheduler: bool = field(default=False)
+    use_flow_matching_scheduler: bool = field(
+        default=False
+    )  # Should be set automatically from data params when training, should be defined from checkpoint at inference time
+    action_dim: int = field(default=None)
+
+    def init_shared_attributes(self, cfg):
+        super().init_shared_attributes(cfg)
+        object.__setattr__(self, "action_dim", cfg.data.action_dim)

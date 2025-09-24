@@ -257,7 +257,7 @@ class TestGetLossFunction:
         # Test that it works
         logits = torch.randn(2, 5)
         targets = torch.randint(0, 5, (2,))
-        mask = torch.ones(2, 5)
+        mask = torch.ones(2)
 
         loss = loss_fn(logits, targets, mask=mask)
         assert loss.dim() == 0
@@ -272,7 +272,7 @@ class TestGetLossFunction:
         # Test that it works
         logits = torch.randn(2, 5)
         targets = torch.randint(0, 5, (2,))
-        mask = torch.ones(2, 5)
+        mask = torch.ones(2)
 
         loss = loss_fn(logits, targets, mask=mask)
         assert loss.dim() == 0
@@ -292,7 +292,7 @@ class TestGetLossFunction:
         assert loss.dim() == 0
 
         # With mse loss the mask is accepted as an input but ignored
-        mask = torch.zeros(2, 3)
+        mask = torch.zeros(2)
         loss2 = loss_fn(predicted, target, mask=mask)
         assert loss == loss2
 
@@ -301,7 +301,6 @@ class TestGetLossFunction:
         hparams = Mock()
 
         loss_fn = get_loss_function("masked_mse", hparams)
-        mse_loss_fn = torch.nn.MSELoss()
 
         # Test that it works
         predicted = torch.randn(2, 3, 4)
@@ -309,7 +308,7 @@ class TestGetLossFunction:
         mask = torch.ones(2, 3)
 
         loss = loss_fn(predicted, target, mask=mask)
-        loss_mse = mse_loss_fn(predicted, target)
+        loss_mse = get_loss_function("mse", hparams)(predicted, target)
         # Here the mask is all ones, so the masked MSE loss should be the same as the regular MSE loss
         assert loss_mse == loss
         assert loss.dim() == 0
@@ -343,13 +342,13 @@ class TestGetLossFunction:
 
             # Create appropriate test data
             if loss_type == "cross_entropy":
-                inputs = torch.randn(2, 5)
-                targets = torch.randint(0, 5, (2,))
+                inputs = torch.randn(2, 3, 5)
+                targets = torch.randint(0, 5, (2, 3))
+                mask = torch.ones(2, 3)
             else:
                 inputs = torch.randn(2, 3, 4)
                 targets = torch.randn(2, 3, 4)
-
-            mask = torch.ones(2, 3)
+                mask = torch.ones(2, 3)
 
             # Should not raise an error
             loss = loss_fn(inputs, targets, mask=mask)

@@ -17,8 +17,17 @@ class CrossEntropyLossWithZLoss(CrossEntropyLoss):
         super().__init__(weight, size_average, ignore_index, reduce, reduction, label_smoothing)
         self.eps = eps
 
-    def forward(self, input: Tensor, target: Tensor) -> Tensor:
-        return super().forward(input, target) + self.eps * torch.square(torch.logsumexp(input, dim=-1)).mean()
+    def forward(self, input: Tensor, target: Tensor, mask=None) -> Tensor:
+        if mask is not None:
+            while target.ndim > mask.ndim:
+                mask = mask.unsqueeze(-1)
+            target = target.masked_fill(mask.bool(), self.ignore_index)
+        input = input.reshape(-1, input.shape[-1])
+        target = target.reshape(-1)
+        if self.eps != 0.0:
+            return super().forward(input, target) + self.eps * torch.square(torch.logsumexp(input, dim=-1)).mean()
+        else:
+            return super().forward(input, target)
 
 
 def masked_mse_loss(predicted_direction, target_direction, mask=None):
@@ -66,10 +75,7 @@ def get_loss_function(loss_function_type, hparams):
     but it doesn't need to use the mask. In that case, the mask can be ignored with the wrapper _ignore_mask.
     """
     if loss_function_type == "cross_entropy":
-        if hparams.z_loss_coefficient != 0.0:
-            loss = _ignore_mask(CrossEntropyLossWithZLoss(hparams.z_loss_coefficient))
-        else:
-            loss = _ignore_mask(torch.nn.CrossEntropyLoss())
+        loss = CrossEntropyLossWithZLoss(hparams.z_loss_coefficient)
     elif loss_function_type == "mse":
         loss = _ignore_mask(torch.nn.MSELoss())
     elif loss_function_type == "masked_mse":

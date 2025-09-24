@@ -23,6 +23,7 @@ class CustomAttn(nn.Module):
         self.pos_embed = get_pos_embed(model_params)
         self.attn_fn = get_attn_func(model_params.attn_name)
         self.apply_qk_norm = model_params.qk_norm
+        self.is_causal = model_params.is_causal
 
         # initialize norm layers for queries and keys if needed
         self.norm_type = get_norm_class(model_params.norm_type)
@@ -54,7 +55,7 @@ class CustomAttn(nn.Module):
         std = std / math.sqrt(2 * (self.layer_id + 1))
         torch.nn.init.trunc_normal_(self.out_proj.weight, std=std, a=-3 * std, b=3 * std)
 
-    def forward(self, x: torch.Tensor, is_causal=True, past_key_value=None, use_cache=False, attention_mask=None):
+    def forward(self, x: torch.Tensor, is_causal=None, past_key_value=None, use_cache=False, attention_mask=None):
         batchsize, seq_len, hidden_dim = x.shape
         queries, keys, vals = self.in_proj(x).chunk(3, dim=-1)
 
@@ -79,7 +80,7 @@ class CustomAttn(nn.Module):
             queries,
             keys,
             vals,
-            is_causal=is_causal,
+            is_causal=is_causal or self.is_causal,
             attention_mask=attention_mask,
         )
         output = output.view(batchsize, seq_len, -1)
@@ -96,6 +97,7 @@ class TransformerBlock(nn.Module):
         self.attention = CustomAttn(layer_id, model_params)
         self.ffn_type = model_params.ffn_type
         self.feed_forward, self.ffn_hidden_dim = get_feed_forward(self.ffn_type, self.hidden_dim)
+        self.is_causal = model_params.is_causal
 
         self.layer_id = layer_id
         self.norm_type = get_norm_class(model_params.norm_type)
@@ -126,10 +128,10 @@ class TransformerBlock(nn.Module):
             std = std / math.sqrt(2 * (self.layer_id + 1))
             torch.nn.init.trunc_normal_(self.feed_forward[2].weight, std=std, a=-3 * std, b=3 * std)
 
-    def forward(self, x, past_key_value=None, use_cache=False, attention_mask=None, is_causal=True):
+    def forward(self, x, past_key_value=None, use_cache=False, attention_mask=None, is_causal=None):
         h, past_key_value = self.attention(
             self.attention_norm(x),
-            is_causal=is_causal,
+            is_causal=is_causal or self.is_causal,
             past_key_value=past_key_value,
             use_cache=use_cache,
             attention_mask=attention_mask,
@@ -159,6 +161,7 @@ class Transformer(TransformerBase):
         )
         self.weight_tying = model_params.weight_tying
         self.embeddings = nn.Embedding(model_params.vocab_size, model_params.hidden_dim)
+        self.is_causal = model_params.is_causal
 
         self.layers = torch.nn.ModuleList()
         for layer_id in range(model_params.n_layers):
@@ -240,12 +243,12 @@ class Transformer(TransformerBase):
     def forward(
         self,
         input_ids=None,
-        input_embeds=None,
+        inputs_embeds=None,
         past_key_values=None,
         use_cache=False,
         attention_mask=None,
         output_hidden_states=False,
-        is_causal=True,
+        is_causal=None,
     ):
         """
         Args:
@@ -256,14 +259,14 @@ class Transformer(TransformerBase):
                 attended to. attention_mask[s, i] = False indicates that token i should not be attended to by any other
                 token for sequence s.
             output_hidden_states (bool): Whether to return the hidden states of the transformer.
-            is_causal (bool): Whether the transformer is causal.
+            is_causal (bool): Whether the transformer is causal, default set in init, can be overridden by the caller.
         """
         if input_ids is not None:
             x = self.embeddings(input_ids)
-        elif input_embeds is not None:
-            x = input_embeds
+        elif inputs_embeds is not None:
+            x = inputs_embeds
         else:
-            raise ValueError("Either input_ids or input_embeds must be provided.")
+            raise ValueError("Either input_ids or inputs_embeds must be provided.")
 
         x = self.post_embed_norm(x)
 
@@ -275,11 +278,15 @@ class Transformer(TransformerBase):
         for i, layer in enumerate(self.layers):
             if self.grad_checkpointing:
                 x, past_key_values[i] = torch.utils.checkpoint.checkpoint(
-                    layer, x, past_key_values[i], use_cache, attention_mask, is_causal
+                    layer, x, past_key_values[i], use_cache, attention_mask, is_causal or self.is_causal
                 )
             else:
                 x, past_key_values[i] = layer(
-                    x, past_key_values[i], use_cache=use_cache, attention_mask=attention_mask, is_causal=is_causal
+                    x,
+                    past_key_values[i],
+                    use_cache=use_cache,
+                    attention_mask=attention_mask,
+                    is_causal=is_causal or self.is_causal,
                 )
             if output_hidden_states:
                 hidden_states.append(x)

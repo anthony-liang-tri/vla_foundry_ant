@@ -5,7 +5,7 @@ import torch
 
 from lbm2.losses import get_loss_function
 from lbm2.models.batch_handlers import (
-    FakePolicyBatchHandler,
+    DiffusionPolicyBatchHandler,
     StableDiffusionBatchHandler,
     TransformerBatchHandler,
     VLMBatchHandler,
@@ -525,40 +525,206 @@ class TestStableDiffusionBatchHandler:
         assert not torch.isnan(loss)
 
 
-class TestFakePolicyBatchHandler:
-    """Test the FakePolicyBatchHandler class."""
+class TestDiffusionPolicyBatchHandler:
+    """Test the DiffusionPolicyBatchHandler class."""
 
     @pytest.fixture
     def handler(self):
-        return FakePolicyBatchHandler()
+        return DiffusionPolicyBatchHandler()
 
     @pytest.fixture
-    def sample_policy_batch(self):
+    def mock_cfg_diffusion_policy(self):
+        cfg = Mock()
+        cfg.model.type = "diffusion_policy"
+        return cfg
+
+    @pytest.fixture
+    def sample_diffusion_policy_batch(self):
+        """Sample batch data for diffusion policy."""
         return {
             "input_ids": torch.randint(1, 1000, (2, 10)),
-            "pixel_values": torch.randn(2, 3, 64, 64),
-            "actions": torch.randn(2, 10, 7),  # 7 action dimensions
-            "proprioception": torch.randn(2, 10, 8),  # 8 proprioception dimensions
-            "past_mask": torch.ones(2, 10, dtype=torch.float32),
-            "future_mask": torch.ones(2, 10, dtype=torch.float32),
+            "attention_mask": torch.ones(2, 10, dtype=torch.bool),
+            "pixel_values": torch.randn(2, 3, 224, 224),
+            "actions": torch.randn(2, 16, 7),  # batch_size=2, seq_len=16, action_dim=7
+            "past_mask": torch.ones(2, 16, dtype=torch.bool),
+            "future_mask": torch.zeros(2, 16, dtype=torch.bool),
         }
 
-    def test_prepare_inputs_and_targets_returns_none_mask(self, handler, sample_policy_batch):
-        """Test that FakePolicyBatchHandler returns None for mask."""
+    @pytest.fixture
+    def sample_diffusion_policy_batch_no_attention_mask(self):
+        """Sample batch data for diffusion policy without attention mask."""
+        return {
+            "input_ids": torch.randint(1, 1000, (2, 10)),
+            "pixel_values": torch.randn(2, 3, 224, 224),
+            "actions": torch.randn(2, 16, 7),
+            "past_mask": torch.ones(2, 16, dtype=torch.bool),
+            "future_mask": torch.zeros(2, 16, dtype=torch.bool),
+        }
+
+    def test_prepare_inputs_with_attention_mask(
+        self, handler, sample_diffusion_policy_batch, mock_cfg_diffusion_policy
+    ):
+        """Test prepare_inputs with attention mask."""
         device = torch.device("cpu")
         model_dtype = torch.float32
-        cfg = Mock()
 
-        model_inputs, targets, mask = handler.prepare_inputs_and_targets(sample_policy_batch, device, model_dtype, cfg)
+        inputs = handler.prepare_inputs(sample_diffusion_policy_batch, device, model_dtype, mock_cfg_diffusion_policy)
 
-        # Check that mask is None
+        # Check all required fields are present
+        assert "input_ids" in inputs
+        assert "attention_mask" in inputs
+        assert "pixel_values" in inputs
+        assert "actions" in inputs
+        assert "noise" in inputs
+        assert "past_mask" in inputs
+        assert "future_mask" in inputs
+
+        # Check data types
+        assert inputs["input_ids"].dtype == torch.long
+        assert inputs["attention_mask"].dtype == torch.bool
+        assert inputs["pixel_values"].dtype == torch.float32
+        assert inputs["actions"].dtype == torch.float32
+        assert inputs["noise"].dtype == torch.float32
+        assert inputs["past_mask"].dtype == torch.bool
+        assert inputs["future_mask"].dtype == torch.bool
+
+        # Check shapes
+        assert inputs["input_ids"].shape == (2, 10)
+        assert inputs["attention_mask"].shape == (2, 10)
+        assert inputs["pixel_values"].shape == (2, 3, 224, 224)
+        assert inputs["actions"].shape == (2, 16, 7)
+        assert inputs["noise"].shape == (2, 16, 7)  # Same shape as actions
+        assert inputs["past_mask"].shape == (2, 16)
+        assert inputs["future_mask"].shape == (2, 16)
+
+        # Check device
+        assert inputs["input_ids"].device == device
+        assert inputs["pixel_values"].device == device
+        assert inputs["actions"].device == device
+        assert inputs["noise"].device == device
+
+    def test_prepare_inputs_without_attention_mask(
+        self, handler, sample_diffusion_policy_batch_no_attention_mask, mock_cfg_diffusion_policy
+    ):
+        """Test prepare_inputs without attention mask."""
+        device = torch.device("cpu")
+        model_dtype = torch.float32
+
+        inputs = handler.prepare_inputs(
+            sample_diffusion_policy_batch_no_attention_mask, device, model_dtype, mock_cfg_diffusion_policy
+        )
+
+        # Check that attention_mask is None when not provided
+        assert inputs["attention_mask"] is None
+
+        # Check other required fields are still present
+        assert "input_ids" in inputs
+        assert "pixel_values" in inputs
+        assert "actions" in inputs
+        assert "noise" in inputs
+        assert "past_mask" in inputs
+        assert "future_mask" in inputs
+
+    def test_prepare_inputs_and_targets(self, handler, sample_diffusion_policy_batch, mock_cfg_diffusion_policy):
+        """Test prepare_inputs_and_targets method."""
+        device = torch.device("cpu")
+        model_dtype = torch.float32
+
+        # Set seed for reproducible noise
+        torch.manual_seed(42)
+
+        model_inputs, targets, mask = handler.prepare_inputs_and_targets(
+            sample_diffusion_policy_batch, device, model_dtype, mock_cfg_diffusion_policy
+        )
+
+        # Check model inputs structure
+        assert "input_ids" in model_inputs
+        assert "pixel_values" in model_inputs
+        assert "actions" in model_inputs
+        assert "noise" in model_inputs
+        assert "past_mask" in model_inputs
+        assert "future_mask" in model_inputs
+
+        # Check shapes match original batch
+        assert model_inputs["input_ids"].shape == (2, 10)
+        assert model_inputs["pixel_values"].shape == (2, 3, 224, 224)
+        assert model_inputs["actions"].shape == (2, 16, 7)
+        assert model_inputs["noise"].shape == (2, 16, 7)
+
+        # Check targets are computed correctly (noise - actions)
+        assert targets.shape == (2, 16, 7)
+        expected_targets = model_inputs["noise"] - model_inputs["actions"]
+        assert torch.allclose(targets, expected_targets)
+
+        # Check mask - DiffusionPolicyBatchHandler should return None
         assert mask is None
 
-        # Basic checks for inputs and targets
-        assert "input_ids" in model_inputs
-        assert "image" in model_inputs
-        assert "actions" in model_inputs
-        assert targets.shape == (2, 10, 7)
+    def test_compute_loss(self, handler, mock_cfg_diffusion_policy):
+        """Test compute_loss method."""
+        # Mock model outputs (predicted direction)
+        predicted_direction = torch.randn(2, 16, 7)
+        targets = torch.randn(2, 16, 7)
+        loss_fn = get_loss_function("mse", mock_cfg_diffusion_policy)
+
+        loss = handler.compute_loss(predicted_direction, targets, loss_fn, mock_cfg_diffusion_policy)
+
+        assert isinstance(loss, torch.Tensor)
+        assert loss.dim() == 0  # Scalar loss
+        assert not torch.isnan(loss)
+
+    def test_compute_loss_with_mask(self, handler, mock_cfg_diffusion_policy):
+        """Test compute_loss method with mask parameter."""
+        # Mock model outputs and targets
+        predicted_direction = torch.randn(2, 16, 7)
+        targets = torch.randn(2, 16, 7)
+        mask = torch.ones(2, 16, dtype=torch.bool)
+        mask[0, :8] = False  # Mask out first half of first batch
+        loss_fn = get_loss_function("mse", mock_cfg_diffusion_policy)
+
+        loss = handler.compute_loss(predicted_direction, targets, loss_fn, mock_cfg_diffusion_policy, mask=mask)
+
+        assert isinstance(loss, torch.Tensor)
+        assert loss.dim() == 0
+        assert not torch.isnan(loss)
+
+    def test_noise_generation_randomness(self, handler, sample_diffusion_policy_batch, mock_cfg_diffusion_policy):
+        """Test that noise generation produces different values across calls."""
+        device = torch.device("cpu")
+        model_dtype = torch.float32
+
+        # Generate inputs twice without setting seed
+        inputs1 = handler.prepare_inputs(sample_diffusion_policy_batch, device, model_dtype, mock_cfg_diffusion_policy)
+        inputs2 = handler.prepare_inputs(sample_diffusion_policy_batch, device, model_dtype, mock_cfg_diffusion_policy)
+
+        # Noise should be different across calls
+        assert not torch.allclose(inputs1["noise"], inputs2["noise"])
+
+        # But actions should be the same (they come from the batch)
+        assert torch.allclose(inputs1["actions"], inputs2["actions"])
+
+    def test_slice_inputs_for_accumulation(self, handler, sample_diffusion_policy_batch, mock_cfg_diffusion_policy):
+        """Test slicing inputs for gradient accumulation."""
+        device = torch.device("cpu")
+        model_dtype = torch.float32
+
+        inputs = handler.prepare_inputs(sample_diffusion_policy_batch, device, model_dtype, mock_cfg_diffusion_policy)
+
+        # Slice to get first batch element only
+        sliced_inputs = handler.slice_inputs_for_accumulation(inputs, 0, 1)
+
+        # Check that tensor dimensions are correctly sliced
+        assert sliced_inputs["input_ids"].shape == (1, 10)  # batch_size reduced from 2 to 1
+        assert sliced_inputs["pixel_values"].shape == (1, 3, 224, 224)
+        assert sliced_inputs["actions"].shape == (1, 16, 7)
+        assert sliced_inputs["noise"].shape == (1, 16, 7)
+        assert sliced_inputs["past_mask"].shape == (1, 16)
+        assert sliced_inputs["future_mask"].shape == (1, 16)
+
+        # Check that None values pass through unchanged
+        inputs_no_mask = inputs.copy()
+        inputs_no_mask["attention_mask"] = None
+        sliced_inputs_no_mask = handler.slice_inputs_for_accumulation(inputs_no_mask, 0, 1)
+        assert sliced_inputs_no_mask["attention_mask"] is None
 
 
 class TestBatchHandlerFactory:
@@ -589,10 +755,10 @@ class TestBatchHandlerFactory:
         handler = create_batch_handler("stable_diffusion")
         assert isinstance(handler, StableDiffusionBatchHandler)
 
-    def test_create_fake_policy_handler(self):
-        """Test creating fake_policy batch handler."""
-        handler = create_batch_handler("fake_policy")
-        assert isinstance(handler, FakePolicyBatchHandler)
+    def test_create_diffusion_policy_handler(self):
+        """Test creating diffusion_policy batch handler."""
+        handler = create_batch_handler("diffusion_policy")
+        assert isinstance(handler, DiffusionPolicyBatchHandler)
 
     def test_create_handler_unsupported_type(self):
         """Test creating handler for unsupported model type."""

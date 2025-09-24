@@ -110,7 +110,9 @@ def train_one_checkpoint(
                 metrics.stats["forward_time"].update(time.time() - forward_start)
 
                 # Compute loss using batch handler
-                total_loss = batch_handler.compute_loss(outputs, targets, loss, cfg, mask=model_inputs["future_mask"])
+                total_loss = batch_handler.compute_loss(
+                    outputs, targets, loss, cfg, mask=model_inputs.get("future_mask", None)
+                )
 
             # Backward for single-step case.
             backward_start = time.time()
@@ -149,7 +151,7 @@ def train_one_checkpoint(
                     forward_total_time += time.time() - forward_start
 
                     local_loss = batch_handler.compute_loss(
-                        outputs, targets_ii, loss, cfg, mask=model_inputs_ii["future_mask"]
+                        outputs, targets_ii, loss, cfg, mask=model_inputs_ii.get("future_mask", None)
                     )
 
                     # Scale loss by microbatch size ratio

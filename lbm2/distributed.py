@@ -161,11 +161,39 @@ def wrap_fsdp_ddp(model, device, cfg):
         # Initialize FSDP. Use the same seed across workers to ensure reset_parameters is the same across workers.
         random_seed(cfg.hparams.seed, rank=0)
 
+        # Find scalar parameters to ignore (FSDP2 doesn't support scalar parameters)
+        # CLIP model has scalar parameters and needs this.
+        scalar_params = set()
+        scalar_param_names = []
+        for name, param in model.named_parameters():
+            if param.dim() == 0:  # scalar parameter
+                scalar_params.add(param)
+                scalar_param_names.append(name)
+
+        if scalar_param_names:
+            print(f"=> Ignoring {len(scalar_param_names)} scalar parameters for FSDP: {scalar_param_names}")
+
+        # Convert to frozenset to avoid mutation during FSDP operations
+        ignored_params = frozenset(scalar_params) if scalar_params else None
+
         model_block_tuple = get_model_block(cfg.model.type, cfg.model)
         for p in model.modules():
             if isinstance(p, model_block_tuple):
-                FSDP2(p, **fsdp_kwargs)
-        FSDP2(model, **fsdp_kwargs)
+                # Get scalar parameters specific to this module
+                module_scalar_params = set()
+                for param in p.parameters():
+                    if param.dim() == 0 and param in scalar_params:
+                        module_scalar_params.add(param)
+
+                module_ignored_params = frozenset(module_scalar_params) if module_scalar_params else None
+                if module_ignored_params:
+                    FSDP2(p, ignored_params=module_ignored_params, **fsdp_kwargs)
+                else:
+                    FSDP2(p, **fsdp_kwargs)
+
+        # Wrap the entire model with ignored scalar parameters
+        # ignored_params is a frozenset of scalar parameters to ignore if any exist
+        FSDP2(model, ignored_params=ignored_params, **fsdp_kwargs)
 
         print(
             f"After FSDP parameter num: {sum(p.numel() for p in model.parameters()):,} on rank {cfg.distributed.rank}"

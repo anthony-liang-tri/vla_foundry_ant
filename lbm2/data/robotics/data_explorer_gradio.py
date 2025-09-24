@@ -22,13 +22,18 @@ Features:
 """
 
 import argparse
+import os
 
 import fsspec
+import torch
 import yaml
 
 from lbm2.data.robotics.gradio_dataloader import RoboticsDataLoader
 from lbm2.data.robotics.gradio_interface import GradioDataExplorer
+from lbm2.file_utils import load_model_checkpoint
+from lbm2.models import create_model
 from lbm2.params.data_params import LBMDataParams
+from lbm2.params.train_experiment_params import load_experiment_params_from_yaml
 
 
 def main():
@@ -54,44 +59,112 @@ def main():
         action="store_true",
         help="Load samples directly from files instead of using dataloader pipeline",
     )
+    parser.add_argument(
+        "--model-predictions-path",
+        default=None,
+        help="Path to model predictions",
+    )
+
+    parser.add_argument(
+        "--num-inference-steps",
+        type=int,
+        default=100,
+        help="Number of inference steps to run for model predictions",
+    )
+
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="cuda",
+        help="Device to run model predictions on",
+    )
+
+    parser.add_argument(
+        "--dtype",
+        type=str,
+        default="float32",
+        help="Data type to use for model predictions",
+    )
 
     args = parser.parse_args()
 
-    args.dataset_path = args.dataset_path.rstrip("/")
+    if args.dataset_path.endswith("/"):
+        args.dataset_path = args.dataset_path[:-1]
 
     print("🔍 Loading robotics data...")
 
     # Determine loading method
     use_dataloader = not args.load_from_files
 
-    # Load data using direct file access
-    config_path = "lbm2/config_presets/data/lbm_data_params.yaml"
-    with fsspec.open(config_path, "r") as f:
-        config_dict = yaml.safe_load(f)
+    # Create data loader and load samples default
+    if args.model_predictions_path is None:
+        # Load data using direct file access
+        config_path = "lbm2/config_presets/data/lbm_data_params.yaml"
+        with fsspec.open(config_path, "r") as f:
+            config_dict = yaml.safe_load(f)
 
-    # Override fields for the data explorer
-    config_dict.update(
-        {
-            "num_workers": 1,
-            "seed": 42,
-            "processor": "google/paligemma-3b-pt-224",
-            "add_action_token": False,
-            "seq_len": 512,
-            "dataset_statistics": [f"{args.dataset_path}/stats.json"],
-            "dataset_manifest": [f"{args.dataset_path}/manifest.jsonl"],
-            "normalization": {"enabled": False},
-        }
-    )
+        # Override fields for the data explorer
+        config_dict.update(
+            {
+                "num_workers": 1,
+                "seed": 42,
+                "processor": "openai/clip-vit-base-patch32",
+                "add_action_token": True,
+                "seq_len": 2048,
+                "dataset_statistics": [f"{args.dataset_path}/stats.json"],
+                "dataset_manifest": [f"{args.dataset_path}/manifest.jsonl"],
+                "normalization": {"enabled": True},
+            }
+        )
 
-    params = LBMDataParams.from_dict(config_dict)
+        params = LBMDataParams.from_dict(config_dict)
 
-    data_loader = RoboticsDataLoader(
-        params,
-        max_samples=args.max_samples,
-        max_shards=args.max_shards,
-        use_dataloader=use_dataloader,
-    )
-    samples = data_loader.load_samples_auto()
+        data_loader = RoboticsDataLoader(
+            params,
+            max_samples=args.max_samples,
+            max_shards=args.max_shards,
+            use_dataloader=use_dataloader,
+            device=args.device,
+            dtype=args.dtype,
+        )
+        samples = data_loader.load_samples_auto()
+    else:  # Use model and load data using model config
+        if args.model_predictions_path.endswith("/"):
+            model_predictions_path = args.model_predictions_path[:-1] + "/config.yaml"
+        elif not args.model_predictions_path.endswith(".yaml"):
+            model_predictions_path = args.model_predictions_path + "/config.yaml"
+        else:
+            model_predictions_path = args.model_predictions_path
+        cfg = load_experiment_params_from_yaml(model_predictions_path)
+        model = create_model(cfg.model)
+        model.to(args.device, dtype=torch.bfloat16 if args.dtype == "bfloat16" else torch.float32)
+        model.eval()
+        data_loader = RoboticsDataLoader(
+            cfg.data,
+            max_samples=args.max_samples,
+            max_shards=args.max_shards,
+            use_dataloader=use_dataloader,
+            device=args.device,
+            dtype=args.dtype,
+        )
+        # Find the checkpoint file and load the latest
+        checkpoint_file = [
+            f
+            for f in os.listdir(args.model_predictions_path + "/checkpoints")
+            if f.endswith(".pt") and f.startswith("checkpoint_")
+        ]
+        # Sort numerically by extracting the checkpoint number
+        checkpoint_file = sorted(checkpoint_file, key=lambda x: int(x.split("_")[1].split(".")[0]))[-1]
+        print(f"Loading model from {args.model_predictions_path + '/checkpoints/' + checkpoint_file}")
+        # Load checkpoint
+        load_model_checkpoint(model, args.model_predictions_path + "/checkpoints/" + checkpoint_file, cfg.distributed)
+        model.to("cuda")
+        model.eval()
+        object.__setattr__(cfg.hparams, "global_batch_size", 1)
+        object.__setattr__(cfg.hparams, "per_gpu_batch_size", 1)
+        samples = data_loader.load_samples_from_model_predictions(
+            model, num_inference_steps=args.num_inference_steps, cfg=cfg
+        )
 
     if not samples:
         print("❌ No samples loaded!")

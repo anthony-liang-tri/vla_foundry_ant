@@ -1,0 +1,25 @@
+.venv/bin/torchrun --master_port 29502 --nproc_per_node=3 --nnodes=1 lbm2/main.py \
+  --model "include lbm2/config_presets/models/diffusion_policy.yaml" \
+  --model.clip.freeze_text_encoder True \
+  --model.transformer.is_causal True \
+  --data "include lbm2/config_presets/data/lbm_data_params.yaml" \
+  --data.dataset_manifest ["s3://tri-ml-datasets-uw2/vlm_datasets/preprocess_224_shuffled_2/lbm/BimanualPutRedBellPepperInBin/riverway/sim/shards/manifest.jsonl"] \
+  --data.dataset_statistics ["s3://tri-ml-datasets-uw2/vlm_datasets/preprocess_224_shuffled_2/lbm/BimanualPutRedBellPepperInBin/riverway/sim/shards/stats.json"] \
+  --data.image_size 224 \
+  --data.processor openai/clip-vit-base-patch32 \
+  --data.img_num_tokens 64 \
+  --distributed.fsdp True \
+  --distributed.fsdp_pure_bf16 True \
+  --num_checkpoints 3 \
+  --hparams.loss_function masked_mse \
+  --hparams.per_gpu_batch_size 128 \
+  --hparams.global_batch_size 384 \
+  --hparams.grad_clip_norm 1.0 \
+  --hparams.lr 5e-4 \
+  --hparams.lr_cooldown_end 1e-5 \
+  --remote_sync s3://tri-ml-datasets-uw2/lbm2_vla/model_checkpoints/diffusion_policy \
+  --data.seq_len 2048 \
+  --total_train_samples 100000 \
+  --data.allow_multiple_epochs True \
+  --data.num_workers 4 \
+  --wandb True

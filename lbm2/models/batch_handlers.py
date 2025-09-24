@@ -111,10 +111,7 @@ class TransformerBatchHandler(BatchHandler):
         return model_inputs, targets, None
 
     def compute_loss(self, outputs, targets, loss_fn, cfg, mask=None):
-        logits = outputs.logits
-        targets = targets.long()
-        vocab_size = logits.shape[-1]
-        return loss_fn(logits.reshape(-1, vocab_size), targets.reshape(-1), mask=mask)
+        return loss_fn(outputs.logits, targets, mask=mask)
 
 
 class VLMBatchHandler(BatchHandler):
@@ -170,12 +167,7 @@ class VLMBatchHandler(BatchHandler):
         return model_inputs, targets, mask
 
     def compute_loss(self, outputs, targets, loss_fn, cfg, mask=None):
-        logits = outputs.logits
-        targets = targets.long()
-        if mask is not None:
-            targets = targets.masked_fill(mask, -100)
-        vocab_size = logits.shape[-1]
-        return loss_fn(logits.reshape(-1, vocab_size), targets.reshape(-1), mask=mask)
+        return loss_fn(outputs.logits, targets, mask=mask)
 
 
 class StableDiffusionBatchHandler(BatchHandler):
@@ -225,33 +217,40 @@ class StableDiffusionBatchHandler(BatchHandler):
         return loss_fn(predicted_direction, targets, mask=mask)
 
 
-class FakePolicyBatchHandler(BatchHandler):
-    """Handles batch preparation for fake_policy models."""
+class DiffusionPolicyBatchHandler(BatchHandler):
+    """Handles batch preparation for diffusion policy models."""
 
     def prepare_inputs(self, batch, device, model_dtype, cfg):
+        actions = batch["actions"].to(device, non_blocking=True, dtype=model_dtype)
+        noise = torch.randn_like(actions)
+        pixel_values = batch["pixel_values"].to(device, non_blocking=True, dtype=model_dtype)
+        input_ids = batch["input_ids"].to(device, non_blocking=True, dtype=torch.long)
+        attention_mask = (
+            batch["attention_mask"].to(device, non_blocking=True, dtype=torch.bool)
+            if "attention_mask" in batch and batch["attention_mask"] is not None
+            else None
+        )
+        past_mask = batch["past_mask"].to(device, non_blocking=True, dtype=torch.bool)
+        future_mask = batch["future_mask"].to(device, non_blocking=True, dtype=torch.bool)
         inputs = {
-            "input_ids": batch["input_ids"].to(device, non_blocking=True, dtype=torch.long),
+            "input_ids": input_ids,
+            "pixel_values": pixel_values,
+            "actions": actions,
+            "noise": noise,
+            "attention_mask": attention_mask,
+            "past_mask": past_mask,
+            "future_mask": future_mask,
         }
-
-        inputs["image"] = batch["pixel_values"].to(device, non_blocking=True, dtype=model_dtype)
-        inputs["actions"] = batch["actions"].to(device, non_blocking=True, dtype=model_dtype)
-        inputs["proprioception"] = batch["proprioception"].to(device, non_blocking=True, dtype=model_dtype)
-        inputs["past_mask"] = batch["past_mask"].to(device, non_blocking=True, dtype=model_dtype)
-        inputs["future_mask"] = batch["future_mask"].to(device, non_blocking=True, dtype=model_dtype)
-
-        if "attention_mask" in batch and batch["attention_mask"] is not None:
-            inputs["attention_mask"] = batch["attention_mask"].to(device, non_blocking=True, dtype=torch.bool)
-
         return inputs
 
     def prepare_inputs_and_targets(self, batch, device, model_dtype, cfg):
         inputs = self.prepare_inputs(batch, device, model_dtype, cfg)
-        targets = batch["actions"].to(device, non_blocking=True, dtype=model_dtype)
+        targets = inputs["noise"] - inputs["actions"]
         return inputs, targets, None
 
     def compute_loss(self, outputs, targets, loss_fn, cfg, mask=None):
-        # For fake_policy, the model already computes the loss internally
-        return outputs.loss
+        predicted_direction = outputs
+        return loss_fn(predicted_direction, targets, mask=mask)
 
 
 def create_batch_handler(model_type: str) -> BatchHandler:
@@ -270,7 +269,7 @@ def create_batch_handler(model_type: str) -> BatchHandler:
         return VLMBatchHandler()
     elif model_type == "stable_diffusion":
         return StableDiffusionBatchHandler()
-    elif model_type == "fake_policy":
-        return FakePolicyBatchHandler()
+    elif model_type == "diffusion_policy":
+        return DiffusionPolicyBatchHandler()
     else:
         raise ValueError(f"Batch handler not supported for model type: {model_type}")

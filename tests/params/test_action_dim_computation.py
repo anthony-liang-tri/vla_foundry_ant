@@ -27,7 +27,7 @@ def get_args_robotics_auto_action_dim():
         "--data.dataset_weighting",
         ["1.0"],
         "--data.dataset_statistics",
-        ["tests/test_assets/small_lbm_dataset/dataset_statistics.json"],
+        ["tests/test_assets/small_lbm_dataset/stats.json"],
         "--data.action_fields",
         [
             "robot__desired__poses__left::panda__xyz",
@@ -66,7 +66,7 @@ def get_args_robotics_manual_action_dim(action_dim: int):
         "--data.dataset_weighting",
         ["1.0"],
         "--data.dataset_statistics",
-        ["tests/test_assets/small_lbm_dataset/dataset_statistics.json"],
+        ["tests/test_assets/small_lbm_dataset/stats.json"],
         "--data.action_fields",
         [
             "robot__desired__poses__left::panda__xyz",
@@ -148,7 +148,7 @@ def test_action_dim_subset_fields():
         "--data.dataset_weighting",
         ["1.0"],
         "--data.dataset_statistics",
-        ["tests/test_assets/small_lbm_dataset/dataset_statistics.json"],
+        ["tests/test_assets/small_lbm_dataset/stats.json"],
         "--data.action_fields",
         [
             "robot__desired__poses__left::panda__xyz",  # 3D
@@ -186,7 +186,7 @@ def test_action_dim_empty_fields():
         "--data.dataset_weighting",
         ["1.0"],
         "--data.dataset_statistics",
-        ["tests/test_assets/small_lbm_dataset/dataset_statistics.json"],
+        ["tests/test_assets/small_lbm_dataset/stats.json"],
         "--data.action_fields",
         [],  # Empty action fields
         "--data.proprioception_fields",

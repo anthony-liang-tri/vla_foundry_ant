@@ -44,13 +44,13 @@ class TestTransformer:
         assert output.hidden_states[0].shape == (batch_size, seq_len, 128)  # hidden_dim = 128
         assert output.hidden_states[1].shape == (batch_size, seq_len, 128)
 
-    def test_transformer_forward_with_input_embeds(self, transformer):
+    def test_transformer_forward_with_inputs_embeds(self, transformer):
         """Test forward pass with input embeddings instead of input_ids"""
         batch_size, seq_len = 2, 10
-        input_embeds = torch.randn(batch_size, seq_len, 128)
+        inputs_embeds = torch.randn(batch_size, seq_len, 128)
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
-        output = transformer(input_embeds=input_embeds, attention_mask=attention_mask, output_hidden_states=False)
+        output = transformer(inputs_embeds=inputs_embeds, attention_mask=attention_mask, output_hidden_states=False)
 
         assert output.logits.shape == (batch_size, seq_len, 1000)
         assert output.past_key_values is None
@@ -86,10 +86,10 @@ class TestTransformer:
         assert output.hidden_states is None
 
     def test_transformer_forward_error_no_input(self, transformer):
-        """Test that error is raised when neither input_ids nor input_embeds provided"""
+        """Test that error is raised when neither input_ids nor inputs_embeds provided"""
         attention_mask = torch.ones(2, 10, dtype=torch.bool)
 
-        with pytest.raises(ValueError, match="Either input_ids or input_embeds must be provided"):
+        with pytest.raises(ValueError, match="Either input_ids or inputs_embeds must be provided"):
             transformer(attention_mask=attention_mask)
 
     def test_transformer_properties(self, transformer):

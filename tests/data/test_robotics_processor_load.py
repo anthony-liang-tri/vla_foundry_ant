@@ -13,7 +13,7 @@ from lbm2.params.data_params import LBMDataParams
 @pytest.fixture
 def dataset_stats_path():
     """Get the path to the real dataset statistics file."""
-    return os.path.join(os.path.dirname(__file__), "..", "test_assets", "small_lbm_dataset", "dataset_statistics.json")
+    return os.path.join(os.path.dirname(__file__), "..", "test_assets", "small_lbm_dataset", "stats.json")
 
 
 class TestRoboticsProcessorLoad:
@@ -344,7 +344,7 @@ class TestRoboticsNormalizerLoad:
         """Create sample statistics data for testing using real dataset structure."""
         # Load a subset of the real dataset statistics for testing
         dataset_stats_path = os.path.join(
-            os.path.dirname(__file__), "..", "test_assets", "small_lbm_dataset", "dataset_statistics.json"
+            os.path.dirname(__file__), "..", "test_assets", "small_lbm_dataset", "stats.json"
         )
 
         # Load the full statistics file
@@ -416,7 +416,7 @@ class TestRoboticsNormalizerLoad:
 
             yield temp_dir
 
-    def test_robotics_normalizer_load(self, temp_normalization_config_file, temp_stats_file, sample_statistics_data):
+    def test_robotics_normalizer_load(self, temp_normalization_config_file, temp_stats_file, dataset_stats_path):
         """Test RoboticsNormalizer.load() method."""
         # NOTE: There's currently a bug in RoboticsNormalizer.load() where it passes
         # NormalizationParams to the constructor, but the constructor expects an object
@@ -430,7 +430,7 @@ class TestRoboticsNormalizerLoad:
         # Test the intended functionality by creating a proper LBMDataParams config
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write("type: robotics\n")
-            f.write("dataset_statistics: []\n")
+            f.write(f"dataset_statistics: [{dataset_stats_path}]\n")
             f.write("processor: google/paligemma-3b-pt-224\n")
             f.write("proprioception_fields:\n")
             f.write("  - robot__actual__joint_position__right::panda\n")
@@ -452,7 +452,7 @@ class TestRoboticsNormalizerLoad:
         try:
             # Test the corrected functionality: Load LBMDataParams and pass to RoboticsNormalizer
             lbm_config = LBMDataParams.from_file(temp_lbm_config_path)
-            normalizer = RoboticsNormalizer(lbm_config, statistics_path=temp_stats_file)
+            normalizer = RoboticsNormalizer(lbm_config, statistics_path=dataset_stats_path)
 
             # Assertions
             assert isinstance(normalizer, RoboticsNormalizer)
@@ -481,7 +481,7 @@ class TestRoboticsNormalizerLoad:
             if os.path.exists(temp_lbm_config_path):
                 os.unlink(temp_lbm_config_path)
 
-    def test_robotics_normalizer_from_pretrained(self, temp_experiment_dir, sample_statistics_data):
+    def test_robotics_normalizer_from_pretrained(self, temp_experiment_dir, dataset_stats_path):
         """Test RoboticsNormalizer.from_pretrained() method."""
         # NOTE: This also has the same bug as load() - it passes NormalizationParams
         # to constructor instead of LBMDataParams
@@ -495,7 +495,7 @@ class TestRoboticsNormalizerLoad:
         config_path = os.path.join(temp_experiment_dir, "config_normalizer.yaml")
         with open(config_path, "w") as f:
             f.write("type: robotics\n")
-            f.write("dataset_statistics: []\n")
+            f.write(f"dataset_statistics: [{dataset_stats_path}]\n")
             f.write("processor: google/paligemma-3b-pt-224\n")
             f.write("proprioception_fields:\n")
             f.write("  - robot__actual__joint_position__right::panda\n")
@@ -530,12 +530,12 @@ class TestRoboticsNormalizerLoad:
         assert "robot__actual__joint_position__right::panda" in normalizer.stats
         assert "robot__actual__joint_velocity__right::panda" in normalizer.stats
 
-    def test_robotics_normalizer_load_with_disabled_normalization(self, temp_stats_file):
+    def test_robotics_normalizer_load_with_disabled_normalization(self, temp_stats_file, dataset_stats_path):
         """Test RoboticsNormalizer.load() with disabled normalization."""
         # Create LBMDataParams config with normalization disabled
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write("type: robotics\n")
-            f.write("dataset_statistics: []\n")
+            f.write(f"dataset_statistics: [{dataset_stats_path}]\n")
             f.write("processor: google/paligemma-3b-pt-224\n")
             f.write("proprioception_fields: []\n")
             f.write("action_fields: []\n")
@@ -551,12 +551,12 @@ class TestRoboticsNormalizerLoad:
         try:
             # Test the corrected functionality: Load LBMDataParams and create normalizer
             lbm_config = LBMDataParams.from_file(temp_config_path)
-            normalizer = RoboticsNormalizer(lbm_config, statistics_path=temp_stats_file)
+            normalizer = RoboticsNormalizer(lbm_config, statistics_path=dataset_stats_path)
 
             # Assertions
             assert isinstance(normalizer, RoboticsNormalizer)
             assert normalizer.config.normalization.enabled is False
-            assert normalizer.stats is None
+            assert normalizer.stats is not None  # even with disabled normalization, stats are loaded
             assert normalizer.enabled is False
 
         finally:

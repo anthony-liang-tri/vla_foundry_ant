@@ -1,5 +1,6 @@
 import torch.nn as nn
 from transformers import AutoConfig, AutoModelForCausalLM, AutoModelForVision2Seq
+from transformers.models.clip.modeling_clip import CLIPEncoderLayer, CLIPTextModel, CLIPVisionTransformer
 
 from lbm2.models.batch_handlers import create_batch_handler
 from lbm2.models.diffusion.noise_scheduler import NoiseSchedulerDDPM
@@ -7,7 +8,8 @@ from lbm2.models.diffusion.noise_scheduler_diffusers import FlowMatchingSchedule
 from lbm2.models.diffusion.stable_diffusion import StableDiffusion
 from lbm2.models.diffusion.unet import CrossAttentionBlock, ResnetBlock, SelfAttentionBlock, UNet
 from lbm2.models.diffusion.unet_diffusers import UNetDiffusers
-from lbm2.models.fake_policy import FakePolicy
+from lbm2.models.diffusion_policy.clip_hf import CLIPHF
+from lbm2.models.diffusion_policy.diffusion_policy import DiffusionPolicy
 from lbm2.models.transformer import Transformer, TransformerBlock
 from lbm2.models.transformer_hf import TransformerHF
 from lbm2.models.vit import ViT
@@ -15,6 +17,16 @@ from lbm2.models.vit_hf import ViTHF
 from lbm2.models.vlm import VLM
 from lbm2.models.vlm_hf import VLMHF
 from lbm2.params.model_params import ModelParams
+
+
+def create_noise_scheduler(model_params: ModelParams):
+    if model_params.use_diffusers_scheduler:
+        noise_scheduler = NoiseSchedulerDDPMDiffusers(model_params.noise_scheduler)
+    elif model_params.use_flow_matching_scheduler:
+        noise_scheduler = FlowMatchingScheduler(model_params.noise_scheduler)
+    else:
+        noise_scheduler = NoiseSchedulerDDPM(model_params.noise_scheduler)
+    return noise_scheduler
 
 
 def create_model(model_params: ModelParams):
@@ -34,15 +46,15 @@ def create_model(model_params: ModelParams):
         model = VLMHF(model_params)
     elif model_params.type == "stable_diffusion":
         unet = UNetDiffusers(model_params.unet) if model_params.use_diffusers_unet else UNet(model_params.unet)
-        if model_params.use_diffusers_scheduler:
-            noise_scheduler = NoiseSchedulerDDPMDiffusers(model_params.noise_scheduler)
-        elif model_params.use_flow_matching_scheduler:
-            noise_scheduler = FlowMatchingScheduler(model_params.noise_scheduler)
-        else:
-            noise_scheduler = NoiseSchedulerDDPM(model_params.noise_scheduler)
+        noise_scheduler = create_noise_scheduler(model_params)
         model = StableDiffusion(model_params, noise_scheduler, unet)
-    elif model_params.type == "fake_policy":
-        model = FakePolicy(model_params)
+    elif model_params.type == "clip_hf":
+        model = CLIPHF(model_params)
+    elif model_params.type == "diffusion_policy":
+        clip = create_model(model_params.clip)
+        transformer = create_model(model_params.transformer)
+        noise_scheduler = create_noise_scheduler(model_params)
+        model = DiffusionPolicy(model_params, clip, transformer, noise_scheduler)
     else:
         raise ValueError(f"{model_params.type} not supported!")
     return model
@@ -102,5 +114,11 @@ def get_model_block(model_type: str, model_params: ModelParams):
             )
         else:
             return (ResnetBlock, SelfAttentionBlock, CrossAttentionBlock)
+    elif model_type == "diffusion_policy":
+        transformer_block = get_model_block(model_params.transformer.type, model_params.transformer)
+        return (
+            *transformer_block,
+            CLIPEncoderLayer,
+        )
     else:
         raise ValueError(f"get_model_block (used for FSDP) not supported for {model_type}")

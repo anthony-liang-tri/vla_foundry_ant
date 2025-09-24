@@ -7,3 +7,4 @@ max_seq_len: 128
 vocab_size: 50432
 post_embed_norm: false
 weight_tying: false
+is_causal: true
