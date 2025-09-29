@@ -1,9 +1,9 @@
 from lbm2.params.model_params import ViTParams
 
 
-def compute_num_image_tokens(vit_cfg: ViTParams) -> int:
-    num_patches = (vit_cfg.img_size // vit_cfg.patch_size) ** 2
-    scale = vit_cfg.projector_pixel_shuffle_factor
+def compute_num_image_tokens(vit_params: ViTParams) -> int:
+    num_patches = (vit_params.img_size // vit_params.patch_size) ** 2
+    scale = vit_params.projector_pixel_shuffle_factor
     return num_patches // (scale * scale)
 
 

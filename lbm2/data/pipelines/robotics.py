@@ -72,18 +72,18 @@ def extract_robotics_fields(sample, language_instruction_types=None):
 
 
 class LBMPipeline(BaseWebDatasetPipeline):
-    def __init__(self, modality, data_configs: LBMDataParams, batch_size: int):
-        super().__init__(modality, data_configs, batch_size)
+    def __init__(self, modality, data_params: LBMDataParams, batch_size: int):
+        super().__init__(modality, data_params, batch_size)
         os.environ["TOKENIZERS_PARALLELISM"] = "true"
-        self.data_configs = data_configs
-        self.robotics_processor = RoboticsProcessor(data_configs)
+        self.data_params = data_params
+        self.robotics_processor = RoboticsProcessor(data_params)
 
     def __len__(self):
         """Return the number of samples in the dataset (cached)."""
         if not hasattr(self, "_cached_num_samples"):
             num_samples = 0
-            for i in range(len(self.data_configs.dataset_manifest)):
-                num_samples += self.data_configs.dataset_manifest[i]["num_sequences"]
+            for i in range(len(self.data_params.dataset_manifest)):
+                num_samples += self.data_params.dataset_manifest[i]["num_sequences"]
             self._cached_num_samples = num_samples
         return self._cached_num_samples
 
@@ -91,9 +91,9 @@ class LBMPipeline(BaseWebDatasetPipeline):
         pipeline = [
             wds.SimpleShardList(datastring),
             deterministic_shuffle(
-                bufsize=self.data_configs.shuffle_buffer_size,
-                initial=self.data_configs.shuffle_initial,
-                seed=self.data_configs.seed,
+                bufsize=self.data_params.shuffle_buffer_size,
+                initial=self.data_params.shuffle_initial,
+                seed=self.data_params.seed,
                 epoch=checkpoint_num,
             ),
             wds.split_by_node,
@@ -103,22 +103,22 @@ class LBMPipeline(BaseWebDatasetPipeline):
             wds.select(filter_robotics_sample),
             wds.map(
                 lambda sample: extract_robotics_fields(
-                    sample, language_instruction_types=self.data_configs.language_instruction_types
+                    sample, language_instruction_types=self.data_params.language_instruction_types
                 ),
                 handler=log_and_continue,
             ),
             wds.batched(self.batch_size, partial=False),
             wds.map(
                 lambda batch: self.robotics_processor.process_inputs(
-                    batch, num_images=self.data_configs.num_images, max_text_seq_len=None
+                    batch, num_images=self.data_params.num_images, max_text_seq_len=None
                 ),
                 handler=log_and_continue,
             ),
             wds.map(
                 lambda batch: self.robotics_processor.add_action_and_proprioception_fields(
                     batch,
-                    action_fields=self.data_configs.action_fields,
-                    proprioception_fields=self.data_configs.proprioception_fields,
+                    action_fields=self.data_params.action_fields,
+                    proprioception_fields=self.data_params.proprioception_fields,
                 ),
                 handler=log_and_continue,
             ),

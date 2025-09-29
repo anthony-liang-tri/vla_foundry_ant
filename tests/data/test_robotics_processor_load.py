@@ -132,15 +132,15 @@ class TestRoboticsProcessorLoad:
 
         # Assertions
         assert isinstance(processor, RoboticsProcessor)
-        assert isinstance(processor.data_configs, LBMDataParams)
-        assert processor.data_configs.type == "robotics"
-        assert processor.data_configs.processor == "google/paligemma-3b-pt-224"
-        assert processor.data_configs.proprioception_fields == [
+        assert isinstance(processor.data_params, LBMDataParams)
+        assert processor.data_params.type == "robotics"
+        assert processor.data_params.processor == "google/paligemma-3b-pt-224"
+        assert processor.data_params.proprioception_fields == [
             "robot__actual__joint_position__right::panda",
             "robot__actual__joint_velocity__right::panda",
         ]
-        assert processor.data_configs.action_fields == ["robot__actual__poses__right::panda__xyz"]
-        assert processor.data_configs.normalization.enabled is True
+        assert processor.data_params.action_fields == ["robot__actual__poses__right::panda__xyz"]
+        assert processor.data_params.normalization.enabled is True
 
         # Verify processor was initialized
         mock_get_processor.assert_called_once()
@@ -171,9 +171,9 @@ class TestRoboticsProcessorLoad:
 
         # Assertions
         assert isinstance(processor, RoboticsProcessor)
-        assert isinstance(processor.data_configs, LBMDataParams)
-        assert processor.data_configs.type == "robotics"
-        assert processor.data_configs.processor == "google/paligemma-3b-pt-224"
+        assert isinstance(processor.data_params, LBMDataParams)
+        assert processor.data_params.type == "robotics"
+        assert processor.data_params.processor == "google/paligemma-3b-pt-224"
 
         # Verify processor was initialized
         mock_get_processor.assert_called_once()
@@ -217,7 +217,7 @@ class TestRoboticsProcessorLoad:
 
             # Assertions
             assert isinstance(processor, RoboticsProcessor)
-            assert processor.data_configs.normalization.enabled is False
+            assert processor.data_params.normalization.enabled is False
             assert processor.normalizer is None
 
         finally:
@@ -272,8 +272,8 @@ class TestRoboticsProcessorLoad:
 
             # Assertions
             assert isinstance(processor, RoboticsProcessor)
-            assert isinstance(processor.data_configs, LBMDataParams)
-            assert processor.data_configs.type == "robotics"
+            assert isinstance(processor.data_params, LBMDataParams)
+            assert processor.data_params.type == "robotics"
 
             # Verify the processor was initialized
             mock_get_processor.assert_called_once()

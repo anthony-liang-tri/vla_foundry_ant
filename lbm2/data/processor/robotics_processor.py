@@ -15,20 +15,20 @@ class RoboticsProcessor:
     It also handles image loading and processing.
     """
 
-    def __init__(self, data_configs: LBMDataParams):
-        self.data_configs = data_configs
-        self.vlm_processor = get_processor(data_configs)
+    def __init__(self, data_params: LBMDataParams):
+        self.data_params = data_params
+        self.vlm_processor = get_processor(data_params)
 
         # Normalize contained entirely within the processor
-        self.statistics = [json_load(s) for s in data_configs.dataset_statistics]
-        if self.data_configs.normalization.enabled:
-            self.normalizer = RoboticsNormalizer(dataset_config=self.data_configs, statistics_data=self.statistics)
+        self.statistics = [json_load(s) for s in data_params.dataset_statistics]
+        if self.data_params.normalization.enabled:
+            self.normalizer = RoboticsNormalizer(dataset_config=self.data_params, statistics_data=self.statistics)
         else:
             self.normalizer = None
 
     def save(self, experiment_path: str):
         with open(os.path.join(experiment_path, "config_processor.yaml"), "w") as f:
-            draccus.dump(self.data_configs, f)
+            draccus.dump(self.data_params, f)
 
     @classmethod
     def load(cls, config_path: str):
