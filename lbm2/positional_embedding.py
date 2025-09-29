@@ -1,10 +1,15 @@
-# inspired from: https://github.com/facebookresearch/xformers/blob/748c159096d4f9fcfe3eaf22801e5aed4777210b/xformers/components/positional_embedding/rotary.py # noqa: E501
 from typing import Tuple
 
 import torch
 
 # Disable torch.compile/dynamo for cache updates to avoid in-graph buffer overwrites
 from torch._dynamo import disable as _dynamo_disable  # type: ignore
+
+from lbm2.model_utils import Float32Module
+
+
+def identity_with_cast(q, k, v, offset: int = 0):
+    return q.to(v.dtype), k.to(v.dtype), v
 
 
 def rotate_half(x):
@@ -92,3 +97,16 @@ class RotaryWithCast(RotaryEmbedding):
     def forward(self, q, k, v, offset: int = 0):
         q, k = super().forward(q, k, offset)
         return q.to(v.dtype), k.to(v.dtype), v
+
+
+def get_pos_embed(model_params):
+    head_dim = model_params.hidden_dim // model_params.n_heads
+    if model_params.positional_embedding_type == "rotary":
+        return RotaryWithCast(head_dim, model_params.max_seq_len)
+    elif model_params.positional_embedding_type == "rotary_float32":
+        # TODO: Currently results in some slowdowns. Need to investigate.
+        return Float32Module(RotaryWithCast(head_dim, model_params.max_seq_len), cast_outputs_back=True)
+    elif model_params.positional_embedding_type == "none":
+        return identity_with_cast
+    else:
+        raise RuntimeError(f"Unknown positional embedding type {model_params.positional_embedding_type}")

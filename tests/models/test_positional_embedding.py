@@ -3,9 +3,14 @@ from dataclasses import dataclass
 import pytest
 import torch
 
-from lbm2.positional_embedding import get_pos_embed
-from lbm2.positional_embedding.none import identity_with_cast
-from lbm2.positional_embedding.rotary import RotaryEmbedding, RotaryWithCast, apply_rotary_pos_emb, rotate_half
+from lbm2.positional_embedding import (
+    RotaryEmbedding,
+    RotaryWithCast,
+    apply_rotary_pos_emb,
+    get_pos_embed,
+    identity_with_cast,
+    rotate_half,
+)
 
 
 @dataclass
