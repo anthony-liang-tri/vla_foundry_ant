@@ -193,6 +193,9 @@ def main():
         dataloader = get_wds_dataloader(datastrings, num_samples_per_dataset, checkpoint_num, cfg)
         if is_master(cfg):
             dataloader.save_configs(experiment_path)  # Save any necessary dataloader/pipeline configs.
+            if cfg.remote_sync:
+                remote_sync(experiment_path, os.path.join(cfg.remote_sync, experiment_name))
+
         prev_step = global_step
 
         if cfg.distributed.use_distributed:
