@@ -137,38 +137,6 @@ class TestMaskedMSELoss:
         assert loss.dim() == 0
         assert loss.item() >= 0
 
-    def test_mask_shorter_than_loss(self):
-        """Test when mask is shorter than the loss sequence."""
-        batch_size, seq_len, dim = 2, 10, 3
-        predicted = torch.randn(batch_size, seq_len, dim)
-        target = torch.randn(batch_size, seq_len, dim)
-
-        # Shorter mask
-        mask_len = 5
-        mask = torch.ones(batch_size, mask_len)
-        mask[0, -1] = 0  # Mask out last position
-
-        loss = masked_mse_loss(predicted, target, mask=mask)
-
-        assert loss.dim() == 0
-        assert loss.item() >= 0
-
-    def test_mask_longer_than_loss(self):
-        """Test when mask is longer than the loss sequence."""
-        batch_size, seq_len, dim = 2, 5, 3
-        predicted = torch.randn(batch_size, seq_len, dim)
-        target = torch.randn(batch_size, seq_len, dim)
-
-        # Longer mask
-        mask_len = 10
-        mask = torch.ones(batch_size, mask_len)
-        mask[0, -3:] = 0  # Mask out last 3 positions
-
-        loss = masked_mse_loss(predicted, target, mask=mask)
-
-        assert loss.dim() == 0
-        assert loss.item() >= 0
-
     def test_all_masked_out(self):
         """Test when all elements are masked out."""
         batch_size, seq_len, dim = 2, 5, 3
@@ -291,16 +259,11 @@ class TestGetLossFunction:
         assert loss > 0
         assert loss.dim() == 0
 
-        # With mse loss the mask is accepted as an input but ignored
-        mask = torch.zeros(2)
-        loss2 = loss_fn(predicted, target, mask=mask)
-        assert loss == loss2
-
     def test_masked_mse_loss(self):
         """Test masked MSE loss creation."""
         hparams = Mock()
 
-        loss_fn = get_loss_function("masked_mse", hparams)
+        loss_fn = get_loss_function("mse", hparams)
 
         # Test that it works
         predicted = torch.randn(2, 3, 4)
@@ -335,7 +298,7 @@ class TestGetLossFunction:
         hparams = Mock()
         hparams.z_loss_coefficient = 0.0
 
-        loss_types = ["cross_entropy", "mse", "masked_mse"]
+        loss_types = ["cross_entropy", "mse"]
 
         for loss_type in loss_types:
             loss_fn = get_loss_function(loss_type, hparams)

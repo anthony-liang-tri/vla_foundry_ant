@@ -11,7 +11,7 @@
   --distributed.fsdp True \
   --distributed.fsdp_pure_bf16 True \
   --num_checkpoints 3 \
-  --hparams.loss_function masked_mse \
+  --hparams.loss_function mse \
   --hparams.per_gpu_batch_size 128 \
   --hparams.global_batch_size 384 \
   --hparams.grad_clip_norm 1.0 \

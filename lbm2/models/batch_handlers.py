@@ -249,8 +249,19 @@ class DiffusionPolicyBatchHandler(BatchHandler):
         return inputs, targets, None
 
     def compute_loss(self, outputs, targets, loss_fn, cfg, mask=None):
+        # Reshape inputs and masks to match shapes
         predicted_direction = outputs
-        return loss_fn(predicted_direction, targets, mask=mask)
+        target_direction = targets
+
+        # Depending on the input strategy (past given in the same sequence or separate),
+        # the mask may be shorter or longer than the loss
+        if mask is not None:
+            seq_len = min(mask.shape[1], predicted_direction.shape[1])
+            predicted_direction = predicted_direction[:, -seq_len:]
+            target_direction = target_direction[:, -seq_len:]
+            mask = mask[:, -seq_len:]
+
+        return loss_fn(input=predicted_direction, target=target_direction, mask=mask)
 
 
 def create_batch_handler(model_type: str) -> BatchHandler:

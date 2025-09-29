@@ -30,35 +30,31 @@ class CrossEntropyLossWithZLoss(CrossEntropyLoss):
             return super().forward(input, target)
 
 
-def masked_mse_loss(predicted_direction, target_direction, mask=None):
+def masked_mse_loss(input: Tensor, target: Tensor, mask=None) -> Tensor:
     """
-    Compute the flow matching loss with masking.
+    Compute the MSE loss with masking. If no mask is provided, all values are considered valid.
 
     Args:
-        predicted_direction: Predicted flow direction
-        target_direction: Target flow direction from flow_sample
-        mask: Mask of valid actions (should be broadcastable to the shape of predicted_direction)
+        input: Predicted values
+        target: Ground truth values
+        mask: Mask of valid actions. Either same shape as input, or same shape as input without last dimension.
 
     Returns:
-        Masked MSE loss between predicted and target directions
+        Masked MSE loss between inputs and targets
     """
     if mask is None:
-        return torch.nn.functional.mse_loss(predicted_direction, target_direction)
+        mask = torch.ones_like(input)
+    elif mask.shape == input.shape:
+        pass
+    elif mask.shape == input.shape[:-1]:
+        mask = mask.unsqueeze(-1).expand_as(input)
+    else:
+        raise ValueError(f"Mask shape {mask.shape} is not compatible with input shape {input.shape}")
 
-    # Compute element-wise squared error
-    loss = (predicted_direction - target_direction) ** 2
-
-    # Apply mask (assume mask is 1 for valid, 0 for invalid)
-    # Depending on the input strategy (past given in the same sequence or separate),
-    # the mask may be shorter or longer than the loss
-    seq_len = min(mask.shape[1], loss.shape[1])
-    loss = loss[:, -seq_len:] * mask[:, -seq_len:, None]
-
-    # Compute mean over masked elements only
-    # Add a small epsilon to avoid division by zero
-    dim_shape = loss.shape[-1]
-    mean_loss = loss.sum() / (mask.sum() * dim_shape + 1e-8)
-    return mean_loss
+    if mask.sum() == 0:
+        return torch.tensor(0.0)
+    else:
+        return torch.nn.functional.mse_loss(input, target, weight=mask)
 
 
 def _ignore_mask(loss_fn):
@@ -77,8 +73,6 @@ def get_loss_function(loss_function_type, hparams):
     if loss_function_type == "cross_entropy":
         loss = CrossEntropyLossWithZLoss(hparams.z_loss_coefficient)
     elif loss_function_type == "mse":
-        loss = _ignore_mask(torch.nn.MSELoss())
-    elif loss_function_type == "masked_mse":
         loss = masked_mse_loss
     else:
         raise ValueError(f"Loss function {loss_function_type} not supported.")
