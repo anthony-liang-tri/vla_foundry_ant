@@ -1,6 +1,6 @@
 type: diffusion_policy
-transformer: !include transformer_100m.yaml
-transformer:
+transformer: 
+  <<: !include transformer_100m.yaml
   is_causal: false
 clip:
   hf_pretrained: openai/clip-vit-base-patch32
