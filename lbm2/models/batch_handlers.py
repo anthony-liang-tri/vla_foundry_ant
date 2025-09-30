@@ -124,12 +124,7 @@ class VLMBatchHandler(BatchHandler):
         }
 
         if "pixel_values" in batch:
-            if cfg.model.type == "vlm_hf":
-                # HF VLM models expect pixel_values, not image
-                inputs["pixel_values"] = batch["pixel_values"].to(device, non_blocking=True, dtype=model_dtype)
-            else:
-                # Custom VLM models expect image parameter
-                inputs["image"] = batch["pixel_values"].to(device, non_blocking=True, dtype=model_dtype)
+            inputs["pixel_values"] = batch["pixel_values"].to(device, non_blocking=True, dtype=model_dtype)
 
         if "attention_mask" in batch and batch["attention_mask"] is not None:
             inputs["attention_mask"] = batch["attention_mask"].to(device, non_blocking=True, dtype=torch.bool)
@@ -152,12 +147,7 @@ class VLMBatchHandler(BatchHandler):
         model_inputs = {"input_ids": input_ids, "output_hidden_states": False}
 
         if "pixel_values" in batch:
-            if cfg.model.type == "vlm_hf":
-                # HF VLM models expect pixel_values, not image
-                model_inputs["pixel_values"] = batch["pixel_values"].to(device, non_blocking=True, dtype=model_dtype)
-            else:
-                # Custom VLM models expect image parameter
-                model_inputs["image"] = batch["pixel_values"].to(device, non_blocking=True, dtype=model_dtype)
+            model_inputs["pixel_values"] = batch["pixel_values"].to(device, non_blocking=True, dtype=model_dtype)
 
         if attention_mask is not None:
             model_inputs["attention_mask"] = attention_mask

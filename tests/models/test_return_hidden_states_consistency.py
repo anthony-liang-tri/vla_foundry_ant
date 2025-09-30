@@ -91,17 +91,21 @@ class TestReturnHiddenStatesConsistency:
         input_ids[0, 0:num_image_tokens] = vlm.model_params.image_token_id
         input_ids[1, 0:num_image_tokens] = vlm.model_params.image_token_id
 
-        image = torch.randn(batch_size, 1, 3, vit_cfg.img_size, vit_cfg.img_size)
+        pixel_values = torch.randn(batch_size, 1, 3, vit_cfg.img_size, vit_cfg.img_size)
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
         # Test without hidden states
-        result = vlm(input_ids=input_ids, image=image, attention_mask=attention_mask, output_hidden_states=False)
+        result = vlm(
+            input_ids=input_ids, pixel_values=pixel_values, attention_mask=attention_mask, output_hidden_states=False
+        )
         assert result.logits is not None
         assert result.past_key_values is None
         assert result.hidden_states is None
 
         # Test with hidden states
-        result = vlm(input_ids=input_ids, image=image, attention_mask=attention_mask, output_hidden_states=True)
+        result = vlm(
+            input_ids=input_ids, pixel_values=pixel_values, attention_mask=attention_mask, output_hidden_states=True
+        )
         assert result.logits is not None
         assert result.past_key_values is None
         assert result.hidden_states is not None
@@ -139,7 +143,7 @@ class TestReturnHiddenStatesConsistency:
         batch_size, seq_len = 2, num_image_tokens + 10
         input_ids = torch.randint(0, 1000, (batch_size, seq_len))
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
-        image = torch.randn(batch_size, 3, vit_cfg.img_size, vit_cfg.img_size)
+        pixel_values = torch.randn(batch_size, 3, vit_cfg.img_size, vit_cfg.img_size)
 
         # Set image tokens for VLM
         input_ids_vlm = input_ids.clone()
@@ -150,8 +154,24 @@ class TestReturnHiddenStatesConsistency:
         models_and_inputs = [
             (transformer, {"input_ids": input_ids, "attention_mask": attention_mask, "use_cache": False}),
             (transformer_hf, {"input_ids": input_ids, "attention_mask": attention_mask, "use_cache": False}),
-            (vlm, {"input_ids": input_ids_vlm, "image": image, "attention_mask": attention_mask, "use_cache": False}),
-            (vlm_hf, {"input_ids": input_ids, "image": image, "attention_mask": attention_mask, "use_cache": False}),
+            (
+                vlm,
+                {
+                    "input_ids": input_ids_vlm,
+                    "pixel_values": pixel_values,
+                    "attention_mask": attention_mask,
+                    "use_cache": False,
+                },
+            ),
+            (
+                vlm_hf,
+                {
+                    "input_ids": input_ids,
+                    "pixel_values": pixel_values,
+                    "attention_mask": attention_mask,
+                    "use_cache": False,
+                },
+            ),
         ]
 
         for model, inputs in models_and_inputs:

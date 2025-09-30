@@ -219,13 +219,12 @@ class TestVLMBatchHandler:
 
         assert "input_ids" in inputs
         assert "attention_mask" in inputs
-        assert "image" in inputs  # Custom VLM uses 'image'
-        assert "pixel_values" not in inputs
+        assert "pixel_values" in inputs
         assert "output_hidden_states" in inputs
         assert inputs["input_ids"].dtype == torch.long
         assert inputs["attention_mask"].dtype == torch.bool
-        assert inputs["image"].dtype == torch.float32
-        assert inputs["image"].shape == (2, 3, 224, 224)
+        assert inputs["pixel_values"].dtype == torch.float32
+        assert inputs["pixel_values"].shape == (2, 3, 224, 224)
 
     def test_prepare_inputs_vlm_hf_with_image(self, handler, sample_vlm_batch, mock_cfg_vlm_hf):
         """Test prepare_inputs for VLM HF with image."""
@@ -236,8 +235,7 @@ class TestVLMBatchHandler:
 
         assert "input_ids" in inputs
         assert "attention_mask" in inputs
-        assert "pixel_values" in inputs  # HF VLM uses 'pixel_values'
-        assert "image" not in inputs
+        assert "pixel_values" in inputs
         assert inputs["pixel_values"].dtype == torch.float32
         assert inputs["pixel_values"].shape == (2, 3, 224, 224)
 
@@ -265,10 +263,10 @@ class TestVLMBatchHandler:
         # Check model inputs
         assert "input_ids" in model_inputs
         assert "attention_mask" in model_inputs
-        assert "image" in model_inputs
+        assert "pixel_values" in model_inputs
         assert "output_hidden_states" in model_inputs
         assert model_inputs["input_ids"].shape == (2, 8)
-        assert model_inputs["image"].shape == (2, 3, 224, 224)
+        assert model_inputs["pixel_values"].shape == (2, 3, 224, 224)
 
         # Check targets
         assert targets.shape == (2, 8)

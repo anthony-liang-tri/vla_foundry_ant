@@ -94,10 +94,12 @@ class TestVLM:
         input_ids[0, 0:num_image_tokens] = vlm.model_params.image_token_id
         input_ids[1, 0:num_image_tokens] = vlm.model_params.image_token_id
 
-        image = torch.randn(batch_size, 3, vit_cfg.img_size, vit_cfg.img_size)
+        pixel_values = torch.randn(batch_size, 3, vit_cfg.img_size, vit_cfg.img_size)
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
-        output = vlm(input_ids=input_ids, image=image, attention_mask=attention_mask, output_hidden_states=False)
+        output = vlm(
+            input_ids=input_ids, pixel_values=pixel_values, attention_mask=attention_mask, output_hidden_states=False
+        )
 
         assert output.logits.shape == (batch_size, seq_len, 1000)  # vocab_size = 1000
         assert output.past_key_values is None
@@ -115,12 +117,16 @@ class TestVLM:
         input_ids[0, 0:num_image_tokens] = vlm.model_params.image_token_id
         input_ids[1, 0:num_image_tokens] = vlm.model_params.image_token_id
 
-        image = torch.randn(batch_size, 3, vit_cfg.img_size, vit_cfg.img_size)
+        pixel_values = torch.randn(batch_size, 3, vit_cfg.img_size, vit_cfg.img_size)
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
         vlm.eval()
         output = vlm(
-            input_ids=input_ids, image=image, attention_mask=attention_mask, output_hidden_states=True, use_cache=True
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            attention_mask=attention_mask,
+            output_hidden_states=True,
+            use_cache=True,
         )
 
         assert output.logits.shape == (batch_size, seq_len, 1000)
@@ -140,11 +146,11 @@ class TestVLM:
         wrong = max(1, num_image_tokens // 2)
         input_ids[0, 0:wrong] = vlm.model_params.image_token_id  # mismatch count
 
-        image = torch.randn(batch_size, 1, 3, vit_cfg.img_size, vit_cfg.img_size)
+        pixel_values = torch.randn(batch_size, 1, 3, vit_cfg.img_size, vit_cfg.img_size)
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
         with pytest.raises(AssertionError):
-            vlm(input_ids=input_ids, image=image, attention_mask=attention_mask)
+            vlm(input_ids=input_ids, pixel_values=pixel_values, attention_mask=attention_mask)
 
     def test_vlm_properties(self, vlm):
         """Test VLM properties"""
@@ -198,10 +204,12 @@ class TestVLMHF:
 
         batch_size, seq_len = 2, 10
         input_ids = torch.randint(0, 1000, (batch_size, seq_len))
-        image = torch.randn(batch_size, 3, 224, 224)
+        pixel_values = torch.randn(batch_size, 3, 224, 224)
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
-        output = vlm(input_ids=input_ids, image=image, attention_mask=attention_mask, output_hidden_states=False)
+        output = vlm(
+            input_ids=input_ids, pixel_values=pixel_values, attention_mask=attention_mask, output_hidden_states=False
+        )
 
         assert output.logits.shape == (batch_size, seq_len, 1000)
         assert output.past_key_values is None
@@ -232,10 +240,12 @@ class TestVLMHF:
 
         batch_size, seq_len = 2, 10
         input_ids = torch.randint(0, 1000, (batch_size, seq_len))
-        image = torch.randn(batch_size, 3, 224, 224)
+        pixel_values = torch.randn(batch_size, 3, 224, 224)
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
-        output = vlm(input_ids=input_ids, image=image, attention_mask=attention_mask, output_hidden_states=True)
+        output = vlm(
+            input_ids=input_ids, pixel_values=pixel_values, attention_mask=attention_mask, output_hidden_states=True
+        )
 
         assert output.logits.shape == (batch_size, seq_len, 1000)
         assert output.past_key_values is None
@@ -267,10 +277,12 @@ class TestVLMHF:
 
         batch_size, seq_len = 2, 10
         input_ids = torch.randint(0, 1000, (batch_size, seq_len))
-        image = torch.randn(batch_size, 3, 224, 224)
+        pixel_values = torch.randn(batch_size, 3, 224, 224)
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
-        output = vlm(input_ids=input_ids, image=image, attention_mask=attention_mask, output_hidden_states=True)
+        output = vlm(
+            input_ids=input_ids, pixel_values=pixel_values, attention_mask=attention_mask, output_hidden_states=True
+        )
 
         assert output.logits.shape == (batch_size, seq_len, 1000)
         assert output.past_key_values is None

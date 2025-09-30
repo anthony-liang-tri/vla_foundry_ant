@@ -67,11 +67,15 @@ class TestHFModelOutputs:
 
         batch_size, seq_len = 2, 10
         input_ids = torch.randint(0, 1000, (batch_size, seq_len))
-        image = torch.randn(batch_size, 3, 224, 224)
+        pixel_values = torch.randn(batch_size, 3, 224, 224)
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
         outputs = vlm.forward(
-            input_ids=input_ids, image=image, attention_mask=attention_mask, output_hidden_states=False, use_cache=False
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            attention_mask=attention_mask,
+            output_hidden_states=False,
+            use_cache=False,
         )
 
         # Verify it returns a standard HF output object
@@ -88,11 +92,15 @@ class TestHFModelOutputs:
 
         batch_size, seq_len = 2, 10
         input_ids = torch.randint(0, 1000, (batch_size, seq_len))
-        image = torch.randn(batch_size, 3, 224, 224, dtype=torch.bfloat16)
+        pixel_values = torch.randn(batch_size, 3, 224, 224, dtype=torch.bfloat16)
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
         outputs = vlm.forward(
-            input_ids=input_ids, image=image, attention_mask=attention_mask, output_hidden_states=True, use_cache=False
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            attention_mask=attention_mask,
+            output_hidden_states=True,
+            use_cache=False,
         )
 
         # Verify it returns a standard HF output object

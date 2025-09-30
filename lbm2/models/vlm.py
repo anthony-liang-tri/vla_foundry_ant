@@ -73,10 +73,12 @@ class VLM(TransformerBase):
         self.transformer = transformer
         self.projection = ModalityProjector(model_params.vit, model_params.transformer.hidden_dim)
 
-    def forward(self, input_ids, image, attention_mask=None, output_hidden_states=False, use_cache=False, **kwargs):
+    def forward(
+        self, input_ids, pixel_values, attention_mask=None, output_hidden_states=False, use_cache=False, **kwargs
+    ):
         # image shape [bsz, 3, image_size, image_size]
         # input_ids and attention_mask should already allot tokens for the image
-        image_embd = self.vit(image)
+        image_embd = self.vit(pixel_values)
         image_embd = self.projection(image_embd)  # [bsz, 16*16, lm_hidden_dim]
         token_embd = self.transformer.embeddings(input_ids).to(image_embd.dtype)
         special_image_mask = (input_ids == self.model_params.image_token_id).unsqueeze(-1)
@@ -114,7 +116,7 @@ class VLM(TransformerBase):
     def generate(
         self,
         input_ids: torch.Tensor,
-        image: torch.Tensor,
+        pixel_values: torch.Tensor,
         attention_mask: torch.Tensor,
         max_new_tokens: int = 20,
     ) -> torch.Tensor:
@@ -127,7 +129,7 @@ class VLM(TransformerBase):
         attn_mask = attention_mask.clone()
 
         for _ in range(max_new_tokens):
-            outputs = self.forward(input_ids=generated, image=image, attention_mask=attn_mask)
+            outputs = self.forward(input_ids=generated, pixel_values=pixel_values, attention_mask=attn_mask)
             last_output = outputs.logits[:, -1, :]
             next_token = torch.argmax(last_output, dim=-1, keepdim=True)
             generated = torch.cat([generated, next_token], dim=-1)
