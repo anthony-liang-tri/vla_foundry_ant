@@ -4,6 +4,7 @@ import random
 import numpy as np
 import webdataset as wds
 
+from lbm2.data.augmentations.base import Augmentations
 from lbm2.data.pipelines.base import BaseWebDatasetPipeline
 from lbm2.data.processor.robotics_processor import RoboticsProcessor
 from lbm2.data.utils import deterministic_shuffle, log_and_continue
@@ -77,6 +78,7 @@ class LBMPipeline(BaseWebDatasetPipeline):
         os.environ["TOKENIZERS_PARALLELISM"] = "true"
         self.data_params = data_params
         self.robotics_processor = RoboticsProcessor(data_params)
+        self.augmentations = Augmentations(data_params.augmentation)
 
     def __len__(self):
         """Return the number of samples in the dataset (cached)."""
@@ -101,6 +103,10 @@ class LBMPipeline(BaseWebDatasetPipeline):
             wds.tarfile_to_samples(handler=log_and_continue),
             wds.decode("pilrgb", handler=log_and_continue),
             wds.select(filter_robotics_sample),
+            wds.map(
+                lambda sample: self.augmentations.apply_transforms(sample),
+                handler=log_and_continue,
+            ),
             wds.map(
                 lambda sample: extract_robotics_fields(
                     sample, language_instruction_types=self.data_params.language_instruction_types

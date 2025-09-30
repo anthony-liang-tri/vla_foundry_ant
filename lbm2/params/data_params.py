@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 
 from lbm2.data.processor import get_processor
 from lbm2.params.base_data_params import DataParams
+from lbm2.params.robotics.augmentation_params import DataAugmentationParams
 from lbm2.params.robotics.normalization_params import FieldNormalizationParams, NormalizationParams
 
 
@@ -39,6 +40,7 @@ class ImageCaptionDataParams(DataParams):
     processor_loaded = None
     img_num_tokens: int = field(default=256)
     image_size: int = field(default=224)
+    augmentation: DataAugmentationParams = field(default_factory=DataAugmentationParams)
 
     def init_shared_attributes(self, cfg):
         super().init_shared_attributes(cfg)
@@ -81,6 +83,7 @@ class LBMDataParams(DataParams):
     action_fields: list[str] = field(default_factory=list)
     exclude_fields: list[str] = field(default_factory=list)
     normalization: NormalizationParams = field(default_factory=NormalizationParams)
+    augmentation: DataAugmentationParams = field(default_factory=DataAugmentationParams)
 
     action_dim: int = field(default=None)
 

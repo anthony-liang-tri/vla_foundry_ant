@@ -51,6 +51,7 @@ class RoboticsDataLoader:
         use_dataloader: bool = True,
         device: str = "cuda",
         dtype: torch.dtype = torch.float32,
+        augmentation_params: Optional = None,
     ):
         self.params = params
         self.max_samples = max_samples
@@ -59,6 +60,7 @@ class RoboticsDataLoader:
         self.samples = []
         self.device = device  # Used for model predictions only
         self.dtype = torch.bfloat16 if dtype == "bfloat16" else torch.float32
+        self.augmentation_params = augmentation_params
         # Initialize normalizer for denormalization if normalization is enabled
         self.normalizer = None
         if self.params.normalization.enabled:
@@ -148,6 +150,7 @@ class RoboticsDataLoader:
         # Create a copy of params with the correct batch size for the data explorer
         cfg.data = self.params
         cfg.hparams = SimpleNamespace(global_batch_size=1)
+        cfg.augmentations = self.augmentation_params
 
         # Load all samples
         num_samples = -1
@@ -181,7 +184,10 @@ class RoboticsDataLoader:
 
         # Create dataloader
         dataloader_info = get_wds_dataloader(
-            datastrings=datastrings, num_samples_per_dataset=num_samples_list_per_dataset, checkpoint_num=0, cfg=cfg
+            datastrings=datastrings,
+            num_samples_per_dataset=num_samples_list_per_dataset,
+            checkpoint_num=0,
+            cfg=cfg,
         )
 
         dataloader = dataloader_info.dataloader
@@ -234,6 +240,7 @@ class RoboticsDataLoader:
             # Create a copy of params with the correct batch size for the data explorer
             cfg.data = self.params
             cfg.hparams = SimpleNamespace(global_batch_size=1)
+            cfg.augmentations = self.augmentation_params
 
         # Load all samples
         num_samples = -1

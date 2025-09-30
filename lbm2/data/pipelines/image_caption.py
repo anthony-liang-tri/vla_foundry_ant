@@ -1,5 +1,6 @@
 import webdataset as wds
 
+from lbm2.data.augmentations.base import Augmentations
 from lbm2.data.pipelines.base import BaseWebDatasetPipeline
 from lbm2.data.processor import get_processor
 from lbm2.data.utils import deterministic_shuffle, log_and_continue
@@ -16,6 +17,7 @@ class ImageCaptionPipeline(BaseWebDatasetPipeline):
     def __init__(self, modality: str, data_params: DataParams, batch_size: int):
         super().__init__(modality, data_params, batch_size)
         self.processor = get_processor(data_params)
+        self.augmentations = Augmentations(data_params.augmentation)
 
     def create_pipeline(self, datastring: str, checkpoint_num: int):
         pipeline = [
@@ -31,6 +33,10 @@ class ImageCaptionPipeline(BaseWebDatasetPipeline):
             wds.tarfile_to_samples(handler=log_and_continue),
             wds.decode("pilrgb", handler=log_and_continue),
             wds.select(filter_no_caption_or_no_image),
+            wds.map(
+                lambda sample: self.augmentations.apply_transforms(sample),
+                handler=log_and_continue,
+            ),
             wds.rename(image="jpg;png;jpeg;webp", text="txt"),
             wds.map(lambda sample: {**sample, "text": "<image> " + sample["text"]}),
             wds.batched(self.batch_size, partial=False),

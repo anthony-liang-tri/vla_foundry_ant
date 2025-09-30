@@ -15,6 +15,7 @@ import yaml
 from lbm2.data.dataloader import get_wds_dataloader
 from lbm2.data.robotics.data_explorer_gradio import RoboticsDataLoader
 from lbm2.params.data_params import LBMDataParams
+from lbm2.params.robotics.augmentation_params import DataAugmentationParams, ImageAugmentationParams
 
 
 @pytest.fixture(autouse=True)
@@ -86,12 +87,16 @@ def mock_config():
         hparams = SimpleNamespace()
         hparams.global_batch_size = batch_size
 
+        # No augmentations
+        augmentations = DataAugmentationParams(image=ImageAugmentationParams())
+
         # Create main config
         cfg = SimpleNamespace()
         cfg.distributed = distributed
         cfg.data = data_params
         cfg.vit = vit
         cfg.hparams = hparams
+        cfg.augmentations = augmentations
         return cfg
 
     return _create_config
@@ -533,12 +538,15 @@ def test_normalization(dataset_path, manifest_data, mock_config):
         hparams = SimpleNamespace()
         hparams.global_batch_size = 1
 
+        augmentations = DataAugmentationParams(image=ImageAugmentationParams())
+
         # Create main config
         cfg = SimpleNamespace()
         cfg.distributed = distributed
         cfg.data = data_params
         cfg.vit = vit
         cfg.hparams = hparams
+        cfg.augmentations = augmentations
 
         return cfg
 
@@ -707,12 +715,15 @@ def test_normalization_consistency(dataset_path, manifest_data, mock_config):
     vit.img_size = 128
     vit.img_num_tokens = 256
 
+    augmentations = DataAugmentationParams(image=ImageAugmentationParams())
+
     # Create main config
     cfg = SimpleNamespace()
     cfg.distributed = distributed
     cfg.data = data_params
     cfg.vit = vit
     cfg.hparams = hparams
+    cfg.augmentations = augmentations
 
     # Create two separate dataloaders with same config
     num_samples_per_dataset = [sum(entry["num_sequences"] for entry in test_shards)]

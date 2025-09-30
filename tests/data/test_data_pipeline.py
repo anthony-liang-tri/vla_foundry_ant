@@ -496,6 +496,8 @@ class TestImageCaptionPipeline:
         data_params.seq_len = 128
         data_params.seed = 42
         data_params.processor = "google/paligemma-3b-pt-224"
+        data_params.augmentation = Mock()
+        data_params.augmentation.enabled = False
         return data_params
 
     def test_filter_no_caption_or_no_image(self):
@@ -671,6 +673,8 @@ class TestPipelineCreation:
             cfg.data.processor = "google/paligemma-3b-pt-224"
             cfg.vit = Mock()
             cfg.vit.image_size = 224
+            cfg.augmentation = Mock()
+            cfg.augmentation.enabled = False
 
         return cfg
 
