@@ -5,10 +5,12 @@ Pytest tests for augmentation_params.py.
 
 import numpy as np
 import pytest
+import torch
 from PIL import Image
 from torchvision import transforms
 
 from lbm2.data.augmentations.base import Augmentations
+from lbm2.data.augmentations.random_ratio_crop import RandomRatioCrop
 from lbm2.params.robotics.augmentation_params import (
     ColorJitterParams,
     DataAugmentationParams,
@@ -340,6 +342,184 @@ def test_apply_transforms_method():
     # Verify that non-image data was not modified
     assert transformed_sample["non_image_data"] == "some text"
     assert transformed_sample["metadata"] == {"key": "value"}
+
+
+# Tests for RandomRatioCrop
+
+
+@pytest.mark.parametrize(
+    "ratio,should_raise",
+    [
+        (0.8, False),  # Valid single ratio
+        ((0.7, 0.9), False),  # Valid tuple ratio
+        ([0.7, 0.9], False),  # Valid list ratio
+        (1.0, False),  # Valid edge case (100%)
+        ((1.0, 1.0), False),  # Valid edge case (100% both)
+        (0.0, True),  # Invalid: ratio cannot be 0
+        (-0.5, True),  # Invalid: negative ratio
+        (1.5, True),  # Invalid: ratio > 1
+        ((0.5, 1.5), True),  # Invalid: width ratio > 1
+        ((1.5, 0.5), True),  # Invalid: height ratio > 1
+        ((0, 0.5), True),  # Invalid: height ratio = 0
+        ((0.5, 0), True),  # Invalid: width ratio = 0
+    ],
+)
+def test_random_ratio_crop_initialization(ratio, should_raise):
+    """Test RandomRatioCrop initialization with various ratio values."""
+    if should_raise:
+        with pytest.raises(ValueError):
+            RandomRatioCrop(ratio)
+    else:
+        transform = RandomRatioCrop(ratio)
+        if isinstance(ratio, (tuple, list)):
+            assert transform.ratio_h == ratio[0]
+            assert transform.ratio_w == ratio[1]
+        else:
+            assert transform.ratio_h == ratio
+            assert transform.ratio_w == ratio
+
+
+def test_random_ratio_crop_pil_image():
+    """Test RandomRatioCrop with PIL images."""
+    transform = RandomRatioCrop(0.5)
+    img = create_dummy_image(size=(200, 100))  # width=200, height=100
+
+    cropped_img = transform(img)
+
+    # Check that the cropped image has the expected size
+    expected_width = int(200 * 0.5)  # 100
+    expected_height = int(100 * 0.5)  # 50
+    assert cropped_img.size == (expected_width, expected_height)
+    assert isinstance(cropped_img, Image.Image)
+
+
+def test_random_ratio_crop_pil_image_different_ratios():
+    """Test RandomRatioCrop with PIL images using different ratios for height and width."""
+    transform = RandomRatioCrop((0.7, 0.9))
+    img = create_dummy_image(size=(200, 100))  # width=200, height=100
+
+    cropped_img = transform(img)
+
+    # Check that the cropped image has the expected size
+    expected_width = int(200 * 0.9)  # 180
+    expected_height = int(100 * 0.7)  # 70
+    assert cropped_img.size == (expected_width, expected_height)
+
+
+def test_random_ratio_crop_torch_tensor():
+    """Test RandomRatioCrop with PyTorch tensors."""
+    transform = RandomRatioCrop(0.5)
+    # Create a tensor with shape (C, H, W) = (3, 100, 200)
+    img_tensor = torch.rand(3, 100, 200)
+
+    cropped_tensor = transform(img_tensor)
+
+    # Check that the cropped tensor has the expected shape
+    expected_height = int(100 * 0.5)  # 50
+    expected_width = int(200 * 0.5)  # 100
+    assert cropped_tensor.shape == (3, expected_height, expected_width)
+    assert isinstance(cropped_tensor, torch.Tensor)
+
+
+def test_random_ratio_crop_torch_tensor_different_ratios():
+    """Test RandomRatioCrop with PyTorch tensors using different ratios."""
+    transform = RandomRatioCrop((0.7, 0.9))
+    # Create a tensor with shape (C, H, W) = (3, 100, 200)
+    img_tensor = torch.rand(3, 100, 200)
+
+    cropped_tensor = transform(img_tensor)
+
+    # Check that the cropped tensor has the expected shape
+    expected_height = int(100 * 0.7)  # 70
+    expected_width = int(200 * 0.9)  # 180
+    assert cropped_tensor.shape == (3, expected_height, expected_width)
+
+
+def test_random_ratio_crop_randomness():
+    """Test that RandomRatioCrop produces different crops on multiple calls."""
+    transform = RandomRatioCrop(0.5)
+    img = create_dummy_image(size=(200, 200))
+
+    # Apply the transform multiple times
+    crops = [transform(img) for _ in range(10)]
+
+    # Convert to numpy arrays for comparison
+    crop_arrays = [np.array(crop) for crop in crops]
+
+    # Check that at least some crops are different (very high probability)
+    # We compare the first pixel of each crop
+    first_pixels = [arr[0, 0].tolist() for arr in crop_arrays]
+    unique_first_pixels = len(set(map(tuple, first_pixels)))
+
+    # With 10 random crops, we expect at least 2 different first pixels
+    # (unless we're extremely unlucky)
+    assert unique_first_pixels >= 2, "RandomRatioCrop should produce varied crops"
+
+
+def test_random_ratio_crop_full_image():
+    """Test RandomRatioCrop with ratio=1.0 (should return same size)."""
+    transform = RandomRatioCrop(1.0)
+    img = create_dummy_image(size=(200, 100))
+
+    cropped_img = transform(img)
+
+    # Should return the same size image
+    assert cropped_img.size == img.size
+
+
+def test_random_ratio_crop_repr():
+    """Test the __repr__ method of RandomRatioCrop."""
+    transform = RandomRatioCrop(0.8)
+    repr_str = repr(transform)
+    assert "RandomRatioCrop" in repr_str
+    assert "ratio_h=0.8" in repr_str
+    assert "ratio_w=0.8" in repr_str
+
+    transform2 = RandomRatioCrop((0.7, 0.9))
+    repr_str2 = repr(transform2)
+    assert "ratio_h=0.7" in repr_str2
+    assert "ratio_w=0.9" in repr_str2
+
+
+def test_random_ratio_crop_maintains_content():
+    """Test that RandomRatioCrop maintains image content (crops from original)."""
+    transform = RandomRatioCrop(0.5)
+
+    # Create a distinctive image with a gradient pattern
+    img_array = np.zeros((100, 200, 3), dtype=np.uint8)
+    for i in range(100):
+        for j in range(200):
+            img_array[i, j] = [i * 2, j, 128]  # Distinctive pattern
+    img = Image.fromarray(img_array)
+
+    cropped_img = transform(img)
+    cropped_array = np.array(cropped_img)
+
+    # Check that all pixel values in the crop are within the range of the original
+    assert cropped_array.min() >= img_array.min()
+    assert cropped_array.max() <= img_array.max()
+
+    # Check dimensions
+    assert cropped_img.size == (100, 50)  # width=100, height=50
+
+
+def test_random_ratio_crop_with_torch_different_channels():
+    """Test RandomRatioCrop with tensors of different channel counts."""
+    # Test with 1 channel (grayscale)
+    transform = RandomRatioCrop(0.5)
+    img_tensor_1ch = torch.rand(1, 100, 200)
+    cropped_1ch = transform(img_tensor_1ch)
+    assert cropped_1ch.shape == (1, 50, 100)
+
+    # Test with 3 channels (RGB)
+    img_tensor_3ch = torch.rand(3, 100, 200)
+    cropped_3ch = transform(img_tensor_3ch)
+    assert cropped_3ch.shape == (3, 50, 100)
+
+    # Test with 4 channels (RGBA)
+    img_tensor_4ch = torch.rand(4, 100, 200)
+    cropped_4ch = transform(img_tensor_4ch)
+    assert cropped_4ch.shape == (4, 50, 100)
 
 
 if __name__ == "__main__":

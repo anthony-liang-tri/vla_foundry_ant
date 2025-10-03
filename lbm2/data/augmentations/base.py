@@ -1,5 +1,6 @@
 from torchvision import transforms
 
+from lbm2.data.augmentations.random_ratio_crop import RandomRatioCrop
 from lbm2.params.robotics.augmentation_params import DataAugmentationParams
 
 
@@ -18,7 +19,12 @@ class Augmentations:
         # Add random crop augmentation
         if (random_crop := self.augmentation_params.image.get("random_crop", None)) and random_crop.enabled:
             crop_h, crop_w = random_crop.shape
-            self.transforms.append(transforms.RandomCrop((crop_h, crop_w)))
+            if crop_h <= 1.0 and crop_w <= 1.0:
+                self.transforms.append(RandomRatioCrop((crop_h, crop_w)))
+            elif crop_h > 1.0 and crop_w > 1.0:
+                self.transforms.append(transforms.RandomCrop((crop_h, crop_w)))
+            else:
+                raise ValueError(f"Invalid crop shape: {random_crop.shape}")
 
         # Add color jitter augmentation
         if (color_jitter := self.augmentation_params.image.get("color_jitter", None)) and color_jitter.enabled:

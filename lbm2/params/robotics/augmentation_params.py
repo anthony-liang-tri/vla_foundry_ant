@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Tuple
+from typing import Tuple, Union
 
 from lbm2.params.base_params import BaseParams
 
@@ -43,12 +43,12 @@ class RandomCropParams(BaseAugmentationParams):
     Configuration for random crop parameters
     """
 
-    shape: Tuple[int, int] = field(default=(224, 224))
+    shape: Tuple[Union[int, float], Union[int, float]] = field(default=(224, 224))
 
     def __post_init__(self):
         h, w = self.shape
-        if not (isinstance(h, int) and isinstance(w, int) and h > 0 and w > 0):
-            raise ValueError("random_crop_shape must be a tuple of positive integers (H, W).")
+        if not (isinstance(h, (int, float)) and isinstance(w, (int, float)) and h > 0 and w > 0):
+            raise ValueError("random_crop_shape must be a tuple of positive integers or floats (H, W).")
 
 
 @dataclass(frozen=True)
