@@ -68,7 +68,7 @@ setup_commands:
     # Symlink everything in /tmp because the root filesystem is too small.
     - mv /home/ubuntu/.cache /tmp/.cache && ln -s /tmp/.cache /home/ubuntu/.cache
     - mkdir -p lbm2/.venv && mv lbm2/.venv /tmp/.venv && ln -s /tmp/.venv lbm2/.venv
-    - cd lbm2 && UV_PROJECT_ENVIRONMENT=/home/ubuntu/lbm2/.venv uv sync
+    - cd lbm2 && UV_PROJECT_ENVIRONMENT=/home/ubuntu/lbm2/.venv uv sync --group=preprocessing
     - echo 'export HF_TOKEN=$(cat /home/ubuntu/.cache/huggingface/token)' >> ~/.bashrc
     - echo 'source /home/ubuntu/lbm2/.venv/bin/activate' >> ~/.bashrc
 

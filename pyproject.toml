@@ -17,9 +17,8 @@ dependencies = [
     "nest-asyncio",
     "accelerate==1.7.0",
     "sentencepiece==0.2.0",
-    "matplotlib",
+    "matplotlib>=3.10.5",
     "tqdm>=4.67.1",
-    "gradio>=5.43.1",
     "scipy>=1.15.3",
     "ruff>=0.12.0",
     "pytest>=8.4.1",
@@ -28,9 +27,6 @@ dependencies = [
     "einops>=0.8.1",
     "draccus>=0.11.5",
     "ray>=2.48.0",
-    "gradio>=5.43.1",
-    "plotly>=6.3.0",
-    "imageio[ffmpeg]>=2.37.0",
 ]
 
 [dependency-groups]
@@ -42,18 +38,20 @@ sagemaker = [
 
 # Add `--group preprocessing` to install preprocessing deps.
 preprocessing = [
-    "huggingface-hub>=0.34.4",
     "opencv-python>=4.11.0.86",
     "datasets>=2.14.4",
     "pyarrow==20.0.0",
     "av>=15.0.0",
-    "matplotlib>=3.10.5",
-    "tqdm>=4.67.1",
-    "scipy>=1.15.3",
-    "numpy>=1.26",
     "Pillow>=10.0.0",
     "PyYAML>=6.0.1",
     "pyturbojpeg>=1.8.2",
+    "imageio[ffmpeg]>=2.37.0",
+]
+
+# Add `--group visualization` to install visualization deps.
+visualization = [
+    "gradio>=5.43.1",
+    "plotly>=6.3.0",
 ]
 
 # Add `--group inference` to install runtime deps for GRPC policy serving and robot gym

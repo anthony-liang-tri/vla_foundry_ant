@@ -1,3 +1,11 @@
+# Dependencies
+The scripts in this folder use certain preprocessing-specific dependencies, which we have isolated from the training code. 
+
+To run these scripts locally, use
+```
+uv sync --groups=preprocessing
+```
+
 # Using Ray
 Many scripts use Ray for parallelization.
 
@@ -21,7 +29,7 @@ ray up lbm2/data/scripts/ray_cluster_configs.yaml
 ray attach lbm2/data/scripts/ray_cluster_configs.yaml
 ```
 
-4. Run your script inside the cluster. Note that ray scripts currently do **not** work well with `uv run`. The requirements can still be used with `source .venv/bin/activate`.
+4. Run your script inside the cluster. Note that ray scripts currently do **not** work well with `uv run`. The requirements can still be used with `uv sync --group=preprocessing` (automatically done in `ray_cluster_configs.yaml`) and `source .venv/bin/activate`.
 ```bash
 # [optional] Start a persistent terminal like tmux
 cd lbm2
