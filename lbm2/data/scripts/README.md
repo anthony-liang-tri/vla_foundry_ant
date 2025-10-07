@@ -56,6 +56,11 @@ This assumes that the HF dataset is already downloaded to S3 (see above section)
 python lbm2/data/scripts/preprocessing/preprocess_captionshf_to_tar.py --cluster ray --input_path s3://tri-ml-datasets/scratch/sedrick.keh/downloads/ --output_path s3://tri-ml-datasets/scratch/sedrick.keh/downloads2/ --url_col images --caption_col texts --save_additional_columns metadata
 ```
 
+# Converting a text Hugging Face dataset to tar shards
+```bash
+python lbm2/data/scripts/preprocessing/preprocess_untokenized_to_tar.py --s3_input_path s3://tri-ml-datasets/hf_datasets/fineweb-edu-350BT --s3_output_path s3://tri-ml-datasets/lbm2_datasets/text/fineweb-edu-350BT --tmp_dir /tmp/finewebshards
+```
+
 # Converting LeRobot to tar shards
 This assumes that the HF dataset is already downloaded to S3.
 
