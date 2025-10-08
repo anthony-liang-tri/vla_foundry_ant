@@ -133,6 +133,24 @@ def list_directory(dir_path):
     return os.listdir(dir_path)
 
 
+def check_directory_has_files_with_prefix(dir_path, prefix):
+    """Check if directory exists and contains files with the given prefix.
+
+    Args:
+        dir_path: Path to directory (can be S3 or local)
+        prefix: Prefix to check for in filenames
+
+    Returns:
+        List of files matching the prefix, or empty list if directory doesn't exist
+    """
+    try:
+        files = list_directory(dir_path)
+        return [f for f in files if f.startswith(prefix)]
+    except (RuntimeError, FileNotFoundError, OSError):
+        # Directory doesn't exist or can't be accessed
+        return []
+
+
 def _is_dir_s3_ls(dir_path):
     """Check if an S3 path is a directory by trying to list it."""
     try:

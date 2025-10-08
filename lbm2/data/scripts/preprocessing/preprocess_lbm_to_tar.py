@@ -24,7 +24,7 @@ from lbm2.data.scripts.preprocessing.image_utils import image_to_bytes, init_jpe
 from lbm2.data.scripts.preprocessing.params import PreprocessParams, SampleMetadata
 from lbm2.data.scripts.preprocessing.preprocess_statistics import StreamingDatasetStatisticsRayActor
 from lbm2.data.scripts.preprocessing.utils import create_processing_metadata, discover_episodes_targeted
-from lbm2.file_utils import list_directory
+from lbm2.file_utils import check_directory_has_files_with_prefix, list_directory
 
 
 def upload_dict_to_s3(dict_data: Dict, s3_path: str, file_name: str):
@@ -650,6 +650,32 @@ def main():
     # Validate required paths
     assert cfg.source_episodes is not None, "--source_episodes is required (or set in config_path)"
     assert cfg.output_dir is not None, "--output_dir is required (or set in config_path)"
+
+    # Safety check: ensure output directory doesn't have existing preprocessing outputs
+    existing_episode_files = check_directory_has_files_with_prefix(cfg.output_dir, "episode_")
+    if existing_episode_files:
+        error_msg = (
+            f"\n{'=' * 80}\n"
+            f"❌ ERROR: Output directory is not empty!\n"
+            f"\n"
+            f"The output directory contains {len(existing_episode_files)} existing files starting with 'episode_':\n"
+            f"  Output directory: {cfg.output_dir}\n"
+            f"  Example files: {', '.join(existing_episode_files[:5])}"
+            f"{'...' if len(existing_episode_files) > 5 else ''}\n"
+            f"\n"
+            f"Pre-processing in a non-empty output directory is unsafe because Phase 2 of the\n"
+            f"preprocessing will gather ALL 'episode_*' files (old and new) together when creating\n"
+            f"shards, resulting in mixed data from different preprocessing runs.\n"
+            f"\n"
+            f"To fix this issue:\n"
+            f"  1. Use a new, empty output directory, OR\n"
+            f"  2. Delete/move the existing files from the output directory\n"
+            f"\n"
+            f"For S3 paths, you can clean the directory with:\n"
+            f"  aws s3 rm --recursive {cfg.output_dir}\n"
+            f"{'=' * 80}\n"
+        )
+        raise RuntimeError(error_msg)
 
     # Initialize Ray
     if cfg.ray_address:

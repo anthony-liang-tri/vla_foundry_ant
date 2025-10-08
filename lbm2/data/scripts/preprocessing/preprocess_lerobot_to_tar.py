@@ -21,7 +21,14 @@ import numpy as np
 import pyarrow.parquet as pq
 import ray
 
-from lbm2.file_utils import copy_to_temp_file, file_exists, json_load, jsonl_load, list_directory
+from lbm2.file_utils import (
+    check_directory_has_files_with_prefix,
+    copy_to_temp_file,
+    file_exists,
+    json_load,
+    jsonl_load,
+    list_directory,
+)
 
 
 def make_json_serializable(obj):
@@ -745,6 +752,31 @@ def copy_stats_to_s3(dataset_path, s3_output_path):
 
 def main():
     args = parse_args()
+
+    # Safety check: ensure output directory doesn't have existing preprocessing outputs
+    existing_shard_files = check_directory_has_files_with_prefix(args.s3_output_path, "shard_")
+    if existing_shard_files:
+        error_msg = (
+            f"\n{'=' * 80}\n"
+            f"❌ ERROR: Output directory is not empty!\n"
+            f"\n"
+            f"The output directory contains {len(existing_shard_files)} existing files starting with 'shard_':\n"
+            f"  Output directory: {args.s3_output_path}\n"
+            f"  Example files: {', '.join(existing_shard_files[:5])}"
+            f"{'...' if len(existing_shard_files) > 5 else ''}\n"
+            f"\n"
+            f"Pre-processing in a non-empty output directory is unsafe because it may overwrite\n"
+            f"existing shard files or mix data from different preprocessing runs.\n"
+            f"\n"
+            f"To fix this issue:\n"
+            f"  1. Use a new, empty output directory, OR\n"
+            f"  2. Delete/move the existing files from the output directory\n"
+            f"\n"
+            f"For S3 paths, you can clean the directory with:\n"
+            f"  aws s3 rm --recursive {args.s3_output_path}\n"
+            f"{'=' * 80}\n"
+        )
+        raise RuntimeError(error_msg)
 
     # Initialize Ray cluster
     if args.ray_address:
