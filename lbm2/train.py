@@ -100,74 +100,50 @@ def train_one_checkpoint(
         # Prepare model inputs and targets (including chunking) using batch handler
         model_inputs, targets, mask = batch_handler.prepare_inputs_and_targets(batch, device, model_dtype, cfg)
 
-        if cfg.hparams.accum_freq == 1:
-            # No gradient accumulation
+        forward_total_time = 0
+        backward_total_time = 0
+        total_lm_loss = 0
+        for ii in range(cfg.hparams.accum_freq):
+            # Don't sync gradients until the final microbatch for FSDP.
+            if cfg.distributed.fsdp:
+                is_final_accum = ii == cfg.hparams.accum_freq - 1
+                model.set_requires_gradient_sync(is_final_accum)
+                model.set_requires_all_reduce(is_final_accum)
+                model.set_reshard_after_backward(is_final_accum)
+                model.set_is_last_backward(is_final_accum)
+
             with autocast():
                 forward_start = time.time()
+                # Slice the microbatch for this accumulation step.
+                start_idx = ii * cfg.hparams.per_gpu_batch_size
+                end_idx = (ii + 1) * cfg.hparams.per_gpu_batch_size
+                model_inputs_ii = batch_handler.slice_inputs_for_accumulation(model_inputs, start_idx, end_idx)
+
+                if model_inputs_ii["input_ids"].shape[0] == 0:
+                    break
+
+                targets_ii = targets[start_idx:end_idx]
 
                 # Forward pass - same for all model types!
-                outputs = model(**model_inputs)
-                metrics.stats["forward_time"].update(time.time() - forward_start)
+                outputs = model(**model_inputs_ii)
+                forward_total_time += time.time() - forward_start
 
-                # Compute loss using batch handler
-                total_loss = batch_handler.compute_loss(
-                    outputs, targets, loss, cfg, mask=model_inputs.get("future_mask", None)
+                local_loss = batch_handler.compute_loss(
+                    outputs, targets_ii, loss, cfg, mask=model_inputs_ii.get("future_mask", None)
                 )
 
-            # Backward for single-step case.
+                # Scale loss by microbatch size ratio
+                local_loss = local_loss * (model_inputs_ii["input_ids"].shape[0] / model_inputs["input_ids"].shape[0])
+
+            # Backward per microbatch.
             backward_start = time.time()
-            total_loss.backward()
-            metrics.stats["backward_time"].update(time.time() - backward_start)
+            local_loss.backward()
+            backward_total_time += time.time() - backward_start
+            total_lm_loss += local_loss
 
-        else:
-            # Gradient accumulation path.
-
-            forward_total_time = 0
-            backward_total_time = 0
-            total_lm_loss = 0
-            for ii in range(cfg.hparams.accum_freq):
-                # Don't sync gradients until the final microbatch for FSDP.
-                if cfg.distributed.fsdp:
-                    is_final_accum = ii == cfg.hparams.accum_freq - 1
-                    model.set_requires_gradient_sync(is_final_accum)
-                    model.set_requires_all_reduce(is_final_accum)
-                    model.set_reshard_after_backward(is_final_accum)
-                    model.set_is_last_backward(is_final_accum)
-
-                with autocast():
-                    forward_start = time.time()
-                    # Slice the microbatch for this accumulation step.
-                    start_idx = ii * cfg.hparams.per_gpu_batch_size
-                    end_idx = (ii + 1) * cfg.hparams.per_gpu_batch_size
-                    model_inputs_ii = batch_handler.slice_inputs_for_accumulation(model_inputs, start_idx, end_idx)
-
-                    if model_inputs_ii["input_ids"].shape[0] == 0:
-                        break
-
-                    targets_ii = targets[start_idx:end_idx]
-
-                    # Forward pass - same for all model types!
-                    outputs = model(**model_inputs_ii)
-                    forward_total_time += time.time() - forward_start
-
-                    local_loss = batch_handler.compute_loss(
-                        outputs, targets_ii, loss, cfg, mask=model_inputs_ii.get("future_mask", None)
-                    )
-
-                    # Scale loss by microbatch size ratio
-                    local_loss = local_loss * (
-                        model_inputs_ii["input_ids"].shape[0] / model_inputs["input_ids"].shape[0]
-                    )
-
-                # Backward per microbatch.
-                backward_start = time.time()
-                local_loss.backward()
-                backward_total_time += time.time() - backward_start
-                total_lm_loss += local_loss
-
-            metrics.stats["forward_time"].update(forward_total_time)
-            metrics.stats["backward_time"].update(backward_total_time)
-            total_loss = total_lm_loss
+        metrics.stats["forward_time"].update(forward_total_time)
+        metrics.stats["backward_time"].update(backward_total_time)
+        total_loss = total_lm_loss
 
         # Optimizer step
         optim_step_start = time.time()
