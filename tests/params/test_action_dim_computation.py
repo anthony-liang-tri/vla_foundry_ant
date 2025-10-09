@@ -5,7 +5,7 @@ import draccus
 import pytest
 from draccus.utils import DecodingError
 
-from lbm2.params.data_params import LBMDataParams
+from lbm2.params.data_params import RoboticsDataParams
 from lbm2.params.train_experiment_params import TrainExperimentParams
 
 
@@ -93,8 +93,8 @@ def test_action_dim_auto_computation():
     """Test that action_dim is automatically computed from action fields and statistics."""
     args = get_args_robotics_auto_action_dim()
 
-    # Verify the data config is LBMDataParams
-    assert isinstance(args.data, LBMDataParams)
+    # Verify the data config is RoboticsDataParams
+    assert isinstance(args.data, RoboticsDataParams)
 
     # Verify action fields are set correctly
     expected_action_fields = [

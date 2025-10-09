@@ -14,7 +14,7 @@ import yaml
 
 from lbm2.data.dataloader import get_wds_dataloader
 from lbm2.data.robotics.data_explorer_gradio import RoboticsDataLoader
-from lbm2.params.data_params import LBMDataParams
+from lbm2.params.data_params import RoboticsDataParams
 from lbm2.params.robotics.augmentation_params import DataAugmentationParams, ImageAugmentationParams
 
 
@@ -71,8 +71,8 @@ def mock_config():
         # Override normalization settings
         config_dict["normalization"]["enabled"] = False  # Default to disabled for most tests
 
-        # Create LBMDataParams from the modified config
-        data_params = LBMDataParams.from_dict(config_dict)
+        # Create RoboticsDataParams from the modified config
+        data_params = RoboticsDataParams.from_dict(config_dict)
 
         # Create mock distributed config
         distributed = SimpleNamespace()
@@ -523,8 +523,8 @@ def test_normalization(dataset_path, manifest_data, mock_config):
         # Set normalization
         config_dict["normalization"]["enabled"] = enabled
 
-        # Create LBMDataParams from the modified config
-        data_params = LBMDataParams.from_dict(config_dict)
+        # Create RoboticsDataParams from the modified config
+        data_params = RoboticsDataParams.from_dict(config_dict)
 
         # Create mock configs
         distributed = SimpleNamespace()
@@ -699,8 +699,8 @@ def test_normalization_consistency(dataset_path, manifest_data, mock_config):
     # Override normalization settings
     config_dict["normalization"]["enabled"] = True
 
-    # Create LBMDataParams from the modified config
-    data_params = LBMDataParams.from_dict(config_dict)
+    # Create RoboticsDataParams from the modified config
+    data_params = RoboticsDataParams.from_dict(config_dict)
 
     # Create mock distributed config
     distributed = SimpleNamespace()
@@ -785,7 +785,7 @@ def test_compare_dataloader_and_roboticsdataloader(dataset_path, manifest_data, 
             "normalization": {"enabled": False},
         }
     )
-    data_cfg = LBMDataParams.from_dict(config_dict)
+    data_cfg = RoboticsDataParams.from_dict(config_dict)
 
     cfg = mock_config(dataset_path, batch_size=1, processor_name="google/paligemma-3b-pt-224")
 

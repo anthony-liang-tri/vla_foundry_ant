@@ -4,7 +4,7 @@ from typing import Callable
 import webdataset as wds
 
 from lbm2.data.pipelines.image_caption import ImageCaptionPipeline
-from lbm2.data.pipelines.robotics import LBMPipeline
+from lbm2.data.pipelines.robotics import RoboticsPipeline
 from lbm2.data.pipelines.text import TextPipeline
 from lbm2.data.pipelines.text_untokenized import TextUntokenizedPipeline
 
@@ -36,7 +36,7 @@ def create_wds_pipeline(datastring, modality, batch_size, checkpoint_num, data_p
     elif modality == "image_caption":
         pipeline = ImageCaptionPipeline(modality, data_params, batch_size)
     elif modality == "robotics":
-        pipeline = LBMPipeline(modality, data_params, batch_size)
+        pipeline = RoboticsPipeline(modality, data_params, batch_size)
     else:
         raise ValueError(f"{modality} webdataset pipeline not supported")
 

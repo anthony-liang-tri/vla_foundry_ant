@@ -32,7 +32,7 @@ from lbm2.data.robotics.gradio_dataloader import RoboticsDataLoader
 from lbm2.data.robotics.gradio_interface import GradioDataExplorer
 from lbm2.file_utils import load_model_checkpoint
 from lbm2.models import create_model
-from lbm2.params.data_params import LBMDataParams
+from lbm2.params.data_params import RoboticsDataParams
 from lbm2.params.train_experiment_params import load_experiment_params_from_yaml
 
 
@@ -117,7 +117,7 @@ def main():
             }
         )
 
-        params = LBMDataParams.from_dict(config_dict)
+        params = RoboticsDataParams.from_dict(config_dict)
 
         data_loader = RoboticsDataLoader(
             params,

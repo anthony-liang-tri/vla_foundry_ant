@@ -37,7 +37,7 @@ from lbm2.data.dataloader import get_datastring_input, get_wds_dataloader
 from lbm2.data.pipelines.robotics import extract_robotics_fields
 from lbm2.data.robotics.normalization import RoboticsNormalizer
 from lbm2.data.robotics.utils import _get_rotation_matrix, rot_6d_to_matrix
-from lbm2.params.data_params import LBMDataParams
+from lbm2.params.data_params import RoboticsDataParams
 
 
 class RoboticsDataLoader:
@@ -45,7 +45,7 @@ class RoboticsDataLoader:
 
     def __init__(
         self,
-        params: LBMDataParams,
+        params: RoboticsDataParams,
         max_samples: int = -1,
         max_shards: int = -1,
         use_dataloader: bool = True,

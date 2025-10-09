@@ -62,7 +62,7 @@ class ImageCaptionDataParams(DataParams):
 
 @register_data_params("robotics")
 @dataclass(frozen=True)
-class LBMDataParams(DataParams):
+class RoboticsDataParams(DataParams):
     """
     Configuration for robotics dataset field definitions and normalization.
 

@@ -8,7 +8,7 @@ from lbm2.data.augmentations.base import Augmentations
 from lbm2.data.pipelines.base import BaseWebDatasetPipeline
 from lbm2.data.processor.robotics_processor import RoboticsProcessor
 from lbm2.data.utils import deterministic_shuffle, log_and_continue
-from lbm2.params.data_params import LBMDataParams
+from lbm2.params.data_params import RoboticsDataParams
 
 
 def filter_robotics_sample(sample):
@@ -81,8 +81,8 @@ def extract_robotics_fields(
     }
 
 
-class LBMPipeline(BaseWebDatasetPipeline):
-    def __init__(self, modality, data_params: LBMDataParams, batch_size: int):
+class RoboticsPipeline(BaseWebDatasetPipeline):
+    def __init__(self, modality, data_params: RoboticsDataParams, batch_size: int):
         super().__init__(modality, data_params, batch_size)
         os.environ["TOKENIZERS_PARALLELISM"] = "true"
         self.data_params = data_params

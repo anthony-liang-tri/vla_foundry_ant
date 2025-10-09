@@ -7,7 +7,7 @@ import pytest
 
 from lbm2.data.processor.robotics_processor import RoboticsProcessor
 from lbm2.data.robotics.normalization import RoboticsNormalizer
-from lbm2.params.data_params import LBMDataParams
+from lbm2.params.data_params import RoboticsDataParams
 
 
 @pytest.fixture
@@ -132,7 +132,7 @@ class TestRoboticsProcessorLoad:
 
         # Assertions
         assert isinstance(processor, RoboticsProcessor)
-        assert isinstance(processor.data_params, LBMDataParams)
+        assert isinstance(processor.data_params, RoboticsDataParams)
         assert processor.data_params.type == "robotics"
         assert processor.data_params.processor == "google/paligemma-3b-pt-224"
         assert processor.data_params.proprioception_fields == [
@@ -171,7 +171,7 @@ class TestRoboticsProcessorLoad:
 
         # Assertions
         assert isinstance(processor, RoboticsProcessor)
-        assert isinstance(processor.data_params, LBMDataParams)
+        assert isinstance(processor.data_params, RoboticsDataParams)
         assert processor.data_params.type == "robotics"
         assert processor.data_params.processor == "google/paligemma-3b-pt-224"
 
@@ -272,7 +272,7 @@ class TestRoboticsProcessorLoad:
 
             # Assertions
             assert isinstance(processor, RoboticsProcessor)
-            assert isinstance(processor.data_params, LBMDataParams)
+            assert isinstance(processor.data_params, RoboticsDataParams)
             assert processor.data_params.type == "robotics"
 
             # Verify the processor was initialized
@@ -427,7 +427,7 @@ class TestRoboticsNormalizerLoad:
         with pytest.raises(AttributeError, match="'NormalizationParams' object has no attribute 'normalization'"):
             RoboticsNormalizer.load(temp_normalization_config_file, temp_stats_file)
 
-        # Test the intended functionality by creating a proper LBMDataParams config
+        # Test the intended functionality by creating a proper RoboticsDataParams config
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write("type: robotics\n")
             f.write(f"dataset_statistics: [{dataset_stats_path}]\n")
@@ -450,13 +450,13 @@ class TestRoboticsNormalizerLoad:
             temp_lbm_config_path = f.name
 
         try:
-            # Test the corrected functionality: Load LBMDataParams and pass to RoboticsNormalizer
-            lbm_config = LBMDataParams.from_file(temp_lbm_config_path)
+            # Test the corrected functionality: Load RoboticsDataParams and pass to RoboticsNormalizer
+            lbm_config = RoboticsDataParams.from_file(temp_lbm_config_path)
             normalizer = RoboticsNormalizer(lbm_config, statistics_path=dataset_stats_path)
 
             # Assertions
             assert isinstance(normalizer, RoboticsNormalizer)
-            assert isinstance(normalizer.config, LBMDataParams)
+            assert isinstance(normalizer.config, RoboticsDataParams)
             assert normalizer.config.normalization.enabled is True
             assert normalizer.config.normalization.method == "std"
             assert normalizer.config.normalization.scope == "global"
@@ -484,14 +484,14 @@ class TestRoboticsNormalizerLoad:
     def test_robotics_normalizer_from_pretrained(self, temp_experiment_dir, dataset_stats_path):
         """Test RoboticsNormalizer.from_pretrained() method."""
         # NOTE: This also has the same bug as load() - it passes NormalizationParams
-        # to constructor instead of LBMDataParams
+        # to constructor instead of RoboticsDataParams
 
         # Test that the from_pretrained method fails as expected due to the bug
         with pytest.raises(AttributeError, match="'NormalizationParams' object has no attribute 'normalization'"):
             RoboticsNormalizer.from_pretrained(temp_experiment_dir)
 
         # Test the intended functionality by creating proper files
-        # Update the config to be an LBMDataParams config instead
+        # Update the config to be an RoboticsDataParams config instead
         config_path = os.path.join(temp_experiment_dir, "config_normalizer.yaml")
         with open(config_path, "w") as f:
             f.write("type: robotics\n")
@@ -513,14 +513,14 @@ class TestRoboticsNormalizerLoad:
             f.write("      scope: per_timestep\n")
             f.write("      epsilon: 1.0e-06\n")
 
-        # Test the corrected functionality: Load LBMDataParams and create normalizer
-        lbm_config = LBMDataParams.from_file(config_path)
+        # Test the corrected functionality: Load RoboticsDataParams and create normalizer
+        robotics_config = RoboticsDataParams.from_file(config_path)
         stats_path = os.path.join(temp_experiment_dir, "stats_normalizer.json")
-        normalizer = RoboticsNormalizer(lbm_config, statistics_path=stats_path)
+        normalizer = RoboticsNormalizer(robotics_config, statistics_path=stats_path)
 
         # Assertions
         assert isinstance(normalizer, RoboticsNormalizer)
-        assert isinstance(normalizer.config, LBMDataParams)
+        assert isinstance(normalizer.config, RoboticsDataParams)
         assert normalizer.config.normalization.enabled is True
         assert normalizer.config.normalization.method == "std"
         assert normalizer.config.normalization.scope == "global"
@@ -532,7 +532,7 @@ class TestRoboticsNormalizerLoad:
 
     def test_robotics_normalizer_load_with_disabled_normalization(self, temp_stats_file, dataset_stats_path):
         """Test RoboticsNormalizer.load() with disabled normalization."""
-        # Create LBMDataParams config with normalization disabled
+        # Create RoboticsDataParams config with normalization disabled
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write("type: robotics\n")
             f.write(f"dataset_statistics: [{dataset_stats_path}]\n")
@@ -549,9 +549,9 @@ class TestRoboticsNormalizerLoad:
             temp_config_path = f.name
 
         try:
-            # Test the corrected functionality: Load LBMDataParams and create normalizer
-            lbm_config = LBMDataParams.from_file(temp_config_path)
-            normalizer = RoboticsNormalizer(lbm_config, statistics_path=dataset_stats_path)
+            # Test the corrected functionality: Load RoboticsDataParams and create normalizer
+            robotics_config = RoboticsDataParams.from_file(temp_config_path)
+            normalizer = RoboticsNormalizer(robotics_config, statistics_path=dataset_stats_path)
 
             # Assertions
             assert isinstance(normalizer, RoboticsNormalizer)

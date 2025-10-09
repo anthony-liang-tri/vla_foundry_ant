@@ -10,7 +10,7 @@ from typing import Any, Dict
 import numpy as np
 import torch
 
-from lbm2.params.data_params import LBMDataParams
+from lbm2.params.data_params import RoboticsDataParams
 
 
 def _get_rotation_matrix(x, y, z, perm_config):
@@ -128,7 +128,7 @@ def rot_6d_to_relative(rot_6d_sequence: np.ndarray, reference_index: int) -> np.
     return relative_rot_6d
 
 
-def extract_proprioception_data(batch, dataset_config: LBMDataParams, device=None):
+def extract_proprioception_data(batch, dataset_config: RoboticsDataParams, device=None):
     """
     Extract proprioception data from a batch based on dataset config.
 
@@ -161,7 +161,7 @@ def extract_proprioception_data(batch, dataset_config: LBMDataParams, device=Non
     return proprioception
 
 
-def extract_action_data(batch, dataset_config: LBMDataParams, device=None):
+def extract_action_data(batch, dataset_config: RoboticsDataParams, device=None):
     """
     Extract action data from a batch based on dataset config.
 
@@ -195,7 +195,7 @@ def extract_action_data(batch, dataset_config: LBMDataParams, device=None):
 
 
 def extract_and_aggregate_proprioception(
-    batch: Dict[str, Any], dataset_config: LBMDataParams, device=None, aggregation_method: str = "mean"
+    batch: Dict[str, Any], dataset_config: RoboticsDataParams, device=None, aggregation_method: str = "mean"
 ) -> torch.Tensor:
     """
     Extract and aggregate proprioception data from batch.
@@ -239,7 +239,7 @@ def extract_and_aggregate_proprioception(
 
 
 def extract_and_aggregate_actions(
-    batch: Dict[str, Any], dataset_config: LBMDataParams, device=None, aggregation_method: str = "none"
+    batch: Dict[str, Any], dataset_config: RoboticsDataParams, device=None, aggregation_method: str = "none"
 ) -> torch.Tensor:
     """
     Extract and optionally aggregate action data from batch.
@@ -283,7 +283,7 @@ def extract_and_aggregate_actions(
 
 
 def extract_robotics_data_for_training(
-    batch: Dict[str, Any], dataset_config: LBMDataParams, device=None
+    batch: Dict[str, Any], dataset_config: RoboticsDataParams, device=None
 ) -> Dict[str, torch.Tensor]:
     """
     Extract proprioception and action data for training.

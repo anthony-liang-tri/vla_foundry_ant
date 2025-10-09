@@ -11,7 +11,7 @@ import draccus
 import torch
 
 from lbm2.file_utils import json_load
-from lbm2.params.data_params import LBMDataParams
+from lbm2.params.data_params import RoboticsDataParams
 from lbm2.params.robotics.normalization_params import FieldNormalizationParams, NormalizationParams
 
 
@@ -28,7 +28,7 @@ class RoboticsNormalizer:
 
     def __init__(
         self,
-        dataset_config: Union[Dict[str, Any], "LBMDataParams"],
+        dataset_config: Union[Dict[str, Any], "RoboticsDataParams"],
         statistics_data: Optional[Dict[str, Any]] = None,
         statistics_path: Optional[str] = None,
     ):
@@ -36,7 +36,7 @@ class RoboticsNormalizer:
         Initialize normalizer.
 
         Args:
-            dataset_config: LBMDataParams instance with field definitions and normalization settings
+            dataset_config: RoboticsDataParams instance with field definitions and normalization settings
             statistics_data: Pre-loaded statistics dict
             statistics_path: Path to statistics JSON file
         """

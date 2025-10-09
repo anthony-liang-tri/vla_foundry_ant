@@ -6,7 +6,7 @@ import torch
 from lbm2.data.processor import get_processor
 from lbm2.data.robotics.normalization import RoboticsNormalizer
 from lbm2.file_utils import json_load
-from lbm2.params.data_params import LBMDataParams
+from lbm2.params.data_params import RoboticsDataParams
 
 
 class RoboticsProcessor:
@@ -15,7 +15,7 @@ class RoboticsProcessor:
     It also handles image loading and processing.
     """
 
-    def __init__(self, data_params: LBMDataParams):
+    def __init__(self, data_params: RoboticsDataParams):
         self.data_params = data_params
         self.vlm_processor = get_processor(data_params)
 
@@ -32,11 +32,11 @@ class RoboticsProcessor:
 
     @classmethod
     def load(cls, config_path: str):
-        return cls(LBMDataParams.from_file(config_path))
+        return cls(RoboticsDataParams.from_file(config_path))
 
     @classmethod
     def from_pretrained(cls, config_path: str):
-        return cls(LBMDataParams.from_file(os.path.join(config_path, "config_processor.yaml")))
+        return cls(RoboticsDataParams.from_file(os.path.join(config_path, "config_processor.yaml")))
 
     def add_action_and_proprioception_fields(self, batch, action_fields=None, proprioception_fields=None):
         # Pre-extract concatenated actions if action fields are provided
