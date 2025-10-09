@@ -19,7 +19,7 @@ distributed:
   device: cuda:0
   dist_backend: nccl
   dist_url: env://
-  fsdp: true
+  fsdp: false
   fsdp_amp: false
   fsdp_cpu_offload: false
   fsdp_pure_bf16: false
