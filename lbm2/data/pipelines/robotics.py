@@ -34,9 +34,24 @@ def select_language_instruction(language_instructions, instruction_types):
     return random.choice(available_instructions) if available_instructions else ""
 
 
-def extract_robotics_fields(sample, language_instruction_types=None):
+def extract_robotics_fields(
+    sample,
+    language_instruction_types=None,
+    action_fields=None,
+    proprioception_fields=None,
+    intrinsics_fields=None,
+    extirnsics_fields=None,
+):
     """Extract robotics fields from sample."""
-    # Extract data by file type
+    if extirnsics_fields is None:
+        extirnsics_fields = []
+    if intrinsics_fields is None:
+        intrinsics_fields = []
+    if proprioception_fields is None:
+        proprioception_fields = []
+    if action_fields is None:
+        action_fields = []
+
     images, data = {}, {}
     for key, value in sample.items():
         if key.endswith(".jpg"):
@@ -44,29 +59,23 @@ def extract_robotics_fields(sample, language_instruction_types=None):
             img_key = key.split(".")[-2]  # e.g., "wrist_camera_t-1"
             images[img_key] = np.array(value)
         else:
-            suffix_map = [
-                "lowdim.npz",
-                "past_mask.npz",
-                "future_mask.npz",
-                "metadata.json",
-                "intrinsics.npz",
-                "extrinsics.npz",
-                "language_instructions.json",
-            ]
+            suffix_map = ["lowdim.npz", "metadata.json", "language_instructions.json"]
             for suffix in suffix_map:
                 if key.endswith(suffix):
                     data[suffix] = value
 
     instruction = select_language_instruction(data.get("language_instructions.json"), language_instruction_types)
 
+    lowdim_data = data.get("lowdim.npz")
+
     return {
         "images": images,
-        "lowdim": data.get("lowdim.npz"),
-        "past_mask": data.get("past_mask.npz")["data"],
-        "future_mask": data.get("future_mask.npz")["data"],
+        "lowdim": {key: lowdim_data.get(key) for key in action_fields + proprioception_fields},
+        "past_mask": lowdim_data.get("past_mask"),
+        "future_mask": lowdim_data.get("future_mask"),
         "metadata": data.get("metadata.json", {}),
-        "intrinsics": data.get("intrinsics.npz", {}),
-        "extrinsics": data.get("extrinsics.npz", {}),
+        "intrinsics": {key: lowdim_data.get(key) for key in intrinsics_fields},
+        "extrinsics": {key: lowdim_data.get(key) for key in extirnsics_fields},
         "language_instruction": instruction,
         "language_instruction_full": data.get("language_instructions.json", {}),
     }
@@ -109,7 +118,12 @@ class LBMPipeline(BaseWebDatasetPipeline):
             ),
             wds.map(
                 lambda sample: extract_robotics_fields(
-                    sample, language_instruction_types=self.data_params.language_instruction_types
+                    sample,
+                    language_instruction_types=self.data_params.language_instruction_types,
+                    action_fields=self.data_params.action_fields,
+                    proprioception_fields=self.data_params.proprioception_fields,
+                    intrinsics_fields=self.data_params.intrinsics_fields,
+                    extirnsics_fields=self.data_params.extirnsics_fields,
                 ),
                 handler=log_and_continue,
             ),

@@ -36,7 +36,7 @@ class StreamingDatasetStatistics:
                 data = data[None, ...]
                 mask = mask[None, ...]
             elif data.ndim != 3:
-                raise ValueError(f"Data must have 2 or 3 dimensions, got {data.ndim}")
+                raise ValueError(f"Data must have 2 or 3 dimensions, got {data.ndim} for key {key}")
 
             data = data.copy()  # Avoid modifying the original data
             data[~mask[..., 0]] = 0

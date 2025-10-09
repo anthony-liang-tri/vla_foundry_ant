@@ -604,18 +604,31 @@ class EpisodeProcessor:
                     is_padded=bool(past_padding > 0 or future_padding > 0),
                 )
 
-                # Upload to S3 instead of yielding
+                statistics_ray_actor.merge_from_samples.remote(
+                    [
+                        {
+                            "lowdim": sample_lowdim,
+                            "past_mask": past_mask,
+                            "future_mask": future_mask,
+                        }
+                    ]
+                )
+
+                # Add intrinsics, extrinsics, past_mask, future_mask to lowdim (after merging statistics)
+                for key, value in sample_intrinsics.items():
+                    sample_lowdim[f"intrinsics.{key}"] = value
+                for key, value in sample_extrinsics.items():
+                    sample_lowdim[f"extrinsics.{key}"] = value
+                sample_lowdim["past_mask"] = past_mask
+                sample_lowdim["future_mask"] = future_mask
+
                 sample_data = {
                     "images": sample_images,
                     "lowdim": sample_lowdim,
-                    "past_mask": past_mask,
-                    "future_mask": future_mask,
                     "metadata": sample_metadata,
-                    "intrinsics": sample_intrinsics,
-                    "extrinsics": sample_extrinsics,
                     "language_instructions": language_instructions,
                 }
-                statistics_ray_actor.merge_from_samples.remote([sample_data])
+
                 upload_sample_to_s3(
                     sample_data,
                     self.output_dir,

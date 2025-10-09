@@ -40,6 +40,21 @@ action_fields:
   - robot__desired__grippers__left::panda_hand # 1
   - robot__desired__grippers__right::panda_hand # 1
 
+intrinsics_fields:
+  - intrinsics.scene_right_0
+  - intrinsics.scene_left_0
+  - intrinsics.wrist_left_minus
+  - intrinsics.wrist_left_plus
+  - intrinsics.wrist_right_minus
+  - intrinsics.wrist_right_plus
+
+extirnsics_fields:
+  - extrinsics.scene_right_0
+  - extrinsics.scene_left_0
+  - extrinsics.wrist_left_minus
+  - extrinsics.wrist_left_plus
+  - extrinsics.wrist_right_minus
+  - extrinsics.wrist_right_plus
 
 exclude_fields:
   - language_instruction

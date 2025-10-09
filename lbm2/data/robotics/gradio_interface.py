@@ -219,11 +219,17 @@ class GradioDataExplorer:
         extrinsics = None
 
         # Look for intrinsics and extrinsics
-        if "intrinsics" in sample and sample["intrinsics"] and camera_name in sample["intrinsics"]:
-            intrinsics = sample["intrinsics"][camera_name]
+        if "intrinsics" in sample and sample["intrinsics"]:
+            if f"intrinsics.{camera_name}" in sample["intrinsics"]:
+                intrinsics = sample["intrinsics"][f"intrinsics.{camera_name}"]
+            elif camera_name in sample["intrinsics"]:
+                intrinsics = sample["intrinsics"][camera_name]
 
-        if "extrinsics" in sample and sample["extrinsics"] and camera_name in sample["extrinsics"]:
-            extrinsics = sample["extrinsics"][camera_name]
+        if "extrinsics" in sample and sample["extrinsics"]:
+            if f"extrinsics.{camera_name}" in sample["extrinsics"]:
+                extrinsics = sample["extrinsics"][f"extrinsics.{camera_name}"]
+            elif camera_name in sample["extrinsics"]:
+                extrinsics = sample["extrinsics"][camera_name]
 
         if intrinsics is not None and extrinsics is not None:
             # Handle time-varying calibration
@@ -274,32 +280,37 @@ class GradioDataExplorer:
         else:
             print("🔍 No original_image_sizes found in metadata")
             # Try to infer from camera intrinsics if available
-            if "intrinsics" in sample and camera_name in sample["intrinsics"]:
+            if "intrinsics" in sample and f"intrinsics.{camera_name}" in sample["intrinsics"]:
+                intrinsics = sample["intrinsics"][f"intrinsics.{camera_name}"]
+            elif camera_name in sample["intrinsics"]:
                 intrinsics = sample["intrinsics"][camera_name]
-                if intrinsics is not None and intrinsics.ndim >= 2:
-                    # Camera intrinsics matrix has focal length and principal point
-                    # The principal point (cx, cy) should be at the center of the original image
-                    if intrinsics.ndim == 3:
-                        # Time-varying intrinsics, use the first one
-                        intrinsics = intrinsics[0]
+            else:
+                intrinsics = None
 
-                    # Principal point is at (cx, cy) in the intrinsics matrix
-                    cx = intrinsics[0, 2]  # Principal point x
-                    cy = intrinsics[1, 2]  # Principal point y
+            if intrinsics is not None and intrinsics.ndim >= 2:
+                # Camera intrinsics matrix has focal length and principal point
+                # The principal point (cx, cy) should be at the center of the original image
+                if intrinsics.ndim == 3:
+                    # Time-varying intrinsics, use the first one
+                    intrinsics = intrinsics[0]
 
-                    # Estimate original image size from principal point
-                    # Principal point should be roughly at the center of the image
-                    estimated_orig_width = int(cx * 2)  # Principal point is roughly at center
-                    estimated_orig_height = int(cy * 2)
+                # Principal point is at (cx, cy) in the intrinsics matrix
+                cx = intrinsics[0, 2]  # Principal point x
+                cy = intrinsics[1, 2]  # Principal point y
 
-                    image_ratio = (image.width / estimated_orig_width, image.height / estimated_orig_height)
-                else:
-                    image_ratio = (1.0, 1.0)
+                # Estimate original image size from principal point
+                # Principal point should be roughly at the center of the image
+                estimated_orig_width = int(cx * 2)  # Principal point is roughly at center
+                estimated_orig_height = int(cy * 2)
+
+                image_ratio = (image.width / estimated_orig_width, image.height / estimated_orig_height)
             else:
                 image_ratio = (1.0, 1.0)
 
         # Debug: Check if intrinsics are available and their properties
-        if "intrinsics" in sample and camera_name in sample["intrinsics"]:
+        if "intrinsics" in sample and f"intrinsics.{camera_name}" in sample["intrinsics"]:
+            intrinsics = sample["intrinsics"][f"intrinsics.{camera_name}"]
+        elif "intrinsics" in sample and camera_name in sample["intrinsics"]:
             intrinsics = sample["intrinsics"][camera_name]
         else:
             print(f"🔍 No intrinsics found for {camera_name}")

@@ -358,7 +358,7 @@ class RoboticsNormalizer:
             end_idx = start_idx + field_dim
 
             # Check if we're going beyond the tensor size
-            if end_idx > batch_data.shape[1]:
+            if end_idx > batch_data.shape[-1]:
                 logging.warning(f"Field {field_name} would exceed tensor dimensions, skipping")
                 continue
 

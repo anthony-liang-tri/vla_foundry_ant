@@ -82,6 +82,8 @@ class LBMDataParams(DataParams):
     proprioception_fields: list[str] = field(default_factory=list)
     action_fields: list[str] = field(default_factory=list)
     exclude_fields: list[str] = field(default_factory=list)
+    intrinsics_fields: list[str] = field(default_factory=list)
+    extirnsics_fields: list[str] = field(default_factory=list)
     normalization: NormalizationParams = field(default_factory=NormalizationParams)
     augmentation: DataAugmentationParams = field(default_factory=DataAugmentationParams)
 
