@@ -109,6 +109,18 @@ class VLMParams(ModelParams):
 
 Here, the ViT can either be `ViTParams` or `ViTHFParams`. We can dynamically pick between the two by directly supplying the necessary arguments. For example, indicating `--model.vit.hf_pretrained=vit_base_patch16_siglip_224` will automatically instantiate `cfg.model.vit` as a `ViTHFParams` object, while `--model.vit.hidden_dim=1152` will automatically instantiate `cfg.model.vit` as a `ViTParams` object. No need to indicate `--model.vit.type` in this case.
 
+#### 1.4 Defaults and Config Presets
+The parameter classes for each module can be found in [lbm2/params](lbm2/params). They list exhaustively all the parameters that can be set. Some of these are given a default value directly in the class definition. 
+
+In addition, the [lbm2/config_presets](lbm2/config_presets) folder contains a set of yaml file which contain commonly used config settings. These are not strictly necessary but can help ensure consistency and reduce bugs. These can be used with the `include` keyword. For instance, you can use `--model "include lbm2/config_presets/models/transformer_410m.yaml"` instead of manually typing out all the model configs. These yamls can be nested with the `<<` operator. See `lbm2/config_presets/models/diffusion_policy.yaml`.
+
+The order of precedence is as follows (listed in decreasing priority):
+1. Command line
+2. Preset yaml configs (Parent yaml has priority over nested yamls)
+3. Default in params class
+
+In other words, if a variable is defined both in a preset yaml and in the command line, the parser will use the value from the command line.
+
 
 ### 2. Data
 Data are stored in shards. Each shard is a tar file. Within each tar file, each sample is distinguished by its unique prefix.
