@@ -1,4 +1,6 @@
-## Robotics Dataset Structure (Bare Minimum Requirements)
+# Robotics Data
+
+## 1. Robotics Dataset Structure (Bare Minimum Requirements)
 
 **S3 Path:**
 ```
@@ -20,5 +22,86 @@ dataset_directory_in_s3/
 ├── (unique_id_1).metadata.json
 └── ...
 ```
+- `lowdim.npz` is a dict. 
+    - It MUST contain the following keys
+        - `past_mask`
+        - `future_mask`
+    - It will also contain the keys that will be used to construct the actions, proprioceptions, intrinsics, and extrinsics. See sections below for more details.
 - `language_instructions.json` should be a dict with keys in set ["original", "randomized", "verbose", "alternative"]
-- np arrays in `lowdim.npz` should exist in `stats.json`
+- The key names in the `lowdim.npz` dict should also exist as keys in `stats.json`
+
+**Sample yaml config**
+
+In the main launcher / command line, you can use the flag `--data "include lbm2/config_presets/data/lbm_data_params.yaml"`
+
+Below is what a sample yaml file would look like (with some lines removed for clarity).
+
+```yaml
+type: robotics
+
+proprioception_fields:
+  - robot__actual__poses__left::panda__xyz # 3
+  - robot__actual__poses__right::panda__xyz # 3
+  - robot__actual__poses__left::panda__rot_6d # 6
+  - robot__actual__poses__right::panda__rot_6d # 6
+  - robot__actual__grippers__left::panda_hand # 1
+  - robot__actual__grippers__right::panda_hand # 1
+
+action_fields:
+  - robot__desired__poses__left::panda__xyz # 3
+  - robot__desired__poses__right::panda__xyz # 3
+  - robot__desired__poses__left::panda__rot_6d # 6
+  - robot__desired__poses__right::panda__rot_6d # 6
+  - robot__desired__grippers__left::panda_hand # 1
+  - robot__desired__grippers__right::panda_hand # 1
+
+intrinsics_fields:
+  - intrinsics.scene_right_0
+  - intrinsics.scene_left_0
+  - intrinsics.wrist_left_minus
+  - intrinsics.wrist_left_plus
+  - intrinsics.wrist_right_minus
+  - intrinsics.wrist_right_plus
+
+extirnsics_fields:
+  - extrinsics.scene_right_0
+  - extrinsics.scene_left_0
+  - extrinsics.wrist_left_minus
+  - extrinsics.wrist_left_plus
+  - extrinsics.wrist_right_minus
+  - extrinsics.wrist_right_plus
+
+img_num_tokens: 81
+image_size: 224
+
+normalization:
+  enabled: true
+  method: std
+  scope: global
+  epsilon: 1e-8
+```
+The full file can be found in [lbm2/config_presets/data/lbm_data_params.yaml](lbm2/config_presets/data/lbm_data_params.yaml)
+
+## 2. Action and Proprioception
+The `LBMDataParams` class has attributes `action_fields` and `proprioception_fields` which take in lists. The contents of these lists should exist as keys in `lowdim.npz`, and the `RoboticsProcessor.add_action_and_proprioception_fields` function will parse these fields and extract their contents to create the action and proprioception tensors. For examples on how to specify these, see `lbm2/config_presets/data/lbm_data_params.yaml`.
+
+For LeRobot converted data, the `action_fields` is usually a single-element list with the element `actions`. 
+
+## 3. Intrinsics and Extrinsics
+These are optional. They are used for the visualization scripts but are not used during training. Similar to the action and proprioception fields above, the `LBMDataParams` class also has attributes `intrinsics_fields` and `extrinsics_fields`. Once again, for examples on how to specify these, see `lbm2/config_presets/data/lbm_data_params.yaml`.
+
+
+## 4. Normalization
+Normalization has its own dedicated params class `NormalizationParams`, which are used to instantiate the [RoboticsNormalizer class](lbm2/data/robotics/normalization.py). This `NormalizationParams` class lives as an attribute inside `LBMDataParams` and can be set using the prefix `--data.normalization`. 
+
+By default, the keys in `action_fields` $\bigcup$ `proprioception_fields` $\bigcup$ `intrinsics_fields` $\bigcup$ `extrinsics_fields` are the fields that get normalized. 
+The `NormalizationParams` class contains parameters on what type of normalization is done. In addition, `NormalizationParams` class also contains a `field_configs` dict, which can be used to specify how to handle certain fields that we may want to normalize differently from the default setting in `NormalizationParams`.
+
+For details on how the normalization is implemented, see the [RoboticsNormalizer class](lbm2/data/robotics/normalization.py).
+
+### 4.1 RoboticsNormalizer Class
+The `RoboticsNormalizer` object is instantiated inside the [RoboticsProcessor class](lbm2/data/processor/robotics_processor.py). This instantitiation is done by supplying the appropriate `dataset_statistics` stats.json path in the `LBMDataParams` object. Before the start of training, `RoboticsNormalizer` and `RoboticsProcessor` will automatically save their configs to the output folder, and these can be loaded using the `from_pretrained` keyword by pointing to the directory containing their saved config files.
+
+
+## 5. Image Augmentation / Transforms
+Image augmentation also has its own dedicated params class `DataAugmentationParams`, which are used to instantiate the [Augmentations class](lbm2/data/augmentations/base.py). This `DataAugmentationParams` class lives as an attribute inside `LBMDataParams` and can be set using the prefix `--data.augmentation`. Each augmentation (e.g., color jitter, random crop) has its own parameters and can be toggled using the `enabled` keyword. When the `apply_transforms` function is invoked in the pipeline, it will run through all enabled augmentations and sequentially apply them to all the images.

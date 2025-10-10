@@ -165,6 +165,8 @@ Use the `--data.dataset_manifest` argument to indicate which dataset to use for 
 
 Webdatasets also supports different dataset ratios. This is done through the `--data.dataset_weighting` argument. For example, `--data.dataset_weighting [0.4,0.6]`.
 
+#### 2.2 Robotics Data
+Robotics data requires some special handling (e.g., normalization) that may not be present in other modalities. We include a separate robotics-specific README in [lbm2/data/robotics](lbm2/data/robotics).
 
 ### 3. Dataloading Pipeline
 We use [webdatasets](https://github.com/webdataset/webdataset) to load the data. Each modality (e.g., image+caption, interleaved, image+actions) has its own pipeline where all the processing steps are defined at a high-level. This involves steps like untarring, shuffling, batching, etc. An example is [lbm2/data/pipelines/image_caption.py](lbm2/data/pipelines/image_caption.py).
