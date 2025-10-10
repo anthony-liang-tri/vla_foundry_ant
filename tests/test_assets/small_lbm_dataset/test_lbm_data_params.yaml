@@ -36,12 +36,6 @@ action_fields:
   - robot__desired__grippers__left::panda_hand
   - robot__desired__grippers__right::panda_hand
 
-
-exclude_fields:
-  - language_instruction
-  - task_description
-  - robot__version
-
 processor: google/paligemma-3b-pt-224
 img_num_tokens: 49
 image_size: 224

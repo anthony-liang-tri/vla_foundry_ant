@@ -576,11 +576,14 @@ def test_normalization(dataset_path, manifest_data, mock_config):
 
     # Compare normalized vs non-normalized lowdim data
     # Focus on key fields to avoid excessive processing
-    included_fields = set(cfg_normalized.data.proprioception_fields + cfg_normalized.data.action_fields)
-    excluded_fields = set(cfg_normalized.data.exclude_fields)
+    included_fields = set(
+        cfg_normalized.data.proprioception_fields
+        + cfg_normalized.data.action_fields
+        + cfg_normalized.data.intrinsics_fields
+        + cfg_normalized.data.extirnsics_fields
+    )
 
     normalized_fields_found = 0
-    excluded_fields_found = 0
     fields_processed = 0
 
     if batch_normalized["lowdim"] and batch_no_norm["lowdim"]:
@@ -615,58 +618,36 @@ def test_normalization(dataset_path, manifest_data, mock_config):
                 print(f"  Non-normalized: mean={no_norm_mean:.3f}, std={no_norm_std:.3f}")
                 print(f"  Normalized:     mean={norm_mean:.3f}, std={norm_std:.3f}")
 
-                # Check if field should be excluded from normalization
-                should_be_excluded = field_name in excluded_fields or any(
-                    keyword in field_name.lower() for keyword in ["text", "language", "instruction", "mask", "valid"]
-                )
+                should_be_included = field_name in included_fields
 
-                should_be_included = field_name in included_fields or any(
-                    keyword in field_name.lower() for keyword in ["pose", "joint", "gripper", "action"]
-                )
+                if should_be_included and no_norm_std > 1e-6:
+                    # For included fields, they should be different (unless zero variance)
+                    # Only check if original data has variance
+                    assert not torch.allclose(norm_data, no_norm_data, atol=1e-6), (
+                        f"Normalized data should differ from non-normalized for field {field_name}"
+                    )
 
-                if should_be_included:
-                    if should_be_excluded:
-                        # For excluded fields, they should be identical
-                        assert torch.allclose(norm_data, no_norm_data, atol=1e-6), (
-                            f"Excluded field {field_name} should be identical in both batches"
-                        )
-                        print(f"  ✅ Field {field_name} correctly unchanged (excluded from normalization)")
-                        excluded_fields_found += 1
-                    else:
-                        # For included fields, they should be different (unless zero variance)
-                        if no_norm_std > 1e-6:  # Only check if original data has variance
-                            assert not torch.allclose(norm_data, no_norm_data, atol=1e-6), (
-                                f"Normalized data should differ from non-normalized for field {field_name}"
+                    # Basic normalization checks for std method
+                    if (
+                        hasattr(cfg_normalized.data.normalization, "field_configs")
+                        and field_name in cfg_normalized.data.normalization.field_configs
+                    ):
+                        field_config = cfg_normalized.data.normalization.field_configs[field_name]
+                        if field_config.method == "std":
+                            # Check that normalized data is roughly standardized (lenient for test data)
+                            assert abs(norm_mean) < 3.0, (
+                                f"Normalized data mean should be closer to 0 for field {field_name}, got {norm_mean}"
+                            )
+                            assert norm_std >= 0.0, (
+                                f"Normalized data std should be non-negative for field {field_name}, got {norm_std}"
                             )
 
-                            # Basic normalization checks for std method
-                            if (
-                                hasattr(cfg_normalized.data.normalization, "field_configs")
-                                and field_name in cfg_normalized.data.normalization.field_configs
-                            ):
-                                field_config = cfg_normalized.data.normalization.field_configs[field_name]
-                                if field_config.method == "std":
-                                    # Check that normalized data is roughly standardized (lenient for test data)
-                                    assert abs(norm_mean) < 3.0, (
-                                        f"Normalized data mean should be closer to 0 for field {field_name}, "
-                                        f"got {norm_mean}"
-                                    )
-                                    assert norm_std >= 0.0, (
-                                        f"Normalized data std should be non-negative for field {field_name}, "
-                                        f"got {norm_std}"
-                                    )
-                        else:
-                            print(f"  ℹ️  Skipping difference check for {field_name} - original data has zero variance")
-
-                        print(f"  ✅ Normalization working for {field_name}")
-                        normalized_fields_found += 1
+                    print(f"  ✅ Normalization working for {field_name}")
+                    normalized_fields_found += 1
 
     # Ensure we found at least some fields to normalize
     assert normalized_fields_found > 0, "Should have found at least one field that gets normalized"
-    print(
-        f"✅ Normalization test passed! Found {normalized_fields_found} normalized fields "
-        f"and {excluded_fields_found} excluded fields"
-    )
+    print(f"✅ Normalization test passed! Found {normalized_fields_found} normalized fields ")
 
 
 @pytest.mark.slow

@@ -67,7 +67,12 @@ class RoboticsNormalizer:
         self.method = self.config.normalization.method
         self.scope = self.config.normalization.scope
         self.field_configs = self.config.normalization.field_configs
-        self.exclude_fields = set(self.config.exclude_fields)
+        self.include_fields = set(
+            self.config.proprioception_fields
+            + self.config.action_fields
+            + self.config.intrinsics_fields
+            + self.config.extirnsics_fields
+        )
 
         logging.info(f"RoboticsNormalizer initialized: method={self.method}, scope={self.scope}")
 
@@ -131,8 +136,8 @@ class RoboticsNormalizer:
         if not self.enabled:
             return False
 
-        # Skip excluded fields
-        if field_name in self.exclude_fields:
+        # Only normalize fields that are in the include_fields
+        if field_name not in self.include_fields:
             return False
 
         # Skip text and mask fields

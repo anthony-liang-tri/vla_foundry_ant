@@ -56,11 +56,6 @@ extirnsics_fields:
   - extrinsics.wrist_right_minus
   - extrinsics.wrist_right_plus
 
-exclude_fields:
-  - language_instruction
-  - task_description
-  - robot__version
-
 processor: google/paligemma-3b-pt-224
 img_num_tokens: 81
 image_size: 224
