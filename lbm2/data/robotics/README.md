@@ -63,7 +63,7 @@ intrinsics_fields:
   - intrinsics.wrist_right_minus
   - intrinsics.wrist_right_plus
 
-extirnsics_fields:
+extrinsics_fields:
   - extrinsics.scene_right_0
   - extrinsics.scene_left_0
   - extrinsics.wrist_left_minus

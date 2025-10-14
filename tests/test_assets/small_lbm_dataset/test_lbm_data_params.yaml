@@ -1,46 +1,42 @@
 type: robotics
 
-dataset_manifest:
-  - s3://robotics-manip-lbm/vlm_datasets/preprocess_test/lbm/PickAndPlaceBox/cabot/sim/manifest.jsonl
-
-dataset_statistics:
-  - s3://robotics-manip-lbm/vlm_datasets/preprocess_test/lbm/PickAndPlaceBox/cabot/sim/stats.json
-
-dataset_weighting:
-  - 1.0
-
-dataset_modality:
-  - robotics
-
-allow_multiple_epochs: true
-num_workers: 32
-seq_len: 4096
-add_action_token: true
-seed: 42
+language_instruction_types:
+  - original
+  - randomized
+  - verbose
+  - alternative
 
 proprioception_fields:
-  - robot__actual__poses__right::panda__xyz 
-  - robot__actual__poses__left::panda__xyz
-  - robot__actual__poses__right::panda__rot_6d
-  - robot__actual__poses__left::panda__rot_6d
-  - robot__actual__joint_position__left::panda
-  - robot__actual__joint_position__right::panda
-  - robot__actual__grippers__left::panda_hand
-  - robot__actual__grippers__right::panda_hand
+  - robot__actual__poses__left::panda__xyz # 3
+  - robot__actual__poses__right::panda__xyz # 3
+  - robot__actual__poses__left::panda__rot_6d # 6
+  - robot__actual__poses__right::panda__rot_6d # 6
+  - robot__actual__grippers__left::panda_hand # 1
+  - robot__actual__grippers__right::panda_hand # 1
 
 action_fields:
-  - robot__desired__poses__left::panda__xyz
-  - robot__desired__poses__right::panda__xyz
-  - robot__desired__poses__left::panda__rot_6d
-  - robot__desired__poses__right::panda__rot_6d
-  - robot__desired__grippers__left::panda_hand
-  - robot__desired__grippers__right::panda_hand
+  - robot__desired__poses__left::panda__xyz # 3
+  - robot__desired__poses__right::panda__xyz # 3
+  - robot__desired__poses__left::panda__rot_6d # 6
+  - robot__desired__poses__right::panda__rot_6d # 6
+  - robot__desired__grippers__left::panda_hand # 1
+  - robot__desired__grippers__right::panda_hand # 1
 
-processor: google/paligemma-3b-pt-224
-img_num_tokens: 49
-image_size: 224
-num_images: 12
-image_size: 224
+intrinsics_fields:
+  - intrinsics.scene_right_0
+  - intrinsics.scene_left_0
+  - intrinsics.wrist_left_minus
+  - intrinsics.wrist_left_plus
+  - intrinsics.wrist_right_minus
+  - intrinsics.wrist_right_plus
+
+extrinsics_fields:
+  - extrinsics.scene_right_0
+  - extrinsics.scene_left_0
+  - extrinsics.wrist_left_minus
+  - extrinsics.wrist_left_plus
+  - extrinsics.wrist_right_minus
+  - extrinsics.wrist_right_plus
 
 normalization:
   enabled: true

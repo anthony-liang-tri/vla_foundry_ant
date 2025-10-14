@@ -433,9 +433,10 @@ class RoboticsDataLoader:
             if "actions" in batch:
                 # Denormalize actions data if normalization is enabled
                 if self.params.normalization.enabled and self.normalizer is not None:
-                    sample["actions"] = (
-                        self.normalizer.denormalize_actions_batch(batch["actions"])[i].float().cpu().numpy()
+                    denormalized_actions = self.normalizer.denormalize_batch(
+                        batch["actions"], self.params.action_fields
                     )
+                    sample["actions"] = denormalized_actions[i].float().cpu().numpy()
                 else:
                     sample["actions"] = batch["actions"][i].float().cpu().numpy()
 

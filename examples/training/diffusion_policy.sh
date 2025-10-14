@@ -5,9 +5,15 @@
   --data "include lbm2/config_presets/data/lbm_data_params.yaml" \
   --data.dataset_manifest ["s3://tri-ml-datasets-uw2/vlm_datasets/preprocess_224_shuffled_2/lbm/BimanualPutRedBellPepperInBin/riverway/sim/shards/manifest.jsonl"] \
   --data.dataset_statistics ["s3://tri-ml-datasets-uw2/vlm_datasets/preprocess_224_shuffled_2/lbm/BimanualPutRedBellPepperInBin/riverway/sim/shards/stats.json"] \
+  --data.dataset_modality ["robotics"] \
   --data.image_size 224 \
+  --data.num_images 12 \
+  --data.action_dim 20 \
   --data.processor openai/clip-vit-base-patch32 \
   --data.img_num_tokens 64 \
+  --data.allow_multiple_epochs True \
+  --data.num_workers 4 \
+  --data.seq_len 2048 \
   --distributed.fsdp True \
   --distributed.fsdp_pure_bf16 True \
   --num_checkpoints 3 \
@@ -18,8 +24,5 @@
   --hparams.lr 5e-4 \
   --hparams.lr_cooldown_end 1e-5 \
   --remote_sync s3://tri-ml-datasets-uw2/lbm2_vla/model_checkpoints/diffusion_policy \
-  --data.seq_len 2048 \
   --total_train_samples 100000 \
-  --data.allow_multiple_epochs True \
-  --data.num_workers 4 \
   --wandb True

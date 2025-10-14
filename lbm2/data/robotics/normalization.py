@@ -71,7 +71,7 @@ class RoboticsNormalizer:
             self.config.proprioception_fields
             + self.config.action_fields
             + self.config.intrinsics_fields
-            + self.config.extirnsics_fields
+            + self.config.extrinsics_fields
         )
 
         logging.info(f"RoboticsNormalizer initialized: method={self.method}, scope={self.scope}")
@@ -99,10 +99,6 @@ class RoboticsNormalizer:
             return len(self.stats[field_name]["mean"])
         else:
             raise ValueError(f"Field {field_name} not found in dataset statistics")
-
-    def get_timestep_dimension(self) -> int:
-        """Get the dimension of a timestep."""
-        return len(self.stats[self.config.proprioception_fields[0]]["mean_per_timestep"])
 
     def _load_statistics(self, statistics_path: str) -> Dict[str, Any]:
         """Load statistics from JSON file."""
@@ -306,18 +302,22 @@ class RoboticsNormalizer:
 
         return denormalized
 
-    def normalize_batch(self, batch: Dict[str, Any]) -> Dict[str, Any]:
+    def normalize_batch(self, batch: Dict[str, Any], field_names=None) -> Dict[str, Any]:
         """
         Normalize a full batch of robotics data.
 
         Args:
             batch: Batch dict from robotics dataloader
+            field_names: List of field names to normalize. If None, normalize all enabled fields.
 
         Returns:
             Batch with normalized lowdim data
         """
         if not self.enabled:
             return batch
+
+        if field_names is None:
+            field_names = self.include_fields
 
         # Create a copy to avoid modifying the original
         normalized_batch = batch.copy()
@@ -326,7 +326,7 @@ class RoboticsNormalizer:
         normalized_lowdim = {}
 
         for field_name, tensor in batch["lowdim"].items():
-            if isinstance(tensor, torch.Tensor):
+            if isinstance(tensor, torch.Tensor) and field_name in field_names:
                 normalized_lowdim[field_name] = self.normalize_tensor(tensor, field_name)
             else:
                 normalized_lowdim[field_name] = tensor
@@ -374,105 +374,6 @@ class RoboticsNormalizer:
             start_idx = end_idx
 
         return denormalized
-
-    def normalize_tensor_batch(self, batch_data, field_names, per_timestep=False):
-        """
-        Normalize a batch of tensor data for multiple fields.
-
-        Args:
-            batch_data: Tensor of shape [batch_size, total_dim]
-            field_names: List of field names corresponding to the dimensions
-
-        Returns:
-            Normalized batch data
-        """
-        if not isinstance(batch_data, torch.Tensor):
-            batch_data = torch.tensor(batch_data, dtype=torch.float32)
-
-        normalized = torch.zeros_like(batch_data)
-        start_idx = 0
-
-        for field_name in field_names:
-            if field_name not in self.stats:
-                logging.warning(f"Field {field_name} not found in dataset statistics")
-                # Skip this field
-                continue
-
-            field_dim = self.get_field_dimension(field_name)
-
-            end_idx = start_idx + field_dim
-
-            # Check if we're going beyond the tensor size
-            if end_idx > batch_data.shape[1]:
-                logging.warning(f"Field {field_name} would exceed tensor dimensions, skipping")
-                continue
-            field_data = batch_data[..., start_idx:end_idx]
-            norm_field_data = self.normalize_tensor(field_data, field_name)
-            normalized[..., start_idx:end_idx] = norm_field_data
-
-            start_idx = end_idx
-
-        return normalized
-
-    def normalize_proprioception_batch(self, batch_data):
-        """
-        Normalize a batch of proprioception data.
-
-        Args:
-            batch_data: Tensor of shape [batch_size, proprioception_dim]
-
-        Returns:
-            Normalized proprioception data
-        """
-        if not self.config.proprioception_fields:
-            raise ValueError("proprioception_fields not specified in dataset config")
-
-        return self.normalize_tensor_batch(batch_data, self.config.proprioception_fields)
-
-    def denormalize_proprioception_batch(self, batch_data):
-        """
-        Denormalize a batch of proprioception data.
-
-        Args:
-            batch_data: Tensor of shape [batch_size, proprioception_dim]
-
-        Returns:
-            Denormalized proprioception data
-        """
-        if not self.config.proprioception_fields:
-            raise ValueError("proprioception_fields not specified in dataset config")
-
-        return self.denormalize_batch(batch_data, self.config.proprioception_fields)
-
-    def normalize_actions_batch(self, batch_data):
-        """
-        Normalize a batch of action data.
-
-        Args:
-            batch_data: Tensor of shape [batch_size, action_dim]
-
-        Returns:
-            Normalized action data
-        """
-        if not self.config.action_fields:
-            raise ValueError("action_fields not specified in dataset config")
-
-        return self.normalize_tensor_batch(batch_data, self.config.action_fields)
-
-    def denormalize_actions_batch(self, batch_data):
-        """
-        Denormalize a batch of action data.
-
-        Args:
-            batch_data: Tensor of shape [batch_size, action_dim]
-
-        Returns:
-            Denormalized action data
-        """
-        if not self.config.action_fields:
-            raise ValueError("action_fields not specified in dataset config")
-
-        return self.denormalize_batch(batch_data, self.config.action_fields)
 
 
 @draccus.encode.register

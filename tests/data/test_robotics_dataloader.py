@@ -15,7 +15,6 @@ import yaml
 from lbm2.data.dataloader import get_wds_dataloader
 from lbm2.data.robotics.data_explorer_gradio import RoboticsDataLoader
 from lbm2.params.data_params import RoboticsDataParams
-from lbm2.params.robotics.augmentation_params import DataAugmentationParams, ImageAugmentationParams
 
 
 @pytest.fixture(autouse=True)
@@ -46,7 +45,6 @@ def mock_config():
         dataset_path: str,
         batch_size: int = 2,
         processor_name: str = "google/paligemma-3b-pt-224",
-        add_action_token: bool = False,
     ):
         # Load the base config from YAML
         config_path = "lbm2/config_presets/data/lbm_data_params.yaml"
@@ -59,12 +57,13 @@ def mock_config():
                 "num_workers": 0,  # Reduce to 0 to prevent worker process accumulation
                 "seed": 42,
                 "processor": processor_name,  # No processor for basic tests
-                "add_action_token": add_action_token,
                 "seq_len": 512,
                 "dataset_statistics": [dataset_path + "/stats.json"],
                 "dataset_manifest": [dataset_path + "/manifest.jsonl"],
                 "num_images": None,  # Let processor infer number of images
                 "img_num_tokens": 49,  # Set image sequence length for PaliGemma
+                "dataset_weighting": [1.0],
+                "dataset_modality": ["robotics"],
             }
         )
 
@@ -87,16 +86,12 @@ def mock_config():
         hparams = SimpleNamespace()
         hparams.global_batch_size = batch_size
 
-        # No augmentations
-        augmentations = DataAugmentationParams(image=ImageAugmentationParams())
-
         # Create main config
         cfg = SimpleNamespace()
         cfg.distributed = distributed
         cfg.data = data_params
         cfg.vit = vit
         cfg.hparams = hparams
-        cfg.augmentations = augmentations
         return cfg
 
     return _create_config
@@ -437,7 +432,7 @@ def test_with_action_token(dataset_path, manifest_data, mock_config):
     datastring = create_datastring(dataset_path, test_shards)
 
     # Create config with action token enabled
-    cfg = mock_config(dataset_path, batch_size=1, add_action_token=True)
+    cfg = mock_config(dataset_path, batch_size=1)
 
     # Get dataloader
     num_samples_per_dataset = [sum(entry["num_sequences"] for entry in test_shards)]
@@ -511,12 +506,13 @@ def test_normalization(dataset_path, manifest_data, mock_config):
                 "num_workers": 0,  # Reduce to 0 to prevent worker process accumulation
                 "seed": 42,
                 "processor": "google/paligemma-3b-pt-224",
-                "add_action_token": False,
                 "seq_len": 512,
                 "dataset_statistics": [dataset_path + "/stats.json"],
                 "dataset_manifest": [dataset_path + "/manifest.jsonl"],
                 "num_images": None,
                 "img_num_tokens": 49,
+                "dataset_weighting": [1.0],
+                "dataset_modality": ["robotics"],
             }
         )
 
@@ -538,15 +534,12 @@ def test_normalization(dataset_path, manifest_data, mock_config):
         hparams = SimpleNamespace()
         hparams.global_batch_size = 1
 
-        augmentations = DataAugmentationParams(image=ImageAugmentationParams())
-
         # Create main config
         cfg = SimpleNamespace()
         cfg.distributed = distributed
         cfg.data = data_params
         cfg.vit = vit
         cfg.hparams = hparams
-        cfg.augmentations = augmentations
 
         return cfg
 
@@ -580,7 +573,7 @@ def test_normalization(dataset_path, manifest_data, mock_config):
         cfg_normalized.data.proprioception_fields
         + cfg_normalized.data.action_fields
         + cfg_normalized.data.intrinsics_fields
-        + cfg_normalized.data.extirnsics_fields
+        + cfg_normalized.data.extrinsics_fields
     )
 
     normalized_fields_found = 0
@@ -670,10 +663,11 @@ def test_normalization_consistency(dataset_path, manifest_data, mock_config):
             "num_workers": 1,
             "seed": 42,  # Fixed seed for reproducibility
             "processor": "google/paligemma-3b-pt-224",
-            "add_action_token": False,
             "seq_len": 512,
             "dataset_statistics": [dataset_path + "/stats.json"],
             "dataset_manifest": [dataset_path + "/manifest.jsonl"],
+            "dataset_weighting": [1.0],
+            "dataset_modality": ["robotics"],
         }
     )
 
@@ -696,15 +690,12 @@ def test_normalization_consistency(dataset_path, manifest_data, mock_config):
     vit.img_size = 128
     vit.img_num_tokens = 256
 
-    augmentations = DataAugmentationParams(image=ImageAugmentationParams())
-
     # Create main config
     cfg = SimpleNamespace()
     cfg.distributed = distributed
     cfg.data = data_params
     cfg.vit = vit
     cfg.hparams = hparams
-    cfg.augmentations = augmentations
 
     # Create two separate dataloaders with same config
     num_samples_per_dataset = [sum(entry["num_sequences"] for entry in test_shards)]
@@ -759,11 +750,12 @@ def test_compare_dataloader_and_roboticsdataloader(dataset_path, manifest_data, 
             "num_workers": 1,
             "seed": 42,
             "processor": "google/paligemma-3b-pt-224",
-            "add_action_token": False,
             "seq_len": 512,
             "dataset_statistics": [f"{dataset_path}/stats.json"],
             "dataset_manifest": [f"{dataset_path}/manifest.jsonl"],
             "normalization": {"enabled": False},
+            "dataset_weighting": [1.0],
+            "dataset_modality": ["robotics"],
         }
     )
     data_cfg = RoboticsDataParams.from_dict(config_dict)

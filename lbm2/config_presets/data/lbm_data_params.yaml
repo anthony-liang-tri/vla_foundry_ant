@@ -1,28 +1,10 @@
 type: robotics
 
-dataset_manifest:
-  - tests/test_assets/small_lbm_dataset/manifest.jsonl
-
-dataset_statistics:
-  - tests/test_assets/small_lbm_dataset/stats.json
-
-dataset_weighting:
-  - 1.0
-
-dataset_modality:
-  - robotics
-
 language_instruction_types:
   - original
   - randomized
   - verbose
   - alternative
-
-allow_multiple_epochs: true
-num_workers: 32
-seq_len: 4096
-add_action_token: true
-seed: 42
 
 proprioception_fields:
   - robot__actual__poses__left::panda__xyz # 3
@@ -48,18 +30,13 @@ intrinsics_fields:
   - intrinsics.wrist_right_minus
   - intrinsics.wrist_right_plus
 
-extirnsics_fields:
+extrinsics_fields:
   - extrinsics.scene_right_0
   - extrinsics.scene_left_0
   - extrinsics.wrist_left_minus
   - extrinsics.wrist_left_plus
   - extrinsics.wrist_right_minus
   - extrinsics.wrist_right_plus
-
-processor: google/paligemma-3b-pt-224
-img_num_tokens: 81
-image_size: 224
-num_images: 12
 
 normalization:
   enabled: true

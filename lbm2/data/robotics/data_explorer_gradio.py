@@ -109,11 +109,12 @@ def main():
                 "num_workers": 1,
                 "seed": 42,
                 "processor": "openai/clip-vit-base-patch32",
-                "add_action_token": True,
                 "seq_len": 2048,
                 "dataset_statistics": [f"{args.dataset_path}/stats.json"],
                 "dataset_manifest": [f"{args.dataset_path}/manifest.jsonl"],
                 "normalization": {"enabled": True},
+                "dataset_weighting": [1.0],
+                "dataset_modality": ["robotics"],
             }
         )
 

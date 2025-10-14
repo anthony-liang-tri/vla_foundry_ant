@@ -40,11 +40,11 @@ def extract_robotics_fields(
     action_fields=None,
     proprioception_fields=None,
     intrinsics_fields=None,
-    extirnsics_fields=None,
+    extrinsics_fields=None,
 ):
     """Extract robotics fields from sample."""
-    if extirnsics_fields is None:
-        extirnsics_fields = []
+    if extrinsics_fields is None:
+        extrinsics_fields = []
     if intrinsics_fields is None:
         intrinsics_fields = []
     if proprioception_fields is None:
@@ -75,7 +75,7 @@ def extract_robotics_fields(
         "future_mask": lowdim_data.get("future_mask"),
         "metadata": data.get("metadata.json", {}),
         "intrinsics": {key: lowdim_data.get(key) for key in intrinsics_fields},
-        "extrinsics": {key: lowdim_data.get(key) for key in extirnsics_fields},
+        "extrinsics": {key: lowdim_data.get(key) for key in extrinsics_fields},
         "language_instruction": instruction,
         "language_instruction_full": data.get("language_instructions.json", {}),
     }
@@ -123,7 +123,7 @@ class RoboticsPipeline(BaseWebDatasetPipeline):
                     action_fields=self.data_params.action_fields,
                     proprioception_fields=self.data_params.proprioception_fields,
                     intrinsics_fields=self.data_params.intrinsics_fields,
-                    extirnsics_fields=self.data_params.extirnsics_fields,
+                    extrinsics_fields=self.data_params.extrinsics_fields,
                 ),
                 handler=log_and_continue,
             ),
