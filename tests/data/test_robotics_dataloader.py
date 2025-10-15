@@ -518,6 +518,9 @@ def test_normalization(dataset_path, manifest_data, mock_config):
 
         # Set normalization
         config_dict["normalization"]["enabled"] = enabled
+        config_dict["normalization"]["include_fields"] = (
+            config_dict["proprioception_fields"] + config_dict["action_fields"]
+        )
 
         # Create RoboticsDataParams from the modified config
         data_params = RoboticsDataParams.from_dict(config_dict)
@@ -569,12 +572,7 @@ def test_normalization(dataset_path, manifest_data, mock_config):
 
     # Compare normalized vs non-normalized lowdim data
     # Focus on key fields to avoid excessive processing
-    included_fields = set(
-        cfg_normalized.data.proprioception_fields
-        + cfg_normalized.data.action_fields
-        + cfg_normalized.data.intrinsics_fields
-        + cfg_normalized.data.extrinsics_fields
-    )
+    included_fields = set(cfg_normalized.data.proprioception_fields + cfg_normalized.data.action_fields)
 
     normalized_fields_found = 0
     fields_processed = 0

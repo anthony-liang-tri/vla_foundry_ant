@@ -96,38 +96,24 @@ class RoboticsDataParams(DataParams):
         if invalid_types:
             raise ValueError(f"Invalid language instruction types: {invalid_types}. Valid types are: {valid_types}")
 
-        # Global default normalization parameters
-        enabled = self.normalization.enabled
-        method = self.normalization.method
-        scope = self.normalization.scope
-        epsilon = self.normalization.epsilon
-
-        # Field-specific normalization parameters
-        normalization_fields = self.normalization.field_configs
-
         # For all used fields (proprioception and action), add default normalization parameters if not specified
+        normalization_fields = self.normalization.field_configs
         for field_name in self.proprioception_fields + self.action_fields:
             if field_name not in normalization_fields:
-                normalization_fields[field_name] = FieldNormalizationParams(method=method, scope=scope, epsilon=epsilon)
+                normalization_fields[field_name] = FieldNormalizationParams(
+                    method=self.normalization.method, scope=self.normalization.scope, epsilon=self.normalization.epsilon
+                )
 
         # Update normalization parameters with field-specific parameters
-        object.__setattr__(
-            self,
-            "normalization",
-            NormalizationParams(
-                field_configs=normalization_fields,
-                enabled=enabled,
-                method=method,
-                scope=scope,
-                epsilon=epsilon,
-            ),
-        )
+        object.__setattr__(self.normalization, "field_configs", normalization_fields)
 
         # Compute action dimension by summing the dimension of all action fields (known from normalization parameters)
         # Need to import here to avoid circular import
         from lbm2.data.robotics.normalization import RoboticsNormalizer
 
-        normalizer = RoboticsNormalizer(dataset_config=self, statistics_path=self.dataset_statistics)
+        normalizer = RoboticsNormalizer(
+            normalization_params=self.normalization, statistics_path=self.dataset_statistics
+        )
         action_dim = 0
         for field_name in self.action_fields:
             action_dim += len(normalizer.stats[field_name]["mean"])
@@ -149,3 +135,4 @@ class RoboticsDataParams(DataParams):
                 object.__setattr__(self, "processor", cfg.model.hf_pretrained)
             elif hasattr(cfg.model, "vlm_params") and hasattr(cfg.model.vlm_params, "hf_pretrained"):
                 object.__setattr__(self, "processor", cfg.model.vlm_params.hf_pretrained)
+        self.normalization.init_shared_attributes(cfg)

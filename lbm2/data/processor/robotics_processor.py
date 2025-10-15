@@ -22,7 +22,9 @@ class RoboticsProcessor:
         # Normalize contained entirely within the processor
         self.statistics = [json_load(s) for s in data_params.dataset_statistics]
         if self.data_params.normalization.enabled:
-            self.normalizer = RoboticsNormalizer(dataset_config=self.data_params, statistics_data=self.statistics)
+            self.normalizer = RoboticsNormalizer(
+                normalization_params=self.data_params.normalization, statistics_data=self.statistics
+            )
         else:
             self.normalizer = None
 

@@ -11,7 +11,6 @@ import draccus
 import torch
 
 from lbm2.file_utils import json_load
-from lbm2.params.data_params import RoboticsDataParams
 from lbm2.params.robotics.normalization_params import FieldNormalizationParams, NormalizationParams
 
 
@@ -28,7 +27,7 @@ class RoboticsNormalizer:
 
     def __init__(
         self,
-        dataset_config: Union[Dict[str, Any], "RoboticsDataParams"],
+        normalization_params: Union[Dict[str, Any], "NormalizationParams"],
         statistics_data: Optional[Dict[str, Any]] = None,
         statistics_path: Optional[str] = None,
     ):
@@ -36,13 +35,13 @@ class RoboticsNormalizer:
         Initialize normalizer.
 
         Args:
-            dataset_config: RoboticsDataParams instance with field definitions and normalization settings
+            normalization_params: NormalizationParams instance with field definitions and normalization settings
             statistics_data: Pre-loaded statistics dict
             statistics_path: Path to statistics JSON file
         """
-        self.config = dataset_config
+        self.normalization_params = normalization_params
 
-        self.enabled = self.config.normalization.enabled
+        self.enabled = self.normalization_params.enabled
 
         # Always load statistics when available, regardless of whether normalization is enabled
         # This allows action dimension computation even when normalization is disabled
@@ -64,21 +63,16 @@ class RoboticsNormalizer:
             self.stats = self.stats[0]
 
         # Parse configuration from dataclass
-        self.method = self.config.normalization.method
-        self.scope = self.config.normalization.scope
-        self.field_configs = self.config.normalization.field_configs
-        self.include_fields = set(
-            self.config.proprioception_fields
-            + self.config.action_fields
-            + self.config.intrinsics_fields
-            + self.config.extrinsics_fields
-        )
+        self.method = self.normalization_params.method
+        self.scope = self.normalization_params.scope
+        self.field_configs = self.normalization_params.field_configs
+        self.include_fields = self.normalization_params.include_fields
 
         logging.info(f"RoboticsNormalizer initialized: method={self.method}, scope={self.scope}")
 
     def save(self, experiment_path: str):
         with open(os.path.join(experiment_path, "config_normalizer.yaml"), "w") as f:
-            draccus.dump(self.config, f)
+            draccus.dump(self.normalization_params, f)
         with open(os.path.join(experiment_path, "stats_normalizer.json"), "w") as f:
             json.dump(self.stats, f)
 
@@ -326,7 +320,7 @@ class RoboticsNormalizer:
         if not self.enabled:
             return batch
 
-        if field_names is None:
+        if field_names is None or len(field_names) == 0:
             field_names = self.include_fields
 
         # Create a copy to avoid modifying the original

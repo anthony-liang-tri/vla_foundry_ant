@@ -8,6 +8,7 @@ import pytest
 from lbm2.data.processor.robotics_processor import RoboticsProcessor
 from lbm2.data.robotics.normalization import RoboticsNormalizer
 from lbm2.params.data_params import RoboticsDataParams
+from lbm2.params.robotics.normalization_params import NormalizationParams
 
 
 @pytest.fixture
@@ -418,110 +419,48 @@ class TestRoboticsNormalizerLoad:
 
     def test_robotics_normalizer_load(self, temp_normalization_config_file, temp_stats_file, dataset_stats_path):
         """Test RoboticsNormalizer.load() method."""
-        # NOTE: There's currently a bug in RoboticsNormalizer.load() where it passes
-        # NormalizationParams to the constructor, but the constructor expects an object
-        # with a .normalization attribute. This test demonstrates the bug and provides
-        # a workaround by testing the intended functionality.
-
-        # Test that the load method fails as expected due to the bug
-        with pytest.raises(AttributeError, match="'NormalizationParams' object has no attribute 'normalization'"):
-            RoboticsNormalizer.load(temp_normalization_config_file, temp_stats_file)
-
-        # Test the intended functionality by creating a proper RoboticsDataParams config
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            f.write("type: robotics\n")
-            f.write(f"dataset_statistics: [{dataset_stats_path}]\n")
-            f.write("processor: google/paligemma-3b-pt-224\n")
-            f.write("proprioception_fields:\n")
-            f.write("  - robot__actual__joint_position__right::panda\n")
-            f.write("  - robot__actual__joint_velocity__right::panda\n")
-            f.write("action_fields: []\n")
-            f.write("normalization:\n")
-            f.write("  enabled: true\n")
-            f.write("  method: std\n")
-            f.write("  scope: global\n")
-            f.write("  epsilon: 1.0e-08\n")
-            f.write("  field_configs:\n")
-            f.write("    robot__actual__joint_position__right::panda:\n")
-            f.write("      method: percentile_5_95\n")
-            f.write("      scope: per_timestep\n")
-            f.write("      epsilon: 1.0e-06\n")
-            temp_lbm_config_path = f.name
-
-        try:
-            # Test the corrected functionality: Load RoboticsDataParams and pass to RoboticsNormalizer
-            lbm_config = RoboticsDataParams.from_file(temp_lbm_config_path)
-            normalizer = RoboticsNormalizer(lbm_config, statistics_path=dataset_stats_path)
-
-            # Assertions
-            assert isinstance(normalizer, RoboticsNormalizer)
-            assert isinstance(normalizer.config, RoboticsDataParams)
-            assert normalizer.config.normalization.enabled is True
-            assert normalizer.config.normalization.method == "std"
-            assert normalizer.config.normalization.scope == "global"
-            assert normalizer.config.normalization.epsilon == 1e-8
-
-            # Check field-specific config
-            assert "robot__actual__joint_position__right::panda" in normalizer.config.normalization.field_configs
-            joint_pos_config = normalizer.config.normalization.field_configs[
-                "robot__actual__joint_position__right::panda"
-            ]
-            assert joint_pos_config.method == "percentile_5_95"
-            assert joint_pos_config.scope == "per_timestep"
-            assert joint_pos_config.epsilon == 1e-6
-
-            # Verify statistics were loaded
-            assert normalizer.stats is not None
-            assert "robot__actual__joint_position__right::panda" in normalizer.stats
-            assert "robot__actual__joint_velocity__right::panda" in normalizer.stats
-
-        finally:
-            # Cleanup
-            if os.path.exists(temp_lbm_config_path):
-                os.unlink(temp_lbm_config_path)
-
-    def test_robotics_normalizer_from_pretrained(self, temp_experiment_dir, dataset_stats_path):
-        """Test RoboticsNormalizer.from_pretrained() method."""
-        # NOTE: This also has the same bug as load() - it passes NormalizationParams
-        # to constructor instead of RoboticsDataParams
-
-        # Test that the from_pretrained method fails as expected due to the bug
-        with pytest.raises(AttributeError, match="'NormalizationParams' object has no attribute 'normalization'"):
-            RoboticsNormalizer.from_pretrained(temp_experiment_dir)
-
-        # Test the intended functionality by creating proper files
-        # Update the config to be an RoboticsDataParams config instead
-        config_path = os.path.join(temp_experiment_dir, "config_normalizer.yaml")
-        with open(config_path, "w") as f:
-            f.write("type: robotics\n")
-            f.write(f"dataset_statistics: [{dataset_stats_path}]\n")
-            f.write("processor: google/paligemma-3b-pt-224\n")
-            f.write("proprioception_fields:\n")
-            f.write("  - robot__actual__joint_position__right::panda\n")
-            f.write("  - robot__actual__joint_velocity__right::panda\n")
-            f.write("action_fields: []\n")
-            f.write("normalization:\n")
-            f.write("  enabled: true\n")
-            f.write("  method: std\n")
-            f.write("  scope: global\n")
-            f.write("  epsilon: 1.0e-08\n")
-            f.write("  field_configs:\n")
-            f.write("    robot__actual__joint_position__right::panda:\n")
-            f.write("      method: percentile_5_95\n")
-            f.write("      scope: per_timestep\n")
-            f.write("      epsilon: 1.0e-06\n")
-
-        # Test the corrected functionality: Load RoboticsDataParams and create normalizer
-        robotics_config = RoboticsDataParams.from_file(config_path)
-        stats_path = os.path.join(temp_experiment_dir, "stats_normalizer.json")
-        normalizer = RoboticsNormalizer(robotics_config, statistics_path=stats_path)
+        # Test that the load method works correctly
+        normalizer = RoboticsNormalizer.load(temp_normalization_config_file, temp_stats_file)
 
         # Assertions
         assert isinstance(normalizer, RoboticsNormalizer)
-        assert isinstance(normalizer.config, RoboticsDataParams)
-        assert normalizer.config.normalization.enabled is True
-        assert normalizer.config.normalization.method == "std"
-        assert normalizer.config.normalization.scope == "global"
+        assert isinstance(normalizer.normalization_params, NormalizationParams)
+        assert normalizer.normalization_params.enabled is True
+        assert normalizer.normalization_params.method == "std"
+        assert normalizer.normalization_params.scope == "global"
+        assert normalizer.normalization_params.epsilon == 1e-8
+
+        # Check field-specific config
+        assert "robot__actual__joint_position__right::panda" in normalizer.normalization_params.field_configs
+        joint_pos_config = normalizer.normalization_params.field_configs["robot__actual__joint_position__right::panda"]
+        assert joint_pos_config.method == "percentile_5_95"
+        assert joint_pos_config.scope == "per_timestep"
+        assert joint_pos_config.epsilon == 1e-6
+
+        # Verify statistics were loaded
+        assert normalizer.stats is not None
+        assert "robot__actual__joint_position__right::panda" in normalizer.stats
+        assert "robot__actual__joint_velocity__right::panda" in normalizer.stats
+
+    def test_robotics_normalizer_from_pretrained(self, temp_experiment_dir, dataset_stats_path):
+        """Test RoboticsNormalizer.from_pretrained() method."""
+        # Test that the from_pretrained method works correctly
+        normalizer = RoboticsNormalizer.from_pretrained(temp_experiment_dir)
+
+        # Assertions
+        assert isinstance(normalizer, RoboticsNormalizer)
+        assert isinstance(normalizer.normalization_params, NormalizationParams)
+        assert normalizer.normalization_params.enabled is True
+        assert normalizer.normalization_params.method == "std"
+        assert normalizer.normalization_params.scope == "global"
+        assert normalizer.normalization_params.epsilon == 1e-8
+
+        # Check field-specific config
+        assert "robot__actual__joint_position__right::panda" in normalizer.normalization_params.field_configs
+        joint_pos_config = normalizer.normalization_params.field_configs["robot__actual__joint_position__right::panda"]
+        assert joint_pos_config.method == "percentile_5_95"
+        assert joint_pos_config.scope == "per_timestep"
+        assert joint_pos_config.epsilon == 1e-6
 
         # Verify statistics were loaded
         assert normalizer.stats is not None
@@ -530,29 +469,22 @@ class TestRoboticsNormalizerLoad:
 
     def test_robotics_normalizer_load_with_disabled_normalization(self, temp_stats_file, dataset_stats_path):
         """Test RoboticsNormalizer.load() with disabled normalization."""
-        # Create RoboticsDataParams config with normalization disabled
+        # Create normalization config with normalization disabled
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            f.write("type: robotics\n")
-            f.write(f"dataset_statistics: [{dataset_stats_path}]\n")
-            f.write("processor: google/paligemma-3b-pt-224\n")
-            f.write("proprioception_fields: []\n")
-            f.write("action_fields: []\n")
-            f.write("normalization:\n")
-            f.write("  enabled: false\n")
-            f.write("  method: std\n")
-            f.write("  scope: global\n")
-            f.write("  epsilon: 1.0e-08\n")
-            f.write("  field_configs: {}\n")
+            f.write("enabled: false\n")
+            f.write("method: std\n")
+            f.write("scope: global\n")
+            f.write("epsilon: 1.0e-08\n")
+            f.write("field_configs: {}\n")
             temp_config_path = f.name
 
         try:
-            # Test the corrected functionality: Load RoboticsDataParams and create normalizer
-            robotics_config = RoboticsDataParams.from_file(temp_config_path)
-            normalizer = RoboticsNormalizer(robotics_config, statistics_path=dataset_stats_path)
+            # Test that load works with disabled normalization
+            normalizer = RoboticsNormalizer.load(temp_config_path, temp_stats_file)
 
             # Assertions
             assert isinstance(normalizer, RoboticsNormalizer)
-            assert normalizer.config.normalization.enabled is False
+            assert normalizer.normalization_params.enabled is False
             assert normalizer.stats is not None  # even with disabled normalization, stats are loaded
             assert normalizer.enabled is False
 

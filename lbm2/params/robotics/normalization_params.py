@@ -45,6 +45,7 @@ class NormalizationParams(BaseParams):
     method: str = field(default="std")  # "std", "percentile_5_95", "percentile_1_99" "min_max"
     scope: str = field(default="global")  # "global" or "per_timestep"
     epsilon: float = field(default=1e-8)
+    include_fields: list[str] = field(default_factory=list)
 
     # Field-specific configurations (initialized in __post_init__)
     field_configs: Dict[str, FieldNormalizationParams] = field(default_factory=dict)
@@ -55,6 +56,7 @@ class NormalizationParams(BaseParams):
             "method": self.method,
             "scope": self.scope,
             "epsilon": self.epsilon,
+            "include_fields": self.include_fields,
             "field_configs": {k: v.to_dict() for k, v in self.field_configs.items()},
         }
 
@@ -66,3 +68,8 @@ class NormalizationParams(BaseParams):
             raise ValueError(f"Invalid normalization method: {self.method}")
         if self.scope not in ["global", "per_timestep"]:
             raise ValueError(f"Invalid normalization scope: {self.scope}")
+
+    def init_shared_attributes(self, cfg):
+        super().init_shared_attributes(cfg)
+        # Currently we don't support normalization of intrinsics and extrinsics fields
+        object.__setattr__(self, "include_fields", cfg.data.proprioception_fields + cfg.data.action_fields)
