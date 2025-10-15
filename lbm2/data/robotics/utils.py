@@ -14,6 +14,11 @@ import yaml
 from lbm2.params.data_params import RoboticsDataParams
 
 
+def normalize(x):
+    """Normalize a vector or batch of vectors along the last dimension."""
+    return x / np.linalg.norm(x, axis=-1, keepdims=True)
+
+
 def load_action_field_config(config_path: str) -> Dict[str, List[Any]]:
     """Load action field configuration from YAML file."""
     with open(config_path, "r") as f:
@@ -24,61 +29,26 @@ def load_action_field_config(config_path: str) -> Dict[str, List[Any]]:
     }
 
 
-def _get_rotation_matrix(x, y, z, perm_config):
-    """Compute rotation matrix using specific axis permutation and signs."""
-    # Construct rotation matrix based on axis permutation
-    if perm_config == (0, 1, 2):  # XYZ
-        rot_mat = np.column_stack([x, y, z])
-    elif perm_config == (1, 0, 2):  # YXZ
-        rot_mat = np.column_stack([y, x, z])
-    elif perm_config == (0, 2, 1):  # XZY
-        rot_mat = np.column_stack([x, z, y])
-    elif perm_config == (1, 2, 0):  # YZX
-        rot_mat = np.column_stack([y, z, x])
-    else:
-        return None
-    return rot_mat
+def rot_6d_to_matrix(rot_6d: np.ndarray) -> np.ndarray:
+    """
+    Convert 6D rotation representation to rotation matrix using Gram-Schmidt orthogonalization.
 
+    Takes a [N, 6] or [6,] np array and converts to [N, 3, 3] or [3, 3] rotation matrices.
+    The input is assumed to be the first 2 rows of a rotation matrix.
 
-def rot_6d_to_matrix(rot_6d: np.ndarray, perm_config: tuple = (0, 1, 2), signs: tuple = (1, 1)) -> np.ndarray:
-    """Convert 6D rotation to rotation matrix using comprehensive interpretation configuration."""
+    Based on Zhou et al. 2019: "On the Continuity of Rotation Representations in Neural Networks"
+    """
     # Handle single vector or batch of vectors
     original_shape = rot_6d.shape
-    rot_6d = rot_6d.reshape(-1, 6)
+    if rot_6d.ndim == 1:
+        rot_6d = rot_6d.reshape(1, 6)
 
-    batch_size = rot_6d.shape[0]
-    rot_matrices = []
-
-    for i in range(batch_size):
-        single_rot_6d = rot_6d[i]
-
-        # Determine which vectors to use based on configuration
-        vec1 = single_rot_6d[:3] * signs[0]
-        vec2 = single_rot_6d[3:6] * signs[1]
-
-        # Normalize first vector
-        x = vec1 / np.linalg.norm(vec1)
-
-        # Make second vector orthogonal and normalize
-        y = vec2 - np.dot(x, vec2) * x
-        y = y / np.linalg.norm(y)
-
-        # Compute third vector
-        z = np.cross(x, y)
-
-        # Construct rotation matrix based on axis permutation
-        rot_mat = _get_rotation_matrix(x, y, z, perm_config)
-
-        det = np.linalg.det(rot_mat)
-        if det < 0:
-            rot_mat = _get_rotation_matrix(x, y, -z, perm_config)
-
-        rot_matrices.append(rot_mat)
-
-    if isinstance(rot_6d, torch.Tensor):
-        rot_matrices = torch.tensor(rot_matrices, device=rot_6d.device, dtype=rot_6d.dtype)
-    else:
-        rot_matrices = np.array(rot_matrices)
+    a1, a2 = rot_6d[..., :3], rot_6d[..., 3:]
+    b1 = normalize(a1)
+    b2 = a2 - np.sum(b1 * a2, axis=-1, keepdims=True) * b1
+    b2 = normalize(b2)
+    b3 = np.cross(b1, b2, axis=-1)
+    rot_matrices = np.stack((b1, b2, b3), axis=-2)
 
     # Return original shape
     if len(original_shape) == 1:
@@ -87,10 +57,16 @@ def rot_6d_to_matrix(rot_6d: np.ndarray, perm_config: tuple = (0, 1, 2), signs: 
         return rot_matrices.reshape(original_shape[:-1] + (3, 3))
 
 
-def matrix_to_rot_6d(rotation_matrix):
-    """Convert 3x3 rotation matrix to 6D rotation representation."""
-    # Take first two columns and flatten
-    return rotation_matrix[:, :2].flatten()
+def matrix_to_rot_6d(rotation_matrix: np.ndarray) -> np.ndarray:
+    """
+    Convert rotation matrix to 6D rotation representation.
+
+    Takes a [N, 3, 3] or [3, 3] np array and converts to [N, 6] or [6,] array.
+    Inverse of rot_6d_to_matrix().
+    """
+    batch_dim = rotation_matrix.shape[:-2]
+    rot_6d = rotation_matrix[..., :2, :].copy().reshape(batch_dim + (6,))
+    return rot_6d
 
 
 def xyz_to_relative(xyz_sequence: np.ndarray, reference_index: int) -> np.ndarray:
@@ -137,6 +113,66 @@ def rot_6d_to_relative(rot_6d_sequence: np.ndarray, reference_index: int) -> np.
     relative_rot_6d = np.array([matrix_to_rot_6d(rot) for rot in relative_rotations])
 
     return relative_rot_6d
+
+
+def xyz_from_relative(relative_xyz_sequence: np.ndarray, reference_position: np.ndarray) -> np.ndarray:
+    """
+    Convert a sequence of relative xyz positions back to absolute positions.
+
+    Args:
+        relative_xyz_sequence: Array of shape (T, 3) or (B, T, 3) with relative xyz positions
+        reference_position: Reference position of shape (3,) to add back
+
+    Returns:
+        Array of shape (T, 3) or (B, T, 3) with absolute xyz positions
+    """
+    return relative_xyz_sequence + reference_position
+
+
+def rot_6d_from_relative(relative_rot_6d_sequence: np.ndarray, reference_rot_6d: np.ndarray) -> np.ndarray:
+    """
+    Convert a sequence of relative 6D rotations back to absolute rotations.
+
+    Args:
+        relative_rot_6d_sequence: Array of shape (T, 6) or (B, T, 6) with relative 6D rotations
+        reference_rot_6d: Reference 6D rotation of shape (6,), (B, 6) or (B, T, 6) to compose with
+
+    Returns:
+        Array of shape (T, 6) or (B, T, 6) with absolute 6D rotations
+    """
+    relative = np.asarray(relative_rot_6d_sequence)
+    if relative.shape[-1] != 6:
+        raise ValueError("relative_rot_6d_sequence must have last dimension equal to 6")
+
+    original_shape = relative.shape
+    relative_flat = relative.reshape(-1, 6)
+
+    reference = np.asarray(reference_rot_6d)
+    if reference.shape[-1] != 6:
+        raise ValueError("reference_rot_6d must have last dimension equal to 6")
+
+    if reference.ndim == 1:
+        reference_flat = np.broadcast_to(reference, (relative_flat.shape[0], 6))
+    else:
+        target_shape = original_shape[:-1] + (6,)
+        expand_dims = len(target_shape) - reference.ndim
+        if expand_dims < 0:
+            raise ValueError("reference_rot_6d has more dimensions than relative_rot_6d_sequence")
+        ref = reference
+        for _ in range(expand_dims):
+            axis = ref.ndim - 1 if ref.ndim > 1 else 0
+            ref = np.expand_dims(ref, axis=axis)
+        reference_broadcast = np.broadcast_to(ref, target_shape)
+        reference_flat = reference_broadcast.reshape(-1, 6)
+
+    reference_matrices = rot_6d_to_matrix(reference_flat)
+    relative_matrices = rot_6d_to_matrix(relative_flat)
+
+    absolute_matrices = np.matmul(reference_matrices, relative_matrices)
+
+    absolute_rot_6d_flat = np.stack([matrix_to_rot_6d(rot) for rot in absolute_matrices], axis=0)
+
+    return absolute_rot_6d_flat.reshape(original_shape)
 
 
 def extract_proprioception_data(batch, dataset_config: RoboticsDataParams, device=None):
@@ -345,8 +381,8 @@ if __name__ == "__main__":
         # Ensure proper rotation (det = 1)
         if np.linalg.det(Q) < 0:
             Q[:, 0] *= -1
-        # Convert to 6D
-        rot_6d = Q[:, :2].flatten()
+        # Convert to 6D using the conversion function
+        rot_6d = matrix_to_rot_6d(Q)
         rot_6d_positions.append(rot_6d)
 
     rot_6d_positions = np.array(rot_6d_positions)

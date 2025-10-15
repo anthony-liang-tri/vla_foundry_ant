@@ -29,7 +29,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from PIL import Image, ImageDraw, ImageFont
 
-from lbm2.data.robotics.gradio_dataloader import TrajectoryExtractor
+from lbm2.data.robotics.gradio_dataloader import extract_trajectories
 
 
 class CameraProjection:
@@ -158,9 +158,9 @@ class GradioDataExplorer:
         self.samples = samples
         self.trajectory_length = trajectory_length
         self.available_cameras = self._get_available_cameras()
-        self.trajectory_extractor = TrajectoryExtractor()
         self.show_desired_trajectories = False
         self.show_action_trajectories = False
+        self.use_reconstructed = False
 
     def _get_available_cameras(self) -> List[str]:
         """Get list of available camera names."""
@@ -359,11 +359,11 @@ class GradioDataExplorer:
             return img_with_overlay
 
         # Extract trajectories (gripper tip only), including desired if requested
-        trajectories = self.trajectory_extractor.extract_trajectories(
+        trajectories = extract_trajectories(
             sample,
-            camera_name,
             include_desired=self.show_desired_trajectories,
             include_action=self.show_action_trajectories,
+            use_reconstructed=self.use_reconstructed,
         )
 
         # Filter trajectories to only include gripper tip position data (_gripper_xyz)
@@ -620,8 +620,11 @@ class GradioDataExplorer:
         fig = go.Figure()
 
         # Extract and filter gripper trajectories, including desired if requested
-        trajectories = self.trajectory_extractor.extract_trajectories(
-            sample, None, include_desired=self.show_desired_trajectories, include_action=self.show_action_trajectories
+        trajectories = extract_trajectories(
+            sample,
+            include_desired=self.show_desired_trajectories,
+            include_action=self.show_action_trajectories,
+            use_reconstructed=self.use_reconstructed,
         )
         valid_trajectories = self._get_valid_gripper_trajectories(trajectories)
 
@@ -887,13 +890,17 @@ class GradioDataExplorer:
             lines.append(f"📊 **Low-dim data:** {len(sample['lowdim'])} keys")
 
             # Group keys by type for better readability
-            robot_keys = [k for k in sample["lowdim"] if k.startswith("robot__")]
+            relative_keys = [k for k in sample["lowdim"] if "_relative" in k]
+            robot_keys = [k for k in sample["lowdim"] if k.startswith("robot__") and k not in relative_keys]
             other_keys = [k for k in sample["lowdim"] if not k.startswith("robot__")]
 
             if robot_keys:
                 lines.append(f"  - Robot state: {len(robot_keys)} keys")
             if other_keys:
                 lines.append(f"  - Other: {len(other_keys)} keys")
+            if relative_keys:
+                lines.append(f"  - Relative coordinates: {len(relative_keys)} keys")
+                lines.append("    🔄 Using reconstructed absolute coordinates for visualization")
             if "language_instruction" in sample["lowdim"]:
                 # Instruction is a list of strings when batched with a dataloader, but a string if read from a file
                 instruction = (
@@ -972,9 +979,12 @@ class GradioDataExplorer:
     def create_interface(self) -> gr.Interface:
         """Create the Gradio interface."""
 
-        def update_fn(sample_idx, camera_name, camera_timestep, show_3d_plot, show_desired, show_action):
+        def update_fn(
+            sample_idx, camera_name, camera_timestep, show_3d_plot, show_desired, show_action, use_reconstructed
+        ):
             self.show_desired_trajectories = show_desired
             self.show_action_trajectories = show_action
+            self.use_reconstructed = use_reconstructed
             return self.update_display(sample_idx, camera_name, camera_timestep, show_3d_plot)
 
         def update_camera_timesteps(camera_name):
@@ -1022,6 +1032,7 @@ class GradioDataExplorer:
                     show_3d_checkbox = gr.Checkbox(value=True, label="Show 3D Plot")
                     show_desired_checkbox = gr.Checkbox(value=False, label="Show Desired Trajectories")
                     show_action_checkbox = gr.Checkbox(value=False, label="Show Action Trajectories")
+                    show_reconstructed_checkbox = gr.Checkbox(value=False, label="Use Reconstructed Coordinates")
 
                 with gr.Column(scale=1):
                     # Metadata display
@@ -1044,6 +1055,7 @@ class GradioDataExplorer:
             - **Blue trajectory**: Right arm actual position
             - **Orange trajectory**: Left arm desired position (when "Show Desired Trajectories" is enabled)
             - **Purple trajectory**: Right arm desired position (when "Show Desired Trajectories" is enabled)
+            - **Yellow trajectory**: Actions (when "Show Actions" is enabled)
             - **Green trajectory**: Base (if available)
             - **🔵 Circle markers**: Open gripper state (value > 0.09)
             - **🔲 Square markers**: Closed gripper state (value ≤ 0.09)
@@ -1066,6 +1078,7 @@ class GradioDataExplorer:
                 show_3d_checkbox,
                 show_desired_checkbox,
                 show_action_checkbox,
+                show_reconstructed_checkbox,
             ]
             outputs = [camera_image, trajectory_plot, metadata_display]
 
