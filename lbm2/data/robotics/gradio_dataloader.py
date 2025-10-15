@@ -36,8 +36,44 @@ from tqdm import tqdm
 from lbm2.data.dataloader import get_datastring_input, get_wds_dataloader
 from lbm2.data.pipelines.robotics import extract_robotics_fields
 from lbm2.data.robotics.normalization import RoboticsNormalizer
-from lbm2.data.robotics.utils import _get_rotation_matrix, rot_6d_to_matrix
+from lbm2.data.robotics.utils import _get_rotation_matrix, load_action_field_config, rot_6d_to_matrix
 from lbm2.params.data_params import RoboticsDataParams
+
+ACTION_FIELDS_CONFIG_PATH = "lbm2/config_presets/data/lbm_action_fields.yaml"
+
+
+def build_action_field_lookup(action_field_keys: List[str]) -> Dict[str, Optional[str]]:
+    """Build a lookup dictionary for action fields based on their semantic names."""
+    lookup: Dict[str, Optional[str]] = {
+        "left_xyz": None,
+        "left_rot_6d": None,
+        "left_gripper": None,
+        "right_xyz": None,
+        "right_rot_6d": None,
+        "right_gripper": None,
+    }
+
+    for field_name in action_field_keys:
+        prefix, _, suffix = field_name.partition("::")
+        normalized_prefix = prefix.lower()
+        normalized_suffix = suffix.lower()
+
+        if "left" in normalized_prefix:
+            if "poses__left" in normalized_prefix and normalized_suffix.endswith("__xyz"):
+                lookup["left_xyz"] = field_name
+            elif "poses__left" in normalized_prefix and normalized_suffix.endswith("__rot_6d"):
+                lookup["left_rot_6d"] = field_name
+            elif "grippers__left" in normalized_prefix or normalized_suffix.endswith("hand"):
+                lookup["left_gripper"] = field_name
+        elif "right" in normalized_prefix:
+            if "poses__right" in normalized_prefix and normalized_suffix.endswith("__xyz"):
+                lookup["right_xyz"] = field_name
+            elif "poses__right" in normalized_prefix and normalized_suffix.endswith("__rot_6d"):
+                lookup["right_rot_6d"] = field_name
+            elif "grippers__right" in normalized_prefix or normalized_suffix.endswith("hand"):
+                lookup["right_gripper"] = field_name
+
+    return lookup
 
 
 class RoboticsDataLoader:
@@ -71,6 +107,9 @@ class RoboticsDataLoader:
                 logging.info("RoboticsDataLoader: Normalizer initialized for denormalization")
             else:
                 logging.warning("RoboticsDataLoader: Failed to initialize normalizer for denormalization")
+
+        action_field_config = load_action_field_config(ACTION_FIELDS_CONFIG_PATH)
+        self.action_field_lookup = build_action_field_lookup(action_field_config["action_key_fields"])
 
     @staticmethod
     def _convert_image_tensor_to_numpy(img_tensor):
@@ -572,6 +611,8 @@ class TrajectoryExtractor:
         self,
         rotation_interpretation: str = "XY_+-",
         camera_best_interpretations: Optional[Dict[str, str]] = None,
+        action_field_lookup: Optional[Dict[str, Optional[str]]] = None,
+        action_fields_config_path: str = ACTION_FIELDS_CONFIG_PATH,
     ):
         if camera_best_interpretations is None:
             # Default camera best interpretation for LBM data to change the 6D rotation interpretation directions
@@ -614,6 +655,11 @@ class TrajectoryExtractor:
         for cam_name, interpretation in self.camera_best_interpretations.items():
             self._camera_best_configs[cam_name] = self._interpretations[interpretation]
         self._best_interpretation_config = None  # Optionally set by user
+
+        if action_field_lookup is None:
+            action_field_config = load_action_field_config(action_fields_config_path)
+            action_field_lookup = build_action_field_lookup(action_field_config["action_key_fields"])
+        self.action_field_lookup = action_field_lookup
 
     def set_camera_best_interpretations(self, camera_best_interpretations: Dict[str, str]) -> None:
         self.camera_best_interpretations = camera_best_interpretations
@@ -1012,7 +1058,11 @@ class TrajectoryExtractor:
         return total_inconsistency / camera_count
 
     def extract_trajectories(
-        self, sample: Dict[str, Any], camera_name: str = None, include_desired: bool = False
+        self,
+        sample: Dict[str, Any],
+        camera_name: str = None,
+        include_desired: bool = False,
+        include_action: bool = False,
     ) -> Dict[str, np.ndarray]:
         """Extract robot trajectories from a sample.
 
@@ -1056,6 +1106,24 @@ class TrajectoryExtractor:
                         camera_name=camera_name,
                     )
 
+            if include_action:
+                left_action_xyz_key = self.action_field_lookup.get("left_xyz")
+                left_action_gripper_key = self.action_field_lookup.get("left_gripper")
+                left_action_6d_key = self.action_field_lookup.get("left_rot_6d")
+                if (
+                    left_action_xyz_key
+                    and left_action_6d_key
+                    and left_action_xyz_key in lowdim
+                    and left_action_6d_key in lowdim
+                ):
+                    trajectories["left_arm_xyz_action"] = lowdim[left_action_xyz_key]
+                    trajectories["left_arm_6d_action"] = lowdim[left_action_6d_key]
+                    if left_action_gripper_key and left_action_gripper_key in lowdim:
+                        trajectories["left_arm_gripper_action"] = lowdim[left_action_gripper_key]
+                    trajectories["left_gripper_xyz_action"] = self.arm_xyz_to_gripper_xyz(
+                        trajectories["left_arm_xyz_action"], trajectories["left_arm_6d_action"], camera_name=camera_name
+                    )
+
         # Extract right arm trajectory
         right_xyz_key = "robot__actual__poses__right::panda__xyz"
         right_gripper_key = "robot__actual__grippers__right::panda_hand"
@@ -1081,6 +1149,26 @@ class TrajectoryExtractor:
                     trajectories["right_gripper_xyz_desired"] = self.arm_xyz_to_gripper_xyz(
                         trajectories["right_arm_xyz_desired"],
                         trajectories["right_arm_6d_desired"],
+                        camera_name=camera_name,
+                    )
+
+            if include_action:
+                right_action_xyz_key = self.action_field_lookup.get("right_xyz")
+                right_action_gripper_key = self.action_field_lookup.get("right_gripper")
+                right_action_6d_key = self.action_field_lookup.get("right_rot_6d")
+                if (
+                    right_action_xyz_key
+                    and right_action_6d_key
+                    and right_action_xyz_key in lowdim
+                    and right_action_6d_key in lowdim
+                ):
+                    trajectories["right_arm_xyz_action"] = lowdim[right_action_xyz_key]
+                    trajectories["right_arm_6d_action"] = lowdim[right_action_6d_key]
+                    if right_action_gripper_key and right_action_gripper_key in lowdim:
+                        trajectories["right_arm_gripper_action"] = lowdim[right_action_gripper_key]
+                    trajectories["right_gripper_xyz_action"] = self.arm_xyz_to_gripper_xyz(
+                        trajectories["right_arm_xyz_action"],
+                        trajectories["right_arm_6d_action"],
                         camera_name=camera_name,
                     )
 

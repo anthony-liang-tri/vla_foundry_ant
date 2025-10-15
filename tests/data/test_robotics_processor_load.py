@@ -30,7 +30,7 @@ class TestRoboticsProcessorLoad:
                 "robot__actual__joint_position__right::panda",
                 "robot__actual__joint_velocity__right::panda",
             ],
-            "action_fields": ["robot__actual__poses__right::panda__xyz"],
+            "action_fields": ["robot__action__poses__right::panda__xyz"],
             "normalization": {
                 "enabled": True,
                 "method": "std",
@@ -51,7 +51,7 @@ class TestRoboticsProcessorLoad:
         return {
             "robot__actual__joint_position__right::panda": full_stats["robot__actual__joint_position__right::panda"],
             "robot__actual__joint_velocity__right::panda": full_stats["robot__actual__joint_velocity__right::panda"],
-            "robot__actual__poses__right::panda__xyz": full_stats["robot__actual__poses__right::panda__xyz"],
+            "robot__action__poses__right::panda__xyz": full_stats["robot__action__poses__right::panda__xyz"],
         }
 
     @pytest.fixture

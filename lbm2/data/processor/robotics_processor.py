@@ -45,6 +45,9 @@ class RoboticsProcessor:
             for key in action_fields:
                 if key in batch["lowdim"]:
                     action_data.append(batch["lowdim"][key])
+                else:
+                    raise KeyError(f"Action field '{key}' missing from lowdim data")
+
             batch["actions"] = torch.cat(action_data, dim=-1)  # [B, T, D]
 
         if proprioception_fields:

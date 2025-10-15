@@ -18,6 +18,7 @@ import numpy as np
 import ray
 import yaml
 
+from lbm2.data.robotics.utils import load_action_field_config
 from lbm2.data.scripts.preprocessing.image_utils import image_to_bytes, init_jpeg_encoder
 
 # Params base class
@@ -237,6 +238,8 @@ class EpisodeProcessor:
         compute_statistics: bool = True,
         resize_images_size: List[int] = None,  # From LBM1
         language_annotations: Optional[Dict] = None,
+        action_key_fields: Optional[List[str]] = None,
+        action_index_fields: Optional[List[int]] = None,
     ):
         if resize_images_size is None:
             resize_images_size = [224, 224]
@@ -258,6 +261,31 @@ class EpisodeProcessor:
         self.compute_statistics = compute_statistics
         self.resize_images_size = resize_images_size
         self.language_annotations = language_annotations or {}
+        self.action_key_fields = action_key_fields or []
+        self.action_index_fields = action_index_fields or []
+
+        if self.action_key_fields and len(self.action_key_fields) != len(self.action_index_fields):
+            raise ValueError("Action field configuration mismatch: key and index lists differ in length")
+
+        self.action_field_sizes: List[int] = []
+        if self.action_key_fields:
+            previous_index = 0
+            for key, cumulative_index in zip(self.action_key_fields, self.action_index_fields, strict=False):
+                field_size = cumulative_index - previous_index
+                if field_size <= 0:
+                    raise ValueError(
+                        f"Action field indices must be strictly increasing. Field {key} produced size {field_size}."
+                    )
+                self.action_field_sizes.append(field_size)
+                previous_index = cumulative_index
+
+            print(
+                "🧭 Action field slices:",
+                [
+                    f"{name} (dim={size})"
+                    for name, size in zip(self.action_key_fields, self.action_field_sizes, strict=False)
+                ],
+            )
 
         # Statistics tracking
         self.total_potential_samples = 0
@@ -391,8 +419,30 @@ class EpisodeProcessor:
             )
 
         # Extract 'actions' if available
-        if actions and "actions" in actions:
-            result["actions"] = actions["actions"]
+        if actions and "actions" in actions and self.action_key_fields:
+            total_action_dim = actions["actions"].shape[1]
+            expected_action_dim = self.action_index_fields[-1]
+            if total_action_dim < expected_action_dim:
+                raise ValueError(
+                    "Action tensor has insufficient dimension. "
+                    f"Expected at least {expected_action_dim}, got {total_action_dim}."
+                )
+
+            prev_index = 0
+            for key, index in zip(self.action_key_fields, self.action_index_fields, strict=False):
+                result[key] = actions["actions"][:, prev_index:index]
+                prev_index = index
+
+            if prev_index != expected_action_dim:
+                raise ValueError(
+                    "Action slicing did not consume expected dimensions. "
+                    f"Expected {expected_action_dim}, consumed {prev_index}."
+                )
+        elif self.action_key_fields:
+            raise ValueError(
+                "Configured action fields but no actions were found in episode data. "
+                "Ensure actions.npz is present for each episode."
+            )
 
         return result
 
@@ -709,6 +759,20 @@ def main():
     language_annotations = load_language_annotations(cfg.language_annotations_path)
     print(f"Loaded language annotations for {len(language_annotations)} tasks")
 
+    # Load action field configuration
+    print("📘 Loading action field configuration...")
+    action_field_config = load_action_field_config(cfg.action_fields_config_path)
+    print(f"Loaded {len(action_field_config['action_key_fields'])} action fields")
+    if action_field_config["action_key_fields"]:
+        prev_index = 0
+        debug_slices = []
+        for name, cumulative_index in zip(
+            action_field_config["action_key_fields"], action_field_config["action_index_fields"], strict=False
+        ):
+            debug_slices.append(f"{name} (dim={cumulative_index - prev_index})")
+            prev_index = cumulative_index
+        print("🧭 Action field slices:", debug_slices)
+
     processor_config = {
         "output_dir": cfg.output_dir,
         "past_lowdim_steps": cfg.past_lowdim_steps,
@@ -727,6 +791,8 @@ def main():
         "compute_statistics": cfg.compute_statistics,
         "resize_images_size": cfg.resize_images_size,
         "language_annotations": language_annotations,
+        "action_key_fields": action_field_config["action_key_fields"],
+        "action_index_fields": action_field_config["action_index_fields"],
     }
 
     print("🚀 Starting optimized preprocessing")

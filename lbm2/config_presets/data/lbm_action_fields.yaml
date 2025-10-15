@@ -1,0 +1,16 @@
+action_key_fields:
+  - robot__action__poses__right::panda__xyz
+  - robot__action__poses__right::panda__rot_6d
+  - robot__action__poses__left::panda__xyz
+  - robot__action__poses__left::panda__rot_6d
+  - robot__action__grippers__right::panda_hand
+  - robot__action__grippers__left::panda_hand
+
+action_index_fields:
+  - 3
+  - 9
+  - 12
+  - 18
+  - 19
+  - 20
+

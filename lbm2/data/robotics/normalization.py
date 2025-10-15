@@ -181,6 +181,11 @@ class RoboticsNormalizer:
                 scale = torch.tensor(field_stats["percentile_99"], dtype=torch.float32) - torch.tensor(
                     field_stats["percentile_1"], dtype=torch.float32
                 )
+            elif method == "min_max":
+                center = torch.tensor(field_stats["min"], dtype=torch.float32)
+                scale = torch.tensor(field_stats["max"], dtype=torch.float32) - torch.tensor(
+                    field_stats["min"], dtype=torch.float32
+                )
             else:
                 raise ValueError(f"Invalid normalization method: {method}")
         else:
@@ -204,6 +209,11 @@ class RoboticsNormalizer:
                 ) - torch.tensor(
                     field_stats["percentile_1_per_timestep"],
                     dtype=torch.float32,
+                )
+            elif method == "min_max":
+                center = torch.tensor(field_stats["min_per_timestep"], dtype=torch.float32)
+                scale = torch.tensor(field_stats["max_per_timestep"], dtype=torch.float32) - torch.tensor(
+                    field_stats["min_per_timestep"], dtype=torch.float32
                 )
             else:
                 raise ValueError(f"Invalid normalization method: {method}")

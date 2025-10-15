@@ -68,7 +68,11 @@ class PreprocessParams(BaseParams):
 
     # Language annotations
     language_annotations_path: str = field(
-        default="lbm2/data/scripts/preprocessing/lbm_language_annotations.yaml",
+        default="lbm2/config_presets/data/lbm_language_annotations.yaml",
+    )
+
+    action_fields_config_path: str = field(
+        default="lbm2/config_presets/data/lbm_action_fields.yaml",
     )
 
     # Ray configuration

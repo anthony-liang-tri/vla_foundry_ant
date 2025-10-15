@@ -160,6 +160,7 @@ class GradioDataExplorer:
         self.available_cameras = self._get_available_cameras()
         self.trajectory_extractor = TrajectoryExtractor()
         self.show_desired_trajectories = False
+        self.show_action_trajectories = False
 
     def _get_available_cameras(self) -> List[str]:
         """Get list of available camera names."""
@@ -359,7 +360,10 @@ class GradioDataExplorer:
 
         # Extract trajectories (gripper tip only), including desired if requested
         trajectories = self.trajectory_extractor.extract_trajectories(
-            sample, camera_name, include_desired=self.show_desired_trajectories
+            sample,
+            camera_name,
+            include_desired=self.show_desired_trajectories,
+            include_action=self.show_action_trajectories,
         )
 
         # Filter trajectories to only include gripper tip position data (_gripper_xyz)
@@ -378,6 +382,7 @@ class GradioDataExplorer:
             """Get RGB color based on trajectory name and time value."""
             # Determine color based on trajectory name
             is_desired = "_desired" in traj_name
+            is_action = "_action" in traj_name
 
             if "left" in traj_name.lower():
                 if is_desired:
@@ -385,6 +390,12 @@ class GradioDataExplorer:
                     r = 255
                     g = int(165 * time_value)
                     b = 0
+                    return f"rgb({r}, {g}, {b})"
+                elif is_action:
+                    # Green gradient for left arm action
+                    r = 0
+                    g = 255
+                    b = int(100 * time_value)
                     return f"rgb({r}, {g}, {b})"
                 else:
                     # Red gradient for left arm actual
@@ -398,6 +409,12 @@ class GradioDataExplorer:
                     r = int(128 + 127 * time_value)
                     g = 0
                     b = int(128 + 127 * time_value)
+                    return f"rgb({r}, {g}, {b})"
+                elif is_action:
+                    # Yellow gradient for right arm action
+                    r = 255
+                    g = 255
+                    b = int(100 * time_value)
                     return f"rgb({r}, {g}, {b})"
                 else:
                     # Blue gradient for right arm actual
@@ -604,7 +621,7 @@ class GradioDataExplorer:
 
         # Extract and filter gripper trajectories, including desired if requested
         trajectories = self.trajectory_extractor.extract_trajectories(
-            sample, None, include_desired=self.show_desired_trajectories
+            sample, None, include_desired=self.show_desired_trajectories, include_action=self.show_action_trajectories
         )
         valid_trajectories = self._get_valid_gripper_trajectories(trajectories)
 
@@ -667,6 +684,7 @@ class GradioDataExplorer:
     def _get_colorscale_for_trajectory(self, traj_name: str) -> list:
         """Get appropriate colorscale based on trajectory name."""
         is_desired = "desired" in traj_name.lower()
+        is_action = "action" in traj_name.lower()
 
         # Custom colorscales with inverted gradient (slightly lighter start to darker end)
         # Format: list of [position, color] pairs where position is 0.0 to 1.0
@@ -674,6 +692,9 @@ class GradioDataExplorer:
             if is_desired:
                 # Light orange to dark orange
                 return [[0, "rgb(255, 165, 0)"], [1, "rgb(180, 80, 0)"]]
+            if is_action:
+                # Green gradient for left arm action
+                return [[0, "rgb(0, 255, 0)"], [1, "rgb(0, 100, 0)"]]
             else:
                 # Light red to dark red
                 return [[0, "rgb(255, 100, 100)"], [1, "rgb(180, 0, 0)"]]
@@ -681,6 +702,9 @@ class GradioDataExplorer:
             if is_desired:
                 # Light purple to dark purple
                 return [[0, "rgb(200, 0, 200)"], [1, "rgb(80, 0, 80)"]]
+            if is_action:
+                # Yellow gradient for right arm action
+                return [[0, "rgb(255, 255, 0)"], [1, "rgb(100, 100, 0)"]]
             else:
                 # Light blue to dark blue
                 return [[0, "rgb(100, 100, 255)"], [1, "rgb(0, 0, 180)"]]
@@ -688,6 +712,9 @@ class GradioDataExplorer:
             if is_desired:
                 # Light yellow-green to dark yellow-green
                 return [[0, "rgb(150, 255, 0)"], [1, "rgb(50, 100, 0)"]]
+            elif is_action:
+                # Light green to dark green
+                return [[0, "rgb(0, 255, 100)"], [1, "rgb(0, 100, 0)"]]
             else:
                 # Light green to dark green
                 return [[0, "rgb(0, 255, 100)"], [1, "rgb(0, 100, 0)"]]
@@ -945,8 +972,9 @@ class GradioDataExplorer:
     def create_interface(self) -> gr.Interface:
         """Create the Gradio interface."""
 
-        def update_fn(sample_idx, camera_name, camera_timestep, show_3d_plot, show_desired):
+        def update_fn(sample_idx, camera_name, camera_timestep, show_3d_plot, show_desired, show_action):
             self.show_desired_trajectories = show_desired
+            self.show_action_trajectories = show_action
             return self.update_display(sample_idx, camera_name, camera_timestep, show_3d_plot)
 
         def update_camera_timesteps(camera_name):
@@ -993,6 +1021,7 @@ class GradioDataExplorer:
 
                     show_3d_checkbox = gr.Checkbox(value=True, label="Show 3D Plot")
                     show_desired_checkbox = gr.Checkbox(value=False, label="Show Desired Trajectories")
+                    show_action_checkbox = gr.Checkbox(value=False, label="Show Action Trajectories")
 
                 with gr.Column(scale=1):
                     # Metadata display
@@ -1019,7 +1048,8 @@ class GradioDataExplorer:
             - **🔵 Circle markers**: Open gripper state (value > 0.09)
             - **🔲 Square markers**: Closed gripper state (value ≤ 0.09)
             - **🟡 Yellow outline**: Current robot position (corresponding to image timestamp)
-                                
+            - **🟢 Green trajectory**: Left arm action position (when "Show Action Trajectories" is enabled)
+            - **🟡 Yellow trajectory**: Right arm action position (when "Show Action Trajectories" is enabled)
             ### 💡 Tips
             - The 3D plot shows interactive trajectory visualization with time-based color gradients
             - Use the camera timestep dropdown to see different temporal views of the same scene
@@ -1029,7 +1059,14 @@ class GradioDataExplorer:
             )
 
             # Connect all inputs to the update function
-            inputs = [sample_slider, camera_dropdown, camera_timestep_dropdown, show_3d_checkbox, show_desired_checkbox]
+            inputs = [
+                sample_slider,
+                camera_dropdown,
+                camera_timestep_dropdown,
+                show_3d_checkbox,
+                show_desired_checkbox,
+                show_action_checkbox,
+            ]
             outputs = [camera_image, trajectory_plot, metadata_display]
 
             # Update camera timesteps when camera changes

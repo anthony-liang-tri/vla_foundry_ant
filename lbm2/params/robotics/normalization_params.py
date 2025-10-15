@@ -12,7 +12,7 @@ class FieldNormalizationParams:
     So we use dataclasses_json to make sure the result is still properly serializable.
     """
 
-    method: str = field(default="std")  # "std", "percentile_5_95", "percentile_1_99"
+    method: str = field(default="std")  # "std", "percentile_5_95", "percentile_1_99" "min_max"
     scope: str = field(default="global")  # "global" or "per_timestep"
     epsilon: float = field(default=1e-8)
 
@@ -42,7 +42,7 @@ class NormalizationParams(BaseParams):
     enabled: bool = field(default=True)
 
     # Default parameters to be used for all fields if not specified in field_configs
-    method: str = field(default="std")  # "std", "percentile_5_95", "percentile_1_99"
+    method: str = field(default="std")  # "std", "percentile_5_95", "percentile_1_99" "min_max"
     scope: str = field(default="global")  # "global" or "per_timestep"
     epsilon: float = field(default=1e-8)
 
@@ -62,7 +62,7 @@ class NormalizationParams(BaseParams):
         self.check_asserts()
 
     def check_asserts(self):
-        if self.method not in ["std", "percentile_5_95", "percentile_1_99"]:
+        if self.method not in ["std", "percentile_5_95", "percentile_1_99", "min_max"]:
             raise ValueError(f"Invalid normalization method: {self.method}")
         if self.scope not in ["global", "per_timestep"]:
             raise ValueError(f"Invalid normalization scope: {self.scope}")

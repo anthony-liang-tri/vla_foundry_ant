@@ -8,19 +8,19 @@ language_instruction_types:
 
 proprioception_fields:
   - robot__actual__poses__left::panda__xyz # 3
-  - robot__actual__poses__right::panda__xyz # 3
   - robot__actual__poses__left::panda__rot_6d # 6
-  - robot__actual__poses__right::panda__rot_6d # 6
   - robot__actual__grippers__left::panda_hand # 1
+  - robot__actual__poses__right::panda__xyz # 3
+  - robot__actual__poses__right::panda__rot_6d # 6
   - robot__actual__grippers__right::panda_hand # 1
 
 action_fields:
-  - robot__desired__poses__left::panda__xyz # 3
-  - robot__desired__poses__right::panda__xyz # 3
-  - robot__desired__poses__left::panda__rot_6d # 6
-  - robot__desired__poses__right::panda__rot_6d # 6
-  - robot__desired__grippers__left::panda_hand # 1
-  - robot__desired__grippers__right::panda_hand # 1
+  - robot__action__poses__left::panda__xyz # 3
+  - robot__action__poses__left::panda__rot_6d # 6
+  - robot__action__grippers__left::panda_hand # 1
+  - robot__action__poses__right::panda__xyz # 3
+  - robot__action__poses__right::panda__rot_6d # 6
+  - robot__action__grippers__right::panda_hand # 1
 
 intrinsics_fields:
   - intrinsics.scene_right_0
@@ -59,11 +59,11 @@ normalization:
       scope: global
       epsilon: 1e-1
     robot__desired__grippers__left::panda_hand:
-      method: percentile_1_99
+      method: min_max
       scope: global
       epsilon: 1e-1
     robot__desired__grippers__right::panda_hand:
-      method: percentile_1_99
+      method: min_max
       scope: global
       epsilon: 1e-1
     robot__actual__joint_position__left::panda:
@@ -75,11 +75,11 @@ normalization:
       scope: global 
       epsilon: 1e-1
     robot__actual__grippers__left::panda_hand:
-      method: percentile_1_99
+      method: min_max
       scope: global
       epsilon: 1e-1
     robot__actual__grippers__right::panda_hand:
-      method: percentile_1_99
+      method: min_max
       scope: global
       epsilon: 1e-1
     robot__actual__poses__left::panda__xyz:
@@ -96,5 +96,29 @@ normalization:
       epsilon: 1e-1
     robot__actual__poses__right::panda__rot_6d:
       method: std
+      scope: global
+      epsilon: 1e-1
+    robot__action__poses__left::panda__xyz:
+      method: percentile_1_99
+      scope: global
+      epsilon: 1e-1
+    robot__action__poses__right::panda__xyz:
+      method: percentile_1_99
+      scope: global
+      epsilon: 1e-1
+    robot__action__poses__left::panda__rot_6d:
+      method: std
+      scope: global
+      epsilon: 1e-1
+    robot__action__poses__right::panda__rot_6d:
+      method: std
+      scope: global
+      epsilon: 1e-1
+    robot__action__grippers__left::panda_hand:
+      method: min_max
+      scope: global
+      epsilon: 1e-1
+    robot__action__grippers__right::panda_hand:
+      method: min_max
       scope: global
       epsilon: 1e-1

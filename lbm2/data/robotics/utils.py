@@ -5,12 +5,23 @@ This module provides helper functions for working with robotics data,
 including extraction of proprioception and action data based on configuration.
 """
 
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import numpy as np
 import torch
+import yaml
 
 from lbm2.params.data_params import RoboticsDataParams
+
+
+def load_action_field_config(config_path: str) -> Dict[str, List[Any]]:
+    """Load action field configuration from YAML file."""
+    with open(config_path, "r") as f:
+        data = yaml.safe_load(f) or {}
+    return {
+        "action_key_fields": data.get("action_key_fields", []),
+        "action_index_fields": data.get("action_index_fields", []),
+    }
 
 
 def _get_rotation_matrix(x, y, z, perm_config):
