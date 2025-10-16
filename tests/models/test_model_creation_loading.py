@@ -4,17 +4,18 @@ import torch
 
 from lbm2.file_utils import load_model_checkpoint
 from lbm2.models import create_model
-from lbm2.params.train_experiment_params import load_experiment_params_from_yaml
+from lbm2.params.model_params import ModelParams
+from lbm2.params.train_experiment_params import load_params_from_yaml
 
 
 def test_model_loading():
-    cfg = load_experiment_params_from_yaml("tests/shared/tiny_model/config.yaml")
-    model = create_model(cfg.model)
+    model_params = load_params_from_yaml(ModelParams, "tests/shared/tiny_model/config_model.yaml")
+    model = create_model(model_params)
     initial_keys = set(model.state_dict().keys())
     initial_state_dict = deepcopy(model.state_dict())
 
     ckpt = "tests/shared/tiny_model/checkpoint.pt"
-    load_model_checkpoint(model, ckpt, cfg.distributed)
+    load_model_checkpoint(model, ckpt)
     loaded_keys = set(model.state_dict().keys())
     loaded_state_dict = model.state_dict()
     assert initial_keys == loaded_keys, "State dict keys changed after loading checkpoint"
@@ -37,15 +38,15 @@ def test_model_loading():
 
 def test_model_same_seed_same_initialization():
     """Test that model initializes same parameters with same seed."""
-    cfg = load_experiment_params_from_yaml("tests/shared/tiny_model/config.yaml")
+    model_params = load_params_from_yaml(ModelParams, "tests/shared/tiny_model/config_model.yaml")
 
     # Set seed and create model
     torch.manual_seed(42)
-    model1 = create_model(cfg.model)
+    model1 = create_model(model_params)
 
     # Set same seed and create another model
     torch.manual_seed(42)
-    model2 = create_model(cfg.model)
+    model2 = create_model(model_params)
 
     # Both models should have identical parameters
     for p1, p2 in zip(model1.parameters(), model2.parameters(), strict=False):
@@ -54,19 +55,19 @@ def test_model_same_seed_same_initialization():
 
 def test_model_deterministic_loading():
     """Test that model loads deterministically regardless of seed."""
-    cfg = load_experiment_params_from_yaml("tests/shared/tiny_model/config.yaml")
+    model_params = load_params_from_yaml(ModelParams, "tests/shared/tiny_model/config_model.yaml")
 
     # Set seed and create model
     torch.manual_seed(42)
-    model1 = create_model(cfg.model)
+    model1 = create_model(model_params)
 
     # Try different seed. This shouldn't matter because we're loading the same checkpoint.
     torch.manual_seed(43)
-    model2 = create_model(cfg.model)
+    model2 = create_model(model_params)
 
     ckpt = "tests/shared/tiny_model/checkpoint.pt"
-    load_model_checkpoint(model1, ckpt, cfg.distributed)
-    load_model_checkpoint(model2, ckpt, cfg.distributed)
+    load_model_checkpoint(model1, ckpt)
+    load_model_checkpoint(model2, ckpt)
 
     for p1, p2 in zip(model1.parameters(), model2.parameters(), strict=False):
         assert torch.equal(p1, p2), "Models with same seed should have identical parameters"

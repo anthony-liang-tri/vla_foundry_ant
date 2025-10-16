@@ -395,7 +395,7 @@ def remote_sync(local_dir, remote_dir):
     return True
 
 
-def load_model_checkpoint(model, resume_from_checkpoint, distributed_params):
+def load_model_checkpoint(model, resume_from_checkpoint):
     checkpoint = pt_load(resume_from_checkpoint, map_location="cpu")
 
     # resuming a train checkpoint w/ epoch and optimizer state
@@ -405,31 +405,28 @@ def load_model_checkpoint(model, resume_from_checkpoint, distributed_params):
     shard_shuffle_seed_per_dataset = checkpoint.get("shard_shuffle_seed_per_dataset", None)
     if "_orig_mod" in next(iter(sd.items()))[0]:
         sd = {k.replace("_orig_mod.", ""): v for k, v in sd.items()}
-    if distributed_params.fsdp:
-        if isinstance(model, FSDPModule):
-            sharded_sd = {}
-            model_sd = model.state_dict()
-            for param_name, full_tensor in sd.items():
-                sharded_meta_param = model_sd.get(param_name)
-                if isinstance(sharded_meta_param, DTensor):
-                    # shard weights from cpu to their target device
-                    sharded_tensor = distribute_tensor(
-                        full_tensor,
-                        sharded_meta_param.device_mesh,
-                        sharded_meta_param.placements,
-                    )
-                    sharded_sd[param_name] = torch.nn.Parameter(sharded_tensor)
-                else:
-                    # FSDP2 doesn't shard buffers.
-                    assert torch.allclose(
-                        full_tensor.to(sharded_meta_param.device), sharded_meta_param, rtol=1e-5, atol=1e-8
-                    )
-                    sharded_sd[param_name] = sharded_meta_param
-            model.load_state_dict(sharded_sd, assign=True)
-        else:
-            # Inference
-            model.load_state_dict(sd)
-    elif distributed_params.use_distributed:
+    if isinstance(model, FSDPModule):
+        sharded_sd = {}
+        model_sd = model.state_dict()
+        for param_name, full_tensor in sd.items():
+            sharded_meta_param = model_sd.get(param_name)
+            if isinstance(sharded_meta_param, DTensor):
+                # shard weights from cpu to their target device
+                sharded_tensor = distribute_tensor(
+                    full_tensor,
+                    sharded_meta_param.device_mesh,
+                    sharded_meta_param.placements,
+                )
+                sharded_sd[param_name] = torch.nn.Parameter(sharded_tensor)
+            else:
+                # FSDP2 doesn't shard buffers.
+                assert torch.allclose(
+                    full_tensor.to(sharded_meta_param.device), sharded_meta_param, rtol=1e-5, atol=1e-8
+                )
+                sharded_sd[param_name] = sharded_meta_param
+        model.load_state_dict(sharded_sd, assign=True)
+    elif hasattr(model, "module"):
+        # DDP but not FSDP
         model.module.load_state_dict(sd)
     else:
         model.load_state_dict(sd)

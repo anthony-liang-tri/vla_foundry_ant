@@ -68,6 +68,8 @@ def main():
         # Persist the resolved config.
         with open(os.path.join(experiment_path, "config.yaml"), "w") as f:
             draccus.dump(cfg, f)
+        with open(os.path.join(experiment_path, "config_model.yaml"), "w") as f:
+            draccus.dump(cfg.model, f)
         # Initial sync to check that remote_sync works.
         if cfg.remote_sync:
             remote_sync(experiment_path, os.path.join(cfg.remote_sync, experiment_name))
@@ -100,10 +102,10 @@ def main():
     shard_shuffle_seed_per_dataset = None
     if cfg.model.resume_from_checkpoint is not None:
         if cfg.model.resume_weights_only:
-            load_model_checkpoint(model, cfg.model.resume_from_checkpoint, cfg.distributed)
+            load_model_checkpoint(model, cfg.model.resume_from_checkpoint)
         else:
             start_checkpoint_num, global_step, shard_shuffle_seed_per_dataset = load_model_checkpoint(
-                model, cfg.model.resume_from_checkpoint, cfg.distributed
+                model, cfg.model.resume_from_checkpoint
             )
 
     # Create optimizer before torchcompile

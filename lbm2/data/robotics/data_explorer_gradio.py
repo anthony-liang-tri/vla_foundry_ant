@@ -189,7 +189,7 @@ def main():
         checkpoint_file = sorted(checkpoint_file, key=lambda x: int(x.split("_")[1].split(".")[0]))[-1]
         print(f"Loading model from {args.model_predictions_path + '/checkpoints/' + checkpoint_file}")
         # Load checkpoint
-        load_model_checkpoint(model, args.model_predictions_path + "/checkpoints/" + checkpoint_file, cfg.distributed)
+        load_model_checkpoint(model, args.model_predictions_path + "/checkpoints/" + checkpoint_file)
         model.to("cuda")
         model.eval()
         object.__setattr__(cfg.hparams, "global_batch_size", 1)

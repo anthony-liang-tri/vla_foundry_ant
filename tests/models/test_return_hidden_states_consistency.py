@@ -3,8 +3,8 @@ import torch
 
 from lbm2.models import create_model
 from lbm2.models.utils import compute_num_image_tokens
-from lbm2.params.model_params import TransformerHFParams, TransformerParams, VLMHFParams
-from lbm2.params.train_experiment_params import load_experiment_params_from_yaml, load_params_from_yaml
+from lbm2.params.model_params import ModelParams, TransformerHFParams, TransformerParams, VLMHFParams
+from lbm2.params.train_experiment_params import load_params_from_yaml
 
 
 class TestReturnHiddenStatesConsistency:
@@ -16,9 +16,9 @@ class TestReturnHiddenStatesConsistency:
 
     @pytest.fixture
     def vlm_config(self):
-        config = load_experiment_params_from_yaml("tests/params/dummy_configs/dummy_vlm_config.yaml")
-        object.__setattr__(config.model, "image_token_id", 999)
-        return config
+        model_params = load_params_from_yaml(ModelParams, "tests/params/dummy_configs/dummy_vlm_model_config.yaml")
+        object.__setattr__(model_params, "image_token_id", 999)
+        return model_params
 
     def test_transformer_return_format_consistency(self, transformer_config):
         """Test that Transformer consistently returns 3 items"""
@@ -80,7 +80,7 @@ class TestReturnHiddenStatesConsistency:
 
     def test_vlm_return_format_consistency(self, vlm_config):
         """Test that VLM consistently returns 3 items"""
-        vlm = create_model(vlm_config.model)
+        vlm = create_model(vlm_config)
 
         # Compute expected number of image tokens from ViT config
         vit_cfg = vlm.model_params.vit
@@ -125,7 +125,7 @@ class TestReturnHiddenStatesConsistency:
         transformer_hf = create_model(transformer_hf_config)
 
         # Create VLM
-        vlm = create_model(vlm_config.model)
+        vlm = create_model(vlm_config)
 
         vlm_hf_config = VLMHFParams(
             hf_pretrained="microsoft/git-base", resume_from_checkpoint=None, resume_weights_only=False

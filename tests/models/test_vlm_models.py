@@ -10,8 +10,8 @@ from lbm2.models.transformer_base import TransformerBase
 from lbm2.models.utils import compute_num_image_tokens
 from lbm2.models.vlm import VLM, ModalityProjector
 from lbm2.models.vlm_hf import VLMHF
-from lbm2.params.model_params import ViTParams
-from lbm2.params.train_experiment_params import load_experiment_params_from_yaml, load_params_from_yaml
+from lbm2.params.model_params import ModelParams, ViTParams
+from lbm2.params.train_experiment_params import load_params_from_yaml
 
 
 class TestModalityProjector:
@@ -73,7 +73,7 @@ class TestModalityProjector:
 class TestVLM:
     @pytest.fixture
     def vlm_config(self):
-        return load_experiment_params_from_yaml("tests/params/dummy_configs/dummy_vlm_config.yaml").model
+        return load_params_from_yaml(ModelParams, "tests/params/dummy_configs/dummy_vlm_model_config.yaml")
 
     @pytest.fixture
     def vlm(self, vlm_config):
@@ -179,7 +179,7 @@ class TestVLM:
 class TestVLMHF:
     @pytest.fixture
     def vlm_hf_config(self):
-        return load_experiment_params_from_yaml("tests/params/dummy_configs/dummy_vlm_hf_config.yaml").model
+        return load_params_from_yaml(ModelParams, "tests/params/dummy_configs/dummy_vlm_model_hf_config.yaml")
 
     @patch("lbm2.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
     def test_vlm_hf_forward_basic(self, mock_from_pretrained, vlm_hf_config):
@@ -411,7 +411,7 @@ class TestVLMInheritance:
 
     @pytest.fixture
     def vlm_config(self):
-        return load_experiment_params_from_yaml("tests/params/dummy_configs/dummy_vlm_config.yaml").model
+        return load_params_from_yaml(ModelParams, "tests/params/dummy_configs/dummy_vlm_model_config.yaml")
 
     @pytest.fixture
     def vlm(self, vlm_config):
@@ -444,7 +444,7 @@ class TestVLMGradientCheckpointing:
 
     @pytest.fixture
     def vlm_config(self):
-        return load_experiment_params_from_yaml("tests/params/dummy_configs/dummy_vlm_config.yaml").model
+        return load_params_from_yaml(ModelParams, "tests/params/dummy_configs/dummy_vlm_model_config.yaml")
 
     @pytest.fixture
     def vlm(self, vlm_config):
@@ -480,7 +480,7 @@ class TestVLMHFInheritance:
 
     @pytest.fixture
     def vlm_hf_config(self):
-        return load_experiment_params_from_yaml("tests/params/dummy_configs/dummy_vlm_hf_config.yaml").model
+        return load_params_from_yaml(ModelParams, "tests/params/dummy_configs/dummy_vlm_model_hf_config.yaml")
 
     @patch("lbm2.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
     def test_vlm_hf_inherits_from_transformer_base(self, mock_from_pretrained, vlm_hf_config):
@@ -524,7 +524,7 @@ class TestVLMHFVocabularyExtension:
 
     @pytest.fixture
     def vlm_hf_config(self):
-        return load_experiment_params_from_yaml("tests/params/dummy_configs/dummy_vlm_hf_config.yaml").model
+        return load_params_from_yaml(ModelParams, "tests/params/dummy_configs/dummy_vlm_model_hf_config.yaml")
 
     @patch("lbm2.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
     def test_vlm_hf_resize_token_embeddings_with_token_id(self, mock_from_pretrained, vlm_hf_config):
