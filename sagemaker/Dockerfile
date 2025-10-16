@@ -1,5 +1,5 @@
 ARG AWS_REGION
-FROM 763104351884.dkr.ecr.${AWS_REGION}.amazonaws.com/pytorch-training:2.6.0-gpu-py312-cu126-ubuntu22.04-sagemaker
+FROM 763104351884.dkr.ecr.${AWS_REGION}.amazonaws.com/pytorch-training:2.8.0-gpu-py312-cu129-ubuntu22.04-sagemaker
 
 # this environment variable is used by the SageMaker PyTorch container to determine our user code directory.
 ENV SAGEMAKER_SUBMIT_DIRECTORY /opt/ml/code
@@ -8,7 +8,7 @@ ENV SAGEMAKER_SUBMIT_DIRECTORY /opt/ml/code
 # TODO: Figure out how to install from uv.lock instead.
 # The issue with uv.lock is that it seems to rely on the sagemaker tar file
 # even if we are installing without that group.
-RUN pip install --no-cache-dir uv
+RUN pip install --upgrade uv
 COPY pyproject.toml /opt/ml/code/pyproject.toml
 RUN \
     # Drop the optional inference group and workspace-only sources that aren't present in this image

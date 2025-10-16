@@ -79,8 +79,6 @@ def init_distributed_device(distributed_params):
         object.__setattr__(distributed_params, "world_size", torch.distributed.get_world_size())
         object.__setattr__(distributed_params, "rank", torch.distributed.get_rank())
         object.__setattr__(distributed_params, "use_distributed", True)
-    else:
-        assert not distributed_params.fsdp, "FSDP is only supported in distributed mode"
 
     if torch.cuda.is_available():
         device = "cuda:%d" % distributed_params.local_rank if distributed_params.use_distributed else "cuda:0"

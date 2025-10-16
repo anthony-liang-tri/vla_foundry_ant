@@ -57,6 +57,7 @@ rsync_exclude:
 setup_commands:
     - sudo apt-get update -y
     - sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" ffmpeg
+    - sudo NEEDRESTART_MODE=a apt install awscli -y
     - sudo mkfs -t xfs /dev/nvme1n1
     - sudo mount /dev/nvme1n1 /tmp
     - sudo chown -R $USER /tmp
