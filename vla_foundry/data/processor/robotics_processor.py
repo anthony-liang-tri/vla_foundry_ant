@@ -158,7 +158,7 @@ class RoboticsProcessor:
             processed_batch["lowdim"][k] = torch.stack([torch.as_tensor(v, dtype=torch.float32) for v in values])
 
         # Normalize each field individually
-        if self.normalizer:
+        if self.normalizer and self.data_params.normalization.enabled:
             anchor_timestep = self.data_params.lowdim_past_timesteps
             # Normalize each lowdim field
             for field_name, tensor in processed_batch["lowdim"].items():
