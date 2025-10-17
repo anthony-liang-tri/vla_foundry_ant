@@ -9,8 +9,6 @@ class DistributedParams(BaseParams):
     dist_url: str = field(default="env://")
     dist_backend: str = field(default="nccl")
     fsdp: bool = field(default=False)
-    fsdp_amp: bool = field(default=False)
-    fsdp_pure_bf16: bool = field(default=False)
     fsdp_cpu_offload: bool = field(default=False)
     fsdp_reshard_after_forward: bool = field(default=False)
     ddp_static_graph: bool = field(default=False)

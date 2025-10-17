@@ -17,7 +17,6 @@
   --data.num_workers 4 \
   --data.seq_len 2048 \
   --distributed.fsdp True \
-  --distributed.fsdp_pure_bf16 True \
   --num_checkpoints 3 \
   --hparams.loss_function mse \
   --hparams.per_gpu_batch_size 128 \

@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass, field
 
 from lbm2.params.base_params import BaseParams
@@ -8,7 +9,6 @@ class HyperParams(BaseParams):
     precision: str = field(default="amp_bfloat16")
     global_batch_size: int = field(default=512)
     per_gpu_batch_size: int = field(default=8)
-
     seed: int = field(default=42)
     lr: float = field(default=1e-4)
     lr_scheduler: str = field(default="cosine")
@@ -28,6 +28,23 @@ class HyperParams(BaseParams):
 
     # Shared attributes. Overwritten in init_shared_attributes.
     world_size: int = field(default=1)
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.precision == "pure_bf16":
+            object.__setattr__(self, "precision_amp", False)
+            object.__setattr__(self, "precision_pure_bf16", True)
+        elif self.precision == "amp" or self.precision == "amp_bf16" or self.precision == "amp_bfloat16":
+            object.__setattr__(self, "precision_pure_bf16", False)
+            object.__setattr__(self, "precision_amp", True)
+        elif self.precision == "fp32" or self.precision == "float32":
+            object.__setattr__(self, "precision_amp", False)
+            object.__setattr__(self, "precision_pure_bf16", False)
+        else:
+            logging.warning(f"Precision {self.precision} uknown, using default float32")
+            object.__setattr__(self, "precision", "float32")
+            object.__setattr__(self, "precision_amp", False)
+            object.__setattr__(self, "precision_pure_bf16", False)
 
     @property
     def accum_freq(self):

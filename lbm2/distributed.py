@@ -114,15 +114,11 @@ def get_model_precision(cfg):
     Determine the appropriate model precision based on distributed configuration.
     Returns the dtype that should be used for model parameters.
     """
-    if cfg.distributed.fsdp:
-        # FSDP handles precision through MixedPrecision policy
-        if cfg.distributed.fsdp_amp or cfg.distributed.fsdp_pure_bf16:
-            return torch.bfloat16
-        else:
-            return torch.float32  # Default FSDP precision
-    else:
-        # For DDP and single GPU, use bfloat16 by default to match FSDP behavior
+    # FSDP handles precision through MixedPrecision policy but in either case the model precision should be bfloat16
+    if cfg.hparams.precision_amp or cfg.hparams.precision_pure_bf16:
         return torch.bfloat16
+    else:
+        return torch.float32  # Default precision if not specified
 
 
 def wrap_fsdp_ddp(model, device, cfg):
@@ -132,14 +128,14 @@ def wrap_fsdp_ddp(model, device, cfg):
             reduce_dtype=None,
             output_dtype=None,
         )
-        if cfg.distributed.fsdp_amp:
+        if cfg.hparams.precision_amp:
             print("=> using bfloat16 params as part of fsdp amp policy.")
             mp_policy = MixedPrecisionPolicy(
                 param_dtype=torch.bfloat16,
                 reduce_dtype=torch.float32,
                 output_dtype=torch.bfloat16,
             )
-        elif cfg.distributed.fsdp_pure_bf16:
+        elif cfg.hparams.precision_pure_bf16:
             print("=> using pure bfloat16 params as part of fsdp amp policy.")
             mp_policy = MixedPrecisionPolicy(
                 param_dtype=torch.bfloat16,
@@ -200,7 +196,12 @@ def wrap_fsdp_ddp(model, device, cfg):
         )
         print(f"After FSDP {torch.cuda.memory_allocated() / 1024**3:.3} GB on rank {cfg.distributed.rank}")
     else:
-        ddp_args = {}
+        # Move model to device before DDP wrapping
+        model = model.to(device, dtype=get_model_precision(cfg))
+
+        ddp_args = {
+            "find_unused_parameters": True,  # Handle unused parameters in DDP
+        }
         if cfg.distributed.ddp_static_graph:
             # this doesn't exist in older PyTorch, arg only added if enabled
             ddp_args["static_graph"] = True

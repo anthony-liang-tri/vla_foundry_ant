@@ -3,8 +3,9 @@
   --model.clip.freeze_text_encoder True \
   --model.transformer.is_causal True \
   --data "include lbm2/config_presets/data/lbm_data_params.yaml" \
-  --data.dataset_manifest ["s3://tri-ml-datasets-uw2/vlm_datasets/preprocess_224_shuffled_2/lbm/BimanualPutRedBellPepperInBin/riverway/sim/shards/manifest.jsonl"] \
-  --data.dataset_statistics ["s3://tri-ml-datasets-uw2/vlm_datasets/preprocess_224_shuffled_2/lbm/BimanualPutRedBellPepperInBin/riverway/sim/shards/stats.json"] \
+  --data.dataset_manifest ["s3://tri-ml-datasets-uw2/vlm_datasets/preprocess_384_past1_future8_relative/lbm/BimanualPutRedBellPepperInBin/riverway/sim/shards/manifest.jsonl"] \
+  --data.dataset_statistics ["s3://tri-ml-datasets-uw2/vlm_datasets/preprocess_384_past1_future8_relative/lbm/BimanualPutRedBellPepperInBin/riverway/sim/shards/stats.json"] \
+  --data.dataset_weighting [1.0] \
   --data.dataset_modality ["robotics"] \
   --data.image_size 224 \
   --data.num_images 12 \
@@ -15,11 +16,11 @@
   --data.num_workers 4 \
   --data.seq_len 2048 \
   --distributed.fsdp True \
-  --distributed.fsdp_pure_bf16 True \
   --num_checkpoints 3 \
+  --hparams.precision pure_bf16 \
   --hparams.loss_function mse \
-  --hparams.per_gpu_batch_size 128 \
-  --hparams.global_batch_size 384 \
+  --hparams.per_gpu_batch_size 16 \
+  --hparams.global_batch_size 48 \
   --hparams.grad_clip_norm 1.0 \
   --hparams.lr 5e-4 \
   --hparams.lr_cooldown_end 1e-5 \

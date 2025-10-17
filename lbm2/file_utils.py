@@ -348,9 +348,17 @@ def save_checkpoint(
             "state": full_state,
         }
 
+    # Get model state dict and ensure consistent naming
+    if cfg.distributed.fsdp:
+        model_state_dict = cpu_state
+    else:
+        # Use unwrapped model state dict to avoid module prefix
+        unwrapped_model = get_unwrapped_model(model)
+        model_state_dict = unwrapped_model.state_dict()
+
     checkpoint_dict = {
         "checkpoint_num": checkpoint_num,
-        "state_dict": cpu_state if cfg.distributed.fsdp else model.state_dict(),
+        "state_dict": model_state_dict,
         "datastrings": datastrings,
         "curr_shard_idx_per_dataset": curr_shard_idx_per_dataset,
         "samples_seen": samples_seen,
@@ -365,6 +373,7 @@ def save_checkpoint(
         "checkpoint_": checkpoint_dict,
         "optimizer_": optimizer_dict,
     }
+
     for prefix in prefixes:
         path = os.path.join(checkpoint_path, f"{prefix}{checkpoint_num}.pt")
         print(f"Saving {prefix}{checkpoint_num} in {path}...")
@@ -378,6 +387,13 @@ def save_checkpoint(
             if os.path.exists(old_path):
                 os.remove(old_path)
                 print(f"Removed old checkpoint: {prefix}{oldest_checkpoint}.pt")
+
+
+def get_unwrapped_model(model):
+    """Get the unwrapped model from DDP wrapper if present, otherwise return the model itself."""
+    if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+        return model.module
+    return model
 
 
 def remote_sync(local_dir, remote_dir):
@@ -425,10 +441,8 @@ def load_model_checkpoint(model, resume_from_checkpoint):
                 )
                 sharded_sd[param_name] = sharded_meta_param
         model.load_state_dict(sharded_sd, assign=True)
-    elif hasattr(model, "module"):
-        # DDP but not FSDP
-        model.module.load_state_dict(sd)
     else:
+        model = get_unwrapped_model(model)
         model.load_state_dict(sd)
     logging.info(f"=> resuming checkpoint '{resume_from_checkpoint}' (checkpoint {start_checkpoint_num})")
     return start_checkpoint_num, global_step, shard_shuffle_seed_per_dataset
