@@ -45,9 +45,10 @@ def create_model(model_params: ModelParams):
     elif model_params.type == "vlm_hf":
         model = VLMHF(model_params)
     elif model_params.type == "stable_diffusion":
+        clip = create_model(model_params.clip) if model_params.clip.hf_pretrained is not None else None
         unet = UNetDiffusers(model_params.unet) if model_params.use_diffusers_unet else UNet(model_params.unet)
         noise_scheduler = create_noise_scheduler(model_params)
-        model = StableDiffusion(model_params, noise_scheduler, unet)
+        model = StableDiffusion(model_params, clip, unet, noise_scheduler)
     elif model_params.type == "clip_hf":
         model = CLIPHF(model_params)
     elif model_params.type == "diffusion_policy":

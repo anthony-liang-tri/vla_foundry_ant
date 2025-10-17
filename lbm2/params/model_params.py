@@ -164,6 +164,14 @@ class NoiseSchedulerParams(ModelParams):
     beta_end: float = field(default=0.02)
 
 
+@register_model_params("clip_hf")
+@dataclass(frozen=True)
+class CLIPHFParams(ModelParams):
+    hf_pretrained: str = field(default=None)
+    freeze_text_encoder: bool = field(default=False)
+    freeze_image_encoder: bool = field(default=False)
+
+
 @register_model_params("stable_diffusion")
 @dataclass(frozen=True)
 class StableDiffusionParams(ModelParams):
@@ -174,17 +182,16 @@ class StableDiffusionParams(ModelParams):
     use_diffusers_scheduler: bool = field(default=False)
     use_flow_matching_scheduler: bool = field(default=False)
 
+    clip: CLIPHFParams = field(default_factory=CLIPHFParams)
+
+    # CFG params
+    do_classifier_free_guidance: bool = field(default=False)
+    guidance_scale: float = field(default=4.0)  # Standard CFG scale
+    dropout_percent: float = field(default=0.2)  # 20% dropout for unconditional training
+
     @property
     def image_size(self):
         return self.unet.image_size
-
-
-@register_model_params("clip_hf")
-@dataclass(frozen=True)
-class CLIPHFParams(ModelParams):
-    hf_pretrained: str = field(default=None)
-    freeze_text_encoder: bool = field(default=False)
-    freeze_image_encoder: bool = field(default=False)
 
 
 @register_model_params("diffusion_policy")

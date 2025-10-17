@@ -1,0 +1,26 @@
+.venv/bin/torchrun --nproc_per_node=8 --nnodes=1 lbm2/main.py \
+--model.type stable_diffusion \
+--model.use_diffusers_unet False \
+--model.use_flow_matching_scheduler True \
+--model.unet "include lbm2/config_presets/models/unet.yaml" \
+--model.unet.image_size 128 \
+--model.clip.hf_pretrained openai/clip-vit-base-patch32 \
+--model.clip.freeze_text_encoder True \
+--model.clip.freeze_image_encoder True \
+--model.do_classifier_free_guidance True \
+--distributed.fsdp True \
+--data.type image_caption \
+--data.processor stable_diffusion \
+--data.dataset_manifest ["s3://tri-ml-datasets/datasets/datacompdr_1b/manifest.jsonl"] \
+--data.dataset_modality ["image_caption"] \
+--data.dataset_weighting [1.0] \
+--data.seq_len 64 \
+--hparams.loss_function mse \
+--hparams.per_gpu_batch_size 16 \
+--hparams.global_batch_size 1024 \
+--hparams.lr 1e-3 \
+--hparams.lr_cooldown_end 1e-6 \
+--total_train_samples 50_000_000 \
+--num_checkpoints 10 \
+--remote_sync s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/stable_diffusion_cfg \
+--wandb True 
