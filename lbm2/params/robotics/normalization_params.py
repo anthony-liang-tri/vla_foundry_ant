@@ -15,12 +15,14 @@ class FieldNormalizationParams:
     method: str = field(default="std")  # "std", "percentile_5_95", "percentile_1_99" "min_max"
     scope: str = field(default="global")  # "global" or "per_timestep"
     epsilon: float = field(default=1e-8)
+    enabled: bool = field(default=True)
 
     def to_dict(self):
         return {
             "method": self.method,
             "scope": self.scope,
             "epsilon": self.epsilon,
+            "enabled": self.enabled,
         }
 
     def __reduce__(self):
@@ -30,7 +32,7 @@ class FieldNormalizationParams:
         """
         # Just return the data as a tuple of (class, args)
         # This will make it serialize as a plain mapping
-        return (self.__class__, (self.method, self.scope, self.epsilon))
+        return (self.__class__, (self.method, self.scope, self.epsilon, self.enabled))
 
     # This is what PyYAML will use for representing the object
     def __repr__(self):

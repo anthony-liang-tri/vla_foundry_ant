@@ -123,7 +123,7 @@ class RoboticsNormalizer:
 
     def _should_normalize_field(self, field_name: str) -> bool:
         """Check if a field should be normalized."""
-        if not self.enabled:
+        if not self.enabled or not self._get_field_config(field_name).enabled:
             return False
 
         # Only normalize fields that are in the include_fields
@@ -158,7 +158,7 @@ class RoboticsNormalizer:
         scope = field_config.scope
         epsilon = field_config.epsilon
 
-        if not self.enabled:
+        if not self.enabled or not field_config.enabled:
             return torch.zeros(1), torch.ones(1)
 
         if scope == "global":
@@ -378,27 +378,3 @@ class RoboticsNormalizer:
             start_idx = end_idx
 
         return denormalized
-
-
-@draccus.encode.register
-def encode_field_norm_params(obj: FieldNormalizationParams) -> dict:
-    """Custom encoder for FieldNormalizationParams."""
-    return {"method": obj.method, "scope": obj.scope, "epsilon": obj.epsilon}
-
-
-@draccus.encode.register
-def encode_norm_params(obj: NormalizationParams) -> dict:
-    """Custom encoder for NormalizationParams."""
-    result = {
-        "enabled": obj.enabled,
-        "method": obj.method,
-        "scope": obj.scope,
-        "epsilon": obj.epsilon,
-        "field_configs": {},
-    }
-
-    # Convert FieldNormalizationParams objects to dictionaries
-    for field_name, field_config in obj.field_configs.items():
-        result["field_configs"][field_name] = encode_field_norm_params(field_config)
-
-    return result
