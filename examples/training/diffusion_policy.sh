@@ -8,7 +8,6 @@
   --data.dataset_weighting [1.0] \
   --data.dataset_modality ["robotics"] \
   --data.image_size 224 \
-  --data.num_images 12 \
   --data.action_dim 20 \
   --data.processor openai/clip-vit-base-patch32 \
   --data.img_num_tokens 64 \

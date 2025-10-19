@@ -130,7 +130,9 @@ class RoboticsPipeline(BaseWebDatasetPipeline):
             wds.batched(self.batch_size, partial=False),
             wds.map(
                 lambda batch: self.robotics_processor.process_inputs(
-                    batch, num_images=self.data_params.num_images, max_text_seq_len=None
+                    batch,
+                    image_names=self.data_params.image_names,
+                    max_text_seq_len=None,
                 ),
                 handler=log_and_continue,
             ),

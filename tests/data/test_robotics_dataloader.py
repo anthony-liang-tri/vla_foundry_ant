@@ -60,7 +60,6 @@ def mock_config():
                 "seq_len": 512,
                 "dataset_statistics": [dataset_path + "/stats.json"],
                 "dataset_manifest": [dataset_path + "/manifest.jsonl"],
-                "num_images": None,  # Let processor infer number of images
                 "img_num_tokens": 49,  # Set image sequence length for PaliGemma
                 "dataset_weighting": [1.0],
                 "dataset_modality": ["robotics"],
@@ -509,7 +508,6 @@ def test_normalization(dataset_path, manifest_data, mock_config):
                 "seq_len": 512,
                 "dataset_statistics": [dataset_path + "/stats.json"],
                 "dataset_manifest": [dataset_path + "/manifest.jsonl"],
-                "num_images": None,
                 "img_num_tokens": 49,
                 "dataset_weighting": [1.0],
                 "dataset_modality": ["robotics"],

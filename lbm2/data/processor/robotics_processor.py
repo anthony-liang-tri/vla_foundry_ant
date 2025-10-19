@@ -1,3 +1,4 @@
+import logging
 import os
 
 import draccus
@@ -62,19 +63,20 @@ class RoboticsProcessor:
 
         return batch
 
-    def process_inputs(self, batch, num_images=None, max_text_seq_len=None):
-        """Convert with padding for specific sequence fields in lowdim data too.
+    def process_inputs(self, batch, image_names, max_text_seq_len=None):
+        """Tokenizes the text and converts the image to pixel_values
         Args:
             batch: Batch of samples to convert to tensors.
-            processor: Processor to use for tokenization.
+            image_names: Automatically generated from camera_names and image_indices in the data_params.
         """
         batch_text, batch_images = [], []
         for sample_images, instruction in zip(batch["images"], batch["language_instruction"], strict=False):
-            camera_names = list(sample_images.keys())
-            if num_images is not None and num_images > 0:
-                camera_names = camera_names[:num_images]
-
-            sample_images = [sample_images[k] for k in camera_names]
+            if image_names is None or len(image_names) == 0:
+                image_names = list(sample_images.keys())
+                logging.warning(
+                    "WARNING: Using sample_images.keys() to detect camera names. No guarantee of consistent ordering."
+                )
+            sample_images = [sample_images[k] for k in image_names]
             sample_num_images = len(sample_images)
 
             # Apply chat template if available
@@ -110,7 +112,7 @@ class RoboticsProcessor:
         processed_batch["attention_mask"] = processed["attention_mask"]
         c, h, w = processed["pixel_values"].shape[-3:]
         processed_batch["pixel_values"] = processed["pixel_values"].reshape(len(batch_images), -1, c, h, w)
-        processed_batch["camera_names"] = camera_names
+        processed_batch["camera_names"] = self.data_params.camera_names
         processed_batch["images"] = batch_images
         processed_batch["lowdim"] = {}
         for k in batch["lowdim"][0]:

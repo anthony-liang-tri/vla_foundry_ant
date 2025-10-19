@@ -74,10 +74,13 @@ class RoboticsDataParams(DataParams):
     processor: str = field(default=None)
     img_num_tokens: int = field(default=256)
     image_size: int = field(default=224)
-    num_images: int = field(default=None)
+
     # Language instruction types to use: "original", "randomized", "verbose", "alternative"
     language_instruction_types: list[str] = field(default_factory=lambda: ["original"])
 
+    camera_names: list[str] = field(default_factory=list)
+    image_indices: list[int] = field(default_factory=list)
+    image_names: list[str] = field(default_factory=list)
     proprioception_fields: list[str] = field(default_factory=list)
     action_fields: list[str] = field(default_factory=list)
     intrinsics_fields: list[str] = field(default_factory=list)
@@ -95,6 +98,11 @@ class RoboticsDataParams(DataParams):
         invalid_types = set(self.language_instruction_types) - valid_types
         if invalid_types:
             raise ValueError(f"Invalid language instruction types: {invalid_types}. Valid types are: {valid_types}")
+
+        # Compute image_names from camera_names and image_indices
+        if self.image_names is None or len(self.image_names) == 0:
+            image_names = [f"{cname}_t{idx}" for idx in self.image_indices for cname in self.camera_names]
+            object.__setattr__(self, "image_names", image_names)
 
         # For all used fields (proprioception and action), add default normalization parameters if not specified
         normalization_fields = self.normalization.field_configs
