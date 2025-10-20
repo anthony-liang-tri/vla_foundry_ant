@@ -863,6 +863,11 @@ def main():
         manifest_lines.append(manifest_entry)
     upload_dict_to_s3(manifest_lines, f"{cfg.output_dir.rstrip('/')}/shards", "manifest.jsonl")
 
+    # Update and save processing metadata with final statistics
+    metadata["processing"]["total_samples_created"] = sum(num_sequences for _, num_sequences in shard_results)
+    metadata["processing"]["timestamp_end"] = datetime.datetime.now().isoformat()
+    upload_dict_to_s3(metadata, f"{cfg.output_dir.rstrip('/')}/shards", "processing_metadata.json")
+
     ray.shutdown()
     print("🎉 Complete! All samples uploaded and sharded.")
 

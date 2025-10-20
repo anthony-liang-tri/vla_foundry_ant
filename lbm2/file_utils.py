@@ -446,3 +446,129 @@ def load_model_checkpoint(model, resume_from_checkpoint):
         model.load_state_dict(sd)
     logging.info(f"=> resuming checkpoint '{resume_from_checkpoint}' (checkpoint {start_checkpoint_num})")
     return start_checkpoint_num, global_step, shard_shuffle_seed_per_dataset
+
+
+def collect_processing_metadata(dataset_manifest_paths, experiment_path):
+    """
+    Collect processing_metadata.json files from all data sources and group them.
+
+    Args:
+        dataset_manifest_paths: List of paths to dataset manifest files
+        experiment_path: Path to the experiment directory
+
+    Returns:
+        dict: Grouped processing metadata from all sources
+    """
+
+    all_metadata = []
+    dataset_sources = []
+
+    for manifest_path in dataset_manifest_paths:
+        # Get the directory containing the manifest
+        manifest_dir = os.path.dirname(manifest_path)
+
+        # Look for processing_metadata.json in the same directory as the manifest
+        processing_metadata_path = os.path.join(manifest_dir, "processing_metadata.json")
+
+        try:
+            if processing_metadata_path.startswith("s3://"):
+                # Handle S3 paths
+                metadata = json_load(processing_metadata_path)
+            else:
+                # Handle local paths
+                if os.path.exists(processing_metadata_path):
+                    metadata = json_load(processing_metadata_path)
+                else:
+                    logging.warning(f"Processing metadata not found at {processing_metadata_path}")
+                    continue
+
+            all_metadata.append(metadata)
+            dataset_sources.append(manifest_path)
+            logging.info(f"Loaded processing metadata from {processing_metadata_path}")
+
+        except Exception as e:
+            logging.warning(f"Failed to load processing metadata from {processing_metadata_path}: {e}")
+            continue
+
+    if not all_metadata:
+        logging.warning("No processing metadata found for any data source")
+        return None
+
+    # Group metadata from multiple sources
+    grouped_metadata = group_processing_metadata(all_metadata, dataset_sources)
+
+    return grouped_metadata
+
+
+def group_processing_metadata(metadata_list, dataset_sources):
+    """
+    Group processing metadata from multiple sources into a single structure.
+
+    Args:
+        metadata_list: List of metadata dictionaries from each source
+        dataset_sources: List of dataset manifest paths corresponding to each metadata
+
+    Returns:
+        dict: Grouped metadata with lists for each field and global sources info
+    """
+    if len(metadata_list) == 1:
+        # Single source - just add source info for compatibility
+        metadata = metadata_list[0].copy()
+        metadata["dataset_sources"] = dataset_sources
+        metadata["num_sources"] = 1
+        return metadata
+
+    def _group_field_values(values):
+        """Recursively group a list of values coming from different sources."""
+
+        if all(value is None or isinstance(value, dict) for value in values):
+            grouped_dict = {}
+            all_keys = set()
+
+            for value in values:
+                if isinstance(value, dict):
+                    all_keys.update(value.keys())
+
+            for key in sorted(all_keys):
+                grouped_sub_values = []
+                for value in values:
+                    if isinstance(value, dict) and key in value:
+                        grouped_sub_values.append(value[key])
+                    else:
+                        grouped_sub_values.append(None)
+                grouped_dict[key] = _group_field_values(grouped_sub_values)
+
+            return grouped_dict
+
+        return [
+            {
+                "source_index": idx,
+                "source_manifest": dataset_sources[idx],
+                "value": value if value is not None else None,
+            }
+            for idx, value in enumerate(values)
+        ]
+
+    grouped = {
+        "grouping_metadata_version": "1.0",
+        "dataset_sources": dataset_sources,
+        "num_sources": len(metadata_list),
+    }
+
+    all_fields = set()
+    for metadata in metadata_list:
+        all_fields.update(metadata.keys())
+
+    for field in sorted(all_fields):
+        values = [metadata.get(field) for metadata in metadata_list]
+        grouped[field] = _group_field_values(values)
+
+    total_samples = sum(metadata.get("processing", {}).get("total_samples_created", 0) for metadata in metadata_list)
+
+    grouped["summary"] = {
+        "total_sources": len(metadata_list),
+        "total_samples_across_sources": total_samples,
+        "source_manifests": dataset_sources,
+    }
+
+    return grouped

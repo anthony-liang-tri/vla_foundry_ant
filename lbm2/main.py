@@ -10,6 +10,7 @@ Notes
 delegated to subpackages (data, models, opt, train, etc.).
 """
 
+import json
 import logging
 import os
 
@@ -19,7 +20,7 @@ import torch
 from lbm2.data.dataloader import get_datastring_input, get_wds_dataloader
 from lbm2.data.utils import load_data_chunks
 from lbm2.distributed import get_model_precision, is_master, wrap_fsdp_ddp
-from lbm2.file_utils import load_model_checkpoint, remote_sync, save_checkpoint
+from lbm2.file_utils import collect_processing_metadata, load_model_checkpoint, remote_sync, save_checkpoint
 from lbm2.logger import setup_logging
 from lbm2.losses import get_loss_function
 from lbm2.models import create_model
@@ -70,6 +71,13 @@ def main():
             draccus.dump(cfg, f)
         with open(os.path.join(experiment_path, "config_model.yaml"), "w") as f:
             draccus.dump(cfg.model, f)
+
+        # Collect and save processing metadata from all data sources
+        processing_metadata = collect_processing_metadata(cfg.data.dataset_manifest, experiment_path)
+        if processing_metadata:
+            with open(os.path.join(experiment_path, "processing_metadata.json"), "w") as f:
+                json.dump(processing_metadata, f, indent=2)
+
         # Initial sync to check that remote_sync works.
         if cfg.remote_sync:
             remote_sync(experiment_path, os.path.join(cfg.remote_sync, experiment_name))
