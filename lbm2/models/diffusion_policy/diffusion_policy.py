@@ -23,11 +23,11 @@ class DiffusionPolicy(BaseModel):
         self.clip = clip
         self.transformer = transformer
         self.scheduler = noise_scheduler
-        self.time_encoding = torch.nn.Embedding(noise_scheduler.num_timesteps, clip.model.projection_dim)
-        self.sinusoidal_position_embeddings = SinusoidalPositionEmbeddings(clip.model.projection_dim)
+        self.time_encoding = torch.nn.Embedding(noise_scheduler.num_timesteps, clip.get_projection_dim())
+        self.sinusoidal_position_embeddings = SinusoidalPositionEmbeddings(clip.get_projection_dim())
         self.output_layer = torch.nn.Linear(transformer.hidden_dim, model_params.action_dim)
         self.action_encode = torch.nn.Linear(model_params.action_dim, transformer.hidden_dim)
-        self.condition_encode = torch.nn.Linear(clip.model.projection_dim, transformer.hidden_dim)
+        self.condition_encode = torch.nn.Linear(clip.get_projection_dim(), transformer.hidden_dim)
         self.initialize_weights()
 
     def initialize_weights(self):

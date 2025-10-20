@@ -1,6 +1,5 @@
 import torch.nn as nn
 from transformers import AutoConfig, AutoModelForCausalLM, AutoModelForVision2Seq
-from transformers.models.clip.modeling_clip import CLIPEncoderLayer, CLIPTextModel, CLIPVisionTransformer
 
 from lbm2.models.batch_handlers import create_batch_handler
 from lbm2.models.diffusion.noise_scheduler import NoiseSchedulerDDPM
@@ -9,6 +8,7 @@ from lbm2.models.diffusion.stable_diffusion import StableDiffusion
 from lbm2.models.diffusion.unet import CrossAttentionBlock, ResnetBlock, SelfAttentionBlock, UNet
 from lbm2.models.diffusion.unet_diffusers import UNetDiffusers
 from lbm2.models.diffusion_policy.clip_hf import CLIPHF
+from lbm2.models.diffusion_policy.clip_openclip import CLIP_OpenCLIP
 from lbm2.models.diffusion_policy.diffusion_policy import DiffusionPolicy
 from lbm2.models.transformer import Transformer, TransformerBlock
 from lbm2.models.transformer_hf import TransformerHF
@@ -49,6 +49,8 @@ def create_model(model_params: ModelParams):
         unet = UNetDiffusers(model_params.unet) if model_params.use_diffusers_unet else UNet(model_params.unet)
         noise_scheduler = create_noise_scheduler(model_params)
         model = StableDiffusion(model_params, clip, unet, noise_scheduler)
+    elif model_params.type == "clip_openclip":
+        model = CLIP_OpenCLIP(model_params)
     elif model_params.type == "clip_hf":
         model = CLIPHF(model_params)
     elif model_params.type == "diffusion_policy":
@@ -115,11 +117,17 @@ def get_model_block(model_type: str, model_params: ModelParams):
             )
         else:
             return (ResnetBlock, SelfAttentionBlock, CrossAttentionBlock)
+    elif model_type == "clip_hf":
+        from transformers.models.clip.modeling_clip import CLIPEncoderLayer
+
+        return (CLIPEncoderLayer,)
+    elif model_type == "clip_openclip":
+        import open_clip
+
+        return (open_clip.transformer.ResidualAttentionBlock,)
     elif model_type == "diffusion_policy":
         transformer_block = get_model_block(model_params.transformer.type, model_params.transformer)
-        return (
-            *transformer_block,
-            CLIPEncoderLayer,
-        )
+        clip_block = get_model_block(model_params.clip.type, model_params.clip)
+        return (*transformer_block, *clip_block)
     else:
         raise ValueError(f"get_model_block (used for FSDP) not supported for {model_type}")

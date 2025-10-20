@@ -24,6 +24,9 @@ class CLIPHF(BaseModel):
     def freeze_image_encoder(self):
         self.model.vision_model.requires_grad_(False)
 
+    def get_projection_dim(self):
+        return self.model.projection_dim
+
     def forward(self, input_ids, pixel_values, attention_mask):
         if pixel_values.ndim == 5:
             # Handle multiple images per sample

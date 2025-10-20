@@ -172,6 +172,15 @@ class CLIPHFParams(ModelParams):
     freeze_image_encoder: bool = field(default=False)
 
 
+@register_model_params("clip_openclip")
+@dataclass(frozen=True)
+class CLIP_OpenCLIPParams(ModelParams):
+    architecture: str = field(default=None)
+    pretrained_weights: str = field(default=None)
+    freeze_text_encoder: bool = field(default=False)
+    freeze_image_encoder: bool = field(default=False)
+
+
 @register_model_params("stable_diffusion")
 @dataclass(frozen=True)
 class StableDiffusionParams(ModelParams):
@@ -197,7 +206,7 @@ class StableDiffusionParams(ModelParams):
 @register_model_params("diffusion_policy")
 @dataclass(frozen=True)
 class DiffusionPolicyParams(ModelParams):
-    clip: CLIPHFParams = field(default_factory=CLIPHFParams)
+    clip: Union[CLIPHFParams, CLIP_OpenCLIPParams] = field(default_factory=CLIPHFParams)
     transformer: Union[TransformerParams, TransformerHFParams] = field(default_factory=ModelParams)
     noise_scheduler: NoiseSchedulerParams = field(default_factory=NoiseSchedulerParams)
 
