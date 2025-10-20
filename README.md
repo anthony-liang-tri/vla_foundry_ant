@@ -209,7 +209,10 @@ for ckpt in range(num_checkpoints):
 
 Given these, we support setting both the `--hparams.per_gpu_batch_size` (try as high as possible), as well as the `--hparams.global_batch_size`. Accumulation is computed automatically.
 
-#### 5.2 Single GPU Training
+#### 5.2 Resuming Training / Loading from Checkpoints
+You can use resume training from checkpoints using the `--model.resume_from_checkpoint` argument. Point the argument to the path of the checkpoint (either S3 or local). If you want to load the weights of a pre-trained checkpoint but wish to train from scratch without resuming the optimizer states, you can set `--model.resume_weights_only=True`.
+
+#### 5.3 Single GPU Training
 For single GPU training, run `python lbm2/main.py` directly (no `torchrun`(specifically for distributed training), skip the `--nproc_per_node` and `--nnodes` args). 
 (If using torchrun, set `--nproc_per_node` to 1.)
 
