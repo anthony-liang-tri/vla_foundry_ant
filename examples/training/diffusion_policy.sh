@@ -1,4 +1,4 @@
-.venv/bin/torchrun --master_port 29502 --nproc_per_node=3 --nnodes=1 lbm2/main.py \
+.venv/bin/torchrun --master_port 29502 --nproc_per_node=2 --nnodes=1 lbm2/main.py \
   --model "include lbm2/config_presets/models/diffusion_policy.yaml" \
   --model.clip.freeze_text_encoder True \
   --model.transformer.is_causal True \
@@ -7,6 +7,7 @@
   --data.dataset_statistics ["s3://tri-ml-datasets-uw2/vlm_datasets/preprocess_384_past1_future8_relative/lbm/BimanualPutRedBellPepperInBin/riverway/sim/shards/stats.json"] \
   --data.dataset_weighting [1.0] \
   --data.dataset_modality ["robotics"] \
+  --data.dataset_weighting [1.0] \
   --data.image_size 224 \
   --data.action_dim 20 \
   --data.processor openai/clip-vit-base-patch32 \
@@ -15,11 +16,12 @@
   --data.num_workers 4 \
   --data.seq_len 2048 \
   --distributed.fsdp True \
+  --distributed.fsdp_pure_bf16 False \
   --num_checkpoints 3 \
   --hparams.precision pure_bf16 \
   --hparams.loss_function mse \
   --hparams.per_gpu_batch_size 16 \
-  --hparams.global_batch_size 48 \
+  --hparams.global_batch_size 32 \
   --hparams.grad_clip_norm 1.0 \
   --hparams.lr 5e-4 \
   --hparams.lr_cooldown_end 1e-5 \

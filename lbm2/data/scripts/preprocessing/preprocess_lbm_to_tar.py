@@ -18,7 +18,7 @@ import numpy as np
 import ray
 import yaml
 
-from lbm2.data.robotics.utils import load_action_field_config
+from lbm2.data.robotics.utils import load_action_field_config, rot_6d_to_relative, xyz_to_relative
 from lbm2.data.scripts.preprocessing.image_utils import image_to_bytes, init_jpeg_encoder
 
 # Params base class
@@ -446,6 +446,25 @@ class EpisodeProcessor:
 
         return result
 
+    def create_relative_lowdim_data(
+        self, lowdim_data: Dict[str, np.ndarray], reference_data: Dict[str, np.ndarray]
+    ) -> Dict[str, np.ndarray]:
+        """Create relative coordinate data."""
+        relative_data = {}
+
+        for key, data in lowdim_data.items():
+            if not np.issubdtype(data.dtype, np.number):
+                continue
+
+            if "xyz" in key.lower() and data.shape[-1] == 3:
+                relative_data[f"{key}_relative"] = xyz_to_relative(data, reference_data[key])
+            elif "rot_6d" in key.lower() and data.shape[-1] == 6:
+                relative_data[f"{key}_relative"] = rot_6d_to_relative(data, reference_data[key])
+            elif any(pos_word in key.lower() for pos_word in ["position", "pose", "pos"]) and data.shape[-1] == 3:
+                relative_data[f"{key}_relative"] = xyz_to_relative(data, reference_data[key])
+
+        return relative_data
+
     def is_still_sample(self, lowdim_data: Dict[str, np.ndarray], start_idx: int, end_idx: int) -> bool:
         """Check if sample is still."""
         if not self.filter_still_samples:
@@ -569,11 +588,11 @@ class EpisodeProcessor:
 
             print(f"Processing episode {episode_id} with length {episode_length}")
             # Generate samples
-            for anchor_timestep in range(0, episode_length, self.stride):
+            for anchor_timestep in range(1, episode_length, self.stride):
                 self.total_potential_samples += 1
 
                 # Calculate windows
-                lowdim_start = anchor_timestep - self.past_lowdim_steps
+                lowdim_start = max(0, anchor_timestep - self.past_lowdim_steps)
                 lowdim_end = anchor_timestep + self.future_lowdim_steps
 
                 # Check padding
@@ -606,11 +625,18 @@ class EpisodeProcessor:
 
                 # Process lowdim data (which includes actions)
                 sample_lowdim = {}
+                reference_data = {}
+                reference_index = anchor_timestep - 1
                 for key, data in lowdim_data.items():
                     valid_data = data[valid_start : valid_end + 1]
                     if past_padding > 0 or future_padding > 0:
                         valid_data = self.pad_fn(valid_data, past_padding, future_padding)
                     sample_lowdim[key] = valid_data
+                    reference_data[key] = data[reference_index]
+
+                # Add relative lowdim data with respect past_lowdim_steps (it is the last past timestep)
+                sample_lowdim_relative = self.create_relative_lowdim_data(sample_lowdim, reference_data)
+                sample_lowdim.update(sample_lowdim_relative)
 
                 # Create masks
                 total_length = self.past_lowdim_steps + self.future_lowdim_steps + 1

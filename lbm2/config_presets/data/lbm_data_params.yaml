@@ -15,11 +15,11 @@ proprioception_fields:
   - robot__actual__grippers__right::panda_hand # 1
 
 action_fields:
-  - robot__action__poses__left::panda__xyz # 3
-  - robot__action__poses__left::panda__rot_6d # 6
+  - robot__action__poses__left::panda__xyz_relative # 3
+  - robot__action__poses__left::panda__rot_6d_relative # 6
   - robot__action__grippers__left::panda_hand # 1
-  - robot__action__poses__right::panda__xyz # 3
-  - robot__action__poses__right::panda__rot_6d # 6
+  - robot__action__poses__right::panda__xyz_relative # 3
+  - robot__action__poses__right::panda__rot_6d_relative # 6
   - robot__action__grippers__right::panda_hand # 1
 
 intrinsics_fields:
@@ -46,7 +46,15 @@ normalization:
       method: percentile_1_99
       scope: global
       epsilon: 1e-1
+    robot__desired__poses__left::panda__xyz_relative:
+      method: percentile_1_99
+      scope: global
+      epsilon: 1e-1
     robot__desired__poses__right::panda__xyz:
+      method: percentile_1_99
+      scope: global
+      epsilon: 1e-1
+    robot__desired__poses__right::panda__xyz_relative:
       method: percentile_1_99
       scope: global
       epsilon: 1e-1
@@ -54,7 +62,15 @@ normalization:
       method: std
       scope: global
       epsilon: 1e-1
+    robot__desired__poses__left::panda__rot_6d_relative:
+      method: std
+      scope: global
+      epsilon: 1e-1
     robot__desired__poses__right::panda__rot_6d:
+      method: std
+      scope: global
+      epsilon: 1e-1
+    robot__desired__poses__right::panda__rot_6d_relative:
       method: std
       scope: global
       epsilon: 1e-1
@@ -70,9 +86,17 @@ normalization:
       method: std
       scope: global
       epsilon: 1e-1
+    robot__actual__joint_position__left::panda_relative:
+      method: std
+      scope: global
+      epsilon: 1e-1
     robot__actual__joint_position__right::panda:
       method: std
       scope: global 
+      epsilon: 1e-1
+    robot__actual__joint_position__right::panda_relative:
+      method: std
+      scope: global
       epsilon: 1e-1
     robot__actual__grippers__left::panda_hand:
       method: min_max
@@ -86,7 +110,15 @@ normalization:
       method: percentile_1_99
       scope: global
       epsilon: 1e-1
+    robot__actual__poses__left::panda__xyz_relative:
+      method: percentile_1_99
+      scope: global
+      epsilon: 1e-1
     robot__actual__poses__right::panda__xyz:
+      method: percentile_1_99
+      scope: global
+      epsilon: 1e-1
+    robot__actual__poses__right::panda__xyz_relative:
       method: percentile_1_99
       scope: global
       epsilon: 1e-1
@@ -94,7 +126,15 @@ normalization:
       method: std
       scope: global
       epsilon: 1e-1
+    robot__actual__poses__left::panda__rot_6d_relative:
+      method: std
+      scope: global
+      epsilon: 1e-1
     robot__actual__poses__right::panda__rot_6d:
+      method: std
+      scope: global
+      epsilon: 1e-1
+    robot__actual__poses__right::panda__rot_6d_relative:
       method: std
       scope: global
       epsilon: 1e-1
@@ -102,7 +142,15 @@ normalization:
       method: percentile_1_99
       scope: global
       epsilon: 1e-1
+    robot__action__poses__left::panda__xyz_relative:
+      method: percentile_1_99
+      scope: global
+      epsilon: 1e-1
     robot__action__poses__right::panda__xyz:
+      method: percentile_1_99
+      scope: global
+      epsilon: 1e-1
+    robot__action__poses__right::panda__xyz_relative:
       method: percentile_1_99
       scope: global
       epsilon: 1e-1
@@ -110,7 +158,15 @@ normalization:
       method: std
       scope: global
       epsilon: 1e-1
+    robot__action__poses__left::panda__rot_6d_relative:
+      method: std
+      scope: global
+      epsilon: 1e-1
     robot__action__poses__right::panda__rot_6d:
+      method: std
+      scope: global
+      epsilon: 1e-1
+    robot__action__poses__right::panda__rot_6d_relative:
       method: std
       scope: global
       epsilon: 1e-1

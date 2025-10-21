@@ -69,12 +69,12 @@ def get_args_robotics_manual_action_dim(action_dim: int):
         ["tests/test_assets/small_lbm_dataset/stats.json"],
         "--data.action_fields",
         [
-            "robot__desired__poses__left::panda__xyz",
-            "robot__desired__poses__right::panda__xyz",
-            "robot__desired__poses__left::panda__rot_6d",
-            "robot__desired__poses__right::panda__rot_6d",
-            "robot__desired__grippers__left::panda_hand",
-            "robot__desired__grippers__right::panda_hand",
+            "robot__action__poses__left::panda__xyz_relative",
+            "robot__action__poses__right::panda__xyz_relative",
+            "robot__action__poses__left::panda__rot_6d_relative",
+            "robot__action__poses__right::panda__rot_6d_relative",
+            "robot__action__grippers__left::panda_hand",
+            "robot__action__grippers__right::panda_hand",
         ],
         "--data.proprioception_fields",
         [

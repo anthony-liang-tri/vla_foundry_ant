@@ -66,7 +66,7 @@ def matrix_to_rot_6d(rotation_matrix: np.ndarray) -> np.ndarray:
     return rot_6d
 
 
-def xyz_to_relative(xyz_sequence: np.ndarray, reference_index: int) -> np.ndarray:
+def xyz_to_relative(xyz_sequence: np.ndarray, reference_xyz: np.ndarray) -> np.ndarray:
     """
     Convert a sequence of xyz positions to relative positions with respect to a reference frame.
 
@@ -77,18 +77,18 @@ def xyz_to_relative(xyz_sequence: np.ndarray, reference_index: int) -> np.ndarra
     Returns:
         Array of shape (T, 3) with relative xyz positions
     """
-    reference_position = xyz_sequence[reference_index]
+    reference_position = reference_xyz
     relative_positions = xyz_sequence - reference_position
     return relative_positions
 
 
-def rot_6d_to_relative(rot_6d_sequence: np.ndarray, reference_index: int) -> np.ndarray:
+def rot_6d_to_relative(rot_6d_sequence: np.ndarray, reference_6d: np.ndarray) -> np.ndarray:
     """
     Convert a sequence of 6D rotations to relative rotations with respect to a reference frame.
 
     Args:
         rot_6d_sequence: Array of shape (T, 6) where T is the number of timesteps
-        reference_index: Index of the reference timestep to compute relative rotations from
+        reference_data: Reference data of shape (3,) or (T, 3)
 
     Returns:
         Array of shape (T, 6) with relative 6D rotations
@@ -98,7 +98,7 @@ def rot_6d_to_relative(rot_6d_sequence: np.ndarray, reference_index: int) -> np.
     rotation_matrices = np.array([rot_6d_to_matrix(rot) for rot in rot_6d_sequence])
 
     # Get reference rotation matrix and compute its inverse (transpose for rotation matrices)
-    reference_rotation = rotation_matrices[reference_index]
+    reference_rotation = rot_6d_to_matrix(reference_6d)
     reference_rotation_inv = reference_rotation.T
 
     # Compute relative rotations: R_relative = R_reference^-1 @ R_current
@@ -178,7 +178,7 @@ if __name__ == "__main__":
     xyz_positions = np.array([[1.0, 2.0, 3.0], [1.5, 2.2, 3.1], [2.0, 2.5, 3.3], [2.2, 2.8, 3.5]])
 
     reference_idx = 1  # Use second position as reference
-    relative_xyz = xyz_to_relative(xyz_positions, reference_idx)
+    relative_xyz = xyz_to_relative(xyz_positions, xyz_positions[reference_idx])
     print("Original positions:")
     print(xyz_positions)
     print(f"\nRelative to index {reference_idx}:")
@@ -201,7 +201,7 @@ if __name__ == "__main__":
 
     rot_6d_positions = np.array(rot_6d_positions)
 
-    relative_rot_6d = rot_6d_to_relative(rot_6d_positions, reference_idx)
+    relative_rot_6d = rot_6d_to_relative(rot_6d_positions, rot_6d_positions[reference_idx])
     print("\nOriginal 6D rotations:")
     print(rot_6d_positions)
     print(f"\nRelative 6D rotations to index {reference_idx}:")
