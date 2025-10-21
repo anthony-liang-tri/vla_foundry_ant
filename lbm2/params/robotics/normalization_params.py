@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Dict
+from typing import Dict, Optional
 
 from lbm2.params.base_params import BaseParams
 
@@ -52,6 +52,10 @@ class NormalizationParams(BaseParams):
     # Field-specific configurations (initialized in __post_init__)
     field_configs: Dict[str, FieldNormalizationParams] = field(default_factory=dict)
 
+    # Low-dimensional trajectory window captured during preprocessing
+    lowdim_past_timesteps: Optional[int] = field(default=None)
+    lowdim_future_timesteps: Optional[int] = field(default=None)
+
     def to_dict(self):
         return {
             "enabled": self.enabled,
@@ -60,6 +64,8 @@ class NormalizationParams(BaseParams):
             "epsilon": self.epsilon,
             "include_fields": self.include_fields,
             "field_configs": {k: v.to_dict() for k, v in self.field_configs.items()},
+            "lowdim_past_timesteps": self.lowdim_past_timesteps,
+            "lowdim_future_timesteps": self.lowdim_future_timesteps,
         }
 
     def __post_init__(self):

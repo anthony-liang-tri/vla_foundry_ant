@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional, Tuple, Union
 import draccus
 import torch
 
+from lbm2.data.robotics.utils import crop_sequence
 from lbm2.file_utils import json_load
 from lbm2.params.robotics.normalization_params import FieldNormalizationParams, NormalizationParams
 
@@ -29,7 +30,7 @@ class RoboticsNormalizer:
         self,
         normalization_params: Union[Dict[str, Any], "NormalizationParams"],
         statistics_data: Optional[Dict[str, Any]] = None,
-        statistics_path: Optional[str] = None,
+        statistics_path: Optional[Union[str, list[str]]] = None,
     ):
         """
         Initialize normalizer.
@@ -42,6 +43,8 @@ class RoboticsNormalizer:
         self.normalization_params = normalization_params
 
         self.enabled = self.normalization_params.enabled
+        self.lowdim_past_timesteps = self.normalization_params.lowdim_past_timesteps
+        self.lowdim_future_timesteps = self.normalization_params.lowdim_future_timesteps
 
         # Always load statistics when available, regardless of whether normalization is enabled
         # This allows action dimension computation even when normalization is disabled
@@ -217,13 +220,17 @@ class RoboticsNormalizer:
 
         return center, scale
 
-    def normalize_tensor(self, tensor: torch.Tensor, field_name: str) -> torch.Tensor:
+    def normalize_tensor(
+        self, tensor: torch.Tensor, field_name: str, anchor_timestep: Optional[int] = None
+    ) -> torch.Tensor:
         """
         Normalize a tensor.
 
         Args:
             tensor: Input tensor of shape [batch_size, timesteps, features] or [batch_size, features]
             field_name: Name of the field being normalized
+            anchor_timestep: The index of the anchor timestep in the input tensor
+            (only usedfor per-timestep normalization with cropped sequences)
 
         Returns:
             Normalized tensor
@@ -247,9 +254,51 @@ class RoboticsNormalizer:
 
         elif scope == "per_timestep" and len(tensor.shape) == 3:
             # Per-timestep normalization
-            center = center.unsqueeze(0)  # [1, D]
-            scale = scale.unsqueeze(0)  # [1, D]
-            normalized = (tensor - center) / scale
+            # If anchor_timestep is provided, we need to align the tensor with the statistics
+            # The statistics were computed with lowdim_past_timesteps past steps
+            # The tensor has anchor_timestep as the index of the current timestep
+            _batch_size, num_timesteps, _feature_dim = tensor.shape
+
+            if anchor_timestep is not None and num_timesteps != center.shape[0]:
+                if self.lowdim_past_timesteps is None:
+                    raise ValueError(
+                        "The normalizer is asked to normalize a tensor with a different number"
+                        f"of timesteps {num_timesteps} than the statistics ({center.shape[0]})"
+                        "but lowdim_past_timesteps must be set to align the statistics with the tensor."
+                        "This is likely because the data preprocessing metadata is not available."
+                    )
+                # The statistics were computed with lowdim_past_timesteps past steps
+                # We need to crop them to align with the tensor's anchor_timestep
+                # This maps: tensor[anchor_timestep] -> stats[lowdim_past_timesteps]
+
+                # Calculate how many past and future timesteps the tensor has relative to its anchor
+                tensor_past = anchor_timestep
+                tensor_future = num_timesteps - anchor_timestep - 1
+
+                # Crop statistics around stats_anchor_idx to match tensor's time range
+                stats_anchor_idx = self.lowdim_past_timesteps
+
+                # Check if crop would be valid
+                start_idx = stats_anchor_idx - tensor_past
+                end_idx = stats_anchor_idx + tensor_future + 1
+
+                if start_idx >= 0 and end_idx <= len(center):
+                    # Normal case: statistics fully cover the tensor's time range
+                    cropped_center = crop_sequence(center, stats_anchor_idx, tensor_past, tensor_future)
+                    cropped_scale = crop_sequence(scale, stats_anchor_idx, tensor_past, tensor_future)
+                else:
+                    raise ValueError("The statistics do not cover the requested tensor's time range")
+
+                # Add batch dimension and broadcast
+                cropped_center = cropped_center.unsqueeze(0)  # [1, T', D]
+                cropped_scale = cropped_scale.unsqueeze(0)  # [1, T', D]
+
+                normalized = (tensor - cropped_center) / cropped_scale
+            else:
+                # No anchor provided, assume the tensor is already aligned
+                center = center.unsqueeze(0)  # [1, T, D]
+                scale = scale.unsqueeze(0)  # [1, T, D]
+                normalized = (tensor - center) / scale
         else:
             # Unsupported tensor shape
             logging.warning(f"Unsupported tensor shape for normalization: {tensor.shape}")
@@ -257,13 +306,17 @@ class RoboticsNormalizer:
 
         return normalized
 
-    def denormalize_tensor(self, normalized_tensor: torch.Tensor, field_name: str) -> torch.Tensor:
+    def denormalize_tensor(
+        self, normalized_tensor: torch.Tensor, field_name: str, anchor_timestep: int = None
+    ) -> torch.Tensor:
         """
         Denormalize a tensor (inverse of normalize_tensor).
 
         Args:
             normalized_tensor: Normalized tensor
             field_name: Name of the field being denormalized
+            anchor_timestep: The index of the anchor timestep in the input tensor
+                (only used for per-timestep denormalization with cropped sequences)
 
         Returns:
             Denormalized tensor
@@ -274,107 +327,72 @@ class RoboticsNormalizer:
         field_config = self._get_field_config(field_name)
         scope = field_config.scope
 
+        center, scale = self._get_normalization_params(field_name)
+        center = center.to(normalized_tensor.device)
+        scale = scale.to(normalized_tensor.device)
+
         if scope == "global" or len(normalized_tensor.shape) == 2:
-            # Global denormalization
-            center, scale = self._get_normalization_params(field_name)
-
-            # Broadcast to match tensor dimensions
-            if len(normalized_tensor.shape) == 3:  # [B, T, D]
-                center = center.unsqueeze(0).unsqueeze(0)  # [1, 1, D]
-                scale = scale.unsqueeze(0).unsqueeze(0)  # [1, 1, D]
-            elif len(normalized_tensor.shape) == 2:  # [B, D]
-                center = center.unsqueeze(0)  # [1, D]
-                scale = scale.unsqueeze(0)  # [1, D]
-
+            # Global denormalization or no time dimension
+            # Broadcast to match tensor dimensions - add singleton dims for all but last
+            target_shape = [1] * (len(normalized_tensor.shape) - 1) + [-1]
+            center = center.view(target_shape)
+            scale = scale.view(target_shape)
             denormalized = normalized_tensor * scale + center
 
         elif scope == "per_timestep" and len(normalized_tensor.shape) == 3:
             # Per-timestep denormalization
-            batch_size, num_timesteps, feature_dim = normalized_tensor.shape
-            denormalized = torch.zeros_like(normalized_tensor)
+            # If anchor_timestep is provided, we need to align the tensor with the statistics
+            # The statistics were computed with lowdim_past_timesteps past steps
+            # The tensor has anchor_timestep as the index of the current timestep
+            _batch_size, num_timesteps, _feature_dim = normalized_tensor.shape
 
-            for t in range(num_timesteps):
-                center, scale = self._get_normalization_params(field_name, timestep=t)
-                center = center.unsqueeze(0)  # [1, D]
-                scale = scale.unsqueeze(0)  # [1, D]
+            if anchor_timestep is not None and num_timesteps != center.shape[0]:
+                if self.lowdim_past_timesteps is None:
+                    raise ValueError(
+                        "The normalizer is asked to denormalize a tensor with a different number"
+                        f"of timesteps {num_timesteps} than the statistics ({center.shape[0]})"
+                        "but lowdim_past_timesteps must be set to align the statistics with the tensor."
+                        "This is likely because the data preprocessing metadata is not available."
+                    )
+                # The statistics were computed with lowdim_past_timesteps past steps
+                # We need to crop them to align with the tensor's anchor_timestep
+                # This maps: tensor[anchor_timestep] -> stats[lowdim_past_timesteps]
 
-                denormalized[:, t, :] = normalized_tensor[:, t, :] * scale + center
+                # Calculate how many past and future timesteps the tensor has relative to its anchor
+                tensor_past = anchor_timestep
+                tensor_future = num_timesteps - anchor_timestep - 1
+
+                # Crop statistics around stats_anchor_idx to match tensor's time range
+                stats_anchor_idx = self.lowdim_past_timesteps
+
+                # Check if crop would be valid
+                start_idx = stats_anchor_idx - tensor_past
+                end_idx = stats_anchor_idx + tensor_future + 1
+
+                if start_idx >= 0 and end_idx <= len(center):
+                    # Normal case: statistics fully cover the tensor's time range
+                    cropped_center = crop_sequence(center, stats_anchor_idx, tensor_past, tensor_future)
+                    cropped_scale = crop_sequence(scale, stats_anchor_idx, tensor_past, tensor_future)
+                else:
+                    # Edge case: need to clamp
+                    start_idx = max(0, start_idx)
+                    end_idx = min(len(center), end_idx)
+                    cropped_center = center[start_idx:end_idx]  # [T', D]
+                    cropped_scale = scale[start_idx:end_idx]  # [T', D]
+
+                # Add batch dimension and broadcast
+                cropped_center = cropped_center.unsqueeze(0)  # [1, T', D]
+                cropped_scale = cropped_scale.unsqueeze(0)  # [1, T', D]
+
+                denormalized = normalized_tensor * cropped_scale + cropped_center
+            else:
+                # No anchor provided, assume the tensor is already aligned
+                center = center.unsqueeze(0)  # [1, T, D]
+                scale = scale.unsqueeze(0)  # [1, T, D]
+                denormalized = normalized_tensor * scale + center
         else:
             # Unsupported tensor shape
             logging.warning(f"Unsupported tensor shape for denormalization: {normalized_tensor.shape}")
             denormalized = normalized_tensor
-
-        return denormalized
-
-    def normalize_batch(self, batch: Dict[str, Any], field_names=None) -> Dict[str, Any]:
-        """
-        Normalize a full batch of robotics data.
-
-        Args:
-            batch: Batch dict from robotics dataloader
-            field_names: List of field names to normalize. If None, normalize all enabled fields.
-
-        Returns:
-            Batch with normalized lowdim data
-        """
-        if not self.enabled:
-            return batch
-
-        if field_names is None or len(field_names) == 0:
-            field_names = self.include_fields
-
-        # Create a copy to avoid modifying the original
-        normalized_batch = batch.copy()
-
-        # Normalize lowdim data
-        normalized_lowdim = {}
-
-        for field_name, tensor in batch["lowdim"].items():
-            if isinstance(tensor, torch.Tensor) and field_name in field_names:
-                normalized_lowdim[field_name] = self.normalize_tensor(tensor, field_name)
-            else:
-                normalized_lowdim[field_name] = tensor
-
-        normalized_batch["lowdim"] = normalized_lowdim
-
-        return normalized_batch
-
-    def denormalize_batch(self, batch_data, field_names):
-        """
-        Denormalize a batch of data for multiple fields.
-
-        Args:
-            batch_data: Tensor of shape [batch_size, total_dim]
-            field_names: List of field names corresponding to the dimensions
-
-        Returns:
-            Denormalized batch data
-        """
-        if not isinstance(batch_data, torch.Tensor):
-            batch_data = torch.tensor(batch_data, dtype=torch.float32)
-
-        denormalized = torch.zeros_like(batch_data)
-        start_idx = 0
-
-        for field_name in field_names:
-            if field_name not in self.stats:
-                logging.warning(f"Field {field_name} not found in dataset statistics")
-                # Skip this field
-                continue
-
-            field_dim = self.get_field_dimension(field_name)
-
-            end_idx = start_idx + field_dim
-
-            # Check if we're going beyond the tensor size
-            if end_idx > batch_data.shape[-1]:
-                logging.warning(f"Field {field_name} would exceed tensor dimensions, skipping")
-                continue
-
-            field_data = batch_data[..., start_idx:end_idx]
-            denorm_field_data = self.denormalize_tensor(field_data, field_name)
-            denormalized[..., start_idx:end_idx] = denorm_field_data
-
-            start_idx = end_idx
 
         return denormalized

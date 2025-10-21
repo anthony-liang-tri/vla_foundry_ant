@@ -15,10 +15,11 @@
   --data.allow_multiple_epochs True \
   --data.num_workers 4 \
   --data.seq_len 2048 \
-  --distributed.fsdp True \
-  --distributed.fsdp_pure_bf16 False \
+  --data.lowdim_past_timesteps 0 \
+  --data.lowdim_future_timesteps 4 \
+  --distributed.fsdp False \
   --num_checkpoints 3 \
-  --hparams.precision pure_bf16 \
+  --hparams.precision amp_bf16 \
   --hparams.loss_function mse \
   --hparams.per_gpu_batch_size 16 \
   --hparams.global_batch_size 32 \

@@ -21,10 +21,11 @@ class RoboticsProcessor:
         self.vlm_processor = get_processor(data_params)
 
         # Normalize contained entirely within the processor
-        self.statistics = [json_load(s) for s in data_params.dataset_statistics]
+        statistics_entries = [json_load(stats_path) for stats_path in data_params.dataset_statistics]
         if self.data_params.normalization.enabled:
             self.normalizer = RoboticsNormalizer(
-                normalization_params=self.data_params.normalization, statistics_data=self.statistics
+                normalization_params=self.data_params.normalization,
+                statistics_data=statistics_entries,
             )
         else:
             self.normalizer = None
@@ -121,5 +122,14 @@ class RoboticsProcessor:
             values = [sample_lowdim[k] for sample_lowdim in batch["lowdim"]]
             processed_batch["lowdim"][k] = torch.stack([torch.as_tensor(v, dtype=torch.float32) for v in values])
 
-        normalized_batch = self.normalizer.normalize_batch(processed_batch) if self.normalizer else processed_batch
-        return normalized_batch
+        # Normalize each field individually
+        if self.normalizer:
+            anchor_timestep = self.data_params.lowdim_past_timesteps
+            # Normalize each lowdim field
+            for field_name, tensor in processed_batch["lowdim"].items():
+                if isinstance(tensor, torch.Tensor) and field_name in self.normalizer.include_fields:
+                    processed_batch["lowdim"][field_name] = self.normalizer.normalize_tensor(
+                        tensor, field_name, anchor_timestep=anchor_timestep
+                    )
+
+        return processed_batch

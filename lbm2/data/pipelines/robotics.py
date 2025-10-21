@@ -7,6 +7,7 @@ import webdataset as wds
 from lbm2.data.augmentations.base import Augmentations
 from lbm2.data.pipelines.base import BaseWebDatasetPipeline
 from lbm2.data.processor.robotics_processor import RoboticsProcessor
+from lbm2.data.robotics.utils import crop_sequence
 from lbm2.data.utils import deterministic_shuffle, log_and_continue
 from lbm2.params.data_params import RoboticsDataParams
 
@@ -41,6 +42,8 @@ def extract_robotics_fields(
     proprioception_fields=None,
     intrinsics_fields=None,
     extrinsics_fields=None,
+    lowdim_past_timesteps=None,
+    lowdim_future_timesteps=None,
 ):
     """Extract robotics fields from sample."""
     if extrinsics_fields is None:
@@ -67,13 +70,51 @@ def extract_robotics_fields(
     instruction = select_language_instruction(data.get("language_instructions.json"), language_instruction_types)
 
     lowdim_data = data.get("lowdim.npz")
+    metadata = data.get("metadata.json", {})
+
+    # Get the anchor index from metadata (where the current timestep is in the sequence)
+    original_anchor_idx = metadata.get("anchor_relative_idx", None)
+
+    # Crop sequences if requested
+    extracted_lowdim = {}
+    for key in action_fields + proprioception_fields:
+        field_data = lowdim_data.get(key)
+        if (
+            field_data is not None
+            and original_anchor_idx is not None
+            and lowdim_past_timesteps is not None
+            and lowdim_future_timesteps is not None
+        ):
+            extracted_lowdim[key] = crop_sequence(
+                field_data, original_anchor_idx, lowdim_past_timesteps, lowdim_future_timesteps
+            )
+        else:
+            extracted_lowdim[key] = field_data
+
+    # Also crop masks if cropping is enabled
+    past_mask = lowdim_data.get("past_mask")
+    future_mask = lowdim_data.get("future_mask")
+    if original_anchor_idx is not None and lowdim_past_timesteps is not None and lowdim_future_timesteps is not None:
+        if past_mask is not None:
+            past_mask = crop_sequence(past_mask, original_anchor_idx, lowdim_past_timesteps, lowdim_future_timesteps)
+        if future_mask is not None:
+            future_mask = crop_sequence(
+                future_mask, original_anchor_idx, lowdim_past_timesteps, lowdim_future_timesteps
+            )
+
+        # Update metadata with new anchor index after cropping
+        # The new anchor is always at lowdim_past_timesteps in the cropped sequence
+        metadata = metadata.copy()
+        metadata["anchor_relative_idx"] = lowdim_past_timesteps
+        # Store original anchor for alignment with normalization statistics
+        metadata["original_anchor_relative_idx"] = original_anchor_idx
 
     return {
         "images": images,
-        "lowdim": {key: lowdim_data.get(key) for key in action_fields + proprioception_fields},
-        "past_mask": lowdim_data.get("past_mask"),
-        "future_mask": lowdim_data.get("future_mask"),
-        "metadata": data.get("metadata.json", {}),
+        "lowdim": extracted_lowdim,
+        "past_mask": past_mask,
+        "future_mask": future_mask,
+        "metadata": metadata,
         "intrinsics": {key: lowdim_data.get(key) for key in intrinsics_fields},
         "extrinsics": {key: lowdim_data.get(key) for key in extrinsics_fields},
         "language_instruction": instruction,
@@ -124,6 +165,8 @@ class RoboticsPipeline(BaseWebDatasetPipeline):
                     proprioception_fields=self.data_params.proprioception_fields,
                     intrinsics_fields=self.data_params.intrinsics_fields,
                     extrinsics_fields=self.data_params.extrinsics_fields,
+                    lowdim_past_timesteps=self.data_params.lowdim_past_timesteps,
+                    lowdim_future_timesteps=self.data_params.lowdim_future_timesteps,
                 ),
                 handler=log_and_continue,
             ),

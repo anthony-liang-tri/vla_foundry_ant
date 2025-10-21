@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
+from typing import Optional
 
 from lbm2.data.processor import get_processor
+from lbm2.file_utils import get_lowdim_past_future_timesteps
 from lbm2.params.base_data_params import DataParams
 from lbm2.params.robotics.augmentation_params import DataAugmentationParams
 from lbm2.params.robotics.normalization_params import FieldNormalizationParams, NormalizationParams
@@ -88,6 +90,8 @@ class RoboticsDataParams(DataParams):
     normalization: NormalizationParams = field(default_factory=NormalizationParams)
     augmentation: DataAugmentationParams = field(default_factory=DataAugmentationParams)
 
+    lowdim_past_timesteps: Optional[int] = field(default=None)
+    lowdim_future_timesteps: Optional[int] = field(default=None)
     action_dim: int = field(default=None)
 
     def __post_init__(self):
@@ -119,9 +123,41 @@ class RoboticsDataParams(DataParams):
         # Need to import here to avoid circular import
         from lbm2.data.robotics.normalization import RoboticsNormalizer
 
+        if not self.dataset_statistics:
+            raise ValueError("Robotics datasets require dataset_statistics to be provided.")
+
+        for stats_path in self.dataset_statistics:
+            past, future = get_lowdim_past_future_timesteps(stats_path)
+            if self.lowdim_past_timesteps is not None and self.lowdim_past_timesteps > past:
+                raise ValueError(
+                    f"Requested lowdim_past_timesteps {self.lowdim_past_timesteps} exceeds "
+                    f"available past timesteps {past} from preprocessing metadata."
+                )
+            if self.lowdim_future_timesteps is not None and self.lowdim_future_timesteps > future:
+                raise ValueError(
+                    f"Requested lowdim_future_timesteps {self.lowdim_future_timesteps} exceeds "
+                    f"available future timesteps {future} from preprocessing metadata."
+                )
+        # TODO: Jean handle multiple values of past and future timesteps for different statistics files
+        object.__setattr__(self.normalization, "lowdim_past_timesteps", past)
+        object.__setattr__(self.normalization, "lowdim_future_timesteps", future)
+
         normalizer = RoboticsNormalizer(
-            normalization_params=self.normalization, statistics_path=self.dataset_statistics
+            normalization_params=self.normalization,
+            statistics_path=self.dataset_statistics,
         )
+
+        object.__setattr__(
+            self,
+            "lowdim_future_timesteps",
+            self.lowdim_future_timesteps if self.lowdim_future_timesteps is not None else future,
+        )
+        object.__setattr__(
+            self,
+            "lowdim_past_timesteps",
+            self.lowdim_past_timesteps if self.lowdim_past_timesteps is not None else past,
+        )
+
         action_dim = 0
         for field_name in self.action_fields:
             action_dim += len(normalizer.stats[field_name]["mean"])

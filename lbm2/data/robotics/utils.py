@@ -206,3 +206,30 @@ if __name__ == "__main__":
     print(rot_6d_positions)
     print(f"\nRelative 6D rotations to index {reference_idx}:")
     print(relative_rot_6d)
+
+
+def crop_sequence(
+    data,
+    anchor_idx,
+    past_timesteps,
+    future_timesteps,
+):
+    """
+    Crop a sequence to specified past and future timesteps around an anchor point.
+
+    Args:
+        data: Array of shape [T, ...] where T is the total number of timesteps
+        anchor_idx: Index of the anchor timestep in the original sequence
+        past_timesteps: Number of past timesteps to keep (not including anchor)
+        future_timesteps: Number of future timesteps to keep (including anchor)
+
+    Returns:
+        Cropped array of shape [past_timesteps + 1 +future_timesteps, ...]
+    """
+    # Calculate the range to extract
+    assert anchor_idx >= past_timesteps
+    assert data.shape[0] >= anchor_idx + future_timesteps + 1
+    start_idx = anchor_idx - past_timesteps
+    end_idx = anchor_idx + future_timesteps + 1
+
+    return data[start_idx:end_idx]

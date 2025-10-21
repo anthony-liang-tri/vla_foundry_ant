@@ -86,15 +86,16 @@ class TestRoboticsProcessorLoad:
     @pytest.fixture
     def temp_stats_file(self, sample_statistics_data):
         """Create a temporary statistics file for testing."""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-            json.dump(sample_statistics_data, f)
-            temp_path = f.name
+        with tempfile.TemporaryDirectory() as temp_dir:
+            stats_path = os.path.join(temp_dir, "stats.json")
+            with open(stats_path, "w") as f:
+                json.dump(sample_statistics_data, f)
 
-        yield temp_path
+            metadata_path = os.path.join(temp_dir, "processing_metadata.json")
+            with open(metadata_path, "w") as f:
+                json.dump({"processing": {"past_lowdim_steps": 1, "future_lowdim_steps": 14}}, f)
 
-        # Cleanup
-        if os.path.exists(temp_path):
-            os.unlink(temp_path)
+            yield stats_path
 
     @pytest.fixture
     def temp_experiment_dir(self, dataset_stats_path):
@@ -104,6 +105,8 @@ class TestRoboticsProcessorLoad:
             config_path = os.path.join(temp_dir, "config_processor.yaml")
             with open(config_path, "w") as f:
                 f.write("type: robotics\n")
+                f.write("lowdim_past_timesteps: 0\n")
+                f.write("lowdim_future_timesteps: 8\n")
                 f.write("dataset_statistics:\n")
                 f.write(f"  - {dataset_stats_path}\n")
                 f.write("processor: google/paligemma-3b-pt-224\n")
@@ -118,6 +121,8 @@ class TestRoboticsProcessorLoad:
                 f.write("  scope: global\n")
                 f.write("  epsilon: 1.0e-08\n")
                 f.write("  field_configs: {}\n")
+                f.write("  lowdim_past_timesteps: 1\n")
+                f.write("  lowdim_future_timesteps: 14\n")
 
             yield temp_dir
 
@@ -149,6 +154,12 @@ class TestRoboticsProcessorLoad:
         # Verify normalizer was created since normalization is enabled
         assert processor.normalizer is not None
         assert isinstance(processor.normalizer, RoboticsNormalizer)
+        assert processor.normalizer.lowdim_past_timesteps == 1
+        assert processor.normalizer.lowdim_future_timesteps == 14
+        assert processor.data_params.normalization.lowdim_past_timesteps == 1
+        assert processor.data_params.normalization.lowdim_future_timesteps == 14
+        assert processor.data_params.lowdim_past_timesteps == 1
+        assert processor.data_params.lowdim_future_timesteps == 14
 
         # Verify that real statistics were loaded
         assert processor.normalizer.stats is not None
@@ -183,6 +194,12 @@ class TestRoboticsProcessorLoad:
         assert processor.normalizer is not None
         assert isinstance(processor.normalizer, RoboticsNormalizer)
         assert processor.normalizer.stats is not None
+        assert processor.data_params.lowdim_past_timesteps == 0
+        assert processor.data_params.lowdim_future_timesteps == 8
+        assert processor.data_params.normalization.lowdim_past_timesteps == 1
+        assert processor.data_params.normalization.lowdim_future_timesteps == 14
+        assert processor.normalizer.lowdim_past_timesteps == 1
+        assert processor.normalizer.lowdim_future_timesteps == 14
 
         # Verify that real statistics were loaded
         expected_fields = [
@@ -367,6 +384,8 @@ class TestRoboticsNormalizerLoad:
             f.write("method: std\n")
             f.write("scope: global\n")
             f.write("epsilon: 1.0e-08\n")
+            f.write("lowdim_past_timesteps: 1\n")
+            f.write("lowdim_future_timesteps: 14\n")
             f.write("field_configs:\n")
             f.write("  robot__actual__joint_position__right::panda:\n")
             f.write("    method: percentile_5_95\n")
@@ -383,15 +402,16 @@ class TestRoboticsNormalizerLoad:
     @pytest.fixture
     def temp_stats_file(self, sample_statistics_data):
         """Create a temporary statistics file for testing."""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-            json.dump(sample_statistics_data, f)
-            temp_path = f.name
+        with tempfile.TemporaryDirectory() as temp_dir:
+            stats_path = os.path.join(temp_dir, "stats.json")
+            with open(stats_path, "w") as f:
+                json.dump(sample_statistics_data, f)
 
-        yield temp_path
+            metadata_path = os.path.join(temp_dir, "processing_metadata.json")
+            with open(metadata_path, "w") as f:
+                json.dump({"processing": {"past_lowdim_steps": 1, "future_lowdim_steps": 14}}, f)
 
-        # Cleanup
-        if os.path.exists(temp_path):
-            os.unlink(temp_path)
+            yield stats_path
 
     @pytest.fixture
     def temp_experiment_dir(self, sample_statistics_data):
@@ -404,6 +424,8 @@ class TestRoboticsNormalizerLoad:
                 f.write("method: std\n")
                 f.write("scope: global\n")
                 f.write("epsilon: 1.0e-08\n")
+                f.write("lowdim_past_timesteps: 1\n")
+                f.write("lowdim_future_timesteps: 14\n")
                 f.write("field_configs:\n")
                 f.write("  robot__actual__joint_position__right::panda:\n")
                 f.write("    method: percentile_5_95\n")
@@ -414,6 +436,10 @@ class TestRoboticsNormalizerLoad:
             stats_path = os.path.join(temp_dir, "stats_normalizer.json")
             with open(stats_path, "w") as f:
                 json.dump(sample_statistics_data, f)
+
+            metadata_path = os.path.join(temp_dir, "processing_metadata.json")
+            with open(metadata_path, "w") as f:
+                json.dump({"processing": {"past_lowdim_steps": 1, "future_lowdim_steps": 14}}, f)
 
             yield temp_dir
 
@@ -441,6 +467,14 @@ class TestRoboticsNormalizerLoad:
         assert normalizer.stats is not None
         assert "robot__actual__joint_position__right::panda" in normalizer.stats
         assert "robot__actual__joint_velocity__right::panda" in normalizer.stats
+        assert normalizer.lowdim_past_timesteps == 1
+        assert normalizer.lowdim_future_timesteps == 14
+        assert normalizer.normalization_params.lowdim_past_timesteps == 1
+        assert normalizer.normalization_params.lowdim_future_timesteps == 14
+        assert normalizer.lowdim_past_timesteps == 1
+        assert normalizer.lowdim_future_timesteps == 14
+        assert normalizer.normalization_params.lowdim_past_timesteps == 1
+        assert normalizer.normalization_params.lowdim_future_timesteps == 14
 
     def test_robotics_normalizer_from_pretrained(self, temp_experiment_dir, dataset_stats_path):
         """Test RoboticsNormalizer.from_pretrained() method."""
@@ -475,6 +509,8 @@ class TestRoboticsNormalizerLoad:
             f.write("method: std\n")
             f.write("scope: global\n")
             f.write("epsilon: 1.0e-08\n")
+            f.write("lowdim_past_timesteps: 1\n")
+            f.write("lowdim_future_timesteps: 14\n")
             f.write("field_configs: {}\n")
             temp_config_path = f.name
 
@@ -487,6 +523,8 @@ class TestRoboticsNormalizerLoad:
             assert normalizer.normalization_params.enabled is False
             assert normalizer.stats is not None  # even with disabled normalization, stats are loaded
             assert normalizer.enabled is False
+            assert normalizer.lowdim_past_timesteps == 1
+            assert normalizer.lowdim_future_timesteps == 14
 
         finally:
             # Cleanup

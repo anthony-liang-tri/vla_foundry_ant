@@ -278,7 +278,10 @@ class RoboticsDataLoader:
         self.normalizer = None
         if self.params.normalization.enabled:
             self.normalizer = RoboticsNormalizer(
-                normalization_params=self.params.normalization, statistics_path=self.params.dataset_statistics
+                normalization_params=self.params.normalization,
+                statistics_path=self.params.dataset_statistics,
+                lowdim_past_timesteps=self.params.lowdim_past_timesteps,
+                lowdim_future_timesteps=self.params.lowdim_future_timesteps,
             )
             if self.normalizer:
                 logging.info("RoboticsDataLoader: Normalizer initialized for denormalization")
