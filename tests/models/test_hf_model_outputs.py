@@ -3,8 +3,8 @@
 import pytest
 import torch
 
-from lbm2.models import create_model
-from lbm2.params.model_params import TransformerHFParams, VLMHFParams
+from vla_foundry.models import create_model
+from vla_foundry.params.model_params import TransformerHFParams, VLMHFParams
 
 
 class TestHFModelOutputs:

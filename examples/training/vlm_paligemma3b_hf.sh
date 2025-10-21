@@ -1,4 +1,4 @@
-.venv/bin/torchrun --nproc_per_node=8 --nnodes=1 lbm2/main.py \
+.venv/bin/torchrun --nproc_per_node=8 --nnodes=1 vla_foundry/main.py \
 --model.type vlm_hf \
 --model.hf_pretrained google/paligemma-3b-pt-224 \
 --data.type image_caption \

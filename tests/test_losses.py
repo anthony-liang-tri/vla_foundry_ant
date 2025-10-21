@@ -4,7 +4,7 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from lbm2.losses import (
+from vla_foundry.losses import (
     CrossEntropyLossWithZLoss,
     _ignore_mask,
     get_loss_function,

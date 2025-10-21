@@ -9,9 +9,9 @@ import torch
 from PIL import Image
 from torchvision import transforms
 
-from lbm2.data.augmentations.base import Augmentations
-from lbm2.data.augmentations.random_ratio_crop import RandomRatioCrop
-from lbm2.params.robotics.augmentation_params import (
+from vla_foundry.data.augmentations.base import Augmentations
+from vla_foundry.data.augmentations.random_ratio_crop import RandomRatioCrop
+from vla_foundry.params.robotics.augmentation_params import (
     ColorJitterParams,
     DataAugmentationParams,
     ImageAugmentationParams,

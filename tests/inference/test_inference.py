@@ -1,7 +1,7 @@
-from lbm2.file_utils import load_model_checkpoint
-from lbm2.models import create_model
-from lbm2.params.model_params import ModelParams
-from lbm2.params.train_experiment_params import load_params_from_yaml
+from vla_foundry.file_utils import load_model_checkpoint
+from vla_foundry.models import create_model
+from vla_foundry.params.model_params import ModelParams
+from vla_foundry.params.train_experiment_params import load_params_from_yaml
 
 EXPECTED_OUTPUT_TEXT = ["hi[PAD][PAD][PAD]....................", "This is a batch...................."]
 

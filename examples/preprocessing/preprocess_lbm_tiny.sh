@@ -1,9 +1,9 @@
-source .venv/bin/activate && python lbm2/data/scripts/preprocessing/preprocess_lbm_to_tar.py \
+source .venv/bin/activate && python vla_foundry/data/scripts/preprocessing/preprocess_lbm_to_tar.py \
     --source_episodes "['s3://robotics-manip-lbm/efs/data/tasks/PickAndPlaceBox/cabot/sim/bc/teleop/2025-02-11T17-04-00-05-00/']" \
     --output_dir s3://tri-ml-datasets-uw2/preprocess_lbm_test_test/lbm/PickAndPlaceBox/cabot/sim/ \
-    --language_annotations_path lbm2/config_presets/data/lbm_language_annotations.yaml \
-    --camera_discard_keys "include lbm2/config_presets/data/lbm_data_discard_key.yaml" \
-    --camera_names "include lbm2/config_presets/data/lbm_data_camera_names.yaml" \
+    --language_annotations_path vla_foundry/config_presets/data/lbm_language_annotations.yaml \
+    --camera_discard_keys "include vla_foundry/config_presets/data/lbm_data_discard_key.yaml" \
+    --camera_names "include vla_foundry/config_presets/data/lbm_data_camera_names.yaml" \
     --past_lowdim_steps 1 \
     --future_lowdim_steps 14 \
     --image_indices "[-1, 0]" \

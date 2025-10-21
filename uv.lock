@@ -23,7 +23,7 @@ resolution-markers = [
 [manifest]
 members = [
     "grpc-workspace",
-    "lbm2",
+    "vla_foundry",
     "robot-gym",
 ]
 
@@ -1601,7 +1601,7 @@ wheels = [
 ]
 
 [[package]]
-name = "lbm2"
+name = "vla_foundry"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

@@ -10,12 +10,12 @@ import boto3
 import draccus
 
 import sagemaker
-from lbm2.params.base_params import BaseParams
-from lbm2.params.train_experiment_params import TrainExperimentParams
 from sagemaker.aws_batch.training_queue import TrainingQueue as Queue
 from sagemaker.pytorch import PyTorch
+from vla_foundry.params.base_params import BaseParams
+from vla_foundry.params.train_experiment_params import TrainExperimentParams
 
-NAME = "lbm2"
+NAME = "vla_foundry"
 INSTANCE_MAPPER = {
     "p4de": "ml.p4de.24xlarge",
     "p5": "ml.p5.48xlarge",
@@ -178,10 +178,10 @@ def main():
 
     environment = {
         "SM_USE_RESERVED_CAPACITY": "1",
-        "WANDB_PROJECT": "lbm2",
+        "WANDB_PROJECT": "vla_foundry",
         "NCCL_DEBUG": "INFO",
         "TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS": "1",
-        "SAGEMAKER_PROGRAM": "/opt/ml/code/lbm2/main.py",
+        "SAGEMAKER_PROGRAM": "/opt/ml/code/vla_foundry/main.py",
     }
     with open("secrets.env", "r") as f:
         for line in f:
@@ -191,7 +191,7 @@ def main():
                 environment[key.strip()] = value.strip().strip("\"'")
 
     estimator = PyTorch(
-        entry_point="lbm2/main.py",
+        entry_point="vla_foundry/main.py",
         sagemaker_session=sagemaker_session,
         base_job_name=base_job_name,
         hyperparameters={"config_path": hyperparameter_sagemaker_path},

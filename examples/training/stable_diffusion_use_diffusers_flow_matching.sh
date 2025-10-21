@@ -1,4 +1,4 @@
-.venv/bin/torchrun --nproc_per_node=8 --nnodes=1 lbm2/main.py \
+.venv/bin/torchrun --nproc_per_node=8 --nnodes=1 vla_foundry/main.py \
 --model.type stable_diffusion \
 --model.use_diffusers_unet True \
 --model.use_flow_matching_scheduler True \

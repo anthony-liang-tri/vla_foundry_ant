@@ -1,10 +1,10 @@
 import pytest
 import torch
 
-from lbm2.models import create_model
-from lbm2.models.utils import compute_num_image_tokens
-from lbm2.params.model_params import ModelParams, TransformerHFParams, TransformerParams, VLMHFParams
-from lbm2.params.train_experiment_params import load_params_from_yaml
+from vla_foundry.models import create_model
+from vla_foundry.models.utils import compute_num_image_tokens
+from vla_foundry.params.model_params import ModelParams, TransformerHFParams, TransformerParams, VLMHFParams
+from vla_foundry.params.train_experiment_params import load_params_from_yaml
 
 
 class TestReturnHiddenStatesConsistency:

@@ -1,6 +1,6 @@
-.venv/bin/torchrun --nproc_per_node=3 --nnodes=1 lbm2/main.py \
+.venv/bin/torchrun --nproc_per_node=3 --nnodes=1 vla_foundry/main.py \
 --model.type transformer \
---model "include lbm2/config_presets/models/transformer_11m.yaml" \
+--model "include vla_foundry/config_presets/models/transformer_11m.yaml" \
 --model.cast_output_to_float32 True \
 --distributed.fsdp True \
 --data.type text \

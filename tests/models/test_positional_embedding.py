@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import pytest
 import torch
 
-from lbm2.positional_embedding import (
+from vla_foundry.positional_embedding import (
     RotaryEmbedding,
     RotaryWithCast,
     apply_rotary_pos_emb,

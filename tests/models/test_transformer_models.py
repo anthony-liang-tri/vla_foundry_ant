@@ -3,9 +3,9 @@ from unittest.mock import Mock, patch
 import pytest
 import torch
 
-from lbm2.models import create_model
-from lbm2.params.model_params import TransformerParams
-from lbm2.params.train_experiment_params import load_params_from_yaml
+from vla_foundry.models import create_model
+from vla_foundry.params.model_params import TransformerParams
+from vla_foundry.params.train_experiment_params import load_params_from_yaml
 
 
 class TestTransformer:
@@ -291,13 +291,13 @@ class TestTransformerHF:
     @pytest.fixture
     def transformer_hf_config(self):
         # Create a new config with transformer_hf type
-        from lbm2.params.model_params import TransformerHFParams
+        from vla_foundry.params.model_params import TransformerHFParams
 
         return TransformerHFParams(
             hf_pretrained="microsoft/DialoGPT-small", resume_from_checkpoint=None, resume_weights_only=False
         )
 
-    @patch("lbm2.models.transformer_hf.AutoModelForCausalLM.from_pretrained")
+    @patch("vla_foundry.models.transformer_hf.AutoModelForCausalLM.from_pretrained")
     def test_transformer_hf_forward_basic(self, mock_from_pretrained, transformer_hf_config):
         """Test basic forward pass without hidden states"""
         # Mock the HF model
@@ -330,7 +330,7 @@ class TestTransformerHF:
         assert outputs.past_key_values is None
         assert outputs.hidden_states is None
 
-    @patch("lbm2.models.transformer_hf.AutoModelForCausalLM.from_pretrained")
+    @patch("vla_foundry.models.transformer_hf.AutoModelForCausalLM.from_pretrained")
     def test_transformer_hf_forward_with_hidden_states(self, mock_from_pretrained, transformer_hf_config):
         """Test forward pass with hidden states returned"""
         # Mock the HF model
@@ -363,7 +363,7 @@ class TestTransformerHF:
         assert isinstance(outputs.hidden_states, tuple)
         assert len(outputs.hidden_states) == 2
 
-    @patch("lbm2.models.transformer_hf.AutoModelForCausalLM.from_pretrained")
+    @patch("vla_foundry.models.transformer_hf.AutoModelForCausalLM.from_pretrained")
     def test_transformer_hf_properties(self, mock_from_pretrained, transformer_hf_config):
         """Test transformer HF properties"""
         # Mock the HF model with config
@@ -379,7 +379,7 @@ class TestTransformerHF:
         assert transformer.hidden_dim == 128
         assert transformer.num_hidden_layers == 2
 
-    @patch("lbm2.models.transformer_hf.AutoModelForCausalLM.from_pretrained")
+    @patch("vla_foundry.models.transformer_hf.AutoModelForCausalLM.from_pretrained")
     def test_transformer_hf_set_grad_checkpointing(self, mock_from_pretrained, transformer_hf_config):
         """Test that set_grad_checkpointing raises NotImplementedError"""
         # Mock the HF model

@@ -1,8 +1,8 @@
-# LBM2 Copilot Coding Agent Instructions
+# VLA Foundry Copilot Coding Agent Instructions
 
 ## Repository Overview
 
-**LBM2** is a Python codebase for training Large Behavior Models, combining MBM and nanoVLM architectures. The repository supports:
+**VLA Foundry** is a Python codebase for training Large Behavior Models, combining MBM and nanoVLM architectures. The repository supports:
 - **Model Types**: Transformers, Vision-Language Models (VLMs), Diffusion models, UNets
 - **Size**: ~7000+ lines of Python across 50+ files, medium-large ML research codebase
 - **Runtime**: Python 3.10, PyTorch 2.7.0, uses `uv` for dependency management
@@ -25,7 +25,7 @@ uv pip install -e .
 
 3. **Verify installation**:
 ```bash
-uv run python -c "import lbm2; print('LBM2 loaded successfully')"
+uv run python -c "import vla_foundry; print('vla_foundry loaded successfully')"
 ```
 
 **Environment Notes:**
@@ -75,30 +75,30 @@ uv run pytest tests/ --verbose
 ## Key Architecture & File Locations
 
 ### Main Entry Points
-- **Training**: `lbm2/main.py` - Main training script with draccus argument parsing
+- **Training**: `vla_foundry/main.py` - Main training script with draccus argument parsing
 - **Examples**: `examples/training/llm_11m.sh` - Good starting point for training examples
 
 ### Configuration System (Critical)
-- **Base**: `lbm2/params/` - Draccus dataclass-based config with nested structures
-- **Presets**: `lbm2/config_presets/models/` - YAML model configurations
+- **Base**: `vla_foundry/params/` - Draccus dataclass-based config with nested structures
+- **Presets**: `vla_foundry/config_presets/models/` - YAML model configurations
 - **Pattern**: Use `--model.type transformer --model "include path/to/preset.yaml"`
 - **Command-line precedence**: CLI args override YAML presets
 
 ### Core Modules
-- **Models**: `lbm2/models/` - create_model() factory, transformer/VLM/diffusion implementations
-- **Data**: `lbm2/data/` - WebDataset pipelines, processors for different modalities
-- **Training**: `lbm2/train.py` - Core training loop, `lbm2/distributed.py` - FSDP/DDP support
+- **Models**: `vla_foundry/models/` - create_model() factory, transformer/VLM/diffusion implementations
+- **Data**: `vla_foundry/data/` - WebDataset pipelines, processors for different modalities
+- **Training**: `vla_foundry/train.py` - Core training loop, `vla_foundry/distributed.py` - FSDP/DDP support
 
 ### Project Structure
 ```
-lbm2/                 # Main package
+vla_foundry/         # Main package
 ├── main.py          # Training entry point
 ├── params/          # Configuration classes
 ├── models/          # Model implementations
 ├── data/            # Data loading & processing
 ├── config_presets/  # YAML configuration presets
 examples/training/   # Training scripts & examples  
-tests/               # Test suite (mirrors lbm2/ structure)
+tests/               # Test suite (mirrors vla_foundry/ structure)
 packages/            # Workspace packages (robot-gym, grpc-workspace)
 ```
 
@@ -107,16 +107,16 @@ packages/            # Workspace packages (robot-gym, grpc-workspace)
 ### Training Commands
 ```bash
 # Verify argument structure (safe test)
-uv run python lbm2/main.py --help
+uv run python vla_foundry/main.py --help
 
 # Use examples as templates for actual training
 # See examples/training/ for working command patterns
 cat examples/training/llm_11m.sh
 
 # Basic pattern (requires valid datasets):
-uv run python lbm2/main.py \
+uv run python vla_foundry/main.py \
   --model.type transformer \
-  --model "include lbm2/config_presets/models/transformer_11m.yaml" \
+  --model "include vla_foundry/config_presets/models/transformer_11m.yaml" \
   --data.type text \
   --total_train_samples 1000
 ```
@@ -160,13 +160,13 @@ uv run pytest tests/models/ tests/params/ -x --tb=short
 
 3. **Import verification**:
 ```bash
-uv run python -c "from lbm2.models import create_model; print('Models OK')"
-uv run python -c "from lbm2.data.dataloader import get_wds_dataloader; print('Data OK')"
+uv run python -c "from vla_foundry.models import create_model; print('Models OK')"
+uv run python -c "from vla_foundry.data.dataloader import get_wds_dataloader; print('Data OK')"
 ```
 
 4. **Argument parsing test**:
 ```bash
-uv run python lbm2/main.py --help | head -5
+uv run python vla_foundry/main.py --help | head -5
 ```
 
 ## Time Expectations

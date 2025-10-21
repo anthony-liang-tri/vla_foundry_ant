@@ -14,8 +14,8 @@ import tempfile
 import pytest
 import torch
 
-from lbm2.data.robotics.normalization import RoboticsNormalizer
-from lbm2.params.robotics.normalization_params import FieldNormalizationParams, NormalizationParams
+from vla_foundry.data.robotics.normalization import RoboticsNormalizer
+from vla_foundry.params.robotics.normalization_params import FieldNormalizationParams, NormalizationParams
 
 
 @pytest.fixture

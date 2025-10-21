@@ -4,14 +4,14 @@ import pytest
 import torch
 from transformers.modeling_outputs import CausalLMOutputWithPast as HFCausalLMOutputWithPast
 
-from lbm2.models import create_model
-from lbm2.models.base_model import BaseModel
-from lbm2.models.transformer_base import TransformerBase
-from lbm2.models.utils import compute_num_image_tokens
-from lbm2.models.vlm import VLM, ModalityProjector
-from lbm2.models.vlm_hf import VLMHF
-from lbm2.params.model_params import ModelParams, ViTParams
-from lbm2.params.train_experiment_params import load_params_from_yaml
+from vla_foundry.models import create_model
+from vla_foundry.models.base_model import BaseModel
+from vla_foundry.models.transformer_base import TransformerBase
+from vla_foundry.models.utils import compute_num_image_tokens
+from vla_foundry.models.vlm import VLM, ModalityProjector
+from vla_foundry.models.vlm_hf import VLMHF
+from vla_foundry.params.model_params import ModelParams, ViTParams
+from vla_foundry.params.train_experiment_params import load_params_from_yaml
 
 
 class TestModalityProjector:
@@ -181,7 +181,7 @@ class TestVLMHF:
     def vlm_hf_config(self):
         return load_params_from_yaml(ModelParams, "tests/params/dummy_configs/dummy_vlm_model_hf_config.yaml")
 
-    @patch("lbm2.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
+    @patch("vla_foundry.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
     def test_vlm_hf_forward_basic(self, mock_from_pretrained, vlm_hf_config):
         """Test basic forward pass without hidden states"""
         # Mock the HF model
@@ -215,7 +215,7 @@ class TestVLMHF:
         assert output.past_key_values is None
         assert output.hidden_states is None
 
-    @patch("lbm2.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
+    @patch("vla_foundry.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
     def test_vlm_hf_forward_with_hidden_states(self, mock_from_pretrained, vlm_hf_config):
         """Test forward pass with hidden states returned"""
         # Mock the HF model
@@ -252,7 +252,7 @@ class TestVLMHF:
         assert isinstance(output.hidden_states, tuple)
         assert len(output.hidden_states) == 2
 
-    @patch("lbm2.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
+    @patch("vla_foundry.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
     def test_vlm_hf_forward_hidden_states_fallback(self, mock_from_pretrained, vlm_hf_config):
         """Test forward pass with hidden states fallback to last_hidden_state"""
         # Mock the HF model
@@ -289,7 +289,7 @@ class TestVLMHF:
         assert isinstance(output.hidden_states, tuple)
         # Should create hidden states based on num_hidden_layers
 
-    @patch("lbm2.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
+    @patch("vla_foundry.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
     def test_vlm_hf_properties(self, mock_from_pretrained, vlm_hf_config):
         """Test VLM HF properties"""
         # Mock the HF model with config
@@ -308,7 +308,7 @@ class TestVLMHF:
         assert isinstance(vlm.hidden_dim, int)
         assert isinstance(vlm.num_hidden_layers, int)
 
-    @patch("lbm2.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
+    @patch("vla_foundry.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
     def test_vlm_hf_grad_checkpointing(self, mock_from_pretrained, vlm_hf_config):
         """Test gradient checkpointing methods"""
         # Mock the HF model with gradient checkpointing methods
@@ -323,7 +323,7 @@ class TestVLMHF:
         vlm.set_grad_checkpointing(True)
         vlm.set_grad_checkpointing(False)
 
-    @patch("lbm2.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
+    @patch("vla_foundry.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
     def test_vlm_hf_grad_checkpointing_no_methods(self, mock_from_pretrained, vlm_hf_config):
         """Test gradient checkpointing when methods don't exist"""
         # Mock the HF model without gradient checkpointing methods
@@ -337,7 +337,7 @@ class TestVLMHF:
         vlm.set_grad_checkpointing(True)
         vlm.set_grad_checkpointing(False)
 
-    @patch("lbm2.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
+    @patch("vla_foundry.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
     def test_vlm_hf_generate(self, mock_from_pretrained, vlm_hf_config):
         """Test VLM HF generation"""
         # Mock the HF model
@@ -482,7 +482,7 @@ class TestVLMHFInheritance:
     def vlm_hf_config(self):
         return load_params_from_yaml(ModelParams, "tests/params/dummy_configs/dummy_vlm_model_hf_config.yaml")
 
-    @patch("lbm2.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
+    @patch("vla_foundry.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
     def test_vlm_hf_inherits_from_transformer_base(self, mock_from_pretrained, vlm_hf_config):
         """Test that VLMHF now inherits from TransformerBase instead of BaseModel directly"""
         # Mock the HF model
@@ -500,7 +500,7 @@ class TestVLMHFInheritance:
         # Check that the inheritance chain is correct
         assert VLMHF.__mro__.index(TransformerBase) < VLMHF.__mro__.index(BaseModel)
 
-    @patch("lbm2.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
+    @patch("vla_foundry.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
     def test_vlm_hf_has_vlm_base_methods(self, mock_from_pretrained, vlm_hf_config):
         """Test that VLMHF has all the methods from TransformerBase"""
         # Mock the HF model
@@ -526,7 +526,7 @@ class TestVLMHFVocabularyExtension:
     def vlm_hf_config(self):
         return load_params_from_yaml(ModelParams, "tests/params/dummy_configs/dummy_vlm_model_hf_config.yaml")
 
-    @patch("lbm2.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
+    @patch("vla_foundry.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
     def test_vlm_hf_resize_token_embeddings_with_token_id(self, mock_from_pretrained, vlm_hf_config):
         """Test resize_token_embeddings with explicit token_id"""
         # Mock the HF model with embeddings
@@ -546,7 +546,7 @@ class TestVLMHFVocabularyExtension:
         assert result == new_token_id
         mock_model.resize_token_embeddings.assert_called_once_with(new_token_id, mean_resizing=False)
 
-    @patch("lbm2.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
+    @patch("vla_foundry.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
     def test_vlm_hf_resize_token_embeddings_without_token_id(self, mock_from_pretrained, vlm_hf_config):
         """Test resize_token_embeddings without explicit token_id (auto-increment)"""
         # Mock the HF model with embeddings
@@ -565,7 +565,7 @@ class TestVLMHFVocabularyExtension:
         assert result == 1001  # current + 1
         mock_model.resize_token_embeddings.assert_called_once_with(1001, mean_resizing=False)
 
-    @patch("lbm2.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
+    @patch("vla_foundry.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
     def test_vlm_hf_resize_token_embeddings_no_resize_needed(self, mock_from_pretrained, vlm_hf_config):
         """Test resize_token_embeddings when no resize is needed"""
         # Mock the HF model with embeddings
@@ -585,7 +585,7 @@ class TestVLMHFVocabularyExtension:
         assert result == token_id
         mock_model.resize_token_embeddings.assert_not_called()
 
-    @patch("lbm2.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
+    @patch("vla_foundry.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
     def test_vlm_hf_resize_token_embeddings_exact_size(self, mock_from_pretrained, vlm_hf_config):
         """Test resize_token_embeddings when token_id equals current vocab size"""
         # Mock the HF model with embeddings

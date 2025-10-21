@@ -3,13 +3,13 @@ from unittest.mock import Mock, patch
 import pytest
 import torch
 
-from lbm2.data.dataloader import get_datastring_input, get_wds_dataloader
-from lbm2.data.pipelines import FiniteDataPipeline, create_wds_pipeline
-from lbm2.data.pipelines.image_caption import ImageCaptionPipeline, filter_no_caption_or_no_image
-from lbm2.data.pipelines.text import TextPipeline, filter_lt_seqlen
-from lbm2.data.pipelines.text_untokenized import TextUntokenizedPipeline, batch_tokenize
-from lbm2.data.sampler import sample_chunk
-from lbm2.params.train_experiment_params import load_experiment_params_from_yaml
+from vla_foundry.data.dataloader import get_datastring_input, get_wds_dataloader
+from vla_foundry.data.pipelines import FiniteDataPipeline, create_wds_pipeline
+from vla_foundry.data.pipelines.image_caption import ImageCaptionPipeline, filter_no_caption_or_no_image
+from vla_foundry.data.pipelines.text import TextPipeline, filter_lt_seqlen
+from vla_foundry.data.pipelines.text_untokenized import TextUntokenizedPipeline, batch_tokenize
+from vla_foundry.data.sampler import sample_chunk
+from vla_foundry.params.train_experiment_params import load_experiment_params_from_yaml
 
 
 def _test_batch_conform(batch, expected_seq_len, expected_batch_size=None, modality="text", do_sample_chunk=True):
@@ -292,7 +292,7 @@ class TestTextUntokenizedPipeline:
         mock_config.tokenizer = "gpt2"
         return mock_config
 
-    @patch("lbm2.data.pipelines.text_untokenized.get_tokenizer")
+    @patch("vla_foundry.data.pipelines.text_untokenized.get_tokenizer")
     def test_text_untokenized_pipeline_creation(self, mock_tokenizer):
         """Test TextUntokenizedPipeline initialization."""
         mock_tokenizer_instance = Mock()
@@ -364,7 +364,7 @@ class TestTextUntokenizedPipeline:
             return_tensors="pt",
         )
 
-    @patch("lbm2.data.pipelines.text_untokenized.get_tokenizer")
+    @patch("vla_foundry.data.pipelines.text_untokenized.get_tokenizer")
     def test_tokenize_wrapper(self, mock_tokenizer):
         """Test tokenize_wrapper method."""
         mock_tokenizer_instance = Mock()
@@ -375,7 +375,7 @@ class TestTextUntokenizedPipeline:
         pipeline = TextUntokenizedPipeline("text_untokenized", data_params, 4)
 
         # Mock batch_tokenize
-        with patch("lbm2.data.pipelines.text_untokenized.batch_tokenize") as mock_batch_tokenize:
+        with patch("vla_foundry.data.pipelines.text_untokenized.batch_tokenize") as mock_batch_tokenize:
             mock_input_ids = torch.tensor([[1, 2, 3]])
             mock_attention_mask = torch.tensor([[1, 1, 1]])
             mock_batch_tokenize.return_value = (mock_input_ids, mock_attention_mask)
@@ -524,7 +524,7 @@ class TestImageCaptionPipeline:
         webp_sample = {"txt": "A cat", "webp": b"image_data"}
         assert filter_no_caption_or_no_image(webp_sample)
 
-    @patch("lbm2.data.pipelines.image_caption.get_processor")
+    @patch("vla_foundry.data.pipelines.image_caption.get_processor")
     def test_image_caption_pipeline_creation(self, mock_get_processor):
         """Test ImageCaptionPipeline initialization."""
         mock_processor = Mock()
@@ -687,9 +687,9 @@ class TestPipelineCreation:
         checkpoint_num = 0
 
         with (
-            patch("lbm2.data.pipelines.text_untokenized.get_tokenizer")
+            patch("vla_foundry.data.pipelines.text_untokenized.get_tokenizer")
             if modality == "text_untokenized"
-            else patch("lbm2.data.pipelines.image_caption.get_processor")
+            else patch("vla_foundry.data.pipelines.image_caption.get_processor")
             if modality == "image_caption"
             else patch("builtins.print")
         ):  # Dummy patch for text modality
@@ -747,7 +747,7 @@ class TestIntegrationWithRealConfig:
         try:
             params = load_experiment_params_from_yaml("tests/params/dummy_configs/dummy_vlm_config.yaml")
 
-            with patch("lbm2.data.pipelines.image_caption.get_processor") as mock_get_processor:
+            with patch("vla_foundry.data.pipelines.image_caption.get_processor") as mock_get_processor:
                 mock_processor = Mock()
                 mock_get_processor.return_value = mock_processor
 

@@ -1,8 +1,8 @@
-.venv/bin/torchrun --master_port 29502 --nproc_per_node=2 --nnodes=1 lbm2/main.py \
-  --model "include lbm2/config_presets/models/diffusion_policy.yaml" \
+.venv/bin/torchrun --master_port 29502 --nproc_per_node=2 --nnodes=1 vla_foundry/main.py \
+  --model "include vla_foundry/config_presets/models/diffusion_policy.yaml" \
   --model.clip.freeze_text_encoder True \
   --model.transformer.is_causal True \
-  --data "include lbm2/config_presets/data/lbm_data_params.yaml" \
+  --data "include vla_foundry/config_presets/data/lbm_data_params.yaml" \
   --data.dataset_manifest ["s3://tri-ml-datasets-uw2/vlm_datasets/preprocess_384_past1_future8_relative/lbm/BimanualPutRedBellPepperInBin/riverway/sim/shards/manifest.jsonl"] \
   --data.dataset_statistics ["s3://tri-ml-datasets-uw2/vlm_datasets/preprocess_384_past1_future8_relative/lbm/BimanualPutRedBellPepperInBin/riverway/sim/shards/stats.json"] \
   --data.dataset_weighting [1.0] \

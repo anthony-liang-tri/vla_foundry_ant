@@ -71,4 +71,4 @@ remote_sync: s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/llm_tiny
 save_path: null
 total_train_samples: 1000000
 wandb: true
-wandb_project_name: lbm2
+wandb_project_name: vla_foundry

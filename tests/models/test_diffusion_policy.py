@@ -3,9 +3,9 @@ from unittest.mock import Mock, patch
 import pytest
 import torch
 
-from lbm2.models import create_model
-from lbm2.params.model_params import DiffusionPolicyParams
-from lbm2.params.train_experiment_params import load_params_from_yaml
+from vla_foundry.models import create_model
+from vla_foundry.params.model_params import DiffusionPolicyParams
+from vla_foundry.params.train_experiment_params import load_params_from_yaml
 
 
 class TestDiffusionPolicy:
@@ -17,7 +17,7 @@ class TestDiffusionPolicy:
 
     @pytest.fixture
     def diffusion_policy(self, diffusion_policy_config):
-        with patch("lbm2.models.diffusion_policy.clip_hf.CLIPModel.from_pretrained") as mock_clip_pretrained:
+        with patch("vla_foundry.models.diffusion_policy.clip_hf.CLIPModel.from_pretrained") as mock_clip_pretrained:
             # Mock the HuggingFace CLIPModel with proper projection_dim
             mock_hf_clip_model = Mock()
             mock_hf_clip_model.projection_dim = 512

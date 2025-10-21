@@ -11,8 +11,8 @@ This script demonstrates:
 
 import torch
 
-from lbm2.models.transformer import Transformer
-from lbm2.params.model_params import TransformerParams
+from vla_foundry.models.transformer import Transformer
+from vla_foundry.params.model_params import TransformerParams
 
 
 def create_demo_transformer():

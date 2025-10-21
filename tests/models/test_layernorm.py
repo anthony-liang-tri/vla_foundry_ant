@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from lbm2.norms import LayerNorm, LPLayerNorm, RmsNorm, get_norm_class
+from vla_foundry.norms import LayerNorm, LPLayerNorm, RmsNorm, get_norm_class
 
 
 class TestLayerNorm:

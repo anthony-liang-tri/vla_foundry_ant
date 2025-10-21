@@ -3,7 +3,7 @@
 import os
 import tempfile
 
-from lbm2.file_utils import check_directory_has_files_with_prefix
+from vla_foundry.file_utils import check_directory_has_files_with_prefix
 
 
 class TestCheckDirectoryHasFilesWithPrefix:

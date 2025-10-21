@@ -1,4 +1,4 @@
-.venv/bin/torchrun --nproc_per_node=8 --nnodes=1 lbm2/main.py \
+.venv/bin/torchrun --nproc_per_node=8 --nnodes=1 vla_foundry/main.py \
 --model.type transformer_hf \
 --model.hf_pretrained Qwen/Qwen2.5-0.5B \
 --distributed.fsdp True \

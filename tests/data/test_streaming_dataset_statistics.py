@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from lbm2.data.scripts.preprocessing.preprocess_statistics import StreamingDatasetStatistics
+from vla_foundry.data.scripts.preprocessing.preprocess_statistics import StreamingDatasetStatistics
 
 
 @pytest.mark.parametrize(

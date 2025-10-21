@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from lbm2.attention import (
+from vla_foundry.attention import (
     ATTN_ACTIVATIONS,
     ATTN_SEQ_SCALARS,
     apply_attention_mask_,

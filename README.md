@@ -1,6 +1,38 @@
-# lbm2
+<p align="center">
+  <img src="assets/logo.svg" alt="VLA Foundry Banner" width="800"/>
+</p>
 
-This was put together from some combination of [MBM](https://github.com/TRI-ML/mbm) and [nanoVLM](https://github.com/huggingface/nanoVLM/tree/main).
+[![License](https://img.shields.io/github/license/tri-ml/vla_foundry?color=blue)](https://github.com/tri-ml/vla_foundry/blob/main/LICENSE)
+[![Release](https://img.shields.io/github/v/release/tri-ml/vla_foundry?color=green)](https://github.com/tri-ml/vla_foundry/releases)
+[![GitHub Repo stars](https://img.shields.io/github/stars/tri-ml/vla_foundry?color=yellow)](https://github.com/tri-ml/vla_foundry/stargazers)
+[![GitHub contributors](https://img.shields.io/github/contributors/tri-ml/vla_foundry?color=orange)](https://github.com/tri-ml/vla_foundry/graphs/contributors)
+
+# VLA Foundry
+VLA Foundry is a framework for training Vision-Language-Action models. We support the following:
+- **Multiple modalities**: Train a model with text, image-captions, or robotics data. With VLA Foundry, you can train an LLM, then use the checkpoint to train a VLM, then use the checkpoint to train a VLA -- all at one place without any external dependencies. 
+- **Multi-node training**: VLA Foundry supports [FSDP2](https://docs.pytorch.org/tutorials/intermediate/FSDP_tutorial.html) and streams datasets with [WebDatasets](https://github.com/webdataset/webdataset). Multi-GPU training works well locally with `torchrun` and on large clusters with AWS SageMaker.
+- **Dataset mixing**: Dataset sources and ratios can be specified during dataloading time, allowing for easy dataset mixing and batch balancing.
+- **Modular and maintainable design**: VLA Foundry is built for flexibility and ease of development. Most modules are implemented with pure PyTorch, without any external libraries. This makes it easier to modify the training pipeline and add new features.
+- **Hugging Face support**: Modules can either be loaded using the native PyTorch implementation, or loaded using pre-trained weights from Hugging Face. This allows users to develop on top of state-of-the-art model releases for LLMs, VLMs, CLIP models, etc.
+
+## Contents
+- [Installation](#installation)
+- [Contributing Guidelines](#contributing-guidelines)
+- [Quickstart](#quickstart)
+    - [Running on SageMaker](#running-on-sagemaker)
+- [Repo Structure and Implementation](#repo-structure-and-implementation)
+  <ol type="1">
+    <li><a href="#1-paramargument-structure">Param/Argument Structure</a></li>
+    <li><a href="#2-data">Data</a></li>
+    <li><a href="#3-dataloading-pipeline">Dataloading Pipeline</a></li>
+    <li><a href="#4-model-saving--loading">Model Saving / Loading</a></li>
+    <li><a href="#5-training">Training</a></li>
+    <li><a href="#6-logging">Logging</a></li>
+    <li><a href="#7-linting">Linting</a></li>
+    <li><a href="#8-tests">Tests</a></li>
+  </ol>
+- [Citation](#citation)
+- [Acknowledgements](#acknowledgements)
 
 ## Installation
 We recommend using [uv](https://docs.astral.sh/uv/getting-started/installation/) for environment management. Please follow the uv documentation for installation. Once uv is installed, create a Python 3.10 virtual environment using uv and install the project dependencies with the command below:
@@ -15,14 +47,14 @@ Alternatively, to activate the virtual env you can then run `source .venv/bin/ac
 Please see [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## Quickstart
-The main entrypoint is `lbm2/main.py`.
+The main entrypoint is `vla_foundry/main.py`.
 
 An example command is something like this:
 ```bash
-.venv/bin/torchrun --nproc_per_node=8 --nnodes=1 lbm2/main.py \
+.venv/bin/torchrun --nproc_per_node=8 --nnodes=1 vla_foundry/main.py \
 --model.type vlm \
---model.transformer "include lbm2/config_presets/models/vlm_3b.yaml" \
---model.vit "include lbm2/config_presets/models/vit_paligemma.yaml" \
+--model.transformer "include vla_foundry/config_presets/models/vlm_3b.yaml" \
+--model.vit "include vla_foundry/config_presets/models/vit_paligemma.yaml" \
 --data.type image_caption \
 --data.processor google/paligemma-3b-pt-224 \
 --data.dataset_manifest ["s3://tri-ml-datasets/datasets/datacompdr_1b/manifest.jsonl"] \
@@ -63,13 +95,13 @@ uv run --group sagemaker sagemaker/launch_training.py \
 The sections below highlight several key design choices and functionalities of the repo.
 
 ### 1. Param/Argument Structure
-We use [draccus](https://github.com/dlwh/draccus) for argument parsing. Params are defined in the [lbm2/params](lbm2/params) folder. We use nested parameters. There is a high level `cfg` dataclass object in [lbm2/main.py](lbm2/main.py). This dataclass has attributes which are dataclasses themselves, namely `cfg.model`, `cfg.hparams`, `cfg.data`, and `cfg.distributed`, which themselves contain attributes like `cfg.model.hidden_dim`.
+We use [draccus](https://github.com/dlwh/draccus) for argument parsing. Params are defined in the [vla_foundry/params](vla_foundry/params) folder. We use nested parameters. There is a high level `cfg` dataclass object in [vla_foundry/main.py](vla_foundry/main.py). This dataclass has attributes which are dataclasses themselves, namely `cfg.model`, `cfg.hparams`, `cfg.data`, and `cfg.distributed`, which themselves contain attributes like `cfg.model.hidden_dim`.
 
 #### 1.1 Argument Parsing Usage
-Below we show an example of how we supply arguments (see [examples](lbm2/examples) folder for more):
+Below we show an example of how we supply arguments (see [examples](vla_foundry/examples) folder for more):
 ```bash
 --model.type transformer \
---model "include lbm2/config_presets/models/transformer_11m.yaml" \
+--model "include vla_foundry/config_presets/models/transformer_11m.yaml" \
 --distributed.fsdp True \
 --data.type text \
 --data.dataset_manifest ["s3://tri-ml-datasets/openlm/dcnlp/datasets/tri-hero-run1_cc_v4_resiliparse_rw_v2_bff_minngram13_10shards_all_fasttext_OH_eli5_vs_rw_v2_bigram_200k_train_0.11-starcoder-math_datasets/manifest.jsonl"] \
@@ -110,9 +142,9 @@ class VLMParams(ModelParams):
 Here, the ViT can either be `ViTParams` or `ViTHFParams`. We can dynamically pick between the two by directly supplying the necessary arguments. For example, indicating `--model.vit.hf_pretrained=vit_base_patch16_siglip_224` will automatically instantiate `cfg.model.vit` as a `ViTHFParams` object, while `--model.vit.hidden_dim=1152` will automatically instantiate `cfg.model.vit` as a `ViTParams` object. No need to indicate `--model.vit.type` in this case.
 
 #### 1.4 Defaults and Config Presets
-The parameter classes for each module can be found in [lbm2/params](lbm2/params). They list exhaustively all the parameters that can be set. Some of these are given a default value directly in the class definition. 
+The parameter classes for each module can be found in [vla_foundry/params](vla_foundry/params). They list exhaustively all the parameters that can be set. Some of these are given a default value directly in the class definition. 
 
-In addition, the [lbm2/config_presets](lbm2/config_presets) folder contains a set of yaml file which contain commonly used config settings. These are not strictly necessary but can help ensure consistency and reduce bugs. These can be used with the `include` keyword. For instance, you can use `--model "include lbm2/config_presets/models/transformer_410m.yaml"` instead of manually typing out all the model configs. These yamls can be nested with the `<<` operator. See `lbm2/config_presets/models/diffusion_policy.yaml`.
+In addition, the [vla_foundry/config_presets](vla_foundry/config_presets) folder contains a set of yaml file which contain commonly used config settings. These are not strictly necessary but can help ensure consistency and reduce bugs. These can be used with the `include` keyword. For instance, you can use `--model "include vla_foundry/config_presets/models/transformer_410m.yaml"` instead of manually typing out all the model configs. These yamls can be nested with the `<<` operator. See `vla_foundry/config_presets/models/diffusion_policy.yaml`.
 
 The order of precedence is as follows (listed in decreasing priority):
 1. Command line
@@ -166,17 +198,17 @@ Use the `--data.dataset_manifest` argument to indicate which dataset to use for 
 Webdatasets also supports different dataset ratios. This is done through the `--data.dataset_weighting` argument. For example, `--data.dataset_weighting [0.4,0.6]`.
 
 #### 2.2 Robotics Data
-Robotics data requires some special handling (e.g., normalization) that may not be present in other modalities. We include a separate robotics-specific README in [lbm2/data/robotics](lbm2/data/robotics).
+Robotics data requires some special handling (e.g., normalization) that may not be present in other modalities. We include a separate robotics-specific README in [vla_foundry/data/robotics](vla_foundry/data/robotics).
 
 ### 3. Dataloading Pipeline
-We use [webdatasets](https://github.com/webdataset/webdataset) to load the data. Each modality (e.g., image+caption, interleaved, image+actions) has its own pipeline where all the processing steps are defined at a high-level. This involves steps like untarring, shuffling, batching, etc. An example is [lbm2/data/pipelines/image_caption.py](lbm2/data/pipelines/image_caption.py).
+We use [webdatasets](https://github.com/webdataset/webdataset) to load the data. Each modality (e.g., image+caption, interleaved, image+actions) has its own pipeline where all the processing steps are defined at a high-level. This involves steps like untarring, shuffling, batching, etc. An example is [vla_foundry/data/pipelines/image_caption.py](vla_foundry/data/pipelines/image_caption.py).
 
-You wil notice that in that file, there is a `self.processor` class that is invoked as a step within the pipeline. This is where all the lower-level processing operations (e.g., normalization, tokenization, padding) are abstracted to. An example is [lbm2/data/processor/stable_diffusion_processor.py](https://github.com/TRI-ML/lbm2/blob/sedrick/diffusion/lbm2/data/processor/stable_diffusion_processor.py).
+You wil notice that in that file, there is a `self.processor` class that is invoked as a step within the pipeline. This is where all the lower-level processing operations (e.g., normalization, tokenization, padding) are abstracted to. An example is [vla_foundry/data/processor/stable_diffusion_processor.py](https://github.com/TRI-ML/vla_foundry/blob/sedrick/diffusion/vla_foundry/data/processor/stable_diffusion_processor.py).
 
 ### 4. Model Saving / Loading
 Models checkpoints are saved locally to the path in `cfg.save_path`. If `cfg.remote_sync` is set, then it will save to that path on s3 as well. Save frequency is per checkpoint. The number of checkpoints is determined by the `--num_checkpoints` argument, and the size of a checkpoint is equal to `--total_train_samples` divided by `--num_checkpoints`.
 
-To load checkpoints, (1) Load the params, (2) Create the model (no weights yet), (3) Load the model weights into the model. An example is shown below. More examples can be found in [lbm2/inference](lbm2/inference).
+To load checkpoints, (1) Load the params, (2) Create the model (no weights yet), (3) Load the model weights into the model. An example is shown below. More examples can be found in [vla_foundry/inference](vla_foundry/inference).
 ```python
 model_params = load_params_from_yaml(ModelParams, "s3://(path-here)/config.yaml")
 model = create_model(model_params)
@@ -195,12 +227,12 @@ for ckpt in range(num_checkpoints):
     train_one_checkpoint(model, dataloader)
     save_checkpoint(model)
 ```
-- `create_model()` -- The [create_model](lbm2/models/__init__.py) function creates the appropriate model based on the `--model.type` model selector and the other `cfg.model` arguments.
+- `create_model()` -- The [create_model](vla_foundry/models/__init__.py) function creates the appropriate model based on the `--model.type` model selector and the other `cfg.model` arguments.
 - `datastring` -- This is a string containing a list of the tar files to be loaded for the current checkpoint. A new datastring is created at the beginning of every checkpoint. If using multiple datasets, this is a list of comma-separated strings. A sample datastring is shown below.
 ```bash
 ['pipe:aws s3 cp s3://tri-ml-datasets/datasets/datacompdr_1b/{00000037,00000078,00000005,00000099,00000015,00000007,00000063}.tar -']
 ```
-- `train_one_checkpoint()` -- This is defined in [lbm2/train.py](lbm2/train.py). Operations such as model forward, model backward, and loss calculation happen in here.
+- `train_one_checkpoint()` -- This is defined in [vla_foundry/train.py](vla_foundry/train.py). Operations such as model forward, model backward, and loss calculation happen in here.
 
 #### 5.1 Batch Size / Accumulation
 - Global batch size is important -- it's a key training hyperparameter.
@@ -213,7 +245,7 @@ Given these, we support setting both the `--hparams.per_gpu_batch_size` (try as 
 You can use resume training from checkpoints using the `--model.resume_from_checkpoint` argument. Point the argument to the path of the checkpoint (either S3 or local). If you want to load the weights of a pre-trained checkpoint but wish to train from scratch without resuming the optimizer states, you can set `--model.resume_weights_only=True`.
 
 #### 5.3 Single GPU Training
-For single GPU training, run `python lbm2/main.py` directly (no `torchrun`(specifically for distributed training), skip the `--nproc_per_node` and `--nnodes` args). 
+For single GPU training, run `python vla_foundry/main.py` directly (no `torchrun`(specifically for distributed training), skip the `--nproc_per_node` and `--nnodes` args). 
 (If using torchrun, set `--nproc_per_node` to 1.)
 
 Set `--distributed.fsdp` to False.
@@ -237,7 +269,7 @@ uv run pytest tests
 ```
 To run more verbose tests, you can add `-v` for detailed per-test breakdowns and `-s` to display print statement outputs.
 
-Please add tests for things you implement. To make it clearer on where to add new tests, we organize the `tests` folder in similar structure to the main `lbm2` folder (with subfolders `data`, `models`, etc.) You can run tests in a specific folder by calling something like
+Please add tests for things you implement. To make it clearer on where to add new tests, we organize the `tests` folder in similar structure to the main `vla_foundry` folder (with subfolders `data`, `models`, etc.) You can run tests in a specific folder by calling something like
 ```
 uv run pytest tests/data
 ```
@@ -246,3 +278,11 @@ uv run pytest tests/data
 API keys and secrets are stored in Github secrets and can be accessed like `${{ secrets.HF_TOKEN }}`. This is already set up properly for Hugging Face, so HF tokenizers and models can now be loaded on tests with no issue.
 
 For AWS S3, this is currently not set up and is generally not recommended (we want tests to be as simple and self-contained as possible, and this adds unnecessary complexity.) For tests that require loading data, we recommend creating tiny WebDataset shards in [tests/shared/tiny_dataset](tests/shared/tiny_dataset). More examples can be found in that folder.
+
+## Citation
+```
+(insert-citation-here)
+```
+
+## Acknowledgements
+Parts of this repo were built from parts of [open_clip](https://github.com/mlfoundations/open_clip), [open_lm](https://github.com/mlfoundations/open_lm), and [nanoVLM](https://github.com/huggingface/nanoVLM/tree/main).

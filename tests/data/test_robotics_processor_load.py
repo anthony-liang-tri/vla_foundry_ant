@@ -5,10 +5,10 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from lbm2.data.processor.robotics_processor import RoboticsProcessor
-from lbm2.data.robotics.normalization import RoboticsNormalizer
-from lbm2.params.data_params import RoboticsDataParams
-from lbm2.params.robotics.normalization_params import NormalizationParams
+from vla_foundry.data.processor.robotics_processor import RoboticsProcessor
+from vla_foundry.data.robotics.normalization import RoboticsNormalizer
+from vla_foundry.params.data_params import RoboticsDataParams
+from vla_foundry.params.robotics.normalization_params import NormalizationParams
 
 
 @pytest.fixture
@@ -126,7 +126,7 @@ class TestRoboticsProcessorLoad:
 
             yield temp_dir
 
-    @patch("lbm2.data.processor.robotics_processor.get_processor")
+    @patch("vla_foundry.data.processor.robotics_processor.get_processor")
     def test_robotics_processor_load(self, mock_get_processor, temp_config_file):
         """Test RoboticsProcessor.load() method."""
         # Setup mocks
@@ -171,7 +171,7 @@ class TestRoboticsProcessorLoad:
         for field in expected_fields:
             assert field in processor.normalizer.stats, f"Field {field} not found in statistics"
 
-    @patch("lbm2.data.processor.robotics_processor.get_processor")
+    @patch("vla_foundry.data.processor.robotics_processor.get_processor")
     def test_robotics_processor_from_pretrained(self, mock_get_processor, temp_experiment_dir):
         """Test RoboticsProcessor.from_pretrained() method."""
         # Setup mocks
@@ -210,7 +210,7 @@ class TestRoboticsProcessorLoad:
         for field in expected_fields:
             assert field in processor.normalizer.stats, f"Field {field} not found in statistics"
 
-    @patch("lbm2.data.processor.robotics_processor.get_processor")
+    @patch("vla_foundry.data.processor.robotics_processor.get_processor")
     def test_robotics_processor_load_with_normalization_disabled(self, mock_get_processor, dataset_stats_path):
         """Test RoboticsProcessor.load() with normalization disabled."""
         # Setup mocks
@@ -255,7 +255,7 @@ class TestRoboticsProcessorLoad:
         with pytest.raises((FileNotFoundError, Exception)):
             RoboticsProcessor.from_pretrained("/nonexistent/dir")
 
-    @patch("lbm2.data.processor.robotics_processor.get_processor")
+    @patch("vla_foundry.data.processor.robotics_processor.get_processor")
     def test_robotics_processor_with_actual_dataset_statistics(self, mock_get_processor, dataset_stats_path):
         """Test RoboticsProcessor with actual dataset statistics structure."""
         # Setup mock

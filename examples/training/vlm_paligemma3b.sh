@@ -1,6 +1,6 @@
 export TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS=1
-.venv/bin/torchrun --nproc_per_node=3 --nnodes=1 lbm2/main.py \
---model "include lbm2/config_presets/models/vlm_3b.yaml" \
+.venv/bin/torchrun --nproc_per_node=3 --nnodes=1 vla_foundry/main.py \
+--model "include vla_foundry/config_presets/models/vlm_3b.yaml" \
 --distributed.fsdp True \
 --data.type image_caption \
 --data.processor google/paligemma-3b-pt-224 \

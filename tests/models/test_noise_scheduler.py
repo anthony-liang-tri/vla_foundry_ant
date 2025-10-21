@@ -1,9 +1,9 @@
 import pytest
 import torch
 
-from lbm2.models.diffusion.noise_scheduler import NoiseSchedulerDDPM
-from lbm2.models.diffusion.noise_scheduler_diffusers import FlowMatchingScheduler, NoiseSchedulerDDPMDiffusers
-from lbm2.params.model_params import NoiseSchedulerParams
+from vla_foundry.models.diffusion.noise_scheduler import NoiseSchedulerDDPM
+from vla_foundry.models.diffusion.noise_scheduler_diffusers import FlowMatchingScheduler, NoiseSchedulerDDPMDiffusers
+from vla_foundry.params.model_params import NoiseSchedulerParams
 
 
 class TestNoiseSchedulers:

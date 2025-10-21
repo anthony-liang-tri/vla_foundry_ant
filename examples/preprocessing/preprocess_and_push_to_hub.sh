@@ -6,7 +6,7 @@ user="jmercat"
 name="lbm_bellpepper_test"
 
 # For testing (small dataset)
-uv run --group preprocessing python lbm2/data/scripts/preprocessing/preprocess_lbm_to_lerobot.py \
+uv run --group preprocessing python vla_foundry/data/scripts/preprocessing/preprocess_lbm_to_lerobot.py \
     --source_episodes "['s3://robotics-manip-lbm/efs/data/tasks/BimanualPutRedBellPepperInBin/riverway/sim/bc/teleop/2025-01-06T08-58-31-05-00/',]" \
     --output_dir ./lerobot_dataset_hub_test/ \
     --dataset_name "${name}" \
@@ -23,9 +23,9 @@ uv run --group preprocessing python lbm2/data/scripts/preprocessing/preprocess_l
     --private True
 
 # For testing with list of episodes loaded from CSV
-# uv run --group preprocessing python lbm2/data/scripts/preprocessing/preprocess_lbm_to_lerobot.py \
+# uv run --group preprocessing python vla_foundry/data/scripts/preprocessing/preprocess_lbm_to_lerobot.py \
 #     --source_eps_csv_path examples/preprocessing/s3_episodes_list.csv \
-#     --output_dir ~/lbm2/lerobot/task_datasets/ \
+#     --output_dir ~/vla_foundry/lerobot/task_datasets/ \
 #     --dataset_name "lbm_eval" \
 #     --robot_type "lbm_bimanual_panda" \
 #     --fps 10 \

@@ -1,4 +1,4 @@
-# Contributing to LBM
+# Contributing to VLA Foundry
 
 ## Guidelines
 - Code should generally have test coverage.
@@ -12,15 +12,15 @@
 
 ## Development Process
 1. Fork the project.
-Go to [LBM2](https://github.com/TRI-ML/lbm2) and click the "fork" button to create your own copy of the project.
+Go to [vla_foundry](https://github.com/TRI-ML/vla_foundry) and click the "fork" button to create your own copy of the project.
 - In order for the CI tests to pass, you may need to add your Hugging Face key. In your fork, go to "Settings" >> "Secrets and variables" and create a new environment variable called `HF_TOKEN`.
 2. Clone your fork locally.
 ```
-git clone git@github.com:your-username/lbm2.git
+git clone git@github.com:your-username/vla_foundry.git
 ```
 3. Add the upstream repository.
 ```
-git remote add upstream git@github.com:TRI-ML/lbm2.git
+git remote add upstream git@github.com:TRI-ML/vla_foundry.git
 git remote set-url --push upstream no_push
 ```
 `git remote -v` should now list the upstream branch.
@@ -39,7 +39,7 @@ Make changes within this branch, committing them as you go.
 ```
 git push origin my_feature_branch
 ```
-Go to the LBM2 [repo](https://github.com/TRI-ML/lbm2).
+Go to the VLA Foundry [repo](https://github.com/TRI-ML/vla_foundry).
 There should be an option to create a pull request at the top,
 follow instructions there to create a pull request
 

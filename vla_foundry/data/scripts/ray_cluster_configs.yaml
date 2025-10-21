@@ -1,0 +1,82 @@
+cluster_name: s3-webdataset-cluster
+min_workers: 60
+max_workers: 60
+available_node_types:
+    ray.head.default:
+        resources: {}
+        node_config:
+            SubnetIds: [subnet-07bf42d7c9cb929e4, subnet-0f72615fd9bd3c717, subnet-0a29e4f1a47443e28, subnet-06e0db77592be2b36]
+            SecurityGroupIds: [sg-02ef5539cfee1e6c3]
+            ImageId: ami-0fc5d935ebf8bc3bc # ray us-east-1
+            InstanceType: i4i.4xlarge
+            IamInstanceProfile:
+                Arn: arn:aws:iam::124224456861:instance-profile/ray-autoscaler-v1
+            TagSpecifications:
+              - ResourceType: instance
+                Tags:
+                  - Key: tri.owner.email
+                    Value: sedrick.keh@tri.global
+                  - Key: tri.project
+                    Value: LBM:PJ-0109
+    ray.worker.default:
+        min_workers: 60
+        max_workers: 60
+        node_config:
+            SubnetIds: [subnet-07bf42d7c9cb929e4, subnet-0f72615fd9bd3c717, subnet-0a29e4f1a47443e28, subnet-06e0db77592be2b36]
+            SecurityGroupIds: [sg-02ef5539cfee1e6c3]
+            ImageId: ami-0fc5d935ebf8bc3bc # ray us-east-1
+            InstanceType: i4i.4xlarge
+            IamInstanceProfile:
+                Arn: arn:aws:iam::124224456861:instance-profile/ray-autoscaler-v1
+            TagSpecifications:
+              - ResourceType: instance
+                Tags:
+                  - Key: tri.owner.email
+                    Value: sedrick.keh@tri.global
+                  - Key: tri.project
+                    Value: LBM:PJ-0109
+
+# Cloud-provider specific configuration.
+provider:
+    type: aws
+    region: us-east-1
+    cache_stopped_nodes: False
+    use_internal_ips: True
+
+file_mounts: {
+    "/home/ubuntu/vla_foundry": "./",
+    "/home/ubuntu/.cache/huggingface/token": "~/.cache/huggingface/token",
+}
+
+rsync_exclude:
+    - "**/.venv/"
+    - "**/.venv"
+    - "**/wandb"
+    - "**/wandb/"
+  
+setup_commands:
+    - sudo apt-get update -y
+    - sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" ffmpeg
+    - sudo NEEDRESTART_MODE=a apt install awscli -y
+    - sudo mkfs -t xfs /dev/nvme1n1
+    - sudo mount /dev/nvme1n1 /tmp
+    - sudo chown -R $USER /tmp
+    # NOTE: This seems to be necessary at TRI AWS due to some permissions issue.
+    - sudo chmod 1777 /tmp
+    - mkdir -p ~/.cache/huggingface/
+    - curl -LsSf https://astral.sh/uv/install.sh | sh
+    - echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc
+    # Symlink everything in /tmp because the root filesystem is too small.
+    - mv /home/ubuntu/.cache /tmp/.cache && ln -s /tmp/.cache /home/ubuntu/.cache
+    - mkdir -p vla_foundry/.venv && mv vla_foundry/.venv /tmp/.venv && ln -s /tmp/.venv vla_foundry/.venv
+    - cd vla_foundry && UV_PROJECT_ENVIRONMENT=/home/ubuntu/vla_foundry/.venv uv sync --group=preprocessing
+    - echo 'export HF_TOKEN=$(cat /home/ubuntu/.cache/huggingface/token)' >> ~/.bashrc
+    - echo 'source /home/ubuntu/vla_foundry/.venv/bin/activate' >> ~/.bashrc
+
+head_setup_commands:
+    - source /home/ubuntu/vla_foundry/.venv/bin/activate && ray stop --force || true
+    - source /home/ubuntu/vla_foundry/.venv/bin/activate && ray start --head --port=6379 --dashboard-host=0.0.0.0
+
+worker_setup_commands:
+    - source /home/ubuntu/vla_foundry/.venv/bin/activate && ray stop --force || true
+    - source /home/ubuntu/vla_foundry/.venv/bin/activate && ray start --address="$RAY_HEAD_IP:6379"

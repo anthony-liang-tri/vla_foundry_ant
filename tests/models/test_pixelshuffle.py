@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from lbm2.models.vlm import ModalityProjector
+from vla_foundry.models.vlm import ModalityProjector
 
 
 # https://github.com/huggingface/smollm/blob/main/vision/m4/models/vllama3/modeling_vllama3.py#L1281

@@ -12,9 +12,9 @@ import pytest
 import torch
 import yaml
 
-from lbm2.data.dataloader import get_wds_dataloader
-from lbm2.data.robotics.data_explorer_gradio import RoboticsDataLoader
-from lbm2.params.data_params import RoboticsDataParams
+from vla_foundry.data.dataloader import get_wds_dataloader
+from vla_foundry.data.robotics.data_explorer_gradio import RoboticsDataLoader
+from vla_foundry.params.data_params import RoboticsDataParams
 
 
 @pytest.fixture(autouse=True)
@@ -47,7 +47,7 @@ def mock_config():
         processor_name: str = "google/paligemma-3b-pt-224",
     ):
         # Load the base config from YAML
-        config_path = "lbm2/config_presets/data/lbm_data_params.yaml"
+        config_path = "vla_foundry/config_presets/data/lbm_data_params.yaml"
         with open(config_path, "r") as f:
             config_dict = yaml.safe_load(f)
 
@@ -495,7 +495,7 @@ def test_normalization(dataset_path, manifest_data, mock_config):
     def _create_config_with_norm(enabled):
         """Helper to create config with normalization enabled/disabled."""
         # Load the base config from YAML
-        config_path = "lbm2/config_presets/data/lbm_data_params.yaml"
+        config_path = "vla_foundry/config_presets/data/lbm_data_params.yaml"
         with open(config_path, "r") as f:
             config_dict = yaml.safe_load(f)
 
@@ -649,7 +649,7 @@ def test_normalization_consistency(dataset_path, manifest_data, mock_config):
     datastring = create_datastring(dataset_path, test_shards)
 
     # Load the base config from YAML
-    config_path = "lbm2/config_presets/data/lbm_data_params.yaml"
+    config_path = "vla_foundry/config_presets/data/lbm_data_params.yaml"
     with open(config_path, "r") as f:
         config_dict = yaml.safe_load(f)
 
@@ -738,7 +738,7 @@ def test_compare_dataloader_and_roboticsdataloader(dataset_path, manifest_data, 
     import yaml
 
     # Load config
-    config_path = "lbm2/config_presets/data/lbm_data_params.yaml"
+    config_path = "vla_foundry/config_presets/data/lbm_data_params.yaml"
     with open(config_path, "r") as f:
         config_dict = yaml.safe_load(f)
     config_dict.update(
@@ -765,7 +765,7 @@ def test_compare_dataloader_and_roboticsdataloader(dataset_path, manifest_data, 
     datastrings = [datastring]
     num_samples_list_per_dataset = [sum(entry["num_sequences"] for entry in test_shards)]
 
-    from lbm2.data.dataloader import get_wds_dataloader
+    from vla_foundry.data.dataloader import get_wds_dataloader
 
     dataloader_info = get_wds_dataloader(
         datastrings=datastrings, num_samples_per_dataset=num_samples_list_per_dataset, checkpoint_num=0, cfg=cfg

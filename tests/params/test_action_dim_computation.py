@@ -5,8 +5,8 @@ import draccus
 import pytest
 from draccus.utils import DecodingError
 
-from lbm2.params.data_params import RoboticsDataParams
-from lbm2.params.train_experiment_params import TrainExperimentParams
+from vla_foundry.params.data_params import RoboticsDataParams
+from vla_foundry.params.train_experiment_params import TrainExperimentParams
 
 
 def get_args_robotics_auto_action_dim():

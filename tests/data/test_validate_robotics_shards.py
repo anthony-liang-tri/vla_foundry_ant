@@ -26,7 +26,7 @@ import numpy as np
 import pytest
 import webdataset as wds
 
-from lbm2.file_utils import json_load, load_dataset_manifest
+from vla_foundry.file_utils import json_load, load_dataset_manifest
 
 
 @pytest.fixture

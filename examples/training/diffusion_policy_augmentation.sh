@@ -1,13 +1,13 @@
-.venv/bin/torchrun --master_port 29502 --nproc_per_node=2 --nnodes=1 lbm2/main.py \
-  --model "include lbm2/config_presets/models/diffusion_policy.yaml" \
+.venv/bin/torchrun --master_port 29502 --nproc_per_node=2 --nnodes=1 vla_foundry/main.py \
+  --model "include vla_foundry/config_presets/models/diffusion_policy.yaml" \
   --model.clip.freeze_text_encoder True \
   --model.transformer.is_causal True \
-  --data "include lbm2/config_presets/data/lbm_data_params.yaml" \
+  --data "include vla_foundry/config_presets/data/lbm_data_params.yaml" \
   --data.dataset_manifest ["s3://tri-ml-datasets-uw2/vlm_datasets/preprocess_224_shuffled_2/lbm/BimanualPutRedBellPepperInBin/riverway/sim/shards/manifest.jsonl"] \
   --data.dataset_statistics ["s3://tri-ml-datasets-uw2/vlm_datasets/preprocess_224_shuffled_2/lbm/BimanualPutRedBellPepperInBin/riverway/sim/shards/stats.json"] \
   --data.dataset_modality ["robotics"] \
   --data.augmentation.enabled True \
-  --data.augmentation.image "include lbm2/config_presets/data/lbm_image_augmentation_params.yaml" \
+  --data.augmentation.image "include vla_foundry/config_presets/data/lbm_image_augmentation_params.yaml" \
   --data.image_size 224 \
   --data.action_dim 20 \
   --data.processor openai/clip-vit-base-patch32 \

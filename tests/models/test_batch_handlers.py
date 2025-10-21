@@ -3,8 +3,8 @@ from unittest.mock import Mock
 import pytest
 import torch
 
-from lbm2.losses import get_loss_function
-from lbm2.models.batch_handlers import (
+from vla_foundry.losses import get_loss_function
+from vla_foundry.models.batch_handlers import (
     DiffusionPolicyBatchHandler,
     StableDiffusionBatchHandler,
     TransformerBatchHandler,

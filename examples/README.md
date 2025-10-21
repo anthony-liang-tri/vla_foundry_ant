@@ -1,6 +1,6 @@
 # Examples
 
-This directory contains example scripts and configurations for training, preprocessing, debugging, and deployment of LBM2 models.
+This directory contains example scripts and configurations for training, preprocessing, debugging, and deployment of VLA Foundry models.
 
 ## Directory Structure
 
@@ -20,7 +20,7 @@ Ready-to-run training scripts for various model architectures:
 - **`llm_11m.sh`** - Small 11M parameter transformer (recommended starting point)
 - **`llm_1b.sh`** - 1B parameter transformer model
 - **`llm_hf_untokenized.sh`** - Hugging Face transformer with untokenized data
-- **`lbm_1b_full.sh`** - Full 1B parameter LBM model
+- **`llm_1b_full.sh`** - Full 1B parameter LLM model
 
 ### Vision-Language Models (VLMs)
 - **`vlm_paligemma3b.sh`** - PaLiGemma 3B VLM model
@@ -43,7 +43,7 @@ Data preparation and conversion scripts:
 - **`preprocess_lbm_tiny.sh`** - Small-scale preprocessing for testing
 - **`preprocess_and_push_to_hub.sh`** - Convert LBM data to LeRobot format and push to Hugging Face Hub
 
-For detailed preprocessing documentation, see [lbm2/data/scripts/preprocessing/README.md](../lbm2/data/scripts/preprocessing/README.md).
+For detailed preprocessing documentation, see [vla_foundry/data/scripts/preprocessing/README.md](../vla_foundry/data/scripts/preprocessing/README.md).
 
 ## Debug Examples
 

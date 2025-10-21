@@ -20,8 +20,8 @@ def _check_pyarrow_available():
 class TestPreprocessLbmToTarSafety:
     """Tests for preprocessing safety checks in preprocess_lbm_to_tar.py."""
 
-    @patch("lbm2.data.scripts.preprocessing.preprocess_lbm_to_tar.check_directory_has_files_with_prefix")
-    @patch("lbm2.data.scripts.preprocessing.preprocess_lbm_to_tar.draccus.parse")
+    @patch("vla_foundry.data.scripts.preprocessing.preprocess_lbm_to_tar.check_directory_has_files_with_prefix")
+    @patch("vla_foundry.data.scripts.preprocessing.preprocess_lbm_to_tar.draccus.parse")
     def test_main_fails_with_existing_episode_files(self, mock_parse, mock_check_dir):
         """Test that main() fails when output directory has existing episode files."""
         # Mock the config
@@ -33,7 +33,7 @@ class TestPreprocessLbmToTarSafety:
         # Mock existing files
         mock_check_dir.return_value = ["episode_001.tar", "episode_002.tar"]
 
-        from lbm2.data.scripts.preprocessing.preprocess_lbm_to_tar import main
+        from vla_foundry.data.scripts.preprocessing.preprocess_lbm_to_tar import main
 
         # Should raise RuntimeError
         with pytest.raises(RuntimeError) as exc_info:
@@ -43,9 +43,9 @@ class TestPreprocessLbmToTarSafety:
         assert "episode_001.tar" in str(exc_info.value)
         mock_check_dir.assert_called_once_with("s3://bucket/output", "episode_")
 
-    @patch("lbm2.data.scripts.preprocessing.preprocess_lbm_to_tar.check_directory_has_files_with_prefix")
-    @patch("lbm2.data.scripts.preprocessing.preprocess_lbm_to_tar.draccus.parse")
-    @patch("lbm2.data.scripts.preprocessing.preprocess_lbm_to_tar.ray.init")
+    @patch("vla_foundry.data.scripts.preprocessing.preprocess_lbm_to_tar.check_directory_has_files_with_prefix")
+    @patch("vla_foundry.data.scripts.preprocessing.preprocess_lbm_to_tar.draccus.parse")
+    @patch("vla_foundry.data.scripts.preprocessing.preprocess_lbm_to_tar.ray.init")
     def test_main_continues_with_empty_directory(self, mock_ray_init, mock_parse, mock_check_dir):
         """Test that main() continues when output directory is empty."""
         # Mock the config
@@ -69,7 +69,7 @@ class TestPreprocessLbmToTarSafety:
         try:
             mock_cfg.language_annotations_path = temp_file
 
-            from lbm2.data.scripts.preprocessing.preprocess_lbm_to_tar import main
+            from vla_foundry.data.scripts.preprocessing.preprocess_lbm_to_tar import main
 
             # Should not raise, but will fail later due to missing other dependencies
             # We're just testing that it passes the safety check
@@ -91,8 +91,8 @@ class TestPreprocessLbmToTarSafety:
 class TestPreprocessLerobotToTarSafety:
     """Tests for preprocessing safety checks in preprocess_lerobot_to_tar.py."""
 
-    @patch("lbm2.data.scripts.preprocessing.preprocess_lerobot_to_tar.check_directory_has_files_with_prefix")
-    @patch("lbm2.data.scripts.preprocessing.preprocess_lerobot_to_tar.parse_args")
+    @patch("vla_foundry.data.scripts.preprocessing.preprocess_lerobot_to_tar.check_directory_has_files_with_prefix")
+    @patch("vla_foundry.data.scripts.preprocessing.preprocess_lerobot_to_tar.parse_args")
     def test_main_fails_with_existing_shard_files(self, mock_parse_args, mock_check_dir):
         """Test that main() fails when output directory has existing shard files."""
         # Mock the args
@@ -103,7 +103,7 @@ class TestPreprocessLerobotToTarSafety:
         # Mock existing files
         mock_check_dir.return_value = ["shard_00001.tar", "shard_00002.tar"]
 
-        from lbm2.data.scripts.preprocessing.preprocess_lerobot_to_tar import main
+        from vla_foundry.data.scripts.preprocessing.preprocess_lerobot_to_tar import main
 
         # Should raise RuntimeError
         with pytest.raises(RuntimeError) as exc_info:
@@ -113,9 +113,9 @@ class TestPreprocessLerobotToTarSafety:
         assert "shard_00001.tar" in str(exc_info.value)
         mock_check_dir.assert_called_once_with("s3://bucket/output", "shard_")
 
-    @patch("lbm2.data.scripts.preprocessing.preprocess_lerobot_to_tar.check_directory_has_files_with_prefix")
-    @patch("lbm2.data.scripts.preprocessing.preprocess_lerobot_to_tar.parse_args")
-    @patch("lbm2.data.scripts.preprocessing.preprocess_lerobot_to_tar.ray.init")
+    @patch("vla_foundry.data.scripts.preprocessing.preprocess_lerobot_to_tar.check_directory_has_files_with_prefix")
+    @patch("vla_foundry.data.scripts.preprocessing.preprocess_lerobot_to_tar.parse_args")
+    @patch("vla_foundry.data.scripts.preprocessing.preprocess_lerobot_to_tar.ray.init")
     def test_main_continues_with_empty_directory(self, mock_ray_init, mock_parse_args, mock_check_dir):
         """Test that main() continues when output directory is empty."""
         # Mock the args
@@ -128,7 +128,7 @@ class TestPreprocessLerobotToTarSafety:
         # Mock empty directory
         mock_check_dir.return_value = []
 
-        from lbm2.data.scripts.preprocessing.preprocess_lerobot_to_tar import main
+        from vla_foundry.data.scripts.preprocessing.preprocess_lerobot_to_tar import main
 
         # Should not raise, but will fail later due to missing other dependencies
         # We're just testing that it passes the safety check

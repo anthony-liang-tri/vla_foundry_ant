@@ -1,8 +1,8 @@
-.venv/bin/torchrun --nproc_per_node=8 --nnodes=1 lbm2/main.py \
+.venv/bin/torchrun --nproc_per_node=8 --nnodes=1 vla_foundry/main.py \
 --model.type stable_diffusion \
 --model.use_diffusers_unet False \
 --model.use_flow_matching_scheduler True \
---model.unet "include lbm2/config_presets/models/unet.yaml" \
+--model.unet "include vla_foundry/config_presets/models/unet.yaml" \
 --model.unet.image_size 128 \
 --model.clip.hf_pretrained openai/clip-vit-base-patch32 \
 --model.clip.freeze_text_encoder True \

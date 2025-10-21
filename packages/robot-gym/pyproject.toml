@@ -1,7 +1,7 @@
 [project]
 name = "robot_gym"
 version = "0.1.0"
-description = "Robot Gym package for LBM2 project."
+description = "Robot Gym package for VLA Foundry project."
 requires-python = ">=3.10"
 dependencies = [
     "numpy",

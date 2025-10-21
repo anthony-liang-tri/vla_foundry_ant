@@ -5,7 +5,7 @@ from unittest.mock import patch
 import draccus
 import pytest
 
-from lbm2.params.train_experiment_params import TrainExperimentParams, load_experiment_params_from_yaml
+from vla_foundry.params.train_experiment_params import TrainExperimentParams, load_experiment_params_from_yaml
 
 
 def get_args_text():
@@ -104,7 +104,7 @@ def test_get_text_args():
     assert args.data.dataset_modality == ["text"]
     assert args.model.hidden_dim == 999
     # Some random subset of args
-    assert args.wandb_project_name == "lbm2"
+    assert args.wandb_project_name == "vla_foundry"
     assert args.hparams.lr == 0.0001
     assert args.hparams.eps == 1e-08
     assert args.save_path is None

@@ -1,8 +1,8 @@
 import torch
 from PIL import Image
 
-from lbm2.data.processor import get_processor
-from lbm2.params.train_experiment_params import load_experiment_params_from_yaml
+from vla_foundry.data.processor import get_processor
+from vla_foundry.params.train_experiment_params import load_experiment_params_from_yaml
 
 
 class TestProcessorPaliGemma:

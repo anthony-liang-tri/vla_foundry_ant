@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
-from lbm2.models.base_model import BaseModel
-from lbm2.models.transformer import Transformer
-from lbm2.models.vit import ViT
-from lbm2.models.vlm import VLM
-from lbm2.params.model_params import TransformerParams, ViTParams, VLMParams
+from vla_foundry.models.base_model import BaseModel
+from vla_foundry.models.transformer import Transformer
+from vla_foundry.models.vit import ViT
+from vla_foundry.models.vlm import VLM
+from vla_foundry.params.model_params import TransformerParams, ViTParams, VLMParams
 
 
 def test_freeze_functionality():

@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from lbm2.model_utils import Float32Module
+from vla_foundry.model_utils import Float32Module
 
 
 class Dummy(nn.Module):

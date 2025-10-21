@@ -1,4 +1,4 @@
-source .venv/bin/activate && python lbm2/data/scripts/preprocessing/preprocess_lbm_to_tar.py \
+source .venv/bin/activate && python vla_foundry/data/scripts/preprocessing/preprocess_lbm_to_tar.py \
     --source_episodes "['s3://robotics-manip-lbm/efs/data/tasks/PickAndPlaceBox/cabot/sim/bc/teleop/2025-02-11T17-04-00-05-00/',]" \
     --output_dir s3://tri-ml-datasets-uw2/vlm_datasets/preprocess_512_shuffle/lbm/PickAndPlaceBox/cabot/sim/ \
     --past_lowdim_steps 1 \
@@ -10,8 +10,8 @@ source .venv/bin/activate && python lbm2/data/scripts/preprocessing/preprocess_l
     --padding_strategy copy \
     --filter_still_samples False \
     --still_threshold 0.05 \
-    --camera_discard_keys "include lbm2/config_presets/data/lbm_data_discard_key.yaml" \
-    --camera_names "include lbm2/config_presets/data/lbm_data_camera_names.yaml" \
+    --camera_discard_keys "include vla_foundry/config_presets/data/lbm_data_discard_key.yaml" \
+    --camera_names "include vla_foundry/config_presets/data/lbm_data_camera_names.yaml" \
     --samples_per_shard 100 \
     --jpeg_quality 95 \
     --max_episodes_to_process -1 \

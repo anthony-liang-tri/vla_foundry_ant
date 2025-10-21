@@ -14,11 +14,11 @@ import pytest
 import torch
 import webdataset as wds
 
-from lbm2.data.pipelines.robotics import crop_sequence, extract_robotics_fields
-from lbm2.data.processor.robotics_processor import RoboticsProcessor
-from lbm2.data.robotics.normalization import RoboticsNormalizer
-from lbm2.params.data_params import RoboticsDataParams
-from lbm2.params.robotics.normalization_params import NormalizationParams
+from vla_foundry.data.pipelines.robotics import crop_sequence, extract_robotics_fields
+from vla_foundry.data.processor.robotics_processor import RoboticsProcessor
+from vla_foundry.data.robotics.normalization import RoboticsNormalizer
+from vla_foundry.params.data_params import RoboticsDataParams
+from vla_foundry.params.robotics.normalization_params import NormalizationParams
 
 
 @pytest.fixture

@@ -1,7 +1,7 @@
 import pytest
 
-from lbm2.data.dataloader import get_datastring_input
-from lbm2.params.train_experiment_params import load_experiment_params_from_yaml
+from vla_foundry.data.dataloader import get_datastring_input
+from vla_foundry.params.train_experiment_params import load_experiment_params_from_yaml
 
 
 def test_get_datastring_input_basic():
