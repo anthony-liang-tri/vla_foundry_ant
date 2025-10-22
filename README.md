@@ -1,6 +1,9 @@
-<p align="center">
-  <img src="assets/logo.svg" alt="VLA Foundry Banner" width="800"/>
-</p>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/logo_dark.svg" width="800">
+  <source media="(prefers-color-scheme: light)" srcset="assets/logo.svg" width="800">
+  <img alt="Fallback image description" src="assets/logo.svg" width="800">
+</picture>
+
 
 [![License](https://img.shields.io/github/license/tri-ml/vla_foundry?color=blue)](https://github.com/tri-ml/vla_foundry/blob/main/LICENSE)
 [![Release](https://img.shields.io/github/v/release/tri-ml/vla_foundry?color=green)](https://github.com/tri-ml/vla_foundry/releases)
