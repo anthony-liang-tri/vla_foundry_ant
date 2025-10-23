@@ -1,18 +1,20 @@
 """
-We probably want this file as self-contained as possible, so we define all functions here.
-Except the file_utils. We rely on them for the s3 stuff.
+We probably want this file as self-contained as possible, so we define most functions here.
 """
 
 import argparse
+import contextlib
 import hashlib
 import io
 import json
 import os
+import random
 import re
 import subprocess
 import tarfile
 import tempfile
 import traceback
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -20,7 +22,11 @@ import boto3
 import numpy as np
 import pyarrow.parquet as pq
 import ray
+from botocore.config import Config
+from PIL import Image
 
+from vla_foundry.data.scripts.preprocessing.image_utils import image_to_bytes, init_jpeg_encoder
+from vla_foundry.data.scripts.preprocessing.preprocess_lbm_to_tar import PaddingStrategy, create_shard
 from vla_foundry.file_utils import (
     check_directory_has_files_with_prefix,
     copy_to_temp_file,
@@ -45,60 +51,141 @@ def make_json_serializable(obj):
         return obj
 
 
-def create_metadata_and_lowdim_dicts(row, lowdim_columns, camera_names, excluded_columns=None):
-    """Create metadata and lowdim dictionaries from a DataFrame row."""
+def create_metadata_and_lowdim_dicts(
+    df, df_dict, frame_idx, num_past, num_future, pad_fn, lowdim_columns, camera_names, excluded_columns=None
+):
     excluded_columns = excluded_columns or []
     metadata_dict, lowdim_dict = {}, {}
 
-    for col, value in row.items():
+    past_nonpad = frame_idx if frame_idx - num_past < 0 else num_past
+    past_pad = num_past - past_nonpad
+    future_nonpad = len(df) - frame_idx - 1 if frame_idx + num_future >= len(df) else num_future
+    future_pad = num_future - future_nonpad
+
+    for col in df.columns:
         if col in lowdim_columns:
-            lowdim_dict[col] = value
+            series = df.iloc[frame_idx - past_nonpad : frame_idx + future_nonpad + 1][col]
+            if len(series) > 0 and isinstance(series.iloc[0], np.ndarray):
+                data = np.stack(series.values)
+            else:
+                data = series.values
+            lowdim_dict[col] = pad_fn(data, past_pad, future_pad)
         elif col not in excluded_columns:
-            metadata_dict[col] = value
+            metadata_dict[col] = df_dict[frame_idx][col]
 
     metadata_dict["camera_names"] = camera_names
     return metadata_dict, lowdim_dict
 
 
-def create_language_instructions_dict(row, tasks_dict, task_index_col):
-    """Create language instruction dictionary from a DataFrame row."""
-    language_instructions_dict = {}
-    language_instructions_dict["original"] = tasks_dict[row[task_index_col]]["task"]
-    return language_instructions_dict
+def create_past_and_future_masks(idx, num_past, num_future, episode_length):
+    total_length = num_past + num_future + 1
+    past_mask = np.ones(total_length, dtype=bool)
+    future_mask = np.ones(total_length, dtype=bool)
+    # Current time step is part of the future for low dim data
+    past_mask[num_past:] = False
+    future_mask[:num_past] = False
+
+    # Check padding
+    past_padding = max(0, -(idx - num_past))
+    future_padding = max(0, (idx + num_future) - episode_length + 1)
+
+    if past_padding > 0:
+        past_mask[:past_padding] = False
+        future_mask[:past_padding] = False
+    if future_padding > 0:
+        future_mask[-future_padding:] = False
+        past_mask[-future_padding:] = False
+
+    return past_mask, future_mask
+
+
+def add_sample_metadata_to_tar(
+    tar, file_prefix, df, df_dict, frame_idx, config, pad_fn, camera_names, row, original_image_sizes
+):
+    # Create metadata and lowdim dictionaries
+    metadata_dict, lowdim_dict = create_metadata_and_lowdim_dicts(
+        df=df,
+        df_dict=df_dict,
+        frame_idx=frame_idx,
+        num_past=config["num_past"],
+        num_future=config["num_future"],
+        pad_fn=pad_fn,
+        lowdim_columns=config["lowdim_columns"],
+        camera_names=camera_names,
+        excluded_columns=list(camera_names) + config["lowdim_columns"],
+    )
+
+    past_mask, future_mask = create_past_and_future_masks(frame_idx, config["num_past"], config["num_future"], len(df))
+
+    # Create language_instructions dictionary
+    language_instructions_dict = {"original": config["tasks_dict"][row[config["task_index_col"]]]["task"]}
+
+    # Add original image sizes to metadata if available
+    if original_image_sizes:
+        metadata_dict["original_image_sizes"] = original_image_sizes
+
+    # Add to tar
+    add_metadata_json_to_tar(tar, file_prefix, metadata_dict)
+    add_npz_to_tar(tar, file_prefix, lowdim_dict, "lowdim.npz")
+    add_npz_to_tar(tar, file_prefix, {"data": past_mask}, "past_mask.npz")
+    add_npz_to_tar(tar, file_prefix, {"data": future_mask}, "future_mask.npz")
+    add_language_instructions_to_tar(tar, file_prefix, language_instructions_dict)
+
+
+def get_image_bytes_from_parquet(df_dict, img_timestep, image_col):
+    """Extract image bytes from parquet data at a specific timestep."""
+    image_data = df_dict[img_timestep][image_col]
+    if isinstance(image_data, dict) and "bytes" in image_data:
+        return image_data["bytes"]  # LeRobot format: {'bytes': b'...', ...}
+    elif isinstance(image_data, bytes):
+        return image_data  # Raw bytes
+    else:
+        raise ValueError(f"Unsupported image data format in column {image_col}")
+
+
+def add_to_tar(tar, filename, content_bytes):
+    """Add a file to tar archive."""
+    tarinfo = tarfile.TarInfo(name=filename)
+    tarinfo.size = len(content_bytes)
+    tar.addfile(tarinfo, io.BytesIO(content_bytes))
 
 
 def add_metadata_json_to_tar(tar, file_prefix, metadata_dict):
     """Add JSON metadata file to tar archive."""
     json_bytes = json.dumps(make_json_serializable(metadata_dict), indent=2).encode("utf-8")
-    tarinfo_json = tarfile.TarInfo(name=f"{file_prefix}.metadata.json")
-    tarinfo_json.size = len(json_bytes)
-    tar.addfile(tarinfo_json, io.BytesIO(json_bytes))
+    add_to_tar(tar, f"{file_prefix}.metadata.json", json_bytes)
 
 
-def add_npz_to_tar(tar, file_prefix, lowdim_dict):
+def add_npz_to_tar(tar, file_prefix, npz_dict, filename):
     """Add NPZ lowdim file to tar archive."""
     npz_buffer = io.BytesIO()
-    np.savez_compressed(npz_buffer, **lowdim_dict)
-    npz_bytes = npz_buffer.getvalue()
-    npz_buffer.close()
-    tarinfo_npz = tarfile.TarInfo(name=f"{file_prefix}.lowdim.npz")
-    tarinfo_npz.size = len(npz_bytes)
-    tar.addfile(tarinfo_npz, io.BytesIO(npz_bytes))
+    np.savez_compressed(npz_buffer, **npz_dict)
+    add_to_tar(tar, f"{file_prefix}.{filename}", npz_buffer.getvalue())
 
 
 def add_language_instructions_to_tar(tar, file_prefix, language_instructions_dict):
     """Add language instruction file to tar archive."""
     json_bytes = json.dumps(make_json_serializable(language_instructions_dict), indent=2).encode("utf-8")
-    tarinfo_json = tarfile.TarInfo(name=f"{file_prefix}.language_instructions.json")
-    tarinfo_json.size = len(json_bytes)
-    tar.addfile(tarinfo_json, io.BytesIO(json_bytes))
+    add_to_tar(tar, f"{file_prefix}.language_instructions.json", json_bytes)
+
+
+def resize_image_bytes(image_bytes, jpeg_quality, resize_size):
+    if resize_size is None:
+        return image_bytes, Image.open(io.BytesIO(image_bytes)).size
+
+    # Decode JPEG to numpy array
+    pil_image = Image.open(io.BytesIO(image_bytes))
+    image_array = np.array(pil_image)
+
+    # Use image_to_bytes to resize and encode (expects target_size as (width, height) for PIL)
+    target_size = (resize_size[1], resize_size[0])  # Convert [height, width] to (width, height)
+    resized_bytes, original_size = image_to_bytes(image_array, jpeg_quality, target_size)
+    return resized_bytes, original_size
 
 
 def add_image_to_tar(tar, file_prefix, camera_name, image_bytes):
     """Add image file to tar archive."""
-    tarinfo_img = tarfile.TarInfo(name=f"{file_prefix}.{camera_name}.jpg")
-    tarinfo_img.size = len(image_bytes)
-    tar.addfile(tarinfo_img, io.BytesIO(image_bytes))
+    add_to_tar(tar, f"{file_prefix}.{camera_name}.jpg", image_bytes)
 
 
 def parse_args():
@@ -135,12 +222,35 @@ def parse_args():
     parser.add_argument("--episode_file_pattern", type=str, default="episode_{:06d}.parquet")
     parser.add_argument("--video_file_pattern", type=str, default="episode_{:06d}.mp4")
     parser.add_argument("--output_prefix_pattern", type=str, default="episode_{:06d}_frame_{:06d}")
+    parser.add_argument("--num_past", type=int, default=1, help="Number of past frames to include")
+    parser.add_argument("--num_future", type=int, default=14, help="Number of future frames to include")
+    parser.add_argument("--padding_strategy", type=str, default="zero", help="Padding strategy")
+    parser.add_argument(
+        "--image_indices",
+        type=int,
+        nargs="+",
+        default=[0],
+        help="Image timestep offsets relative to current frame (e.g., -1 0 for previous and current)",
+    )
+    parser.add_argument(
+        "--upload_threads", type=int, default=10, help="Number of parallel threads for S3 uploads per worker"
+    )
 
     # Image processing mode
     parser.add_argument(
         "--no_video", action="store_true", help="Load images from parquet columns instead of video files"
     )
     parser.add_argument("--image_columns", type=str, nargs="+", default=None, help="auto-detected if not specified")
+
+    # Image resizing and quality
+    parser.add_argument(
+        "--resize_images_size",
+        type=int,
+        nargs=2,
+        default=None,
+        help="Resize images to [height, width]",
+    )
+    parser.add_argument("--jpeg_quality", type=int, default=95, help="JPEG quality for image compression (1-100)")
 
     return parser.parse_args()
 
@@ -249,128 +359,34 @@ def discover_cameras(video_chunks: List[str]) -> Dict[str, str]:
 
 
 def discover_image_columns(data_chunks: List[str], episode_file_pattern: str) -> List[str]:
-    image_columns = []
-
+    """Discover image columns by checking first available episode."""
     for chunk_dir in data_chunks:
-        for episode_idx in range(10):  # Check first 10 episodes
-            episode_file = episode_file_pattern.format(episode_idx)
-            episode_path = f"{chunk_dir.rstrip('/')}/{episode_file}"
+        for episode_idx in range(10):
+            episode_path = f"{chunk_dir.rstrip('/')}/{episode_file_pattern.format(episode_idx)}"
+            if not file_exists(episode_path):
+                continue
 
-            if file_exists(episode_path):
-                # Read parquet file to examine columns
-                if episode_path.startswith("s3"):
-                    with copy_to_temp_file(episode_path) as temp_parquet:
-                        df = pq.read_table(temp_parquet).to_pandas()
-                else:
-                    df = pq.read_table(episode_path).to_pandas()
+            # Read parquet to examine columns
+            if episode_path.startswith("s3"):
+                with copy_to_temp_file(episode_path) as temp_parquet:
+                    df = pq.read_table(temp_parquet).to_pandas()
+            else:
+                df = pq.read_table(episode_path).to_pandas()
 
-                # Look for columns that contain bytes data (likely images)
-                for col in df.columns:
-                    if df[col].dtype == object and len(df[col]) > 0:
-                        # Check if first non-null value is bytes
-                        first_value = df[col].dropna().iloc[0] if len(df[col].dropna()) > 0 else None
-                        if isinstance(first_value, dict) and "bytes" in first_value or isinstance(first_value, bytes):
-                            image_columns.append(col)
+            # Find columns containing image bytes
+            image_columns = []
+            for col in df.columns:
+                if df[col].dtype == object and len(df[col]) > 0:
+                    first_val = df[col].dropna().iloc[0] if len(df[col].dropna()) > 0 else None
+                    if isinstance(first_val, (dict, bytes)) and (isinstance(first_val, bytes) or "bytes" in first_val):
+                        image_columns.append(col)
 
-                print(f"Discovered image columns from {episode_path}: {image_columns}")
+            if image_columns:
+                print(f"Discovered image columns: {image_columns}")
                 return image_columns
 
-    print("Warning: Could not discover image columns from parquet files")
-    return image_columns
-
-
-def find_episode_file(episode_index: int, data_chunks: List[str], file_pattern: str) -> str:
-    """Find the correct episode path across multiple chunks-* folders."""
-    episode_file = file_pattern.format(episode_index)
-
-    for chunk_dir in data_chunks:
-        episode_path = f"{chunk_dir.rstrip('/')}/{episode_file}"
-        if file_exists(episode_path):
-            return episode_path
-
-    raise FileNotFoundError(f"Episode file {episode_file} not found in any chunk: {data_chunks}")
-
-
-def find_video_file(episode_index: int, camera_path: str, video_chunks: List[str], file_pattern: str) -> str:
-    """Find the correct video path for a specific camera across multiple chunks-* folders."""
-    video_file = file_pattern.format(episode_index)
-    camera_name = os.path.basename(camera_path)
-
-    for chunk_dir in video_chunks:
-        video_path = f"{chunk_dir.rstrip('/')}/{camera_name}/{video_file}"
-        if file_exists(video_path):
-            return video_path
-
-    raise FileNotFoundError(f"Video file {video_file} for camera {camera_name} not found in any chunk: {video_chunks}")
-
-
-def episodes_to_shard_slices(
-    entries: List[Dict], max_shard_length: int, episode_index_key: str = "episode_index"
-) -> List[List[Tuple[int, int, int]]]:
-    """
-    Slices episodes into shards of specified size.
-
-    Sample output for max_shard_length = 512:
-    [
-        [(0, 0, 512)],
-        [(0, 512, 586), (1, 0, 381), (2, 0, 57)],
-        [(2, 57, 369), (3, 0, 200)],
-    ]
-    """
-    shards = []
-    current_shard = []
-    remaining_space = max_shard_length
-
-    for entry in entries:
-        ep_idx = entry[episode_index_key]
-        ep_len = entry["length"]
-        start = 0
-
-        while ep_len > 0:
-            take = min(remaining_space, ep_len)
-            current_shard.append((ep_idx, start, start + take))
-            ep_len -= take
-            start += take
-            remaining_space -= take
-
-            if remaining_space == 0:
-                shards.append(current_shard)
-                current_shard = []
-                remaining_space = max_shard_length
-
-    # Add the last shard
-    if current_shard:
-        shards.append(current_shard)
-
-    return shards
-
-
-def extract_single_frame_ffmpeg(video_path: str, frame_index: int, output_path: str, fps: float = 30.0) -> bool:
-    """Extract a specific frame from video using ffmpeg. Video_path should be local."""
-    try:
-        timestamp = frame_index / fps
-
-        cmd = [
-            "ffmpeg",
-            "-ss",
-            str(timestamp),
-            "-i",
-            video_path,
-            "-vframes",
-            "1",
-            "-y",
-            output_path,
-            "-loglevel",
-            "quiet",
-        ]
-
-        with open(os.devnull, "w") as devnull:
-            result = subprocess.run(cmd, stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL, timeout=10)
-
-        return result.returncode == 0 and file_exists(output_path)
-
-    except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.CalledProcessError):
-        return False
+    print("Warning: Could not discover image columns")
+    return []
 
 
 def extract_multiple_frames_ffmpeg(
@@ -395,8 +411,7 @@ def extract_multiple_frames_ffmpeg(
         # Sort requests by frame index for efficiency
         sorted_requests = sorted(frame_requests, key=lambda x: x[0])
 
-        # Use ffmpeg select filter to extract frames in batches of 10 to avoid command line length limits
-        batch_size = 10
+        batch_size = 1000 if len(sorted_requests) <= 1000 else 500
 
         for i in range(0, len(sorted_requests), batch_size):
             batch = sorted_requests[i : i + batch_size]
@@ -437,316 +452,229 @@ def extract_multiple_frames_ffmpeg(
                     results[frame_index] = False
 
     except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.CalledProcessError) as e:
-        print(f"Batch ffmpeg extraction failed: {e}. Falling back to single frame extractions.")
-        # Fall back to individual extractions
-        for frame_index, output_path in frame_requests:
-            if frame_index not in results:
-                results[frame_index] = extract_single_frame_ffmpeg(video_path, frame_index, output_path, fps)
-
+        print(f"Batch ffmpeg extraction failed: {e}.")
     return results
 
 
 @ray.remote
-def write_tar_and_upload(shard_idx: int, slices: List[Tuple[int, int, int]], config: Dict):
+def write_tar_and_upload(episode_entry: Dict, config: Dict):
     try:
-        s3_client = boto3.client("s3")
-
-        # Use pre-built episode, video, and camera lookups from config
-        episode_lookup = config["episode_lookup"]
-        video_lookup = config["video_lookup"]
-        cameras = config["cameras"]
-        no_video_mode = config["no_video"]
-        image_columns = config["image_columns"]
+        s3_config = Config(max_pool_connections=50, retries={"max_attempts": 3, "mode": "adaptive"})
+        s3_client = boto3.client("s3", config=s3_config)
+        pad_fn = PaddingStrategy.get_pad_fn(config["padding_strategy"])
 
         if config["tmp_dir"] and not os.path.exists(config["tmp_dir"]):
             os.makedirs(config["tmp_dir"], exist_ok=True)
 
-        # Write files to temporary directory, then upload to S3, then delete tmpdir.
-        with tempfile.TemporaryDirectory(dir=config["tmp_dir"]) as tmpdir:
-            tar_filename = f"shard_{shard_idx:05d}.tar"
-            tar_path = Path(tmpdir) / tar_filename
-            num_sequences = 0
+        ep_idx = episode_entry[config["episode_index_col"]]
 
+        with tempfile.TemporaryDirectory(dir=config["tmp_dir"]) as tmpdir:
             # Cache to avoid multiple downloads. Create inside tempdir.
             video_cache = {}
 
             def get_cached_video_path(video_path: str) -> str:
                 if video_path.startswith("s3"):
-                    # Use video_cache to avoid downloading the same episode video multiple times
                     if video_path not in video_cache:
-                        # Create a unique local filename to avoid collisions between different cameras
                         hashed = hashlib.sha1(video_path.encode("utf-8")).hexdigest()
                         local_path = os.path.join(tmpdir, f"cached_{hashed}_{os.path.basename(video_path)}")
-
-                        cmd = f"aws s3 cp {video_path} {local_path}"
-                        proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                        stdout, stderr = proc.communicate()
-
-                        if proc.returncode != 0:
-                            raise RuntimeError(f"Failed to download video {video_path}: {stderr.decode().strip()}")
-
+                        bucket, key = video_path.replace("s3://", "").split("/", 1)
+                        s3_client.download_file(bucket, key, local_path)
                         video_cache[video_path] = local_path
                     return video_cache[video_path]
                 else:
                     return video_path
 
             try:
-                with tarfile.open(tar_path, "w") as tar:
-                    if no_video_mode:
-                        # No-video mode: process images from parquet columns
-                        for ep_idx, start, end in slices:
-                            try:
-                                ep_path = episode_lookup[ep_idx]
+                ep_path = config["episode_lookup"][ep_idx]
 
-                                # Read parquet file (download from S3 if needed)
-                                if ep_path.startswith("s3"):
-                                    with copy_to_temp_file(ep_path) as temp_parquet:
-                                        df = pq.read_table(temp_parquet).to_pandas().iloc[start:end]
-                                else:
-                                    df = pq.read_table(ep_path).to_pandas().iloc[start:end]
+                # Read parquet file (download from S3 if needed)
+                if ep_path.startswith("s3"):
+                    with copy_to_temp_file(ep_path) as temp_parquet:
+                        df = pq.read_table(temp_parquet).to_pandas()
+                else:
+                    df = pq.read_table(ep_path).to_pandas()
+                df_dict = df.to_dict("index")
+                print(f"Processing episode {ep_idx} with {len(df)} frames")
 
-                            except Exception as e:
-                                print(f"Error reading episode {ep_idx}: {e}")
-                                continue
-
-                            print(f"Shard {shard_idx}: Processing episode {ep_idx}, frames {start}-{end}")
-
-                            # Process each frame
-                            for idx, (_, row) in enumerate(df.iterrows()):
-                                frame_idx = start + idx
-                                file_prefix = config["output_prefix_pattern"].format(ep_idx, frame_idx)
-
-                                # Create metadata and lowdim dictionaries
-                                metadata_dict, lowdim_dict = create_metadata_and_lowdim_dicts(
-                                    row=row,
-                                    lowdim_columns=config["lowdim_columns"],
-                                    camera_names=image_columns,
-                                    excluded_columns=image_columns + config["lowdim_columns"],
-                                )
-
-                                # Create language_instructions dictionary
-                                language_instructions_dict = create_language_instructions_dict(
-                                    row=row,
-                                    tasks_dict=config["tasks_dict"],
-                                    task_index_col=config["task_index_col"],
-                                )
-
-                                # Add JSON and NPZ files to tar
-                                add_metadata_json_to_tar(tar, file_prefix, metadata_dict)
-                                add_npz_to_tar(tar, file_prefix, lowdim_dict)
-                                add_language_instructions_to_tar(tar, file_prefix, language_instructions_dict)
-
-                                # Process image columns
-                                for image_col in image_columns:
-                                    image_data = row[image_col]
-
-                                    # Handle different image data formats
-                                    if isinstance(image_data, dict) and "bytes" in image_data:
-                                        # LeRobot format: {'bytes': b'...', ...}
-                                        image_bytes = image_data["bytes"]
-                                    elif isinstance(image_data, bytes):
-                                        # Raw bytes
-                                        image_bytes = image_data
-                                    else:
-                                        print(f"Warning: Unsupported image data format in column {image_col}")
-                                        continue
-
-                                    # Add image file to tar
-                                    add_image_to_tar(tar, file_prefix, image_col, image_bytes)
-
-                                num_sequences += 1
-
-                    else:
-                        # Video mode: extract frames from video files
-                        # Group frames by video to enable batch processing
-                        video_frame_groups = {}  # key=video_path, value=list of frames to extract from video
-
-                        # First pass: collect all data and group by video
-                        for ep_idx, start, end in slices:
-                            try:
-                                ep_path = episode_lookup[ep_idx]
-
-                                # Read parquet file (download from S3 if needed)
-                                if ep_path.startswith("s3"):
-                                    with copy_to_temp_file(ep_path) as temp_parquet:
-                                        df = pq.read_table(temp_parquet).to_pandas().iloc[start:end]
-                                else:
-                                    df = pq.read_table(ep_path).to_pandas().iloc[start:end]
-
-                            except Exception as e:
-                                print(f"Error reading episode {ep_idx}: {e}")
-                                continue
-
-                            print(f"Shard {shard_idx}: Processing episode {ep_idx}, frames {start}-{end}")
-
-                            # Process each frame and group by video for batched extraction
-                            for idx, (_, row) in enumerate(df.iterrows()):
-                                frame_idx = start + idx
-                                file_prefix = config["output_prefix_pattern"].format(ep_idx, frame_idx)
-                                frame_index_value = row[config["frame_index_col"]]
-
-                                # Group frames by video for batch processing
-                                for camera_name, camera_relative_path in cameras.items():
-                                    video_path = video_lookup[(ep_idx, camera_relative_path)]
-                                    local_video_path = get_cached_video_path(video_path)
-
-                                    video_frame_groups.setdefault(local_video_path, []).append(
-                                        {
-                                            "frame_index_value": frame_index_value,
-                                            "camera_name": camera_name,
-                                            "file_prefix": file_prefix,
-                                            "row": row,
-                                            "ep_idx": ep_idx,
-                                            "frame_idx": frame_idx,
-                                        }
-                                    )
-
-                        # Second pass: batch extract frames and create tar entries
-                        for local_video_path, frames_to_extract in video_frame_groups.items():
-                            # Prepare batch frame extraction requests
-                            frame_requests = []
-                            frame_data_map = {}
-
-                            for frame_data in frames_to_extract:
-                                temp_jpg_path = (
-                                    Path(tmpdir)
-                                    / f"temp_{shard_idx}_{frame_data['camera_name']}_{frame_data['frame_idx']}.jpg"
-                                )
-                                frame_requests.append((frame_data["frame_index_value"], str(temp_jpg_path)))
-                                frame_data_map[frame_data["frame_index_value"]] = {
-                                    **frame_data,
-                                    "temp_jpg_path": temp_jpg_path,
-                                }
-
-                            # Batch extract all frames from this video
-                            extraction_results = extract_multiple_frames_ffmpeg(
-                                local_video_path, frame_requests, config["fps"]
-                            )
-
-                            # Process each frame's data and add to tar
-                            for frame_index_value, success in extraction_results.items():
-                                frame_data = frame_data_map[frame_index_value]
-                                row = frame_data["row"]
-                                file_prefix = frame_data["file_prefix"]
-                                temp_jpg_path = frame_data["temp_jpg_path"]
-                                camera_name = frame_data["camera_name"]
-
-                                # Create metadata and lowdim dictionaries
-                                metadata_dict, lowdim_dict = create_metadata_and_lowdim_dicts(
-                                    row, config["lowdim_columns"], list(cameras.keys())
-                                )
-
-                                # Create language_instructions dictionary
-                                language_instructions_dict = create_language_instructions_dict(
-                                    row, config["tasks_dict"], config["task_index_col"]
-                                )
-
-                                # Create and add json file (only once per frame, not per camera)
-                                if camera_name == list(cameras.keys())[0]:  # Only for first camera to avoid duplicates
-                                    add_metadata_json_to_tar(tar, file_prefix, metadata_dict)
-                                    add_npz_to_tar(tar, file_prefix, lowdim_dict)
-                                    add_language_instructions_to_tar(tar, file_prefix, language_instructions_dict)
-                                    num_sequences += 1
-
-                                # Add jpg file if extraction was successful
-                                if success and temp_jpg_path.exists():
-                                    with open(temp_jpg_path, "rb") as jpg_file:
-                                        jpg_bytes = jpg_file.read()
-                                    add_image_to_tar(tar, file_prefix, camera_name, jpg_bytes)
-                                    temp_jpg_path.unlink()
-                                else:
-                                    print(f"Failed to extract frame {frame_index_value} from {local_video_path}")
-
-                # Upload to S3 with multipart upload for better performance
+                uploaded_frames = []
                 s3_path = config["s3_output_path"].removeprefix("s3://")
                 bucket_name, s3_prefix = s3_path.split("/", 1)
-                s3_key = f"{s3_prefix.rstrip('/')}/{tar_filename}"
 
-                # Use multipart upload for files larger than 100MB for better performance
-                file_size = tar_path.stat().st_size
-                if file_size > 100 * 1024 * 1024:  # 100MB threshold
-                    # Use multipart upload
-                    transfer_config = boto3.s3.transfer.TransferConfig(
-                        multipart_threshold=1024 * 25,  # 25MB
-                        max_concurrency=10,
-                        multipart_chunksize=1024 * 25,
-                        use_threads=True,
-                    )
-                    s3_client.upload_file(str(tar_path), bucket_name, s3_key, Config=transfer_config)
+                # Step 1: Prepare image data based on mode
+                if config["no_video"]:
+                    # No-video mode: images come from parquet columns
+                    camera_names = config["image_columns"]
+
+                    def get_image_bytes_for_frame(idx, img_offset, camera_name):
+                        img_timestep = np.clip(idx + img_offset, 0, len(df) - 1)
+                        return get_image_bytes_from_parquet(df_dict, img_timestep, camera_name)
+
                 else:
-                    s3_client.upload_file(str(tar_path), bucket_name, s3_key)
-                print(f"Uploaded {tar_filename} ({file_size / (1024 * 1024):.1f}MB) to s3://{bucket_name}/{s3_key}")
+                    # Video mode: Batch extract all needed frames upfront
+                    camera_names = list(config["cameras"].keys())
+
+                    # List out frames to extract per video
+                    unique_frames_per_video = {}  # video_path -> set of frame_index_values
+                    for idx, _ in df_dict.items():
+                        for img_offset in config["image_indices"]:
+                            img_timestep = np.clip(idx + img_offset, 0, len(df) - 1)
+                            frame_index_value = df_dict[img_timestep][config["frame_index_col"]]
+
+                            for _camera_name, camera_relative_path in config["cameras"].items():
+                                video_path = config["video_lookup"][(ep_idx, camera_relative_path)]
+                                local_video_path = get_cached_video_path(video_path)
+                                unique_frames_per_video.setdefault(local_video_path, set()).add(frame_index_value)
+
+                    # Batch extract all unique frames from videos
+                    extracted_frames = {}  # (video_path, frame_index_value) -> jpg_bytes
+                    for local_video_path, frame_indices in unique_frames_per_video.items():
+                        frame_requests, temp_paths = [], {}
+
+                        for frame_index_value in frame_indices:
+                            temp_jpg_path = Path(tmpdir) / f"temp_{abs(hash(local_video_path))}_{frame_index_value}.jpg"
+                            frame_requests.append((frame_index_value, str(temp_jpg_path)))
+                            temp_paths[frame_index_value] = temp_jpg_path
+
+                        extraction_results = extract_multiple_frames_ffmpeg(
+                            local_video_path, frame_requests, config["fps"]
+                        )
+
+                        for frame_index_value, temp_jpg_path in temp_paths.items():
+                            if extraction_results.get(frame_index_value, False) and temp_jpg_path.exists():
+                                with open(temp_jpg_path, "rb") as f:
+                                    extracted_frames[(local_video_path, frame_index_value)] = f.read()
+                                temp_jpg_path.unlink()
+                            else:
+                                print(f"Failed to extract frame {frame_index_value} from {local_video_path}")
+
+                    def get_image_bytes_for_frame(idx, img_offset, camera_name):
+                        img_timestep = np.clip(idx + img_offset, 0, len(df) - 1)
+                        frame_index_value = df_dict[img_timestep][config["frame_index_col"]]
+                        camera_relative_path = config["cameras"][camera_name]
+                        video_path = config["video_lookup"][(ep_idx, camera_relative_path)]
+                        local_video_path = get_cached_video_path(video_path)
+                        return extracted_frames.get((local_video_path, frame_index_value))
+
+                # Step 2: Create tars (unified logic for both modes)
+                tar_buffers = []
+                for idx, row in df_dict.items():
+                    frame_tar_filename = f"{config['output_prefix_pattern'].format(ep_idx, idx)}.tar"
+
+                    # Create tar in memory
+                    tar_buffer = io.BytesIO()
+                    with tarfile.open(fileobj=tar_buffer, mode="w") as tar:
+                        file_prefix = config["output_prefix_pattern"].format(ep_idx, idx)
+
+                        # Track original image sizes per camera
+                        original_image_sizes = {}
+
+                        # Process and add images
+                        for img_offset in config["image_indices"]:
+                            for camera_name in camera_names:
+                                image_bytes = get_image_bytes_for_frame(idx, img_offset, camera_name)
+
+                                if image_bytes:
+                                    # Resize image if requested
+                                    resized_bytes, original_size = resize_image_bytes(
+                                        image_bytes, config["jpeg_quality"], config["resize_images_size"]
+                                    )
+
+                                    # Track original size (store by camera name without timestep)
+                                    if camera_name not in original_image_sizes:
+                                        original_image_sizes[camera_name] = original_size
+
+                                    camera_key = f"{camera_name}_t{img_offset}"
+                                    add_image_to_tar(tar, file_prefix, camera_key, resized_bytes)
+
+                        # Add metadata with original image sizes
+                        add_sample_metadata_to_tar(
+                            tar,
+                            file_prefix,
+                            df,
+                            df_dict,
+                            idx,
+                            config,
+                            pad_fn,
+                            camera_names,
+                            row,
+                            original_image_sizes,
+                        )
+
+                    tar_buffer.seek(0)
+                    tar_buffers.append((frame_tar_filename, tar_buffer))
+
+                # Step 3: Upload in parallel (unified for both modes)
+                def upload_tar(tar_data):
+                    filename, buffer = tar_data
+                    s3_key = f"{s3_prefix.rstrip('/')}/{filename}"
+                    buffer.seek(0)
+                    s3_client.upload_fileobj(buffer, bucket_name, s3_key)
+                    return filename
+
+                with ThreadPoolExecutor(max_workers=config["upload_threads"]) as executor:
+                    futures = [executor.submit(upload_tar, tar_data) for tar_data in tar_buffers]
+                    for future in as_completed(futures):
+                        uploaded_frames.append(future.result())
+
+                print(f"Uploaded episode {ep_idx} with {len(uploaded_frames)} frame tars")
 
             finally:
-                # Explicitly clean up cached video files (only in video mode)
-                if not no_video_mode:
-                    for _cache_key, local_path in video_cache.items():
-                        try:
-                            if os.path.exists(local_path):
-                                os.unlink(local_path)
-                                print(f"Cleaned up cached video: {os.path.basename(local_path)}")
-                        except Exception as e:
-                            print(f"Warning: Failed to clean up cached video {local_path}: {e}")
-                    video_cache.clear()
+                # Clean up cached video files (only in video mode)
+                if not config["no_video"]:
+                    for local_path in video_cache.values():
+                        with contextlib.suppress(Exception):
+                            os.unlink(local_path)  # Temp files will be cleaned up by tempfile.TemporaryDirectory
 
         return {
-            "s3_path": f"s3://{bucket_name}/{s3_key}",
-            "shard_name": f"shard_{shard_idx:05d}",
-            "num_sequences": num_sequences,
+            "episode_index": ep_idx,
+            "num_sequences": len(uploaded_frames),
+            "frame_tar_filenames": uploaded_frames,
         }
 
     except Exception as e:
-        print(f"Failed on shard {shard_idx}: {e}")
+        print(f"Failed on episode {ep_idx}: {e}")
         traceback.print_exc()
         return None
 
 
-def create_and_upload_manifest(results: List[Dict], s3_output_path: str):
-    try:
-        s3_client = boto3.client("s3")
+def upload_manifest(manifest_data: List[Dict], s3_output_path: str, subpath: str = ""):
+    s3_client = boto3.client("s3")
+    manifest_lines = [json.dumps(entry) for entry in manifest_data]
+    manifest_content = "\n".join(manifest_lines)
 
-        successful_results = [r for r in results if r is not None]
-        manifest_lines = []
-        for result in successful_results:
-            manifest_entry = {"shard": result["shard_name"], "num_sequences": result["num_sequences"]}
-            manifest_lines.append(json.dumps(manifest_entry))
+    s3_path = s3_output_path.removeprefix("s3://")
+    bucket_name, s3_prefix = s3_path.split("/", 1)
 
-        manifest_content = "\n".join(manifest_lines)
-
-        # Upload manifest to S3 in the same directory as the tar files
-        s3_path = s3_output_path.removeprefix("s3://")
-        bucket_name, s3_prefix = s3_path.split("/", 1)
+    if subpath:
+        manifest_s3_key = f"{s3_prefix.rstrip('/')}/{subpath}/manifest.jsonl"
+    else:
         manifest_s3_key = f"{s3_prefix.rstrip('/')}/manifest.jsonl"
-        s3_client.put_object(
-            Bucket=bucket_name,
-            Key=manifest_s3_key,
-            Body=manifest_content.encode("utf-8"),
-            ContentType="application/json",
-        )
 
-        print(f"Uploaded manifest.jsonl to s3://{bucket_name}/{manifest_s3_key}")
-        return f"s3://{bucket_name}/{manifest_s3_key}"
+    s3_client.put_object(
+        Bucket=bucket_name,
+        Key=manifest_s3_key,
+        Body=manifest_content.encode("utf-8"),
+        ContentType="application/json",
+    )
 
-    except Exception as e:
-        print(f"Failed to create/upload manifest: {e}")
-        traceback.print_exc()
-        return None
+    print(f"Uploaded manifest to s3://{bucket_name}/{manifest_s3_key}")
+    return f"s3://{bucket_name}/{manifest_s3_key}"
 
 
 def copy_stats_to_s3(dataset_path, s3_output_path):
-    stats_names = ["stats.json", "episode_stats.json", "stats.jsonl", "episode_stats.jsonl"]
-    for stats_name in stats_names:
+    """Copy first available stats file to S3."""
+    for stats_name in ["stats.json", "episode_stats.json", "stats.jsonl", "episode_stats.jsonl"]:
         stats_path = resolve_path(dataset_path, f"meta/{stats_name}")
-        destination_path = resolve_path(s3_output_path, f"{stats_name}")
         if file_exists(stats_path):
-            cmd = f"aws s3 cp {stats_path} {destination_path}"
-            proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            _, stderr = proc.communicate()
-            if proc.returncode != 0:
-                print(f"Failed to copy {stats_name} to {destination_path}: {stderr.decode().strip()}")
+            destination_path = resolve_path(s3_output_path, stats_name)
+            try:
+                subprocess.run(
+                    ["aws", "s3", "cp", stats_path, destination_path], capture_output=True, check=True, timeout=60
+                )
+                print(f"Uploaded {stats_name} to {destination_path}")
+                return destination_path
+            except subprocess.CalledProcessError:
                 continue
-            print(f"Uploaded {stats_name} to {destination_path}")
-            return destination_path
     return None
 
 
@@ -836,10 +764,12 @@ def main():
         video_lookup = build_video_lookup(video_chunks, cameras)
         print(f"Built video lookup with {len(video_lookup)} video files")
 
-    # Read episodes metadata and split into shards
+    # Read episodes metadata
     entries = jsonl_load(args.meta_episodes_path)
-    shards = episodes_to_shard_slices(entries, args.shard_size, args.episode_index_col)
-    print(f"Created {len(shards)} shards from {len(entries)} episodes")
+    print(f"Processing {len(entries)} episodes (one episode per tar file)")
+
+    # Initialize JPEG encoder with specified quality
+    init_jpeg_encoder(args.jpeg_quality)
 
     config = {
         "data_chunks": data_chunks,
@@ -859,39 +789,59 @@ def main():
         "fps": fps,
         "no_video": args.no_video,
         "image_columns": image_columns,
+        "num_past": args.num_past,
+        "num_future": args.num_future,
+        "padding_strategy": args.padding_strategy,
+        "episode_index_col": args.episode_index_col,
+        "image_indices": sorted(args.image_indices),  # Sort for consistent ordering
+        "upload_threads": args.upload_threads,
+        "resize_images_size": tuple(args.resize_images_size) if args.resize_images_size else None,
+        "jpeg_quality": args.jpeg_quality,
     }
 
-    # Process shards with controlled concurrency to avoid overwhelming the system
+    # Process episodes with controlled concurrency to avoid overwhelming the system
     max_concurrent = int(args.max_concurrent_shards or ray.cluster_resources().get("CPU", 1))
-    print(f"Processing {len(shards)} shards with max concurrency: {max_concurrent}")
+    print(f"Processing {len(entries)} episodes with max concurrency: {max_concurrent}")
 
     # Process in batches to control memory usage and resource consumption
     results = []
-    for i in range(0, len(shards), max_concurrent):
-        batch = shards[i : i + max_concurrent]
-        batch_futures = [write_tar_and_upload.remote(i + j, slices, config) for j, slices in enumerate(batch)]
+    for i in range(0, len(entries), max_concurrent):
+        batch = entries[i : i + max_concurrent]
+        batch_futures = [write_tar_and_upload.remote(episode_entry, config) for episode_entry in batch]
         batch_results = ray.get(batch_futures)
         results.extend(batch_results)
-        print(f"Completed batch {i // max_concurrent + 1}/{(len(shards) + max_concurrent - 1) // max_concurrent}")
+        print(f"Completed batch {i // max_concurrent + 1}/{(len(entries) + max_concurrent - 1) // max_concurrent}")
 
-    # Create manifest and copy stats to s3
-    manifest_path = create_and_upload_manifest(results, args.s3_output_path)
-    stats_path = copy_stats_to_s3(args.dataset_path, args.s3_output_path)
+    # Collect all frame tar filenames
+    all_frame_tars = []
+    for result in results:
+        if result is not None:
+            all_frame_tars.extend(result["frame_tar_filenames"])
 
-    # Print results
-    successful = [r for r in results if r is not None]
-    failed = len(results) - len(successful)
-    total_sequences = sum(r["num_sequences"] for r in successful)
+    print(f"Found {len(all_frame_tars)} total frames across {len(results)} episodes")
 
-    print("\nProcessing complete:")
-    print(f"  Successful shards: {len(successful)}")
-    print(f"  Failed shards: {failed}")
-    print(f"  Total sequences processed: {total_sequences}")
-    if manifest_path:
-        print(f"  Manifest created: {manifest_path}")
-    if stats_path:
-        print(f"  Stats copied to: {stats_path}")
+    # Shuffle and group into shards
+    random.shuffle(all_frame_tars)
+    shards = [all_frame_tars[i : i + args.shard_size] for i in range(0, len(all_frame_tars), args.shard_size)]
+    print(f"Creating {len(shards)} shards with up to {args.shard_size} frames each")
+    shard_futures = [create_shard.remote(frame_tars, i, args.s3_output_path) for i, frame_tars in enumerate(shards)]
+    shard_results = ray.get(shard_futures)
 
+    # Upload shard manifest and copy stats to s3
+    shard_manifest = [
+        {"shard": shard_name, "num_sequences": num_sequences} for shard_name, num_sequences in shard_results
+    ]
+    upload_manifest(shard_manifest, args.s3_output_path, subpath="shards")
+    copy_stats_to_s3(args.dataset_path, os.path.join(args.s3_output_path, "shards"))
+
+    # Print summary
+    total_sequences = sum(num_seq for _, num_seq in shard_results)
+    avg_sequences_per_shard = total_sequences / len(shard_results) if shard_results else 0
+    print("\nSharding complete:")
+    print(f"  Total shards: {len(shard_results)}")
+    print(f"  Total sequences: {total_sequences}")
+    print(f"  Target frames per shard: {args.shard_size}")
+    print(f"  Avg frames per shard: {avg_sequences_per_shard:.1f}")
     ray.shutdown()
 
 

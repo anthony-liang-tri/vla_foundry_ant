@@ -8,6 +8,7 @@ import random
 import tarfile
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
@@ -17,6 +18,7 @@ import fsspec
 import numpy as np
 import ray
 import yaml
+from botocore.config import Config
 
 from vla_foundry.data.robotics.utils import load_action_field_config, rot_6d_to_relative, xyz_to_relative
 from vla_foundry.data.scripts.preprocessing.image_utils import image_to_bytes, init_jpeg_encoder
@@ -24,7 +26,11 @@ from vla_foundry.data.scripts.preprocessing.image_utils import image_to_bytes, i
 # Params base class
 from vla_foundry.data.scripts.preprocessing.params import PreprocessParams, SampleMetadata
 from vla_foundry.data.scripts.preprocessing.preprocess_statistics import StreamingDatasetStatisticsRayActor
-from vla_foundry.data.scripts.preprocessing.utils import create_processing_metadata, discover_episodes_targeted
+from vla_foundry.data.scripts.preprocessing.utils import (
+    PaddingStrategy,
+    create_processing_metadata,
+    discover_episodes_targeted,
+)
 from vla_foundry.file_utils import check_directory_has_files_with_prefix, list_directory
 
 
@@ -40,37 +46,6 @@ def upload_dict_to_s3(dict_data: Dict, s3_path: str, file_name: str):
         ContentType="application/json",
     )
     print(f"Uploaded {file_name} to s3://{bucket_name}/{s3_key}")
-
-
-class PaddingStrategy:
-    """Optimized padding strategies with vectorized operations."""
-
-    @staticmethod
-    def copy_edge(data: np.ndarray, pad_before: int, pad_after: int) -> np.ndarray:
-        """Vectorized edge padding."""
-        if pad_before == 0 and pad_after == 0:
-            return data
-
-        pad_width = [(pad_before, pad_after)] + [(0, 0)] * (data.ndim - 1)
-        return np.pad(data, pad_width, mode="edge")
-
-    @staticmethod
-    def zero_pad(data: np.ndarray, pad_before: int, pad_after: int) -> np.ndarray:
-        """Vectorized zero padding."""
-        if pad_before == 0 and pad_after == 0:
-            return data
-
-        pad_width = [(pad_before, pad_after)] + [(0, 0)] * (data.ndim - 1)
-        return np.pad(data, pad_width, mode="constant", constant_values=0)
-
-    @staticmethod
-    def reflect_pad(data: np.ndarray, pad_before: int, pad_after: int) -> np.ndarray:
-        """Vectorized reflect padding."""
-        if pad_before == 0 and pad_after == 0:
-            return data
-
-        pad_width = [(pad_before, pad_after)] + [(0, 0)] * (data.ndim - 1)
-        return np.pad(data, pad_width, mode="reflect")
 
 
 def load_language_annotations(yaml_path: str) -> Dict[str, Dict[str, List[str]]]:
@@ -191,17 +166,34 @@ def upload_sample_to_s3(
 
 @ray.remote
 def create_shard(shard_files: List[str], shard_idx: int, output_dir: str) -> str:
-    """Download tar files from S3 and create a shard."""
-    s3_client = boto3.client("s3")
-    shard_buffer = io.BytesIO()
+    """Download tar files from S3 and create a shard. OPTIMIZED with parallel downloads."""
+    s3_config = Config(max_pool_connections=50, retries={"max_attempts": 3, "mode": "adaptive"})
+    s3_client = boto3.client("s3", config=s3_config)
 
+    bucket_name, s3_prefix = output_dir.removeprefix("s3://").split("/", 1)
+
+    def download_tar(s3_key):
+        """Download a single tar file from S3."""
+        obj_buffer = io.BytesIO()
+        full_key = f"{s3_prefix.rstrip('/')}/{s3_key}"
+        s3_client.download_fileobj(bucket_name, full_key, obj_buffer)
+        obj_buffer.seek(0)
+        return (s3_key, obj_buffer)
+
+    # Download all tars in parallel (use 20 threads for download phase)
+    downloaded_tars = {}
+    with ThreadPoolExecutor(max_workers=20) as executor:
+        futures = [executor.submit(download_tar, s3_key) for s3_key in shard_files]
+        for future in as_completed(futures):
+            s3_key, obj_buffer = future.result()
+            downloaded_tars[s3_key] = obj_buffer
+
+    # Create shard by combining all downloaded tars
+    shard_buffer = io.BytesIO()
     with tarfile.open(fileobj=shard_buffer, mode="w") as shard_tar:
+        # Process in original order for consistency
         for s3_key in shard_files:
-            # Download tar file from S3
-            obj_buffer = io.BytesIO()
-            bucket_name, s3_prefix = output_dir.removeprefix("s3://").split("/", 1)
-            s3_key = f"{s3_prefix.rstrip('/')}/{s3_key}"
-            s3_client.download_fileobj(bucket_name, s3_key, obj_buffer)
+            obj_buffer = downloaded_tars[s3_key]
             obj_buffer.seek(0)
 
             # Extract contents and add to shard
@@ -213,6 +205,7 @@ def create_shard(shard_files: List[str], shard_idx: int, output_dir: str) -> str
     shard_buffer.seek(0)
     shard_key = f"shard_{shard_idx:06d}.tar"
     s3_client.upload_fileobj(shard_buffer, bucket_name, f"{s3_prefix.rstrip('/')}/shards/{shard_key}")
+    print(f"Uploaded shard {shard_key} to s3://{bucket_name}/{s3_prefix.rstrip('/')}/shards/{shard_key}")
     return (shard_key.rstrip(".tar"), len(shard_files))
 
 
@@ -299,12 +292,7 @@ class EpisodeProcessor:
         self.s3_client = boto3.client("s3")
 
         # Set padding function
-        self.pad_functions = {
-            "copy": PaddingStrategy.copy_edge,
-            "zero": PaddingStrategy.zero_pad,
-            "reflect": PaddingStrategy.reflect_pad,
-        }
-        self.pad_fn = self.pad_functions[padding_strategy]
+        self.pad_fn = PaddingStrategy.get_pad_fn(padding_strategy)
 
     def load_episode_data(self, episode_path: str) -> Dict[str, Any]:
         """Load episode data with optimization and retry logic."""

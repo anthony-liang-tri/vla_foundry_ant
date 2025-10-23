@@ -9,6 +9,7 @@ import sys
 from typing import Any, Dict, List
 
 import fsspec
+import numpy as np
 from draccus.parsers import encoding as _draccus_encoding
 
 from vla_foundry.data.scripts.preprocessing.git_utils import get_git_info
@@ -335,3 +336,45 @@ def discover_episodes_targeted(source_paths: List[str], max_episodes_to_process:
 
     print(f"Total episodes discovered: {len(episodes)}")
     return sorted(episodes)
+
+
+class PaddingStrategy:
+    """Optimized padding strategies with vectorized operations."""
+
+    @staticmethod
+    def copy_edge(data: np.ndarray, pad_before: int, pad_after: int) -> np.ndarray:
+        """Vectorized edge padding."""
+        if pad_before == 0 and pad_after == 0:
+            return data
+
+        pad_width = [(pad_before, pad_after)] + [(0, 0)] * (data.ndim - 1)
+        return np.pad(data, pad_width, mode="edge")
+
+    @staticmethod
+    def zero_pad(data: np.ndarray, pad_before: int, pad_after: int) -> np.ndarray:
+        """Vectorized zero padding."""
+        if pad_before == 0 and pad_after == 0:
+            return data
+
+        pad_width = [(pad_before, pad_after)] + [(0, 0)] * (data.ndim - 1)
+        return np.pad(data, pad_width, mode="constant", constant_values=0)
+
+    @staticmethod
+    def reflect_pad(data: np.ndarray, pad_before: int, pad_after: int) -> np.ndarray:
+        """Vectorized reflect padding."""
+        if pad_before == 0 and pad_after == 0:
+            return data
+
+        pad_width = [(pad_before, pad_after)] + [(0, 0)] * (data.ndim - 1)
+        return np.pad(data, pad_width, mode="reflect")
+
+    @staticmethod
+    def get_pad_fn(padding_strategy: str):
+        if padding_strategy == "copy":
+            return PaddingStrategy.copy_edge
+        elif padding_strategy == "zero":
+            return PaddingStrategy.zero_pad
+        elif padding_strategy == "reflect":
+            return PaddingStrategy.reflect_pad
+        else:
+            raise ValueError(f"Invalid padding strategy: {padding_strategy}")
