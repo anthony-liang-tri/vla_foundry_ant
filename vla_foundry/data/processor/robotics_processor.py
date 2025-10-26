@@ -76,8 +76,9 @@ class RoboticsProcessor:
                 image_names = list(sample_images.keys())
                 logging.warning(
                     "WARNING: Using sample_images.keys() to detect camera names. No guarantee of consistent ordering."
+                    f"Sample keys: {list(sample_images.keys())}"
                 )
-            sample_images = [sample_images[k] for k in image_names]
+            sample_images = [sample_images[k] for k in image_names if k in sample_images]
             sample_num_images = len(sample_images)
 
             # Apply chat template if available
