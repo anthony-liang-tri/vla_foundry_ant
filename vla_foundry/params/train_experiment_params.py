@@ -6,8 +6,8 @@ import draccus
 
 from vla_foundry.data.utils import epochs_to_samples
 from vla_foundry.file_utils import copy_to_temp_file
-from vla_foundry.params.base_data_params import DataParams
 from vla_foundry.params.base_params import BaseParams
+from vla_foundry.params.data_params import DataParams  # not from base_data_params so it loads registered params
 from vla_foundry.params.distributed_params import DistributedParams
 from vla_foundry.params.hyper_params import HyperParams
 from vla_foundry.params.model_params import ModelParams
