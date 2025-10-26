@@ -122,7 +122,9 @@ class RoboticsNormalizer:
                 return config
 
         # Return default config
-        return FieldNormalizationParams(method=self.method, scope=self.scope)
+        return FieldNormalizationParams(
+            method=self.method, scope=self.scope, epsilon=self.epsilon, enabled=self.enabled
+        )
 
     def _should_normalize_field(self, field_name: str) -> bool:
         """Check if a field should be normalized."""
