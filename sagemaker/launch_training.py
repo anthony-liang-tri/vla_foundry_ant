@@ -35,6 +35,7 @@ QUEUE_MAPPER = {
 class SageMakerRunParams(BaseParams):
     local: bool = field(default=False)
     user: str = field(default=None)
+    name_prefix: str = field(default=None)
 
     # AWS profile args
     region: str = field(default="us-west-2")
@@ -163,15 +164,26 @@ def main():
     ##########
     # Configure the training
     ##########
-    base_job_name = f"{args.user.replace('.', '-')}-{NAME}"
+    base_job_name = f"{args.name_prefix + '-' if args.name_prefix else ''}{args.user.replace('.', '-')}-{NAME}"
     checkpoint_local_path = "/opt/ml/checkpoints"
 
     def get_job_name(base):
         now = datetime.now()
         # Format example: 2023-03-03-10-14-02-324
-        now_ms_str = f"{now.microsecond // 1000:03d}"
-        date_str = f"{now.strftime('%Y-%m-%d-%H-%M-%S')}-{now_ms_str}"
-        job_name = "-".join([base, date_str])
+        date_str = f"{now.strftime('%Y-%m-%d-%H-%M-%S')}"
+        # Ensure the job name follows SageMaker naming constraints: [a-zA-Z0-9](-*[a-zA-Z0-9]){0,62}
+        base = base.replace("_", "-")
+        clean_base = "".join(c if c.isalnum() or c == "-" else "" for c in base)
+        clean_base = clean_base.strip("-")
+        if not clean_base:
+            clean_base = "job"
+        job_name = f"{clean_base}-{date_str}"
+        job_name = job_name.lstrip("-")
+        # Truncate if too long (SageMaker limit is 63 characters)
+        if len(job_name) > 63:
+            job_name = job_name[:63]
+        # Remove trailing hyphens if any (truncation may have left some)
+        job_name = job_name.rstrip("-")
         return job_name
 
     job_name = get_job_name(base_job_name)
