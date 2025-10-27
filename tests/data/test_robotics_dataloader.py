@@ -13,7 +13,7 @@ import torch
 import yaml
 
 from vla_foundry.data.dataloader import get_wds_dataloader
-from vla_foundry.data.robotics.data_explorer_gradio import RoboticsDataLoader
+from vla_foundry.data.robotics.gradio_dataloader import RoboticsDataLoader
 from vla_foundry.params.data_params import RoboticsDataParams
 
 

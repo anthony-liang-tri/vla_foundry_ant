@@ -29,7 +29,7 @@ jobs:
     - name: Create virtual environment and install dependencies
       run: |
         # Use `--frozen` to avoid updating the lockfile at all.
-        uv sync --group={preprocessing,visualization} --frozen
+        uv sync --frozen
 
     - name: Run tests
       run: |
