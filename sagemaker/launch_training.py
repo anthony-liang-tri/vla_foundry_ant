@@ -164,7 +164,15 @@ def main():
     ##########
     # Configure the training
     ##########
-    base_job_name = f"{args.name_prefix + '-' if args.name_prefix else ''}{args.user.replace('.', '-')}-{NAME}"
+    def sanitize_name(name):
+        name = name.replace("_", "-")
+        clean = "".join(c if c.isalnum() or c == "-" else "" for c in name)
+        clean = clean.strip("-")
+        return clean or "job"
+
+    base_job_name = sanitize_name(
+        f"{args.name_prefix + '-' if args.name_prefix else ''}{args.user.replace('.', '-')}-{NAME}"
+    )
     checkpoint_local_path = "/opt/ml/checkpoints"
 
     def get_job_name(base):
@@ -172,11 +180,7 @@ def main():
         # Format example: 2023-03-03-10-14-02-324
         date_str = f"{now.strftime('%Y-%m-%d-%H-%M-%S')}"
         # Ensure the job name follows SageMaker naming constraints: [a-zA-Z0-9](-*[a-zA-Z0-9]){0,62}
-        base = base.replace("_", "-")
-        clean_base = "".join(c if c.isalnum() or c == "-" else "" for c in base)
-        clean_base = clean_base.strip("-")
-        if not clean_base:
-            clean_base = "job"
+        clean_base = sanitize_name(base)
         job_name = f"{clean_base}-{date_str}"
         job_name = job_name.lstrip("-")
         # Truncate if too long (SageMaker limit is 63 characters)
