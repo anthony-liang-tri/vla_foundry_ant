@@ -110,3 +110,11 @@ uv run pytest tests
 # Run a specific test:
 uv run pytest /path/to/my/test.py -s -k partial_string_in_test_name
 ```
+
+Note that when running tests out of your own fork, you may need to add your own HF_TOKEN in `Settings`. See screenshot below.
+
+<picture>
+  <img alt="Settings HF_TOKEN screenshot" src="assets/hf_key_screenshot.png" width="800">
+</picture>
+
+For these tests specifically, they use the HF PaliGemma model, so you will need to accept the [PaliGemma terms and conditions on HF](https://huggingface.co/google/paligemma2-3b-pt-224) with own HF account for the token to work properly. 

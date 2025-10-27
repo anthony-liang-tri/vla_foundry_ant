@@ -282,6 +282,9 @@ API keys and secrets are stored in Github secrets and can be accessed like `${{ 
 
 For AWS S3, this is currently not set up and is generally not recommended (we want tests to be as simple and self-contained as possible, and this adds unnecessary complexity.) For tests that require loading data, we recommend creating tiny WebDataset shards in [tests/shared/tiny_dataset](tests/shared/tiny_dataset). More examples can be found in that folder.
 
+#### 8.2 Credentials on Forks
+The HF_TOKEN is set up already on upstream. However, this may not be set up on individual forks. To add your own HF_TOKEN to individual forks, you can add it in "Settings". See [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
+
 ## Citation
 ```
 (insert-citation-here)
