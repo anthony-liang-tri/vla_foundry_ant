@@ -101,7 +101,7 @@ The sections below highlight several key design choices and functionalities of t
 We use [draccus](https://github.com/dlwh/draccus) for argument parsing. Params are defined in the [vla_foundry/params](vla_foundry/params) folder. We use nested parameters. There is a high level `cfg` dataclass object in [vla_foundry/main.py](vla_foundry/main.py). This dataclass has attributes which are dataclasses themselves, namely `cfg.model`, `cfg.hparams`, `cfg.data`, and `cfg.distributed`, which themselves contain attributes like `cfg.model.hidden_dim`.
 
 #### 1.1 Argument Parsing Usage
-Below we show an example of how we supply arguments (see [examples](vla_foundry/examples) folder for more):
+Below we show an example of how we supply arguments (see [examples](examples) folder for more):
 ```bash
 --model.type transformer \
 --model "include vla_foundry/config_presets/models/transformer_11m.yaml" \
@@ -206,7 +206,7 @@ Robotics data requires some special handling (e.g., normalization) that may not 
 ### 3. Dataloading Pipeline
 We use [webdatasets](https://github.com/webdataset/webdataset) to load the data. Each modality (e.g., image+caption, interleaved, image+actions) has its own pipeline where all the processing steps are defined at a high-level. This involves steps like untarring, shuffling, batching, etc. An example is [vla_foundry/data/pipelines/image_caption.py](vla_foundry/data/pipelines/image_caption.py).
 
-You wil notice that in that file, there is a `self.processor` class that is invoked as a step within the pipeline. This is where all the lower-level processing operations (e.g., normalization, tokenization, padding) are abstracted to. An example is [vla_foundry/data/processor/stable_diffusion_processor.py](https://github.com/TRI-ML/vla_foundry/blob/sedrick/diffusion/vla_foundry/data/processor/stable_diffusion_processor.py).
+You wil notice that in that file, there is a `self.processor` class that is invoked as a step within the pipeline. This is where all the lower-level processing operations (e.g., normalization, tokenization, padding) are abstracted to. An example is [vla_foundry/data/processor/stable_diffusion_processor.py](vla_foundry/data/processor/stable_diffusion_processor.py).
 
 ### 4. Model Saving / Loading
 Models checkpoints are saved locally to the path in `cfg.save_path`. If `cfg.remote_sync` is set, then it will save to that path on s3 as well. Save frequency is per checkpoint. The number of checkpoints is determined by the `--num_checkpoints` argument, and the size of a checkpoint is equal to `--total_train_samples` divided by `--num_checkpoints`.
@@ -249,7 +249,7 @@ You can use resume training from checkpoints using the `--model.resume_from_chec
 
 #### 5.3 Single GPU Training
 For single GPU training, run `python vla_foundry/main.py` directly (no `torchrun`(specifically for distributed training), skip the `--nproc_per_node` and `--nnodes` args). 
-(If using torchrun, set `--nproc_per_node` to 1.)
+(If using `torchrun`, set `--nproc_per_node` to 1.)
 
 Set `--distributed.fsdp` to False.
 
@@ -283,7 +283,7 @@ API keys and secrets are stored in Github secrets and can be accessed like `${{ 
 For AWS S3, this is currently not set up and is generally not recommended (we want tests to be as simple and self-contained as possible, and this adds unnecessary complexity.) For tests that require loading data, we recommend creating tiny WebDataset shards in [tests/shared/tiny_dataset](tests/shared/tiny_dataset). More examples can be found in that folder.
 
 #### 8.2 Credentials on Forks
-The HF_TOKEN is set up already on upstream. However, this may not be set up on individual forks. To add your own HF_TOKEN to individual forks, you can add it in "Settings". See [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
+The `HF_TOKEN` is set up already on upstream. However, this may not be set up on individual forks. To add your own `HF_TOKEN` to individual forks, you can add it in "Settings". See [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
 
 ## Citation
 ```
