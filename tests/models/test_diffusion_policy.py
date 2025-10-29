@@ -27,11 +27,11 @@ class TestDiffusionPolicy:
             model = create_model(diffusion_policy_config)
             return model
 
-    def _mock_clip_output(self, batch_size):
+    def _mock_clip_output(self, batch_size, with_text=True, with_image=True):
         """Helper method to create mock CLIP output"""
         mock_clip_output = Mock()
-        mock_clip_output.text_embeds = torch.randn(batch_size, 512)
-        mock_clip_output.image_embeds = torch.randn(batch_size, 512)
+        mock_clip_output.text_embeds = torch.randn(batch_size, 512) if with_text else None
+        mock_clip_output.image_embeds = torch.randn(batch_size, 512) if with_image else None
         return mock_clip_output
 
     def test_diffusion_policy_forward_basic(self, diffusion_policy):
@@ -62,6 +62,64 @@ class TestDiffusionPolicy:
             )
 
             # Check output shape
+            assert output.shape == (batch_size, seq_len, action_dim)
+            assert output.dtype == torch.float32
+
+    def test_diffusion_policy_forward_without_image_input(self, diffusion_policy):
+        """Test forward pass when image input is missing"""
+        batch_size, seq_len = 2, 10
+        action_dim = diffusion_policy.model_params.action_dim
+
+        input_ids = torch.randint(0, 1000, (batch_size, seq_len))
+        pixel_values = None
+        attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+        actions = torch.randn(batch_size, seq_len, action_dim)
+        noise = torch.randn(batch_size, seq_len, action_dim)
+        past_mask = torch.zeros(batch_size, seq_len, dtype=torch.bool)
+        future_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+
+        mock_clip_output = self._mock_clip_output(batch_size, with_text=True, with_image=False)
+
+        with patch.object(diffusion_policy.clip, "forward", return_value=mock_clip_output):
+            output = diffusion_policy(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                attention_mask=attention_mask,
+                actions=actions,
+                noise=noise,
+                past_mask=past_mask,
+                future_mask=future_mask,
+            )
+
+            assert output.shape == (batch_size, seq_len, action_dim)
+            assert output.dtype == torch.float32
+
+    def test_diffusion_policy_forward_without_text_input(self, diffusion_policy):
+        """Test forward pass when text input is missing"""
+        batch_size, seq_len = 2, 10
+        action_dim = diffusion_policy.model_params.action_dim
+
+        input_ids = torch.randint(0, 1000, (batch_size, seq_len))
+        pixel_values = torch.randn(batch_size, 3, 224, 224)
+        attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+        actions = torch.randn(batch_size, seq_len, action_dim)
+        noise = torch.randn(batch_size, seq_len, action_dim)
+        past_mask = torch.zeros(batch_size, seq_len, dtype=torch.bool)
+        future_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+
+        mock_clip_output = self._mock_clip_output(batch_size, with_text=False, with_image=True)
+
+        with patch.object(diffusion_policy.clip, "forward", return_value=mock_clip_output):
+            output = diffusion_policy(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                attention_mask=attention_mask,
+                actions=actions,
+                noise=noise,
+                past_mask=past_mask,
+                future_mask=future_mask,
+            )
+
             assert output.shape == (batch_size, seq_len, action_dim)
             assert output.dtype == torch.float32
 
@@ -160,6 +218,74 @@ class TestDiffusionPolicy:
 
             # Check output shape
             assert generated_actions.shape == (batch_size, seq_len, action_dim)
+
+    def test_diffusion_policy_generate_actions_without_image_input(self, diffusion_policy):
+        """Test action generation when image input is missing"""
+        batch_size, seq_len = 2, 6
+        action_dim = diffusion_policy.model_params.action_dim
+
+        input_ids = torch.randint(0, 1000, (batch_size, seq_len))
+        pixel_values = None
+        actions = torch.randn(batch_size, seq_len, action_dim)
+        attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+        past_mask = torch.cat(
+            [
+                torch.ones(batch_size, seq_len // 2, dtype=torch.bool),
+                torch.zeros(batch_size, seq_len - seq_len // 2, dtype=torch.bool),
+            ],
+            dim=1,
+        )
+
+        mock_clip_output = self._mock_clip_output(batch_size, with_text=True, with_image=False)
+
+        with patch.object(diffusion_policy.clip, "forward", return_value=mock_clip_output):
+            generated_actions = diffusion_policy.generate_actions(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                actions=actions,
+                attention_mask=attention_mask,
+                num_inference_steps=3,
+                past_mask=past_mask,
+            )
+
+            assert generated_actions.shape == (batch_size, seq_len, action_dim)
+            torch.testing.assert_close(
+                generated_actions[:, : seq_len // 2], actions[:, : seq_len // 2], rtol=1e-5, atol=1e-5
+            )
+
+    def test_diffusion_policy_generate_actions_without_text_input(self, diffusion_policy):
+        """Test action generation when text input is missing"""
+        batch_size, seq_len = 2, 6
+        action_dim = diffusion_policy.model_params.action_dim
+
+        input_ids = None
+        pixel_values = torch.randn(batch_size, 3, 224, 224)
+        actions = torch.randn(batch_size, seq_len, action_dim)
+        attention_mask = None
+        past_mask = torch.cat(
+            [
+                torch.ones(batch_size, seq_len // 2, dtype=torch.bool),
+                torch.zeros(batch_size, seq_len - seq_len // 2, dtype=torch.bool),
+            ],
+            dim=1,
+        )
+
+        mock_clip_output = self._mock_clip_output(batch_size, with_text=False, with_image=True)
+
+        with patch.object(diffusion_policy.clip, "forward", return_value=mock_clip_output):
+            generated_actions = diffusion_policy.generate_actions(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                actions=actions,
+                attention_mask=attention_mask,
+                num_inference_steps=3,
+                past_mask=past_mask,
+            )
+
+            assert generated_actions.shape == (batch_size, seq_len, action_dim)
+            torch.testing.assert_close(
+                generated_actions[:, : seq_len // 2], actions[:, : seq_len // 2], rtol=1e-5, atol=1e-5
+            )
 
     def test_diffusion_policy_weight_initialization(self, diffusion_policy):
         """Test that weight initialization works correctly"""

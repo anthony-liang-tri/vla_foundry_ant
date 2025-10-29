@@ -41,7 +41,7 @@ class DiffusionPolicy(BaseModel):
 
     def forward(self, input_ids, pixel_values, attention_mask, actions, noise, past_mask, future_mask):
         # Sample random timesteps
-        timesteps = torch.randint(0, self.scheduler.num_timesteps, (input_ids.shape[0],)).to(actions.device)  # [bsz]
+        timesteps = torch.randint(0, self.scheduler.num_timesteps, (actions.shape[0],)).to(actions.device)  # [bsz]
 
         # Sample action to denoise
         noisy_action = self.scheduler.add_noise(actions, noise, timesteps, mask=future_mask)
@@ -53,18 +53,26 @@ class DiffusionPolicy(BaseModel):
         out_clip = self.clip(input_ids=input_ids, pixel_values=pixel_values, attention_mask=attention_mask)
         text_embeddings = out_clip.text_embeds
         image_embeddings = out_clip.image_embeds
-        ## Time embeddings
-        time_embeddings = self.time_encoding(timesteps)
+        ## Time embeddings (B, 1, D)
+        time_embeddings = self.time_encoding(timesteps).unsqueeze(1)
+        conditional_embeddings = [time_embeddings]
 
         # Create conditional embeddings sequence
-        if image_embeddings.ndim == 2:
-            image_embeddings = image_embeddings.unsqueeze(1)
-        time_embeddings = time_embeddings.unsqueeze(1)
-        text_embeddings = text_embeddings.unsqueeze(1)
-        conditional_embeddings = torch.cat([time_embeddings, text_embeddings, image_embeddings], dim=1)
+        if text_embeddings is not None:
+            # (B, D) -> (B, 1, D)
+            text_embeddings = text_embeddings.unsqueeze(1)
+            conditional_embeddings.append(text_embeddings)
+        if image_embeddings is not None:
+            # if multiple images per sample, (B, N, D) else (B, D) -> (B, 1, D)
+            if image_embeddings.ndim == 2:
+                image_embeddings = image_embeddings.unsqueeze(1)
+            conditional_embeddings.append(image_embeddings)
+        # (B, 1 + 1 + N, D)
+        conditional_embeddings = torch.cat(conditional_embeddings, dim=1)
+        # [B, 1 + 1 + N, C] -> [B, 1 + 1 + N, transformer.hidden_dim]
         conditional_embeddings = self.condition_encode(conditional_embeddings)
 
-        # Create transformer input
+        # Create transformer input (B, 1 + 1 + N + T, D)
         transformer_input = torch.cat([conditional_embeddings, noisy_action], dim=1)
 
         # Pass through transformer
@@ -74,8 +82,9 @@ class DiffusionPolicy(BaseModel):
             use_cache=False,
         )
 
-        # Extract predicted direction to denoise the action
+        # Extract predicted direction to denoise the action (B, 1 + 1 + N + T, D) -> (B, T, D)
         action_seq_len = noise.shape[1]
+        # [B, 1 + 1 + N + action_seq_len, transformer.hidden_dim] -> [B, action_seq_len, transformer.hidden_dim]
         predicted_direction = self.output_layer(transformer_output.hidden_states[-1][:, -action_seq_len:, :])
 
         return predicted_direction
@@ -107,8 +116,8 @@ class DiffusionPolicy(BaseModel):
         if num_inference_steps is None:
             num_inference_steps = self.scheduler.num_timesteps
 
-        batch_size = input_ids.shape[0]
-        device = input_ids.device
+        batch_size = actions.shape[0]
+        device = actions.device
 
         # Create condition embeddings (same as in forward)
         out_clip = self.clip(input_ids=input_ids, pixel_values=pixel_values, attention_mask=attention_mask)
@@ -128,23 +137,31 @@ class DiffusionPolicy(BaseModel):
 
         # Iterative denoising - similar to flow VLM approach
         step_size = max(1, self.scheduler.num_timesteps // num_inference_steps)
-        text_embeddings = text_embeddings.unsqueeze(1)
+        if text_embeddings is not None:
+            # (B, D) -> (B, 1, D)
+            text_embeddings = text_embeddings.unsqueeze(1)
+        if image_embeddings is not None and image_embeddings.ndim == 2:
+            # if multiple images per sample, (B, N, D) else (B, D) -> (B, 1, D)
+            image_embeddings = image_embeddings.unsqueeze(1)
         for step in range(self.scheduler.num_timesteps - 1, 0, -step_size):
-            # Create time embeddings for current timestep
+            # Create time embeddings for current timestep (B, 1, D)
             timesteps = torch.tensor([step] * batch_size, device=device)
-            time_embeddings = self.time_encoding(timesteps)
+            time_embeddings = self.time_encoding(timesteps).unsqueeze(1)
+            conditional_embeddings = [time_embeddings]
+
+            if text_embeddings is not None:
+                conditional_embeddings.append(text_embeddings)
+            if image_embeddings is not None:
+                conditional_embeddings.append(image_embeddings)
+
+            # Create conditional embeddings sequence (B, 1 + 1 + N, D)
+            conditional_embeddings = torch.cat(conditional_embeddings, dim=1)
+            conditional_embeddings = self.condition_encode(conditional_embeddings)
 
             # Encode current actions
             action_encoding = self.action_encode(actions)
 
-            # Create conditional embeddings sequence
-            if image_embeddings.ndim == 2:
-                image_embeddings = image_embeddings.unsqueeze(1)
-            time_embeddings = time_embeddings.unsqueeze(1)
-            conditional_embeddings = torch.cat([time_embeddings, text_embeddings, image_embeddings], dim=1)
-            conditional_embeddings = self.condition_encode(conditional_embeddings)
-
-            # Create transformer input
+            # Create transformer input (B, 1 + 1 + N + T, D)
             transformer_input = torch.cat([conditional_embeddings, action_encoding], dim=1)
 
             # Pass through transformer
@@ -154,7 +171,7 @@ class DiffusionPolicy(BaseModel):
                 use_cache=False,
             )
 
-            # Extract predicted direction to denoise the action
+            # Extract predicted direction to denoise the action (B, 1 + 1 + N + T, D) -> (B, T, D)
             action_seq_len = actions.shape[1]
             predicted_direction = self.output_layer(transformer_output.hidden_states[-1][:, -action_seq_len:, :])
 
@@ -164,6 +181,7 @@ class DiffusionPolicy(BaseModel):
             # Preserve past actions if mask provided
             if past_mask is not None:
                 # Keep original past actions, update only future actions
+                # (B, T) -> (B, T, 1)
                 past_mask_expanded = past_mask[:, :, None].to(actions.dtype)
                 actions = original_past_actions + predicted_actions * (1 - past_mask_expanded)
             else:

@@ -104,7 +104,12 @@ class RoboticsProcessor:
                     instruction = image_tokens + instruction
 
             batch_text.append(instruction)
-            batch_images.append(sample_images)
+            if len(sample_images) > 0:
+                batch_images.append(sample_images)
+
+        # If no images, set batch_images to None
+        if len(batch_images) == 0:
+            batch_images = None
 
         # Run processor on entire batch
         processed = self.vlm_processor(images=batch_images, text=batch_text, padding=True, return_tensors="pt")
@@ -112,8 +117,9 @@ class RoboticsProcessor:
         processed_batch = batch.copy()
         processed_batch["input_ids"] = processed["input_ids"]
         processed_batch["attention_mask"] = processed["attention_mask"]
-        c, h, w = processed["pixel_values"].shape[-3:]
-        processed_batch["pixel_values"] = processed["pixel_values"].reshape(len(batch_images), -1, c, h, w)
+        if "pixel_values" in processed:
+            c, h, w = processed["pixel_values"].shape[-3:]
+            processed_batch["pixel_values"] = processed["pixel_values"].reshape(len(batch_images), -1, c, h, w)
         processed_batch["camera_names"] = self.data_params.camera_names
         processed_batch["images"] = batch_images
         processed_batch["lowdim"] = {}
