@@ -18,7 +18,7 @@ Alternatively, Ray also works on local instances, so Steps 2 and 3 can be skippe
 ray start --head
 ```
 
-Add the --include-dashboard=True arge before the --head to include the ray dashboard for diagnostics.
+Add the --include-dashboard=True arg before the --head to include the ray dashboard for diagnostics.
 
 2. [Optional] Create the ray cluster
 ```bash
