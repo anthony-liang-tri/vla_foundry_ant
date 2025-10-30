@@ -1,31 +1,5 @@
-.venv/bin/torchrun --master_port 29502 --nproc_per_node=2 --nnodes=1 vla_foundry/main.py \
-  --model "include vla_foundry/config_presets/models/diffusion_policy.yaml" \
-  --model.clip.freeze_text_encoder True \
-  --model.transformer.is_causal True \
-  --data "include vla_foundry/config_presets/data/lbm_data_params.yaml" \
-  --data.dataset_manifest ["s3://tri-ml-datasets-uw2/vlm_datasets/preprocess_384_past1_future8_relative/lbm/BimanualPutRedBellPepperInBin/riverway/sim/shards/manifest.jsonl"] \
-  --data.dataset_statistics ["s3://tri-ml-datasets-uw2/vlm_datasets/preprocess_384_past1_future8_relative/lbm/BimanualPutRedBellPepperInBin/riverway/sim/shards/stats.json"] \
-  --data.dataset_weighting [1.0] \
-  --data.dataset_modality ["robotics"] \
-  --data.dataset_weighting [1.0] \
-  --data.image_size 224 \
-  --data.action_dim 20 \
-  --data.processor openai/clip-vit-base-patch32 \
-  --data.img_num_tokens 64 \
-  --data.allow_multiple_epochs True \
-  --data.num_workers 4 \
-  --data.seq_len 2048 \
-  --data.lowdim_past_timesteps 0 \
-  --data.lowdim_future_timesteps 4 \
-  --distributed.fsdp False \
-  --num_checkpoints 3 \
-  --hparams.precision amp_bf16 \
-  --hparams.loss_function mse \
-  --hparams.per_gpu_batch_size 16 \
-  --hparams.global_batch_size 32 \
-  --hparams.grad_clip_norm 1.0 \
-  --hparams.lr 5e-4 \
-  --hparams.lr_cooldown_end 1e-5 \
-  --remote_sync s3://tri-ml-datasets-uw2/lbm2_vla/model_checkpoints/diffusion_policy \
-  --total_train_samples 100000 \
-  --wandb True
+.venv/bin/torchrun --nproc_per_node=2 --nnodes=1 vla_foundry/main.py \
+--config_path vla_foundry/config_presets/training_jobs/diffusion_policy_bellpepper.yaml \
+--remote_sync s3://tri-ml-datasets-uw2/lbm2_vla/model_checkpoints/diffusion_policy \
+--num_checkpoints 5 \
+--total_train_samples 100000

@@ -18,13 +18,18 @@ Alternatively, Ray also works on local instances, so Steps 2 and 3 can be skippe
 ray start --head
 ```
 
-2. Create the ray cluster
+2. [Optional] Create the ray cluster
 ```bash
-# Edit ray_cluster_configs.yaml as needed
+####################
+# IMPORTANT: You may need to edit the following in ray_cluster_configs.yaml before running.
+# - tags, username, number of nodes, etc.
+# - file_mounts: It copies your HF token from ~/.cache/huggingface/token. Change this if it's somewhere else.
+# - rsync_exclude: It currently excludes rsyncing `.venv` and `wandb`. Add here if there are other paths you want to exclude (e.g. large checkpoints).
+####################
 ray up vla_foundry/data/scripts/ray_cluster_configs.yaml
 ```
 
-3. Attach the ray cluster. This will take you "inside" the cluster.
+3. [Optional] Attach the ray cluster. This will take you "inside" the cluster.
 ```bash
 ray attach vla_foundry/data/scripts/ray_cluster_configs.yaml
 ```

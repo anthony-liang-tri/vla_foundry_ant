@@ -23,6 +23,7 @@ VLA Foundry is a framework for training Vision-Language-Action models. We suppor
 - [Contributing Guidelines](#contributing-guidelines)
 - [Quickstart](#quickstart)
     - [Running on SageMaker](#running-on-sagemaker)
+- [Deployment Examples](#deployment-examples)
 - [Repo Structure and Implementation](#repo-structure-and-implementation)
   <ol type="1">
     <li><a href="#1-paramargument-structure">Param/Argument Structure</a></li>
@@ -71,7 +72,7 @@ An example command is something like this:
 --remote_sync s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/vlm_paligemma_3b
 ```
 
-See `./examples` for more examples. [llm_11m.sh](examples/training/llm_11m.sh) is a good place to start.
+See `./examples` for more examples. [llm_11m.sh](examples/training/llm_11m.sh) is a good place to start for the basic training loop, and [diffusion_policy.sh](examples/training/diffusion_policy.sh) is a good place to start for robotics training. We also have end-to-end exmaples in [tutorials](tutorials).
 
 ### Running on SageMaker
 Create a `secrets.env` file in the project's root directory:
@@ -93,6 +94,10 @@ uv run --group sagemaker sagemaker/launch_training.py \
 --sagemaker.instance_type p4de \
 --insert_experiment_arguments_here (no_need_for_sagemaker_prefix)
 ```
+
+## Deployment Examples
+For lightweight evaluation utilities and gRPC policy server templates, see
+`examples/deployment/lbm_eval/README.md`.
 
 ## Repo Structure and Implementation
 The sections below highlight several key design choices and functionalities of the repo.
