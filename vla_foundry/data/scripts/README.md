@@ -70,27 +70,29 @@ python vla_foundry/data/scripts/preprocessing/preprocess_untokenized_to_tar.py -
 This assumes that the HF dataset is already downloaded to S3.
 
 ```bash
-python vla_foundry/data/scripts/preprocessing/preprocess_lerobot_to_tar.py --dataset_path s3://tri-ml-datasets/hf_datasets/oxe_lerobot/droid_lerobot --s3_output_path s3://tri-ml-datasets/lbm2_datasets/droid_lerobot --tmp_dir /tmp --shard_size 2048
+source .venv/bin/activate && python vla_foundry/data/scripts/preprocessing/preprocess_robotics_to_tar.py \
+--source_type "lerobot" \
+--source_episodes "['s3://tri-ml-datasets/hf_datasets/pi_libero/']" \
+--output_dir s3://tri-ml-datasets/scratch/sedrick.keh/tmp/lerobotdata/pi_libero/ \
+--camera_names "['image', 'wrist_image']" \
+--samples_per_shard 100 \
+--config_path "vla_foundry/config_presets/data/robotics_preprocessing_params_1past_14future.yaml"
 ```
 
 # Converting LBM Spartan data to tar shards
 ```bash
-python vla_foundry/data/scripts/preprocessing/preprocess_lbm_to_tar.py \
-    --source_episodes "['s3://robotics-manip-lbm/efs/data/tasks/PickAndPlaceBox/cabot/sim/bc/teleop/2025-02-11T17-04-00-05-00/']" \
-    --output_dir s3://tri-ml-datasets-uw2/preprocess_lbm_test/lbm/PickAndPlaceBox/cabot/sim/ \
-    --language_annotations_path vla_foundry/config_presets/data/lbm_language_annotations.yaml \
-    --camera_discard_keys "include vla_foundry/config_presets/data/lbm_data_discard_key.yaml" \
-    --camera_names "include vla_foundry/config_presets/data/lbm_data_camera_names.yaml" \
-    --past_lowdim_steps 1 \
-    --future_lowdim_steps 14 \
-    --image_indices "[-1, 0]" \
-    --max_padding_left 1 \
-    --max_padding_right 15 \
-    --samples_per_shard 1 \
-    --max_episodes_to_process 5 \
-    --jpeg_quality 95 \
-    --filter_still_samples False \
-    --no_statistics False \
-    --still_threshold 0.05 \
-    --resize_images_size "[224, 224]"
+python vla_foundry/data/scripts/preprocessing/preprocess_robotics_to_tar.py \
+--source_type "spartan" \
+--source_episodes "[
+    's3://robotics-manip-lbm/efs/data/tasks/BimanualPutRedBellPepperInBin/riverway/sim/bc/teleop/2025-01-02T10-49-28-05-00/',
+    's3://robotics-manip-lbm/efs/data/tasks/BimanualPutRedBellPepperInBin/riverway/sim/bc/teleop/2025-01-02T14-21-19-05-00/',
+    's3://robotics-manip-lbm/efs/data/tasks/BimanualPutRedBellPepperInBin/riverway/sim/bc/teleop/2025-01-06T08-58-31-05-00/',
+    ]" \
+--output_dir s3://tri-ml-datasets/scratch/sedrick.keh/tmp/lbmdata/bimanualputredbellpepperinbin3/ \
+--data_discard_keys "include vla_foundry/config_presets/data/lbm/lbm_data_discard_key.yaml" \
+--camera_names "include vla_foundry/config_presets/data/lbm/lbm_data_camera_names.yaml" \
+--language_annotations_path vla_foundry/config_presets/data/lbm/lbm_language_annotations.yaml \
+--action_fields_config_path vla_foundry/config_presets/data/lbm/lbm_action_fields.yaml \
+--samples_per_shard 100 \
+--config_path "vla_foundry/config_presets/data/robotics_preprocessing_params_1past_14future.yaml" \
 ```

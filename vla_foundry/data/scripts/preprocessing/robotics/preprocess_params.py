@@ -1,26 +1,7 @@
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional
 
 from vla_foundry.params.base_params import BaseParams
-
-
-@dataclass
-class SampleMetadata:
-    """Metadata for each preprocessed sample."""
-
-    episode_id: str
-    sample_id: str
-    anchor_timestep: Optional[int]
-    anchor_relative_idx: Optional[int]
-    image_timesteps: List[int]
-    lowdim_start_timestep: int
-    lowdim_end_timestep: int
-    past_padding: int
-    future_padding: int
-    camera_names: List[str]
-    original_episode_length: int
-    original_image_sizes: Dict[str, Tuple[int, int]]
-    is_padded: bool
 
 
 @dataclass(frozen=True)
@@ -28,6 +9,7 @@ class PreprocessParams(BaseParams):
     """Dataclass for preprocessing configuration parsed by draccus."""
 
     # Core I/O
+    source_type: str = field(default=None)
     source_episodes: Optional[List[str]] = field(default=None)
     output_dir: Optional[str] = field(default=None)
 
@@ -44,13 +26,13 @@ class PreprocessParams(BaseParams):
     filter_still_samples: bool = field(default=False)
     still_threshold: float = field(default=0.01)
 
-    # Cameras
+    # Field names
     camera_names: Optional[List[str]] = field(default=None)
-    camera_discard_keys: Optional[List[str]] = field(default=None)
+    data_discard_keys: Optional[List[str]] = field(default=None)
 
-    # Sharding / compression
-    samples_per_shard: int = field(default=1)
-    jpeg_quality: int = field(default=95)
+    # Sharding / parallelism
+    samples_per_shard: int = field(default=128)
+    num_workers: int = field(default=20)
 
     # Runtime
     max_episodes_to_process: int = field(default=-1)
@@ -65,16 +47,24 @@ class PreprocessParams(BaseParams):
 
     # Image preprocessing
     resize_images_size: List[int] = field(default=None)
+    jpeg_quality: int = field(default=95)
 
     # Language annotations
     language_annotations_path: str = field(
-        default="vla_foundry/config_presets/data/lbm_language_annotations.yaml",
+        default="vla_foundry/config_presets/data/lbm/lbm_language_annotations.yaml",
     )
 
     action_fields_config_path: str = field(
-        default="vla_foundry/config_presets/data/lbm_action_fields.yaml",
+        default="vla_foundry/config_presets/data/lbm/lbm_action_fields.yaml",
     )
 
     # Ray configuration
     ray_address: str = field(default=None)  # Ray cluster address, default to auto-detect
     ray_num_cpus: int = field(default=None)  # Number of CPUs for Ray, default to auto-detect
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        # Validate required paths
+        assert self.source_episodes is not None, "--source_episodes is required (or set in config_path)"
+        assert self.output_dir is not None, "--output_dir is required (or set in config_path)"

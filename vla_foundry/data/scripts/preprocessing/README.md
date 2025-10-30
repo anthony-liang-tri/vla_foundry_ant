@@ -1,42 +1,46 @@
-The following README specifially discusses the file [preprocess_lbm_to_tar.py](preprocess_lbm_to_tar.py). For a more general README, please see the [README in the scripts folder](./../README.md).
+The following README specifially discusses the robotics data preprocessing file [preprocess_robotics_to_tar.py](preprocess_robotics_to_tar.py). For a more general README, please see the [README in the scripts folder](./../README.md).
 
-# LBM Data Preprocessing
+# Robotics Data Preprocessing
+Because we may want robotics data from different sources, we create a unified structure and a unified script to handle the preprocessing. This lets us avoid having to reimplement certain functionalities like ray parallelism. Instead, these functionalities are shared, and the dataset-specific processing logic is moved to the individual converters inside [robotics/converters](robotics/converters/).
 
-This folder containts python files to preprocess LBM data and convert them to various formats. In general, these scripts convert processed robotics demonstration data from S3 storage into WebDataset tar files or LeRobot formats for VLA Foundry training. This tool takes episodic robot data (images, actions, observations) and packages them into training-ready format with temporal sequences and language annotations. Note that this README and this folder is still under development and will be updated frequently with additional support and documentation being added. 
+## 1. Converters
+To select which dataset format to use, you can use the `--source_type` argument. This will route your script to the correct converter class for your dataset. 
 
-## What it does
+All converter classes inherit from the base class `BaseRoboticsConverter`. The [preprocess_robotics_to_tar.py](preprocess_robotics_to_tar.py) interfaces with converter objects by calling methods such as `discover_episodes` and `process_episode`. 
 
-This preprocessor transforms robotics episodes stored in S3 into structured training datasets by:
+### 1.1 Adding a New Dataset Source
+To support a new dataset source, create a new class inside `converters`, register your class in `converters/__init__.py`, then define the following methods (`converters/base.py` also provides some docstring guides for how to populate these methods).
+- `discover_episodes`: Given a list of paths, return a list of full paths for each episode.
+- `process_episode`: This is pre-filled in `base.py` with the logic to extract the necessary fields, as well as the parallelism for uploading. The functioning of this method depends on the other methods listed below. For most cases, you probably will not need to touch this specific function, and it should work properly once all the other methods are defined. 
+- `load_episode_data`: Takes in `episode_path` and reads it, then extracts and returns `episode_data`. This `episode_data` is what is passed to the other functions to extract from, so this `episode_data` return format can be any format you wish.
+    - `get_episode_length`: Takes in `episode_data`. Returns length of episode.
+    - `extract_camera_data`: Takes in `episode_data` then extracts out the image data and returns a dict. The result is passed as an argument to `extract_sample_data` later on.
+    - `extract_lowdim_data`: Same as above but for lowdim.
+    - `extract_intrinsics_extrinsics_data`: Same as above but for intrinsics and extrinsics. Can return `None` if these are not present.
+    - `extract_metadata_data`: Same as above but for metadata. 
+- `extract_sample_data`: The previously defined `extract_*_data` functions contain data for all the timesteps. This function takes in `anchor_timesteps` and uses it to extract the data relevant to the current frame. It returns `sample_images`, `sample_lowdim`, `sample_metadata`, and `language_instructions`, which correspond to the fields in our output tar shards.
 
-- **Creating temporal sequences (aka action chunks)**: Extracts past/future timesteps which can be flexibly defined
-- **Multi-modal packaging**: Combines camera images, low-dimensional sensor data, and robot actions
-- **Language annotation**: Adds task-specific natural language instructions from YAML files
-- **Data filtering (Optional)**: Removes static/motionless samples and handles padding constraints
-- **WebDataset format**: Outputs compressed tar shards compatible with VLA Foundry training pipeline
-- **LeRobot format**: Outputs compressed tar shards compatible with VLA Foundry training pipeline
+For examples on how to fill out these methods above, see [robotics/converters/spartan.py](robotics/converters/spartan.py) and [robotics/converters/lerobot.py](robotics/converters/lerobot.py)
 
-It works by running two sets of Ray parallel jobs.
-1. First, it will process each file individually and create frames on s3. Each frame of each episode will have its own tar shard. These episodes will all be in the same bucket and be called episode\_{X}\_frame\_{Y}.tar. In terms of parallelism, each worker will be assigned one episode to process.
-2. List out all tar shards generated in the previous step. Randomly shuffle and group together by shard\_size. Each worker is assigned one shard and will untar the component frames, combine the contents, then tar them back.
 
-The `stats.json` is built up by the workers of Step 1, and the `manifest.jsonl` is built up by the workers of Step 2.
+### 1.2 Preprocessing Parameters
+The `preprocess_robotics_to_tar.py` file reads parameters from the `PreprocessParams` class from [robotics/preprocess_params.py](robotics/preprocess_params.py). This inherits from the `BaseParams` class, and parsing is done with the `draccus` parser. These `PreprocessParams` is passed to the `BaseRoboticsConverter` initializer, and can be accessed by calling `self.cfg`. As such, the `PreprocessParams` class is shared between the different dataset formats (spartan, LeRobot, etc.) There might come a point in the future when we want to have subclasses that inherit from PreprocessParams, but currently the fields in that class are exhaustive enough to cover our datasets.
 
-## Input Data Format
 
-Expects processed episodes in S3 with this structure:
-```
-s3://bucket/path/to/episode/
-└── processed/
-    ├── metadata.yaml          # Episode metadata
-    ├── observations.npz       # Multi-modal observations
-    ├── actions.npz           # Robot actions (optional)
-    ├── intrinsics.npz        # Camera calibration (optional)
-    └── extrinsics.npz        # Camera extrinsics (optional)
-```
+## 2. Parallelism
+We use Ray for parallelism. For a guide on how to use Ray, see the [README in the scripts folder](./../README.md). Luckily, these are already defined in `preprocess_robotics_to_tar.py` and in the `BaseRoboticsConverter` class, so for adding new data sources, you will not need to deal with Ray and can instead focus on defining the preprocessing logic in the converters classes. 
 
-## Output Format (VLA Foundry tar shards)
+Within each Ray node, we also use ThreadPoolExecutor to speed up the processing and uploading. Once again, this has already been handled in the `BaseRoboticsConverter` class.
 
-Generates WebDataset tar files:
+The preprocessing happens through two Ray phases. In the first phase, we read the path to a raw unprocessed episode, then create one tar shard per timestep per episode. This phase is where most of the preprocessing logic is done. In the second phase, we gather all the timestep tars from the previous phase, and we shard them into grouped shards according to the parameter `samples_per_shard`. Both phases are done with Ray remote functions.
+
+
+## 3. Statistics Computation
+Statistics computation is done in [robotics/preprocess_statistics.py](robotics/preprocess_statistics.py). The `preprocess_robotics_to_tar.py` creates a Ray actor object, which is passed as an argument when the converter classes run the preprocessing. This class contains running tallies of various fields, together with running percentages. At the end of everything, we call `statistics_ray_actor.get_statistics.remote()`, which computes and returns the final statistics. These are uploaded as `stats.json` in the `output_dir/shards` folder.
+
+
+## 4. Input and Output Structure
+The output format is as follows:
 ```
 output_directory/
 ├── episode_{X}_frame_{Y}.tar     # Intermediate tar shards
@@ -44,71 +48,26 @@ output_directory/
 └── shards
     ├── shard_000000.tar          # Training data shards
     ├── shard_000001.tar
-    ├── manifest.jsonl            # Shard index
+    ├── manifest.jsonl            # Tallies for shard indices and counts
     └── stats.json                # Dataset statistics
+  ```
+
+**Inside each shard (e.g., shard_00000.tar):**
 ```
-
-## Basic Usage
-
-Note Ray doesn't work well with `uv run` right now. You can still use the uv requirements with with `source .venv/bin/activate`.
-
-```bash
-python vla_foundry/data/scripts/preprocessing/preprocess_lbm_to_tar.py \
-    --source_episodes "['s3://robotics-manip-lbm/efs/data/tasks/PickAndPlaceBox/cabot/sim/bc/teleop/2025-02-11T17-04-00-05-00/']" \
-    --output_dir s3://tri-ml-datasets-uw2/scratch/tmp/lbmpreprocess \
-    --past_lowdim_steps 1 \
-    --future_lowdim_steps 14 \
-    --image_indices "[-1, 0]" \
-    --stride 1 \
-    --max_padding_left 3 \
-    --max_padding_right 15 \
-    --padding_strategy copy \
-    --filter_still_samples False \
-    --still_threshold 0.05 \
-    --camera_discard_keys "include vla_foundry/config_presets/data/lbm_data_discard_key.yaml" \
-    --camera_names "include vla_foundry/config_presets/data/lbm_data_camera_names.yaml" \
-    --samples_per_shard 100 \
-    --jpeg_quality 95 \
-    --max_episodes_to_process -1 \
-    --fail_on_nan True \
-    --skip_git_tagging False \
-    --resize_images_size "[224, 224]"
+├── (unique_id_1).lowdim.npz
+├── (unique_id_1).camera_name_{1,2,...n}.jpg
+├── (unique_id_1).language_instructions.json
+├── (unique_id_1).metadata.json
+└── ...
 ```
+- `lowdim.npz` is a dict. 
+    - It MUST contain the following keys
+        - `past_mask`
+        - `future_mask`
+    - It will also contain the keys that will be used to construct the actions, proprioceptions, intrinsics, and extrinsics. 
+- `language_instructions.json` should be a dict with keys in set ["original", "randomized", "verbose", "alternative"]
+- The key names in the `lowdim.npz` dict should also exist as keys in `stats.json`
 
-## Key Configuration
 
-The full list of options and parameters for converting from *processed* LBM data to VLA Foundry shards can be found in `params.py`. 
+We don't have any restrictions on the input format. As long as the converter classes can handle the preprocessing for its corresponding data sources, then any input format is fine.
 
-### Temporal Windows
-- `--past_lowdim_steps`: Past timesteps for low-dim data (default: 2)
-- `--future_lowdim_steps`: Future timesteps for low-dim data (default: 14)  
-- `--image_indices`: Image timestep offsets (default: [-2, 0])
-
-### Data Processing
-- `--resize_images_size`: Target image size [height, width] (default: [256, 342])
-- `--padding_strategy`: How to pad sequences - "copy", "zero", "reflect" (default: "copy")
-- `--filter_still_samples`: Remove static samples (default: True)
-- `--samples_per_shard`: Samples per tar file (default: 1)
-
-### Language Annotations
-
-Language instructions are loaded from YAML:
-```yaml
-language_dict:
-  TaskName:
-    original:
-      - "Pick up the box and place it on the table"
-    randomized:
-      - "Place the box on the table"
-      - "Move the box to the table surface"
-```
-
-## Sample Structure
-
-Each processed sample contains:
-- **Images**: Multi-camera views at specified timesteps
-- **Low-dimensional data**: Joint positions, poses, sensor readings in temporal sequences
-- **Actions**: Robot action sequences
-- **Language instructions**: Task descriptions in multiple formats
-- **Metadata**: Timing, padding, and provenance information
-- **Camera calibration**: Intrinsics/extrinsics for the sequence timespan

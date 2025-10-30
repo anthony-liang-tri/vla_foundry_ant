@@ -5,6 +5,30 @@ import numpy as np
 import ray
 
 
+@ray.remote
+class LoggerActor:
+    def __init__(self):
+        self.total_potential_samples = 0
+        self.still_samples_filtered = 0
+        self.padding_samples_filtered = 0
+
+    def get_values(self):
+        return {
+            "total_potential_samples": self.total_potential_samples,
+            "still_samples_filtered": self.still_samples_filtered,
+            "padding_samples_filtered": self.padding_samples_filtered,
+        }
+
+    def increment_total_potential_samples(self):
+        self.total_potential_samples += 1
+
+    def increment_still_samples_filtered(self):
+        self.still_samples_filtered += 1
+
+    def increment_padding_samples_filtered(self):
+        self.padding_samples_filtered += 1
+
+
 class StreamingDatasetStatistics:
     """Thread-safe memory-efficient streaming statistics computation."""
 

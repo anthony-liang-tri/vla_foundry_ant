@@ -44,7 +44,7 @@ from vla_foundry.data.robotics.utils import (
 )
 from vla_foundry.params.data_params import RoboticsDataParams
 
-ACTION_FIELDS_CONFIG_PATH = "vla_foundry/config_presets/data/lbm_action_fields.yaml"
+ACTION_FIELDS_CONFIG_PATH = "vla_foundry/config_presets/data/lbm/lbm_action_fields.yaml"
 
 
 def build_action_field_lookup(action_field_keys: List[str]) -> Dict[str, Optional[str]]:

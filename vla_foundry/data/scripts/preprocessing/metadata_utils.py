@@ -1,8 +1,18 @@
+### These functions are used to create metadata for preprocessing robotics data.
+
 import ast
 import datetime
+import hashlib
 import os
+import platform
 import subprocess
-from typing import Dict, List, Optional, Tuple
+import sys
+from typing import Any, Dict, List, Optional, Tuple
+
+import fsspec
+from draccus.parsers import encoding as _draccus_encoding
+
+from vla_foundry.data.scripts.preprocessing.robotics.preprocess_params import PreprocessParams
 
 
 def find_repo_root(start_path):
@@ -392,3 +402,175 @@ def get_git_info(auto_tag: bool = True) -> Dict[str, str]:
         git_info["remote_url"] = "unknown"
 
     return git_info
+
+
+def get_source_data_info(source_path: str, episodes: List[str]) -> Dict[str, str]:
+    """Get information about the source data."""
+    source_info = {
+        "source_path": source_path,
+        "num_episodes": len(episodes),
+        "episode_paths": episodes[:10],  # Store first 10 for reference
+        "total_episodes_available": len(episodes),
+    }
+
+    # Try to get modification times of some episodes for data versioning
+    try:
+        fs, _ = fsspec.core.url_to_fs(source_path)
+        sample_episodes = episodes[:3]  # Check first 3 episodes
+        mod_times = []
+
+        for episode in sample_episodes:
+            try:
+                if source_path.startswith("s3://"):
+                    # For S3, try to get object info
+                    fs_path = episode[5:] if episode.startswith("s3://") else episode
+                    info = fs.info(fs_path)
+                    if "LastModified" in info:
+                        mod_times.append(info["LastModified"].isoformat())
+                else:
+                    # For local files
+                    stat = fs.stat(episode)
+                    mod_times.append(datetime.datetime.fromtimestamp(stat["mtime"]).isoformat())
+            except Exception:
+                continue
+
+        source_info["sample_episode_modification_times"] = mod_times
+
+        # Create a simple hash of episode paths for data version tracking
+        episode_hash = hashlib.md5("\n".join(sorted(episodes)).encode()).hexdigest()
+        source_info["episode_list_hash"] = episode_hash
+
+    except Exception as e:
+        source_info["source_data_info_error"] = str(e)
+
+    return source_info
+
+
+def create_processing_metadata(args: PreprocessParams, episodes: List[str]) -> Dict[str, Any]:
+    """Create comprehensive metadata about the processing run."""
+
+    # Get command line information
+    command_line = {
+        "script_name": sys.argv[0],
+        "full_command": " ".join(sys.argv),
+        "arguments": _draccus_encoding.encode(args),
+    }
+
+    # Get environment information
+    environment = {
+        "python_version": sys.version,
+        "platform": platform.platform(),
+        "hostname": platform.node(),
+        "processor": platform.processor(),
+        "python_executable": sys.executable,
+        "working_directory": os.getcwd(),
+        "user": os.environ.get("USER", "unknown"),
+        "timestamp_captured": datetime.datetime.now().isoformat(),
+    }
+
+    # Get git information (skip if testing flag is set)
+    if args.skip_git_tagging:
+        git_info = {"skip_git_tagging": True, "commit_hash": "test", "branch": "test"}
+    else:
+        git_info = get_git_info(auto_tag=args.auto_tag)
+
+    # Get source data information
+    source_data_info = get_source_data_info(args.source_episodes, episodes)
+
+    # Package versions (try to get key dependencies)
+    try:
+        # Use modern importlib.metadata instead of deprecated pkg_resources
+        try:
+            from importlib.metadata import PackageNotFoundError, version
+        except ImportError:
+            # Fallback for Python < 3.8
+            from importlib_metadata import PackageNotFoundError, version
+
+        key_packages = ["numpy", "fsspec", "PIL", "tqdm", "boto3", "webdataset"]
+        package_versions = {}
+        for pkg in key_packages:
+            try:
+                # Handle special case for PIL package name
+                pkg_name = "Pillow" if pkg == "PIL" else pkg
+                package_versions[pkg] = version(pkg_name)
+            except PackageNotFoundError:
+                package_versions[pkg] = "not_found"
+            except Exception:
+                package_versions[pkg] = "unknown"
+        environment["package_versions"] = package_versions
+    except ImportError:
+        # If importlib.metadata is not available, fall back gracefully
+        environment["package_versions"] = "unavailable_importlib_metadata_missing"
+    except Exception:
+        environment["package_versions"] = "unavailable"
+
+    # Create reproducibility instructions based on git state
+    reproducibility_notes = []
+
+    if git_info.get("preprocessing_tag"):
+        # If we created a tag, use that for reproduction
+        reproducibility_notes.extend(
+            [
+                f"EXACT REPRODUCTION: Use git tag '{git_info['preprocessing_tag']}'",
+                "Commands to reproduce:",
+                f"  git clone {git_info.get('remote_url', 'REPO_URL')}",
+                f"  git checkout {git_info['preprocessing_tag']}",
+                f"  {command_line['full_command']}",
+                "",
+                "This tag captures the exact code state including uncommitted changes used for this dataset.",
+            ]
+        )
+    elif git_info.get("has_uncommitted_changes"):
+        # If there are uncommitted changes but no tag was created
+        reproducibility_notes.extend(
+            [
+                f"WARNING: Dataset created with uncommitted changes to commit {git_info.get('commit_hash', 'unknown')}",
+                "For exact reproduction, the following files had uncommitted changes:",
+            ]
+        )
+        for file in git_info.get("preprocessing_related_files", []):
+            reproducibility_notes.append(f"  - {file}")
+        reproducibility_notes.extend(
+            [
+                "",
+                "Basic reproduction (may differ due to uncommitted changes):",
+                f"  git clone {git_info.get('remote_url', 'REPO_URL')}",
+                f"  git checkout {git_info.get('commit_hash', 'COMMIT_HASH')}",
+                f"  {command_line['full_command']}",
+            ]
+        )
+    else:
+        # Clean state - straightforward reproduction
+        reproducibility_notes.extend(
+            [
+                "CLEAN REPRODUCTION: No uncommitted changes",
+                "Commands to reproduce:",
+                f"  git clone {git_info.get('remote_url', 'REPO_URL')}",
+                f"  git checkout {git_info.get('commit_hash', 'COMMIT_HASH')}",
+                f"  {command_line['full_command']}",
+            ]
+        )
+
+    reproducibility_notes.extend(
+        [
+            "",
+            "Additional requirements:",
+            "- Ensure the source data at the specified paths is unchanged (check episode_list_hash)",
+            "- Use the same package versions if possible for identical results",
+            "- Use the same hardware/OS for identical performance characteristics",
+        ]
+    )
+
+    # Combine all metadata
+    metadata = {
+        "metadata_version": "1.0",
+        "created_at": datetime.datetime.now().isoformat(),
+        "command_line": command_line,
+        "environment": environment,
+        "git_info": git_info,
+        "source_data": source_data_info,
+        "processing": {},
+        "reproducibility_notes": reproducibility_notes,
+    }
+
+    return metadata

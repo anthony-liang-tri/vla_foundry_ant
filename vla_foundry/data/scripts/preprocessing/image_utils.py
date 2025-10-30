@@ -1,5 +1,4 @@
 import io
-from functools import lru_cache
 from typing import Tuple
 
 import numpy as np
@@ -13,12 +12,6 @@ def init_jpeg_encoder(quality: int = 95):
     """Initialize global JPEG encoder settings."""
     global _jpeg_quality
     _jpeg_quality = quality
-
-
-@lru_cache(maxsize=32)
-def get_pil_image_cached(shape: Tuple[int, int], mode: str = "RGB"):
-    """Cache PIL Image objects to reduce allocation overhead."""
-    return Image.new(mode, shape)
 
 
 def image_to_bytes(
