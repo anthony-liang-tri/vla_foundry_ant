@@ -8,6 +8,8 @@ experiments
 outputs
 results
 sagemaker/configs/
+tmp/
+debug_logs/
 
 # System files
 **/.DS_Store

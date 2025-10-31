@@ -99,7 +99,7 @@ def main():
     # Create data loader and load samples default
     if args.model_predictions_path is None:
         # Load data using direct file access
-        config_path = "vla_foundry/config_presets/data/lbm_data_params.yaml"
+        config_path = "vla_foundry/config_presets/data/lbm/lbm_data_params.yaml"
         with fsspec.open(config_path, "r") as f:
             config_dict = yaml.safe_load(f)
 

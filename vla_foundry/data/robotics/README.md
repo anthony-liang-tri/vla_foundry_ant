@@ -32,7 +32,7 @@ dataset_directory_in_s3/
 
 **Sample yaml config**
 
-In the main launcher / command line, you can use the flag `--data "include vla_foundry/config_presets/data/lbm_data_params.yaml"`
+In the main launcher / command line, you can use the flag `--data "include vla_foundry/config_presets/data/lbm/lbm_data_params.yaml"`
 
 Below is what a sample yaml file would look like (with some lines removed for clarity).
 
@@ -80,15 +80,15 @@ normalization:
   scope: global
   epsilon: 1e-8
 ```
-The full file can be found in [vla_foundry/config_presets/data/lbm_data_params.yaml](/vla_foundry/config_presets/data/lbm_data_params.yaml)
+The full file can be found in [vla_foundry/config_presets/data/lbm/lbm_data_params.yaml](/vla_foundry/config_presets/data/lbm/lbm_data_params.yaml)
 
 ## 2. Action and Proprioception
-The `RoboticsDataParams` class has attributes `action_fields` and `proprioception_fields` which take in lists. The contents of these lists should exist as keys in `lowdim.npz`, and the `RoboticsProcessor.add_action_and_proprioception_fields` function will parse these fields and extract their contents to create the action and proprioception tensors. For examples on how to specify these, see `vla_foundry/config_presets/data/lbm_data_params.yaml`.
+The `RoboticsDataParams` class has attributes `action_fields` and `proprioception_fields` which take in lists. The contents of these lists should exist as keys in `lowdim.npz`, and the `RoboticsProcessor.add_action_and_proprioception_fields` function will parse these fields and extract their contents to create the action and proprioception tensors. For examples on how to specify these, see `vla_foundry/config_presets/data/lbm/lbm_data_params.yaml`.
 
 For LeRobot converted data, the `action_fields` is usually a single-element list with the element `actions`. 
 
 ## 3. Intrinsics and Extrinsics
-These are optional. They are used for the visualization scripts but are not used during training. Similar to the action and proprioception fields above, the `RoboticsDataParams` class also has attributes `intrinsics_fields` and `extrinsics_fields`. Once again, for examples on how to specify these, see `vla_foundry/config_presets/data/lbm_data_params.yaml`.
+These are optional. They are used for the visualization scripts but are not used during training. Similar to the action and proprioception fields above, the `RoboticsDataParams` class also has attributes `intrinsics_fields` and `extrinsics_fields`. Once again, for examples on how to specify these, see `vla_foundry/config_presets/data/lbm/lbm_data_params.yaml`.
 
 
 ## 4. Normalization
