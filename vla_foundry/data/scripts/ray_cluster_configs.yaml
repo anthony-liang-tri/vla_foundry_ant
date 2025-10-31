@@ -75,7 +75,7 @@ setup_commands:
 
 head_setup_commands:
     - source /home/ubuntu/vla_foundry/.venv/bin/activate && ray stop --force || true
-    - source /home/ubuntu/vla_foundry/.venv/bin/activate && ray start --head --port=6379 --dashboard-host=0.0.0.0
+    - source /home/ubuntu/vla_foundry/.venv/bin/activate && ray start --head --port=6379 --dashboard-host=0.0.0.0 --include-dashboard=true
 
 worker_setup_commands:
     - source /home/ubuntu/vla_foundry/.venv/bin/activate && ray stop --force || true
