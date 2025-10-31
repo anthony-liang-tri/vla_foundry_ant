@@ -48,6 +48,7 @@ class NormalizationParams(BaseParams):
     scope: str = field(default="global")  # "global" or "per_timestep"
     epsilon: float = field(default=1e-8)
     include_fields: list[str] = field(default_factory=list)
+    centered_norm: bool = field(default=False)
 
     # Field-specific configurations (initialized in __post_init__)
     field_configs: Dict[str, FieldNormalizationParams] = field(default_factory=dict)
@@ -63,6 +64,7 @@ class NormalizationParams(BaseParams):
             "scope": self.scope,
             "epsilon": self.epsilon,
             "include_fields": self.include_fields,
+            "centered_norm": self.centered_norm,
             "field_configs": {k: v.to_dict() for k, v in self.field_configs.items()},
             "lowdim_past_timesteps": self.lowdim_past_timesteps,
             "lowdim_future_timesteps": self.lowdim_future_timesteps,

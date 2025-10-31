@@ -43,3 +43,4 @@ normalization:
   method: percentile_1_99
   scope: global
   epsilon: 1e-2
+  centered_norm: true

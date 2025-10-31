@@ -70,6 +70,7 @@ class RoboticsNormalizer:
         self.scope = self.normalization_params.scope
         self.field_configs = self.normalization_params.field_configs
         self.include_fields = self.normalization_params.include_fields
+        self.centered_norm = self.normalization_params.centered_norm
 
         logging.info(f"RoboticsNormalizer initialized: method={self.method}, scope={self.scope}")
 
@@ -217,9 +218,12 @@ class RoboticsNormalizer:
             else:
                 raise ValueError(f"Invalid normalization method: {method}")
 
+        if self.centered_norm and ("percentile" in method or "min_max" in method):
+            center = center + 0.5 * scale
+            scale = scale * 0.5
+
         # Avoid division by zero
         scale = torch.clamp(scale, min=epsilon)
-
         return center, scale
 
     def normalize_tensor(
