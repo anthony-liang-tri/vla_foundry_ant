@@ -97,6 +97,7 @@ class VLMParams(ModelParams):
     image_token_id: int = field(default=None)
 
     def init_shared_attributes(self, cfg):
+        super().init_shared_attributes(cfg)
         # Prefer computing special ids from the processor/tokenizer rather than requiring user input
         # 1) Resolve processor once (reuse if already loaded on data params)
         processor = getattr(cfg.data, "processor_loaded", None)

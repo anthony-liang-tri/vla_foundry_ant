@@ -1,4 +1,5 @@
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, fields
 
 import draccus
@@ -32,7 +33,19 @@ class BaseParams:
         return getattr(self, key, default)
 
     def init_shared_attributes(self, cfg):
-        pass
+        for field_info in fields(self):
+            field_value = getattr(self, field_info.name)
+            self._init_child_shared_attributes(field_value, cfg)
+
+    def _init_child_shared_attributes(self, value, cfg):
+        if isinstance(value, BaseParams):
+            value.init_shared_attributes(cfg)
+        elif isinstance(value, Mapping):
+            for item in value.values():
+                self._init_child_shared_attributes(item, cfg)
+        elif isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+            for item in value:
+                self._init_child_shared_attributes(item, cfg)
 
     @classmethod
     def from_file(cls, file_path):

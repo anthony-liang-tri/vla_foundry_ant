@@ -179,4 +179,3 @@ class RoboticsDataParams(DataParams):
                 object.__setattr__(self, "processor", cfg.model.hf_pretrained)
             elif hasattr(cfg.model, "vlm_params") and hasattr(cfg.model.vlm_params, "hf_pretrained"):
                 object.__setattr__(self, "processor", cfg.model.vlm_params.hf_pretrained)
-        self.normalization.init_shared_attributes(cfg)

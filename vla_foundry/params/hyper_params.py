@@ -53,4 +53,5 @@ class HyperParams(BaseParams):
         return self.global_batch_size // combined_batch_size
 
     def init_shared_attributes(self, cfg):
+        super().init_shared_attributes(cfg)
         object.__setattr__(self, "world_size", cfg.distributed.world_size)

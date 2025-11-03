@@ -35,4 +35,5 @@ class DataParams(draccus.ChoiceRegistry, BaseParams):
             object.__setattr__(self, "type", getattr(self.__class__, "_type", None))
 
     def init_shared_attributes(self, cfg):
+        super().init_shared_attributes(cfg)
         object.__setattr__(self, "seed", cfg.hparams.seed)

@@ -55,10 +55,7 @@ class TrainExperimentParams(BaseParams):
         super().__post_init__()
 
         # Allow sub-params to read the full config and set shared/derived fields.
-        self.data.init_shared_attributes(self)
-        self.distributed.init_shared_attributes(self)
-        self.hparams.init_shared_attributes(self)
-        self.model.init_shared_attributes(self)
+        self.init_shared_attributes(self)
 
         # Mutual exclusivity check for training budget specification.
         if self.num_epochs is not None and self.total_train_samples is not None:
