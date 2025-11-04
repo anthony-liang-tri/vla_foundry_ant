@@ -85,7 +85,7 @@ def upload_sample_to_s3(
 
     tar_buffer.seek(0)
     bucket_name, s3_prefix = output_dir.removeprefix("s3://").split("/", 1)
-    s3_key = f"{s3_prefix.rstrip('/')}/{episode_id}_frame_{frame_idx}.tar"
+    s3_key = f"{s3_prefix.rstrip('/')}/episodes/{episode_id}_frame_{frame_idx}.tar"
     s3_client.upload_fileobj(tar_buffer, bucket_name, s3_key)
     print(f"Uploaded {bucket_name.rstrip('/')}/{s3_key}", flush=True)
     return s3_key.split("/")[-1]
@@ -131,7 +131,7 @@ def create_shard(shard_files: List[str], shard_idx: int, output_dir: str) -> str
     def download_tar(s3_key):
         """Download a single tar file from S3."""
         obj_buffer = io.BytesIO()
-        full_key = f"{s3_prefix.rstrip('/')}/{s3_key}"
+        full_key = f"{s3_prefix.rstrip('/')}/episodes/{s3_key}"
         s3_client.download_fileobj(bucket_name, full_key, obj_buffer)
         obj_buffer.seek(0)
         return (s3_key, obj_buffer)

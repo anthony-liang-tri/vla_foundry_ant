@@ -1,4 +1,5 @@
 import datetime
+import os
 import random
 
 import draccus
@@ -24,7 +25,8 @@ def main():
     cfg = draccus.parse(config_class=PreprocessParams)
 
     # Safety check: ensure output directory doesn't have existing preprocessing outputs
-    existing_episode_files = check_directory_has_files_with_prefix(cfg.output_dir, "episode_")
+    episodes_dir = os.path.join(cfg.output_dir, "episodes")
+    existing_episode_files = check_directory_has_files_with_prefix(episodes_dir, "episode_")
     if existing_episode_files:
         error_msg = (
             f"❌ ERROR: Output directory is not empty!\n"

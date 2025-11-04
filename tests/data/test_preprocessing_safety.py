@@ -29,7 +29,7 @@ class TestPreprocessRoboticsToTarSafety:
 
         assert "Output directory is not empty" in str(exc_info.value)
         assert "episode_001.tar" in str(exc_info.value)
-        mock_check_dir.assert_called_once_with("s3://bucket/output", "episode_")
+        mock_check_dir.assert_called_once_with("s3://bucket/output/episodes", "episode_")
 
     @patch("vla_foundry.data.scripts.preprocessing.preprocess_robotics_to_tar.get_converter")
     @patch("vla_foundry.data.scripts.preprocessing.preprocess_robotics_to_tar.check_directory_has_files_with_prefix")
@@ -64,4 +64,4 @@ class TestPreprocessRoboticsToTarSafety:
             # It's ok if it fails later, we just want to ensure it didn't fail on our safety check
             assert "Output directory is not empty" not in str(e)
 
-        mock_check_dir.assert_called_once_with("s3://bucket/output", "episode_")
+        mock_check_dir.assert_called_once_with("s3://bucket/output/episodes", "episode_")
