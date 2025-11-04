@@ -23,7 +23,7 @@ class BaseRoboticsConverter:
 
     def __init__(self, cfg):
         self.cfg = cfg
-        self.resize_images_size = cfg.resize_images_size if cfg.resize_images_size is not None else [224, 224]
+        self.resize_images_size = cfg.resize_images_size if cfg.resize_images_size is not None else [384, 384]
         self.image_indices = sorted(cfg.image_indices) if cfg.image_indices is not None else [-1, 0]
 
         # Initialize JPEG encoder

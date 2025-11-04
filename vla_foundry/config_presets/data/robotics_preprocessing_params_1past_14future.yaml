@@ -14,5 +14,5 @@ max_episodes_to_process: -1
 fail_on_nan: True 
 skip_git_tagging: False 
 resize_images_size:
-- 224
-- 224
+- 384
+- 384
