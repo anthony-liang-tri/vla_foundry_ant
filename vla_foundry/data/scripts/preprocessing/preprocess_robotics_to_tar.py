@@ -11,7 +11,7 @@ from vla_foundry.data.scripts.preprocessing.robotics.preprocess_statistics impor
     LoggerActor,
     StreamingDatasetStatisticsRayActor,
 )
-from vla_foundry.data.scripts.preprocessing.utils import create_shard, upload_dict_to_s3
+from vla_foundry.data.scripts.preprocessing.utils import create_shard, upload_config_to_s3, upload_dict_to_s3
 from vla_foundry.file_utils import check_directory_has_files_with_prefix
 
 
@@ -105,6 +105,7 @@ def main():
     metadata["processing"]["sample_counts"] = ray.get(logger_actor.get_values.remote())
     print("Sample counts:", metadata["processing"]["sample_counts"])
     upload_dict_to_s3(metadata, f"{cfg.output_dir.rstrip('/')}/shards", "processing_metadata.json")
+    upload_config_to_s3(cfg, f"{cfg.output_dir.rstrip('/')}/shards", "preprocessing_config.yaml")
 
     ray.shutdown()
     print("🎉 Complete! All samples uploaded and sharded.")

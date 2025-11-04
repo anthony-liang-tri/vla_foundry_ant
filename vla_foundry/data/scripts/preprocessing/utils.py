@@ -105,6 +105,21 @@ def upload_dict_to_s3(dict_data: Dict, s3_path: str, file_name: str):
     print(f"Uploaded {file_name} to s3://{bucket_name}/{s3_key}")
 
 
+def upload_config_to_s3(config, s3_path: str, file_name: str):
+    # Draccus dump to temp file then upload to s3
+    import tempfile
+
+    import draccus
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".yaml", mode="w") as temp_file:
+        draccus.dump(config, temp_file)
+        temp_path = temp_file.name
+    bucket_name, s3_prefix = s3_path.removeprefix("s3://").split("/", 1)
+    s3_key = f"{s3_prefix.rstrip('/')}/{file_name}"
+    boto3.client("s3").upload_file(temp_path, bucket_name, s3_key)
+    print(f"Uploaded {file_name} to s3://{bucket_name}/{s3_key}")
+
+
 @ray.remote
 def create_shard(shard_files: List[str], shard_idx: int, output_dir: str) -> str:
     """Download tar files from S3 and create a shard. OPTIMIZED with parallel downloads."""

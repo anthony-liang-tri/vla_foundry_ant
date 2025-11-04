@@ -585,3 +585,27 @@ def group_processing_metadata(metadata_list, dataset_sources):
     }
 
     return grouped
+
+
+def collect_preprocessing_configs(dataset_manifest_paths):
+    """
+    Return a list of preprocessing configs from all data sources (if exists)
+    """
+
+    def collect_single_source_preprocessing_config(dataset_manifest_path):
+        """
+        Collect the preprocessing config from a single data source
+        """
+        preprocessing_config_path = os.path.join(os.path.dirname(dataset_manifest_path), "preprocessing_config.yaml")
+        if file_exists(preprocessing_config_path):
+            return yaml_load(preprocessing_config_path)
+        return None
+
+    if len(dataset_manifest_paths) == 1:
+        return collect_single_source_preprocessing_config(dataset_manifest_paths[0])
+    else:
+        all_preprocessing_configs = {}
+        for idx, dataset_manifest_path in enumerate(dataset_manifest_paths):
+            preprocessing_config = collect_single_source_preprocessing_config(dataset_manifest_path)
+            all_preprocessing_configs[idx] = preprocessing_config
+        return all_preprocessing_configs

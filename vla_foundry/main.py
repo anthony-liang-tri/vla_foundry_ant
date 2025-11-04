@@ -16,11 +16,18 @@ import os
 
 import draccus
 import torch
+import yaml
 
 from vla_foundry.data.dataloader import get_datastring_input, get_wds_dataloader
 from vla_foundry.data.utils import load_data_chunks
 from vla_foundry.distributed import get_model_precision, is_master, wrap_fsdp_ddp
-from vla_foundry.file_utils import collect_processing_metadata, load_model_checkpoint, remote_sync, save_checkpoint
+from vla_foundry.file_utils import (
+    collect_preprocessing_configs,
+    collect_processing_metadata,
+    load_model_checkpoint,
+    remote_sync,
+    save_checkpoint,
+)
 from vla_foundry.logger import setup_logging
 from vla_foundry.losses import get_loss_function
 from vla_foundry.models import create_model
@@ -72,11 +79,15 @@ def main():
         with open(os.path.join(experiment_path, "config_model.yaml"), "w") as f:
             draccus.dump(cfg.model, f)
 
-        # Collect and save processing metadata from all data sources
+        # Collect and save processing metadata and configs from all data sources
         processing_metadata = collect_processing_metadata(cfg.data.dataset_manifest, experiment_path)
         if processing_metadata:
             with open(os.path.join(experiment_path, "processing_metadata.json"), "w") as f:
                 json.dump(processing_metadata, f, indent=2)
+        preprocessing_configs = collect_preprocessing_configs(cfg.data.dataset_manifest)
+        if preprocessing_configs:
+            with open(os.path.join(experiment_path, "preprocessing_configs.yaml"), "w") as f:
+                yaml.dump(preprocessing_configs, f)
 
         # Initial sync to check that remote_sync works.
         if cfg.remote_sync:
