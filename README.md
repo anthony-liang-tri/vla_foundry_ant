@@ -128,16 +128,31 @@ A few usage notes:
 - As seen in the example above, we can use the `--model "include ..."` argument to recycle presets that we want to use repeatedly. This `include` can be used for any parameter class that is loaded with draccus.
 - When including a preset in a yaml file, the path must be relative to the file and the statement is `arg: !include <path>`.
 - When including a preset file, command line arguments still take precedence (i.e., if an overlapping argument is supplied in the command line, it will overwrite the value from the preset yaml).
-
-#### 1.2 Design Choices
 - Arguments are immutable by design, and we recommend developing around this. If really necessary, `object.__setattr__` can be used to modify an immutable argument.
-- Shared arguments
-    - Sometimes attributes may need to be accessed in multiple param classes. For example, we may want to have both `cfg.experiment.seed` and `cfg.data.seed`.
-    - To prevent the user needing to supply the same argument twice, we pick an "owner" class for the attribute, then for the non-owner class, we list the attribute under the `init_shared_attributes()` function which is automatically called after initialization and populates all shared attributes.
+
+#### 1.2 Separation of Concerns
+We have five high-level param class types:
+- `DataParams`: Each modality has its own `DataParams` class, which inherits from the base `DataParams` object. 
+- `ModelParams`: Each model type has its own `ModelParams` class, which inherits from the base `ModelParams` object. The logic for model selection is done in the `create_model` function in [models/\_\_init\_\_.py](/vla_foundry/models/__init__.py). This param class is saved to `(output_path)/model_config.yaml` during training and can be used to load the yaml during inference time.
+- `HyperParams`: This handles things like learning rate and optimizers.
+- `DistributedParams`: This handles things like FSDP parameters. This is automatically initialized with `init_distributed_device()`, which is called in the `post_init()` function of `DistributedParams`. The `init_distributed_device()` function automatically sets things like `rank` and `world_size`, so you do not need to set these parameters. It is explicitly indicated in [distributed_params.py](/vla_foundry/params/distributed_params.py) which ones do not need to be set.
+- `TrainExperimentParams`: This is the main params class that [main.py](/vla_foundry/main.py) reads. It contains the other 4 param classes as attributes, and it handles global variables like save paths. This param class is saved to `(output_path)/config.yaml` during training and can be used during inference time.
+
+We generally want to have some separation of concerns here. For instance, we do not want to pass a `DataParams` class to a model object, since we want to have the ability to load a model during inference time, even without any dataset. In instances where we need to access some `DataParams` object in our model, we can make use of the `init_shared_attributes()` function, which we detail in the "Shared Arguments" section below.
+- Note: It is not always clear which parameter should belong in which class. For a more detailed discussion on this, see the "Shared Arguments" section below.
+
+
+#### 1.3 Shared Arguments
+- Sometimes attributes may need to be accessed in multiple param classes. For example, we may want to have both `cfg.experiment.seed` and `cfg.data.seed`.
+- To prevent the user needing to supply the same argument twice, and to ensure coherence, we pick an "owner" class for the attribute, then for the non-owner class, we list the attribute under the `init_shared_attributes()` function which is automatically called after initialization and populates all shared attributes.
+    - As a rule of thumb, whichever component is the _source of truth_ for a parameter should own it. For example, the model may require access to the `action_dim` parameter, but this is inherently tied to the dataset, so we prefer this to be in `DataParams` then shared to `ModelParams` instead of the other way around.
+       - This might require some conceptual understanding of what the parameter fundamentally is for, and for some parameters, there might be some room for debate, but in practice, as long as `init_shared_attribtes()` is implemented properly, the selection of "owner" will not have any meaningful effect outside of code style and readability.
+    - `init_shared_attributes(self, cfg)` is called with full access to the entire `TrainExperimentParams` config object. This means that each subclass (and so on recursively) can set shared params from any of the `TrainExperimentParams` parameters.
+
 - We can also have arguments with the same name but are not shared. For instance, `cfg.data.seq_len` and `cfg.model.seq_len` are defined separately. The one in `cfg.data` controls the padding/truncation during dataloading, while the one in `cfg.model` is used for the rotary embedding.
     - (Note: Now updated to `cfg.model.max_seq_len` instead of just `cfg.model.seq_len`, but point still holds.)
 
-#### 1.3 Dynamic Selection
+#### 1.4 Dynamic Selection
 Consider the following definition of the `VLMParams`
 ```python
 @register_model_params("vlm")
@@ -149,7 +164,7 @@ class VLMParams(ModelParams):
 
 Here, the ViT can either be `ViTParams` or `ViTHFParams`. We can dynamically pick between the two by directly supplying the necessary arguments. For example, indicating `--model.vit.hf_pretrained=vit_base_patch16_siglip_224` will automatically instantiate `cfg.model.vit` as a `ViTHFParams` object, while `--model.vit.hidden_dim=1152` will automatically instantiate `cfg.model.vit` as a `ViTParams` object. No need to indicate `--model.vit.type` in this case.
 
-#### 1.4 Defaults and Config Presets
+#### 1.5 Defaults and Config Presets
 The parameter classes for each module can be found in [vla_foundry/params](vla_foundry/params). They list exhaustively all the parameters that can be set. Some of these are given a default value directly in the class definition. 
 
 In addition, the [vla_foundry/config_presets](vla_foundry/config_presets) folder contains a set of yaml file which contain commonly used config settings. These are not strictly necessary but can help ensure consistency and reduce bugs. These can be used with the `include` keyword. For instance, you can use `--model "include vla_foundry/config_presets/models/transformer_410m.yaml"` instead of manually typing out all the model configs. These yamls can be nested with the `<<` operator. See `vla_foundry/config_presets/models/diffusion_policy.yaml`.
@@ -161,6 +176,30 @@ The order of precedence is as follows (listed in decreasing priority):
 
 In other words, if a variable is defined both in a preset yaml and in the command line, the parser will use the value from the command line.
 
+#### 1.6. Known Limitations
+- When including a preset in a yaml file with `!include <path>`, we cannot re-define part of its members. More specifically, we might want to load a preset config, then change only a few attributes while preserving the rest. In the example below, the following yaml will not work; it would reset the other transformer parameters to the default ones and not preserve the ones from `../models/diffusion_policy.yaml`.
+
+```yaml
+model:
+  <<: !include ../models/diffusion_policy.yaml    # This yaml defines the transformer
+  # What if we want to change only one attribute of the transformer?
+  # NOTE: The following block does NOT work. It overrides fields from the included diffusion_policy.yaml.
+  transformer:
+    is_causal: True
+```
+
+Instead we need to redefine all transformer parameters, as shown below:
+
+```yaml
+model:
+  <<: !include ../models/diffusion_policy.yaml
+
+  transformer:
+    <<: !include ../models/transformer_100m.yaml
+    is_causal: True
+```
+
+For such cases, we recommend just using a command line argument like `--model.transformer.is_causal True`, which would work as expected.
 
 ### 2. Data
 Data are stored in shards. Each shard is a tar file. Within each tar file, each sample is distinguished by its unique prefix.
