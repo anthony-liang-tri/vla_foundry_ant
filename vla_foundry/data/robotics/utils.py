@@ -11,6 +11,20 @@ import numpy as np
 import yaml
 
 
+def any_to_actual_key(field: str) -> str:
+    """Convert any field name to its 'actual' counterpart for field mapping lookup.
+    Expects field name to be in format: robot__<desired/actual/action>__...
+      - __ are used as separators for the different parts of the field name
+      - <desired/actual/action> is the type of the data
+      - ... is the rest of the field name separated by __
+    """
+    parts = field.split("__")
+    if len(parts) > 2:
+        return "__".join(parts[0:1] + ["actual"] + parts[2:])
+    else:
+        return None
+
+
 def normalize(x):
     """Normalize a vector or batch of vectors along the last dimension."""
     return x / np.linalg.norm(x, axis=-1, keepdims=True)

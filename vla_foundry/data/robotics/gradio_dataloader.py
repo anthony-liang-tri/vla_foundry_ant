@@ -37,6 +37,7 @@ from vla_foundry.data.dataloader import get_datastring_input, get_wds_dataloader
 from vla_foundry.data.pipelines.robotics import extract_robotics_fields
 from vla_foundry.data.robotics.normalization import RoboticsNormalizer
 from vla_foundry.data.robotics.utils import (
+    any_to_actual_key,
     load_action_field_config,
     rot_6d_from_relative,
     rot_6d_to_matrix,
@@ -107,7 +108,6 @@ def _reconstruct_relative_coordinates(sample: Dict[str, Any]) -> Dict[str, np.nd
     Returns:
         Dictionary with reconstructed absolute coordinates
     """
-    import re
 
     reconstructed = {}
     lowdim = sample["lowdim"]
@@ -117,7 +117,7 @@ def _reconstruct_relative_coordinates(sample: Dict[str, Any]) -> Dict[str, np.nd
     # The reference index for relative coordinates is anchor_relative_idx - 1
     # (anchor_relative_idx points to the anchor, but relative coords are computed relative to the previous timestep)
     anchor_relative_idx = metadata.get("anchor_relative_idx", 1)
-    reference_index = anchor_relative_idx - 1
+    reference_index = anchor_relative_idx
 
     # Find all relative coordinate keys
     relative_keys = [key for key in lowdim if key.endswith("_relative")]
@@ -132,10 +132,10 @@ def _reconstruct_relative_coordinates(sample: Dict[str, Any]) -> Dict[str, np.nd
 
         # Find the corresponding robot__actual reference key
         # Replace any trajectory type with "actual" to get the reference
-        reference_key = re.sub(r"robot__[^_]+__", "robot__actual__", absolute_key)
+        reference_key = any_to_actual_key(absolute_key)
 
         # Skip if reference key doesn't exist
-        if reference_key not in lowdim:
+        if reference_key is not None and reference_key not in lowdim:
             continue
 
         # Determine if this is xyz or rot_6d based on the key name

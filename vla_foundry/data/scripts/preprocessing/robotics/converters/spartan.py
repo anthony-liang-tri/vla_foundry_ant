@@ -7,7 +7,7 @@ import fsspec
 import numpy as np
 import yaml
 
-from vla_foundry.data.robotics.utils import load_action_field_config
+from vla_foundry.data.robotics.utils import any_to_actual_key, load_action_field_config
 from vla_foundry.data.scripts.preprocessing.robotics.converters.base import BaseRoboticsConverter
 from vla_foundry.data.scripts.preprocessing.robotics.preprocess_masks import create_past_and_future_masks
 from vla_foundry.data.scripts.preprocessing.utils import is_still_sample
@@ -494,15 +494,16 @@ class SpartanConverter(BaseRoboticsConverter):
         # Process lowdim data (which includes actions)
         sample_lowdim = {}
         reference_data = {}
-        reference_index = anchor_timestep - 1
         for key, data in lowdim_data.items():
             valid_data = data[valid_start : valid_end + 1]
             if past_padding > 0 or future_padding > 0:
                 valid_data = self.pad_fn(valid_data, past_padding, future_padding)
             sample_lowdim[key] = valid_data
-            reference_data[key] = data[reference_index]
+            actual_key = any_to_actual_key(key)
+            if actual_key is not None and actual_key in lowdim_data:
+                reference_data[key] = lowdim_data[actual_key][anchor_timestep]
 
-        # Add relative lowdim data with respect past_lowdim_steps (it is the last past timestep)
+        # Add relative lowdim data with respect to the actual position at the current timestep
         sample_lowdim_relative = self.create_relative_lowdim_data(sample_lowdim, reference_data)
         sample_lowdim.update(sample_lowdim_relative)
 
