@@ -2,7 +2,7 @@
 This file provides convenience decorators and functions to log information to rerun.io
 
 The intention is to eventually refactor these functionalities into a workflow
-that enables visualization in wandb was well as rerun.io. It is added here as-is to
+that enables visualization in wandb as well as rerun.io. It is added here as-is to
 provide immediate value for debugging and visualization.
 
 '''
