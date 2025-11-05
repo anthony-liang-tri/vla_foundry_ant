@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import fsspec
 import numpy as np
+import ray
 import yaml
 
 from vla_foundry.data.robotics.utils import any_to_actual_key, load_action_field_config
@@ -30,6 +31,71 @@ class SampleMetadata:
     original_episode_length: int
     original_image_sizes: Dict[str, Tuple[int, int]]
     is_padded: bool
+
+
+@ray.remote
+def check_episode_validity_ray(episode_path: str) -> Optional[str]:
+    """Check if an episode directory has valid processed data. Returns episode path if valid, None otherwise."""
+    fs, _ = fsspec.core.url_to_fs(episode_path)
+    processed_path = os.path.join(episode_path, "processed")
+    fs_processed_path = processed_path.replace("s3://", "")
+
+    try:
+        if not fs.exists(fs_processed_path):
+            return None
+
+        # Check for required files
+        required_files = ["metadata.yaml", "observations.npz"]
+        for required_file in required_files:
+            file_path = os.path.join(processed_path, required_file)
+            fs_file_path = file_path.replace("s3://", "")
+            if not fs.exists(fs_file_path):
+                return None
+        return episode_path
+    except Exception:
+        return None
+
+
+@ray.remote
+def discover_and_validate_episodes_in_directory(diffusion_spartan_path: str, max_episodes: int = -1) -> List[str]:
+    """Discover and validate episodes in a diffusion_spartan directory in parallel."""
+    fs, _ = fsspec.core.url_to_fs(diffusion_spartan_path)
+    fs_path = diffusion_spartan_path.replace("s3://", "")
+
+    try:
+        items = fs.listdir(fs_path)
+    except Exception as e:
+        print(f"Warning: Cannot list directory {diffusion_spartan_path}: {e}")
+        return []
+
+    # First pass: identify episode directories only
+    episode_paths = []
+    for item in items:
+        item_name = item["name"] if isinstance(item, dict) else item
+        item_basename = os.path.basename(item_name.rstrip("/"))
+
+        # Only process directories that start with "episode_" - skip all files
+        if item_basename.startswith("episode_") and not any(
+            item_basename.endswith(ext) for ext in [".pkl", ".npz", ".txt", ".json", ".yaml", ".tar", ".gz"]
+        ):
+            episode_path = os.path.join(diffusion_spartan_path, item_basename)
+            episode_paths.append(episode_path)
+
+            # Early exit if we have enough episodes
+            if max_episodes > 0 and len(episode_paths) >= max_episodes:
+                break
+
+    if not episode_paths:
+        return []
+
+    # Second pass: validate episodes in parallel using Ray
+    validation_futures = [check_episode_validity_ray.remote(ep_path) for ep_path in episode_paths]
+    validation_results = ray.get(validation_futures)
+
+    # Filter out None results (invalid episodes)
+    valid_episodes = [ep for ep in validation_results if ep is not None]
+
+    return valid_episodes
 
 
 class SpartanConverter(BaseRoboticsConverter):
@@ -82,140 +148,35 @@ class SpartanConverter(BaseRoboticsConverter):
 
     def discover_episodes(self, source_paths: List[str], max_episodes_to_process: int = -1) -> List[str]:
         """
-        Discover episodes efficiently, with different behavior based on
-        whether 'diffusion_spartan' is in the path.
+        Discover episodes efficiently by assuming all source_paths are diffusion_spartan directories.
+        Uses Ray for parallel validation.
         """
         if isinstance(source_paths, str):
             source_paths = [source_paths]
-        episodes = []
 
-        def check_episode_validity(fs, episode_path: str) -> bool:
-            """Check if an episode directory has valid processed data."""
-            processed_path = os.path.join(episode_path, "processed")
-            fs_processed_path = processed_path.replace("s3://", "")
+        # Assume all source_paths are diffusion_spartan directories
+        diffusion_spartan_dirs = source_paths
+        print(f"Using {len(diffusion_spartan_dirs)} diffusion_spartan directories")
 
-            try:
-                if not fs.exists(fs_processed_path):
-                    return False
+        # Discover and validate episodes in parallel using Ray
+        print("Discovering and validating episodes in parallel...")
+        discover_futures = [
+            discover_and_validate_episodes_in_directory.remote(dir_path, -1)  # Let each dir discover all episodes
+            for dir_path in diffusion_spartan_dirs
+        ]
+        discover_results = ray.get(discover_futures)
 
-                # Check for required files
-                required_files = ["metadata.yaml", "observations.npz"]
-                for required_file in required_files:
-                    file_path = os.path.join(processed_path, required_file)
-                    fs_file_path = file_path.replace("s3://", "")
-                    if not fs.exists(fs_file_path):
-                        return False
-                return True
-            except Exception:
-                return False
+        # Merge results from all directories
+        all_episodes = []
+        for result in discover_results:
+            all_episodes.extend(result)
 
-        def search_diffusion_spartan_directory(fs, diffusion_spartan_path: str) -> None:
-            """Search within a diffusion_spartan directory for episode_* folders."""
-            fs_path = diffusion_spartan_path.replace("s3://", "")
+        # Apply max_episodes_to_process limit if specified
+        if max_episodes_to_process > 0 and len(all_episodes) > max_episodes_to_process:
+            all_episodes = all_episodes[:max_episodes_to_process]
 
-            try:
-                items = fs.listdir(fs_path)
-                print(f"Found {len(items)} items in diffusion_spartan directory")
-            except Exception as e:
-                print(f"Warning: Cannot list directory {diffusion_spartan_path}: {e}")
-                return
-
-            episode_dirs = []
-            # First pass: identify episode directories only
-            for item in items:
-                item_name = item["name"] if isinstance(item, dict) else item
-                item_basename = os.path.basename(item_name.rstrip("/"))
-
-                # Only process directories that start with "episode_" - skip all files
-                if item_basename.startswith("episode_") and not any(
-                    item_basename.endswith(ext) for ext in [".pkl", ".npz", ".txt", ".json", ".yaml", ".tar", ".gz"]
-                ):
-                    episode_dirs.append(item_basename)
-
-            print(f"Found {len(episode_dirs)} potential episode directories")
-
-            # Second pass: validate episode directories
-            for episode_basename in episode_dirs:
-                if max_episodes_to_process > 0 and len(episodes) >= max_episodes_to_process:
-                    break
-
-                # Construct full episode path
-                episode_path = os.path.join(diffusion_spartan_path, episode_basename)
-
-                if check_episode_validity(fs, episode_path):
-                    episodes.append(episode_path)
-                    print(f"Added valid episode: {episode_basename}")
-                else:
-                    print(f"Skipped invalid episode: {episode_basename}")
-
-            print(f"Total valid episodes found: {len(episodes)}")
-
-        def crawl_directory_for_diffusion_spartan(fs, current_path: str, depth: int = 0, max_depth: int = 5) -> None:
-            """Recursively search for diffusion_spartan directories, but don't recurse into files."""
-            if depth > max_depth:
-                return
-
-            if max_episodes_to_process > 0 and len(episodes) >= max_episodes_to_process:
-                return
-
-            fs_current_path = current_path.replace("s3://", "")
-
-            try:
-                items = fs.listdir(fs_current_path)
-            except Exception as e:
-                print(f"Warning: Cannot list directory {current_path}: {e}")
-                return
-
-            # Check if current directory is diffusion_spartan
-            current_basename = os.path.basename(current_path.rstrip("/"))
-            if current_basename == "diffusion_spartan":
-                search_diffusion_spartan_directory(fs, current_path)
-                return
-
-            # Only recurse into directories, skip all files
-            for item in items:
-                if max_episodes_to_process > 0 and len(episodes) >= max_episodes_to_process:
-                    break
-
-                item_name = item["name"] if isinstance(item, dict) else item
-                item_basename = os.path.basename(item_name.rstrip("/"))
-
-                # Skip all files by extension
-                if any(
-                    item_basename.endswith(ext)
-                    for ext in [".pkl", ".npz", ".txt", ".json", ".yaml", ".tar", ".gz", ".log"]
-                ):
-                    continue
-
-                # Skip hidden directories and obvious non-directories
-                if item_basename.startswith("."):
-                    continue
-
-                item_path = os.path.join(current_path, item_basename)
-
-                try:
-                    # Check if it's actually a directory before recursing
-                    fs_item_path = item_path.replace("s3://", "")
-                    if fs.isdir(fs_item_path):
-                        crawl_directory_for_diffusion_spartan(fs, item_path, depth + 1, max_depth)
-                except Exception:
-                    # If we can't check if it's a directory, skip it
-                    continue
-
-        for source_path in source_paths:
-            print(f"Scanning source path: {source_path}")
-            fs, fsspec_path = fsspec.core.url_to_fs(source_path)
-
-            # Check if 'diffusion_spartan' is in the source path
-            if "diffusion_spartan" in source_path:
-                print("Found 'diffusion_spartan' in source path - searching only this directory")
-                search_diffusion_spartan_directory(fs, source_path)
-            else:
-                print("No 'diffusion_spartan' in source path - performing recursive search")
-                crawl_directory_for_diffusion_spartan(fs, source_path)
-
-        print(f"Total episodes discovered: {len(episodes)}")
-        return sorted(episodes)
+        print(f"Total episodes discovered: {len(all_episodes)}")
+        return sorted(all_episodes)
 
     def extract_sample_camera_calibration(
         self,

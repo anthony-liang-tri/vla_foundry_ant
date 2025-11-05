@@ -7,7 +7,7 @@ name="lbm_bellpepper_test"
 
 # For testing (small dataset)
 uv run --group preprocessing python vla_foundry/data/scripts/preprocessing/preprocess_lbm_to_lerobot.py \
-    --source_episodes "['s3://robotics-manip-lbm/efs/data/tasks/BimanualPutRedBellPepperInBin/riverway/sim/bc/teleop/2025-01-06T08-58-31-05-00/',]" \
+    --source_episodes "['s3://robotics-manip-lbm/efs/data/tasks/BimanualPutRedBellPepperInBin/riverway/sim/bc/teleop/2025-01-06T08-58-31-05-00/diffusion_spartan/',]" \
     --output_dir ./lerobot_dataset_hub_test/ \
     --dataset_name "${name}" \
     --robot_type "lbm_bimanual_panda" \

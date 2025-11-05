@@ -1,0 +1,189 @@
+"""Tests for Spartan converter with Ray parallelization."""
+
+import os
+import tempfile
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import numpy as np
+import pytest
+import ray
+import yaml
+
+from vla_foundry.data.scripts.preprocessing.robotics.converters.spartan import (
+    SpartanConverter,
+    check_episode_validity_ray,
+    discover_and_validate_episodes_in_directory,
+)
+
+
+@pytest.fixture(scope="module")
+def ray_init():
+    """Initialize Ray once for all tests."""
+    if not ray.is_initialized():
+        ray.init(num_cpus=2)
+    yield
+    ray.shutdown()
+
+
+@pytest.fixture
+def mock_config():
+    """Create a mock config for SpartanConverter."""
+    cfg = MagicMock()
+    cfg.language_annotations_path = None
+    cfg.action_fields_config_path = None
+    cfg.data_discard_keys = []
+    cfg.camera_names = []
+    cfg.resize_images_size = [384, 384]
+    cfg.image_indices = [-1, 0]
+    cfg.jpeg_quality = 90
+    cfg.padding_strategy = "copy"  # Use valid padding strategy
+    cfg.past_lowdim_steps = 5
+    cfg.future_lowdim_steps = 10
+    cfg.max_padding_left = 5
+    cfg.max_padding_right = 10
+    cfg.filter_still_samples = False
+    cfg.still_threshold = 0.01
+    cfg.stride = 1
+    cfg.num_workers = 1
+    cfg.output_dir = "/tmp/test_output"
+    cfg.jpeg_quality = 90
+    cfg.fail_on_nan = False
+    return cfg
+
+
+@pytest.fixture
+def temp_spartan_episodes():
+    """Create temporary episode directories with required files."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        base_path = Path(tmpdir) / "data" / "diffusion_spartan"
+        base_path.mkdir(parents=True, exist_ok=True)
+
+        # Create valid episodes
+        for i in range(3):
+            episode_dir = base_path / f"episode_{i:04d}"
+            processed_dir = episode_dir / "processed"
+            processed_dir.mkdir(parents=True, exist_ok=True)
+
+            # Create required files
+            metadata_path = processed_dir / "metadata.yaml"
+            metadata_path.write_text(yaml.dump({"episode_id": i}))
+
+            observations_path = processed_dir / "observations.npz"
+            np.savez(observations_path, obs=np.zeros((10, 3)))
+
+        # Create invalid episode (missing observations.npz)
+        invalid_episode_dir = base_path / "episode_0003"
+        invalid_processed_dir = invalid_episode_dir / "processed"
+        invalid_processed_dir.mkdir(parents=True, exist_ok=True)
+        metadata_path = invalid_processed_dir / "metadata.yaml"
+        metadata_path.write_text(yaml.dump({"episode_id": 3}))
+
+        yield str(base_path)
+
+
+def test_check_episode_validity_ray_valid(ray_init, temp_spartan_episodes):
+    """Test that check_episode_validity_ray returns episode path for valid episodes."""
+    episode_path = os.path.join(temp_spartan_episodes, "episode_0000")
+    result = ray.get(check_episode_validity_ray.remote(episode_path))
+    assert result == episode_path
+
+
+def test_check_episode_validity_ray_invalid(ray_init, temp_spartan_episodes):
+    """Test that check_episode_validity_ray returns None for invalid episodes."""
+    episode_path = os.path.join(temp_spartan_episodes, "episode_0003")
+    result = ray.get(check_episode_validity_ray.remote(episode_path))
+    assert result is None
+
+
+def test_check_episode_validity_ray_nonexistent(ray_init, temp_spartan_episodes):
+    """Test that check_episode_validity_ray returns None for non-existent episodes."""
+    episode_path = os.path.join(temp_spartan_episodes, "episode_9999")
+    result = ray.get(check_episode_validity_ray.remote(episode_path))
+    assert result is None
+
+
+def test_discover_and_validate_episodes_in_directory(ray_init, temp_spartan_episodes):
+    """Test parallel discovery and validation of episodes."""
+    result = ray.get(discover_and_validate_episodes_in_directory.remote(temp_spartan_episodes))
+
+    # Should find 3 valid episodes (0000, 0001, 0002) and exclude the invalid one (0003)
+    assert len(result) == 3
+    assert all("episode_" in ep for ep in result)
+
+    # Check that valid episodes are in the result
+    episode_names = [os.path.basename(ep) for ep in result]
+    assert "episode_0000" in episode_names
+    assert "episode_0001" in episode_names
+    assert "episode_0002" in episode_names
+    assert "episode_0003" not in episode_names
+
+
+def test_discover_and_validate_episodes_with_max_limit(ray_init, temp_spartan_episodes):
+    """Test that max_episodes parameter limits the number of episodes discovered."""
+    result = ray.get(discover_and_validate_episodes_in_directory.remote(temp_spartan_episodes, max_episodes=2))
+
+    # Should find at most 2 episodes due to the limit
+    assert len(result) <= 2
+
+
+def test_discover_episodes_integration(ray_init, temp_spartan_episodes, mock_config):
+    """Test the full discover_episodes method with Ray parallelization."""
+    # Mock the language annotations and action fields to avoid file loading
+    with patch("builtins.open"), patch("yaml.safe_load") as mock_yaml:
+        mock_yaml.return_value = {"language_dict": {}}
+        mock_config.language_annotations_path = "/tmp/fake_annotations.yaml"
+        mock_config.action_fields_config_path = "/tmp/fake_action_fields.yaml"
+
+        with patch(
+            "vla_foundry.data.robotics.utils.load_action_field_config",
+            return_value={"action_key_fields": [], "action_index_fields": []},
+        ):
+            converter = SpartanConverter(mock_config)
+
+            # Test with the path containing 'diffusion_spartan'
+            episodes = converter.discover_episodes([temp_spartan_episodes])
+
+            # Should discover 3 valid episodes
+            assert len(episodes) == 3
+            assert all("episode_" in ep for ep in episodes)
+
+
+def test_discover_episodes_with_max_episodes_to_process(ray_init, temp_spartan_episodes, mock_config):
+    """Test that max_episodes_to_process limits the total number of episodes returned."""
+    with patch("builtins.open"), patch("yaml.safe_load") as mock_yaml:
+        mock_yaml.return_value = {"language_dict": {}}
+        mock_config.language_annotations_path = "/tmp/fake_annotations.yaml"
+        mock_config.action_fields_config_path = "/tmp/fake_action_fields.yaml"
+
+        with patch(
+            "vla_foundry.data.robotics.utils.load_action_field_config",
+            return_value={"action_key_fields": [], "action_index_fields": []},
+        ):
+            converter = SpartanConverter(mock_config)
+            episodes = converter.discover_episodes([temp_spartan_episodes], max_episodes_to_process=2)
+
+            # Should only return 2 episodes due to the limit
+            assert len(episodes) == 2
+
+
+def test_discover_episodes_empty_directory(ray_init, mock_config):
+    """Test discover_episodes with an empty directory."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        empty_dir = Path(tmpdir) / "empty"
+        empty_dir.mkdir(parents=True, exist_ok=True)
+
+        with patch("builtins.open"), patch("yaml.safe_load") as mock_yaml:
+            mock_yaml.return_value = {"language_dict": {}}
+            mock_config.language_annotations_path = "/tmp/fake_annotations.yaml"
+            mock_config.action_fields_config_path = "/tmp/fake_action_fields.yaml"
+
+            with patch(
+                "vla_foundry.data.robotics.utils.load_action_field_config",
+                return_value={"action_key_fields": [], "action_index_fields": []},
+            ):
+                converter = SpartanConverter(mock_config)
+                episodes = converter.discover_episodes([str(empty_dir)])
+
+                # Should return empty list
+                assert len(episodes) == 0

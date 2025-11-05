@@ -40,7 +40,7 @@ resize_images_size:
 samples_per_shard: 5
 skip_git_tagging: false
 source_episodes:
-- s3://robotics-manip-lbm/efs/data/tasks/PickAndPlaceBox/cabot/sim/bc/teleop/2025-02-11T17-04-00-05-00/
+- s3://robotics-manip-lbm/efs/data/tasks/PickAndPlaceBox/cabot/sim/bc/teleop/2025-02-11T17-04-00-05-00/diffusion_spartan/
 source_type: spartan
 still_threshold: 0.05
 stride: 1
