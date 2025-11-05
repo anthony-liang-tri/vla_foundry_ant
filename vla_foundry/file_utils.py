@@ -152,6 +152,15 @@ def check_directory_has_files_with_prefix(dir_path, prefix):
         return []
 
 
+def check_directory_has_files_with_substring(dir_path, substring):
+    """Check if directory exists and contains files with the given substring."""
+    try:
+        files = list_directory(dir_path)
+        return [f for f in files if substring in f]
+    except (RuntimeError, FileNotFoundError, OSError):
+        return []
+
+
 def _is_dir_s3_ls(dir_path):
     """Check if an S3 path is a directory by trying to list it."""
     try:

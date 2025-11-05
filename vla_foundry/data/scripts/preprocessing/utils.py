@@ -1,5 +1,6 @@
 import io
 import json
+import os
 import tarfile
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -18,7 +19,7 @@ from vla_foundry.data.scripts.preprocessing.image_utils import image_to_bytes
 def upload_sample_to_s3(
     sample_data: Dict[str, Any],
     output_dir: str,
-    episode_id: str,
+    episode_path: str,
     frame_idx: int,
     jpeg_quality: int = 95,
     resize_images_size: List[int] = None,
@@ -26,6 +27,7 @@ def upload_sample_to_s3(
     """Upload sample data to S3 as tar file."""
     if resize_images_size is None:
         resize_images_size = [224, 224]
+    episode_id = os.path.basename(episode_path.rstrip("/"))
     s3_client = boto3.client("s3")
     tar_buffer = io.BytesIO()
     uuid_prefix = str(uuid.uuid4())
@@ -85,10 +87,20 @@ def upload_sample_to_s3(
 
     tar_buffer.seek(0)
     bucket_name, s3_prefix = output_dir.removeprefix("s3://").split("/", 1)
-    s3_key = f"{s3_prefix.rstrip('/')}/episodes/{episode_id}_frame_{frame_idx}.tar"
+    unique_id = extract_unique_id(episode_path)
+    s3_key = f"{s3_prefix.rstrip('/')}/episodes/{unique_id}_{episode_id}_frame_{frame_idx}.tar"
     s3_client.upload_fileobj(tar_buffer, bucket_name, s3_key)
     print(f"Uploaded {bucket_name.rstrip('/')}/{s3_key}", flush=True)
     return s3_key.split("/")[-1]
+
+
+def extract_unique_id(episode_path: str) -> str:
+    """Extract a unique ID from the episode path."""
+    if "diffusion_spartan" in episode_path:
+        # For diffusion_spartan, use the datetime as unique id
+        return episode_path.split("/")[-3]
+    else:
+        return str(uuid.uuid4())
 
 
 def upload_dict_to_s3(dict_data: Dict, s3_path: str, file_name: str):

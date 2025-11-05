@@ -13,7 +13,7 @@ from vla_foundry.data.scripts.preprocessing.robotics.preprocess_statistics impor
     StreamingDatasetStatisticsRayActor,
 )
 from vla_foundry.data.scripts.preprocessing.utils import create_shard, upload_config_to_s3, upload_dict_to_s3
-from vla_foundry.file_utils import check_directory_has_files_with_prefix
+from vla_foundry.file_utils import check_directory_has_files_with_substring
 
 
 @ray.remote
@@ -26,11 +26,11 @@ def main():
 
     # Safety check: ensure output directory doesn't have existing preprocessing outputs
     episodes_dir = os.path.join(cfg.output_dir, "episodes")
-    existing_episode_files = check_directory_has_files_with_prefix(episodes_dir, "episode_")
+    existing_episode_files = check_directory_has_files_with_substring(episodes_dir, "_frame_")
     if existing_episode_files:
         error_msg = (
             f"❌ ERROR: Output directory is not empty!\n"
-            f"The output directory contains {len(existing_episode_files)} existing files starting with 'episode_':\n"
+            f"The output directory contains {len(existing_episode_files)} existing episode files':\n"
             f"  Output directory: {cfg.output_dir}\n"
             f"  Example files: {', '.join(existing_episode_files[:5])}"
             f"{'...' if len(existing_episode_files) > 5 else ''}\n"

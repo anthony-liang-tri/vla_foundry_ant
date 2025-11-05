@@ -1,4 +1,3 @@
-import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List
 
@@ -208,7 +207,7 @@ class BaseRoboticsConverter:
                         upload_sample_to_s3,
                         sample_data=sample_data,
                         output_dir=self.cfg.output_dir,
-                        episode_id=os.path.basename(episode_path.rstrip("/")),
+                        episode_path=episode_path,
                         frame_idx=anchor_timestep,
                         jpeg_quality=self.cfg.jpeg_quality,
                         resize_images_size=self.resize_images_size,
