@@ -44,14 +44,17 @@ def initialize_rerun_server():
         rr.init("vla_foundry_logging", spawn=True)
 
 def log_rigid_transform(entity: str, X_AB: RigidTransform) -> None:
-    """Visualise a Drake pose in Rerun. Generated with ChatGPT o3
+    """
+    Visualise a Drake pose in Rerun.
+
     Parameters
     ----------
     entity : str
         Path of the entity in the Rerun hierarchy (e.g. "world/robot_base").
     X_AB : RigidTransform
         Pose of frame B expressed in frame A (Drake notation X_AB).
-    Generated with ChatGPT
+
+    Generated with ChatGPT o3
     """
     # Translation vector (m) expressed in parent frame A
     t = X_AB.translation()                    # shape (3,)
