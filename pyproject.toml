@@ -53,6 +53,7 @@ preprocessing = [
 visualization = [
     "gradio>=5.43.1",
     "plotly>=6.3.0",
+    "rerun-sdk>=0.17.2"
 ]
 
 # Add `--group inference` to install runtime deps for GRPC policy serving and robot gym
