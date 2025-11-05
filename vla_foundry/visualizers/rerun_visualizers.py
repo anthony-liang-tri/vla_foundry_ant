@@ -1,38 +1,33 @@
-'''
+"""
 This file provides convenience decorators and functions to log information to rerun.io
 
 The intention is to eventually refactor these functionalities into a workflow
 that enables visualization in wandb as well as rerun.io. It is added here as-is to
 provide immediate value for debugging and visualization.
 
-'''
+"""
 
 import functools
+import subprocess
+from collections.abc import Iterable
 from typing import Callable
 
+import numpy as np
 import rerun as rr
-import subprocess
+from pydrake.math import RigidTransform
 from rerun import Transform3D
 from rerun.datatypes import Quaternion
-from robot_gym.multiarm_spaces import MultiarmObservation, PosesAndGrippers
-from robot_gym.policy import Policy, PolicyMetadata
-from pydrake.math import RigidTransform
-from collections.abc import Iterable
-import numpy as np
+
 
 def disable_rerun_analytics():
     try:
-        subprocess.run(
-            ["rerun", "analytics", "disable"],
-            check=True,
-            capture_output=True,
-            text=True
-        )
+        subprocess.run(["rerun", "analytics", "disable"], check=True, capture_output=True, text=True)
         print("Rerun analytics disabled.")
     except FileNotFoundError:
         print("Warning: rerun CLI not found. Make sure rerun-sdk is installed.")
     except subprocess.CalledProcessError as e:
         print(f"Failed to disable rerun analytics: {e.stderr or e}")
+
 
 # Utility function to initialize the rerun server
 def initialize_rerun_server():
@@ -42,6 +37,7 @@ def initialize_rerun_server():
     if not rr.is_enabled():
         disable_rerun_analytics()
         rr.init("vla_foundry_logging", spawn=True)
+
 
 def log_rigid_transform(entity: str, X_AB: RigidTransform) -> None:
     """
@@ -54,14 +50,14 @@ def log_rigid_transform(entity: str, X_AB: RigidTransform) -> None:
     X_AB : RigidTransform
         Pose of frame B expressed in frame A (Drake notation X_AB).
 
-    Generated with ChatGPT o3
+    Generated with ChatGPT
     """
     # Translation vector (m) expressed in parent frame A
-    t = X_AB.translation()                    # shape (3,)
+    t = X_AB.translation()  # shape (3,)
 
     # Quaternion conversion: Drake (w,x,y,z) → Rerun (x,y,z,w)
     q_wxyz = X_AB.rotation().ToQuaternion().wxyz()  # ndarray (4,)
-    q_xyzw = np.roll(q_wxyz, -1)                     # shift order
+    q_xyzw = np.roll(q_wxyz, -1)  # shift order
 
     # Send to Rerun
     rr.log(
@@ -69,10 +65,11 @@ def log_rigid_transform(entity: str, X_AB: RigidTransform) -> None:
         rr.Transform3D(
             translation=t,
             quaternion=q_xyzw,
-            axis_length=0.25,   # 25 cm axes so the pose is visible
-            clear=False         # keep axes while you stream updates
+            axis_length=0.25,  # 25 cm axes so the pose is visible
+            clear=False,  # keep axes while you stream updates
         ),
     )
+
 
 def rerun_log_images(func):
     """
@@ -144,6 +141,7 @@ def rerun_log_arm_poses(func: Callable):
 
     return wrapper
 
+
 def log_model_action_predictions(func):
     """
     A decorator to visualize trajectories.
@@ -171,7 +169,7 @@ def log_model_action_predictions(func):
             return results
 
         # If you only want grippers, filter here:
-        model_keys = [k for k in first_poses.keys() if "gripper" in k.lower()] or list(first_poses.keys())
+        model_keys = [k for k in first_poses if "gripper" in k.lower()] or list(first_poses.keys())
 
         # 2) Accumulate per-model trajectories in timestep order
         traj = {k: [] for k in model_keys}
@@ -189,7 +187,7 @@ def log_model_action_predictions(func):
             if len(pts) >= 2:
                 arr = np.vstack(pts)
                 rr.log(f"predictions/{k}/trajectory", rr.LineStrips3D([arr]))
-                rr.log(f"predictions/{k}/waypoints",  rr.Points3D(arr))
+                rr.log(f"predictions/{k}/waypoints", rr.Points3D(arr))
             elif pts:
                 rr.log(f"predictions/{k}/waypoints", rr.Points3D(np.vstack(pts)))
 
