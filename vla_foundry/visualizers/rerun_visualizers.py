@@ -1,5 +1,5 @@
 '''
-This file provides convience decorators and functions to log information to rerun.io
+This file provides convenience decorators and functions to log information to rerun.io
 
 The intention is to eventually refactor these functionalities into a workflow
 that enables visualization in wandb was well as rerun.io. It is added here as-is to
