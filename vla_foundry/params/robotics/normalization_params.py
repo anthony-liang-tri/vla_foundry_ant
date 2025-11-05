@@ -72,6 +72,9 @@ class NormalizationParams(BaseParams):
 
     def __post_init__(self):
         self.check_asserts()
+        if self.method == "std":
+            # std is always centered so we force centered_norm to True
+            object.__setattr__(self, "centered_norm", True)
 
     def check_asserts(self):
         if self.method not in ["std", "percentile_5_95", "percentile_1_99", "min_max"]:

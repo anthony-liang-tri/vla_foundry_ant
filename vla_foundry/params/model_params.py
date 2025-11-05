@@ -1,5 +1,6 @@
+import logging
 from dataclasses import dataclass, field
-from typing import List, Union
+from typing import List, Tuple, Union
 
 import draccus
 
@@ -163,6 +164,22 @@ class NoiseSchedulerParams(ModelParams):
     num_timesteps: int = field(default=1000)
     beta_start: float = field(default=0.0001)
     beta_end: float = field(default=0.02)
+    clamp_range: Tuple[float, float] = field(default=None)
+
+    def init_shared_attributes(self, cfg):
+        super().init_shared_attributes(cfg)
+        if hasattr(cfg.data, "normalization") and self.clamp_range is not None:
+            if not cfg.data.normalization.enabled:
+                logging.warning(
+                    "Normalization is disabled with clamping range enabled. "
+                    f"Make sure your data is within the clamping range. {self.clamp_range}"
+                )
+            elif not cfg.data.normalization.centered_norm and self.clamp_range[0] == -self.clamp_range[1]:
+                raise ValueError(
+                    f"Clamp range {self.clamp_range} is symetric but "
+                    f"normalization is not centered: {cfg.data.normalization.centered_norm}"
+                    f"Set data.normalization.centered_norm to True or use a different clamp range."
+                )
 
 
 @register_model_params("clip_hf")

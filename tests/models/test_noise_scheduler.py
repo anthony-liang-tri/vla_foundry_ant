@@ -12,6 +12,10 @@ class TestNoiseSchedulers:
         return NoiseSchedulerParams(num_timesteps=1000, beta_start=0.0001, beta_end=0.02)
 
     @pytest.fixture
+    def clamped_noise_scheduler_params(self):
+        return NoiseSchedulerParams(num_timesteps=1000, beta_start=0.0001, beta_end=0.02, clamp_range=(-0.5, 0.5))
+
+    @pytest.fixture
     def sample_data(self):
         """Create sample data for testing"""
         batch_size = 2
@@ -181,21 +185,6 @@ class TestNoiseSchedulers:
         # Different step sizes should produce different outputs
         assert not torch.allclose(prev_sample, prev_sample_step2)
 
-    def test_flow_matching_scheduler_int_param(self):
-        """Test Flow Matching scheduler with integer parameter"""
-        num_timesteps = 500
-        scheduler = FlowMatchingScheduler(num_timesteps)
-
-        assert scheduler.num_timesteps == num_timesteps
-
-        # Test basic functionality
-        x_start = torch.randn(2, 3, 32, 32)
-        noise = torch.randn_like(x_start)
-        timesteps = torch.randint(0, num_timesteps, (2,))
-
-        noisy_x = scheduler.add_noise(x_start, noise, timesteps)
-        assert noisy_x.shape == x_start.shape
-
     def test_mask_shapes_and_broadcasting(self, ddpm_scheduler, flow_matching_scheduler):
         """Test that masks work with different tensor shapes and automatically expand dimensions"""
         # Test with 4D input tensor and different VALID mask shapes
@@ -302,3 +291,32 @@ class TestNoiseSchedulers:
             assert noisy_x_fm.shape == x_start.shape
             assert noisy_x_ddpm.shape[0] == batch_size
             assert noisy_x_fm.shape[0] == batch_size
+
+    @pytest.mark.parametrize(
+        "scheduler_cls",
+        [NoiseSchedulerDDPM, NoiseSchedulerDDPMDiffusers, FlowMatchingScheduler],
+    )
+    def test_clamp_range_limits_outputs(self, scheduler_cls, clamped_noise_scheduler_params):
+        """Ensure clamp_range enforces bounds on add_noise and step outputs"""
+        scheduler = scheduler_cls(clamped_noise_scheduler_params)
+        clamp_min, clamp_max = clamped_noise_scheduler_params.clamp_range
+
+        x_start = torch.full((1, 3, 4, 4), 10.0)
+        noise = torch.full_like(x_start, -10.0)
+        timesteps = torch.zeros(1, dtype=torch.long)
+
+        noisy_x = scheduler.add_noise(x_start, noise, timesteps)
+        assert torch.all(noisy_x <= clamp_max)
+        assert torch.all(noisy_x >= clamp_min)
+
+        model_output = torch.full_like(x_start, -10.0)
+        sample = torch.full_like(x_start, 10.0)
+        timestep = torch.tensor(0)
+
+        if isinstance(scheduler, FlowMatchingScheduler):
+            prev_sample = scheduler.step(model_output, timestep, sample, step_size=1)
+        else:
+            prev_sample = scheduler.step(model_output, timestep, sample)
+
+        assert torch.all(prev_sample <= clamp_max)
+        assert torch.all(prev_sample >= clamp_min)

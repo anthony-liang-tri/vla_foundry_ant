@@ -23,6 +23,7 @@ class NoiseSchedulerDDPM(nn.Module, NoiseScheduler):
         self.num_timesteps = params.num_timesteps
         self.beta_start = params.beta_start
         self.beta_end = params.beta_end
+        self.clamp_range = params.clamp_range
         betas = torch.linspace(self.beta_start, self.beta_end, self.num_timesteps)
         alphas = 1 - betas
         alphas_cumprod = torch.cumprod(alphas, dim=0)
@@ -66,12 +67,15 @@ class NoiseSchedulerDDPM(nn.Module, NoiseScheduler):
                 self.sqrt_alphas_cumprod[timesteps].view(*view_shape) * x_start
                 + self.sqrt_one_minus_alphas_cumprod[timesteps].view(*view_shape) * noise
             ).to(dtype=x_start.dtype)
-            return mask_expanded * normal_result + (1 - mask_expanded) * x_start
+            output = mask_expanded * normal_result + (1 - mask_expanded) * x_start
         else:
-            return (
+            output = (
                 self.sqrt_alphas_cumprod[timesteps].view(*view_shape) * x_start
                 + self.sqrt_one_minus_alphas_cumprod[timesteps].view(*view_shape) * noise
             ).to(dtype=x_start.dtype)  # [bsz, channels, h, w]
+        if self.clamp_range is not None:
+            output = output.clamp(self.clamp_range[0], self.clamp_range[1])
+        return output
 
     def step(self, model_output, timestep, sample):
         """Reverse process single step"""
@@ -103,4 +107,6 @@ class NoiseSchedulerDDPM(nn.Module, NoiseScheduler):
             variance = torch.sqrt(self.posterior_variance[t]) * noise  # [batch_size, channels, height, width]
             pred_prev_sample = pred_prev_sample + variance  # [batch_size, channels, height, width]
 
+        if self.clamp_range is not None:
+            pred_prev_sample = pred_prev_sample.clamp(self.clamp_range[0], self.clamp_range[1])
         return pred_prev_sample  # [batch_size, channels, height, width]
