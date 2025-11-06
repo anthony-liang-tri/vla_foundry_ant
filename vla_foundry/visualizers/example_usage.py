@@ -7,6 +7,7 @@ and rigid transforms. It also shows how to use the methods for logging robot arm
 Make sure the `VISUALIZER` environment variable is set to `rerun` or `disabled` before running this script.
 """
 
+import os
 from collections import namedtuple
 
 import numpy as np
@@ -14,7 +15,8 @@ import visualizer as vz
 from pydrake.math import RigidTransform, RollPitchYaw
 
 # Initialize the visualizer
-vz.init(run_name="tutorial_logging", add_rank_to_run=True)
+backend = os.environ.get("VISUALIZER", "rerun").lower()
+vz.init(run_name="tutorial_logging", backend=backend, add_rank_to_run=True)
 
 # 1. Log an image
 print("Logging an image...")
@@ -75,5 +77,11 @@ action_predictions = [
     ),
 ]
 vz.log_action_predictions(action_predictions)
+
+# Launch the Gradio app if the backend is Gradio
+# TODO: move this into the backend...
+if backend == "gradio":
+    print("Launching Gradio app...")
+    vz._STATE.backend.launch()  # Explicitly call the launch method for Gradio
 
 print("Tutorial complete!")
