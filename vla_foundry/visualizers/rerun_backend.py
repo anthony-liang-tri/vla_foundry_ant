@@ -6,13 +6,14 @@ logging functionality to rerun.io.
 """
 
 import subprocess
-from typing import Any, Mapping
+from typing import Any, Dict, List, Mapping
 
 import numpy as np
 import rerun as rr
 from pydrake.math import RigidTransform
 from rerun import Transform3D
 from rerun.datatypes import Quaternion
+from robot_gym.multiarm_spaces import PosesAndGrippers  # Import from robot_gym.multiarm_spaces
 
 
 class RerunBackend:
@@ -99,7 +100,7 @@ class RerunBackend:
             ),
         )
 
-    def log_arm_poses(self, arm_poses: dict, **kwargs) -> None:
+    def log_arm_poses(self, arm_poses: Dict[str, PosesAndGrippers], **kwargs: Any) -> None:
         """
         Log arm poses to the Rerun backend.
 
@@ -125,12 +126,12 @@ class RerunBackend:
                 for gripper_name, value in poses_and_grippers.grippers.items():
                     rr.log(f"clients/{client_id}/grippers/{gripper_name}/grip", rr.Scalar(value))
 
-    def log_action_predictions(self, predictions: list, **kwargs) -> None:
+    def log_action_predictions(self, predictions: List[PosesAndGrippers], **kwargs: Any) -> None:
         """
         Log action predictions to the Rerun backend.
 
         Parameters:
-        - predictions: A list of action prediction data.
+        - predictions: A list of PosesAndGrippers objects containing action prediction data.
         """
         traj = {}
         for step in predictions:

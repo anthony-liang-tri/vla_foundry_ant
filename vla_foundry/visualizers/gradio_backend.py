@@ -1,7 +1,9 @@
+from typing import Any, Dict, List
 
 import gradio as gr
 import numpy as np
 from pydrake.math import RigidTransform
+from robot_gym.multiarm_spaces import PosesAndGrippers  # Import from robot_gym.multiarm_spaces
 
 # State to store logged data
 state = {
@@ -86,7 +88,7 @@ class GradioBackend:
         """
         state["rigid_transforms"].append((path, transform, axis_length))
 
-    def log_arm_poses(self, arm_poses: dict, **kwargs) -> None:
+    def log_arm_poses(self, arm_poses: Dict[str, PosesAndGrippers], **kwargs: Any) -> None:
         """
         Log arm poses to the Gradio backend.
 
@@ -95,7 +97,7 @@ class GradioBackend:
         """
         state["arm_poses"].append(arm_poses)
 
-    def log_action_predictions(self, predictions: list, **kwargs) -> None:
+    def log_action_predictions(self, predictions: List[PosesAndGrippers], **kwargs: Any) -> None:
         """
         Log action predictions to the Gradio backend.
 
