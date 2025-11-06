@@ -113,7 +113,7 @@ def _detect_rank_prefix() -> str:
 def _choose_backend_from_env() -> str:
     # VISUALIZER values:
     #   disabled|off|0 -> disabled
-    #   rerun|gradio (default to disabled if no env variable is set)
+    #   rerun (default to disabled if no env variable is set)
     val = (os.environ.get("VISUALIZER") or "").strip().lower()
     if not val:
         return "disabled"  # Default to disabled if no VISUALIZER is set
