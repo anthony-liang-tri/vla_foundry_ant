@@ -40,6 +40,7 @@ try:
 except Exception:
     _HAS_DRAKE = False
 
+from vla_foundry.visualizers.gradio_backend import GradioBackend  # Import the GradioBackend class
 from vla_foundry.visualizers.rerun_backend import RerunBackend  # Import the RerunBackend class
 
 # ---------------------------
@@ -78,6 +79,12 @@ def register_backend(backend: Backend) -> None:
 if _HAS_RERUN:
     register_backend(RerunBackend())
 
+# Register gradio if importable
+try:
+    register_backend(GradioBackend())
+except Exception as e:
+    print(f"[visualizer] Failed to register Gradio backend: {e}")
+
 # ---------------------------
 # Global state / facade
 # ---------------------------
@@ -112,14 +119,14 @@ def _detect_rank_prefix() -> str:
 def _choose_backend_from_env() -> str:
     # VISUALIZER values:
     #   disabled|off|0 -> disabled
-    #   rerun (default if installed)
+    #   rerun|gradio (default to rerun if installed)
     val = (os.environ.get("VISUALIZER") or "").strip().lower()
     if val in {"disabled", "off", "0", "none"}:
         return "disabled"
-    if val in {"rerun"}:
-        return "rerun"
+    if val in {"rerun", "gradio"}:
+        return val
     # Auto
-    return "rerun" if "rerun" in _BACKENDS else "disabled"
+    return "rerun" if "rerun" in _BACKENDS else "gradio" if "gradio" in _BACKENDS else "disabled"
 
 
 def _get_backend(name: str) -> Optional[Backend]:
@@ -201,7 +208,7 @@ def log_image(path: str, image: np.ndarray, **kwargs) -> None:
     Parameters
     ----------
     path : str
-        Path in the rerun hierarchy (e.g., "images/cam0").
+        Path in the visualization hierarchy (e.g., "images/cam0").
     image : np.ndarray
         Image data as a NumPy array.
     """
@@ -210,7 +217,7 @@ def log_image(path: str, image: np.ndarray, **kwargs) -> None:
     if not enabled():
         return
     assert _STATE.backend is not None
-    _STATE.backend.log(_prefix(path), rr.Image(image), **kwargs)
+    _STATE.backend.log_image(_prefix(path), image, **kwargs)
 
 
 def log_points3d(path: str, points: np.ndarray, **kwargs) -> None:
@@ -220,7 +227,7 @@ def log_points3d(path: str, points: np.ndarray, **kwargs) -> None:
     Parameters
     ----------
     path : str
-        Path in the rerun hierarchy (e.g., "points/scene").
+        Path in the visualization hierarchy (e.g., "points/scene").
     points : np.ndarray
         3D points as a NumPy array of shape (N, 3).
     """
@@ -229,7 +236,7 @@ def log_points3d(path: str, points: np.ndarray, **kwargs) -> None:
     if not enabled():
         return
     assert _STATE.backend is not None
-    _STATE.backend.log(_prefix(path), rr.Points3D(points), **kwargs)
+    _STATE.backend.log_points3d(_prefix(path), points, **kwargs)
 
 
 def log_line_strips3d(path: str, line_strips: np.ndarray, **kwargs) -> None:
@@ -248,7 +255,7 @@ def log_line_strips3d(path: str, line_strips: np.ndarray, **kwargs) -> None:
     if not enabled():
         return
     assert _STATE.backend is not None
-    _STATE.backend.log(_prefix(path), rr.LineStrips3D([line_strips]), **kwargs)
+    _STATE.backend.log_line_strips3d(_prefix(path), line_strips, **kwargs)
 
 
 def log_scalar(path: str, value: float, **kwargs) -> None:
@@ -267,7 +274,7 @@ def log_scalar(path: str, value: float, **kwargs) -> None:
     if not enabled():
         return
     assert _STATE.backend is not None
-    _STATE.backend.log(_prefix(path), rr.Scalars([value]), **kwargs)
+    _STATE.backend.log_scalar(_prefix(path), value, **kwargs)
 
 
 def log_trajectory(path: str, trajectory_points: np.ndarray) -> None:
@@ -298,10 +305,15 @@ def flush() -> None:
 
 
 def shutdown() -> None:
+    """
+    Perform cleanup during shutdown. Ensure the backend is active before shutting down.
+    """
     if not enabled():
         return
     try:
-        _STATE.backend.shutdown()  # type: ignore[union-attr]
+        if _STATE.backend is not None:
+            print(f"[visualizer] Shutting down backend: {_STATE.backend_name}")
+            _STATE.backend.shutdown()  # type: ignore[union-attr]
     finally:
         _STATE.enabled = False
 
