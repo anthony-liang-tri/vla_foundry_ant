@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import atexit
 import os
-from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
@@ -24,9 +23,6 @@ import numpy as np
 
 # Optional imports (gate behind backend)
 try:
-    import rerun as rr  # type: ignore
-    from rerun import Transform3D  # type: ignore
-    from rerun.datatypes import Quaternion  # type: ignore
 
     _HAS_RERUN = True
 except Exception:
@@ -34,7 +30,6 @@ except Exception:
 
 # Optional Drake import for RigidTransform convenience
 try:
-    from pydrake.math import RigidTransform  # type: ignore
 
     _HAS_DRAKE = True
 except Exception:
@@ -327,156 +322,3 @@ def shutdown() -> None:
             _STATE.backend.shutdown()  # type: ignore[union-attr]
     finally:
         _STATE.enabled = False
-
-
-# ---------------------------
-# Convenience helpers (optional)
-# ---------------------------
-
-
-def log_rigid_transform(path: str, X_AB: "RigidTransform", *, axis_length: float = 0.25) -> None:
-    """
-    Log a Drake pose as a Transform3D in rerun.
-
-    Parameters
-    ----------
-    path : str
-        Path in the rerun hierarchy (e.g., "world/robot_base").
-    X_AB : RigidTransform
-        Pose of frame B expressed in frame A (Drake notation X_AB).
-    axis_length : float, optional
-        Length of the axes to visualize, by default 0.25.
-    """
-    if not _HAS_DRAKE:
-        raise RuntimeError("Drake not available; cannot log RigidTransform")
-
-    # Translation vector (m) expressed in parent frame A
-    t = np.asarray(X_AB.translation(), dtype=float).reshape(3)
-
-    # Quaternion conversion: Drake (w,x,y,z) → Rerun (x,y,z,w)
-    q_wxyz = X_AB.rotation().ToQuaternion().wxyz()  # (w, x, y, z)
-    q_xyzw = np.roll(q_wxyz, -1)  # → (x, y, z, w)
-
-    # Log the transform
-    rr.log(
-        path,
-        Transform3D(
-            translation=t,
-            rotation=Quaternion(xyzw=q_xyzw),
-            axis_length=axis_length,
-        ),
-    )
-
-
-def log_arm_poses(actions_dict: Dict[str, Any]) -> None:
-    """
-    Visualize robot arm poses.
-
-    Parameters
-    ----------
-    actions_dict : Dict[str, Any]
-        A dictionary where keys are client IDs and values are objects containing
-        `poses` (RigidTransform mappings), `grippers` (optional), and `timestamp_data` (optional).
-    """
-    if not _STATE.initialized:
-        init()
-
-    for client_id, poses_and_grippers in actions_dict.items():
-        if not poses_and_grippers or not hasattr(poses_and_grippers, "poses"):
-            continue
-
-        # Set time to wallclock time
-        timestamp = getattr(poses_and_grippers, "timestamp_data", None)
-        if timestamp is not None:
-            rr.set_time_seconds("time", timestamp)
-
-        for model_name, transform in poses_and_grippers.poses.items():
-            # Ensure data compatibility with rerun
-            translation = np.asarray(transform.translation(), dtype=float).reshape(3)
-            rotation_quat = transform.rotation().ToQuaternion()
-            quaternion = np.roll(
-                np.array([rotation_quat.w(), rotation_quat.x(), rotation_quat.y(), rotation_quat.z()], dtype=float),
-                -1,  # Convert (w, x, y, z) → (x, y, z, w)
-            )
-
-            rr.log(
-                f"clients/{client_id}/models/{model_name}/pose",
-                Transform3D(
-                    translation=translation,
-                    rotation=Quaternion(xyzw=quaternion),
-                    axis_length=0.25,
-                ),
-            )
-
-        if hasattr(poses_and_grippers, "grippers") and poses_and_grippers.grippers:
-            for gripper_name, value in poses_and_grippers.grippers.items():
-                if isinstance(value, (int, float)):
-                    rr.log(f"clients/{client_id}/grippers/{gripper_name}/grip", rr.Scalars([value]))
-
-
-def log_action_predictions(results: Iterable[Any]) -> None:
-    """
-    Visualize trajectories from model action predictions.
-
-    Parameters
-    ----------
-    results : Iterable[Any]
-        A list of objects containing `poses` (RigidTransform mappings).
-    """
-    if not _STATE.initialized:
-        init()
-
-    if not results:
-        return
-
-    # 1) Decide which model keys to track from the first valid step
-    first_poses = None
-    for r in results:
-        p = getattr(r, "poses", None)
-        if p:
-            first_poses = p
-            break
-    if not first_poses:
-        return
-
-    # If you only want grippers, filter here:
-    model_keys = [k for k in first_poses if "gripper" in k.lower()] or list(first_poses.keys())
-    traj = {k: [] for k in model_keys}
-
-    # 2) Accumulate per-model trajectories in timestep order
-    traj = {k: [] for k in model_keys}
-    for r in results:
-        poses = getattr(r, "poses", None)
-        if not poses:
-            continue
-        for k in model_keys:
-            if k in poses:
-                xyz = np.asarray(poses[k].translation(), dtype=float).reshape(3)
-                traj[k].append(xyz)
-
-    # 3) Log one strip per model (no cross-linking between models)
-    for k, pts in traj.items():
-        if len(pts) >= 2:
-            arr = np.vstack(pts)
-            log_line_strips3d(f"predictions/{k}/trajectory", arr)
-            log_points3d(f"predictions/{k}/waypoints", arr)
-        elif pts:
-            log_points3d(f"predictions/{k}/waypoints", np.vstack(pts))
-
-    for r in results:
-        poses = getattr(r, "poses", None)
-        if not poses:
-            continue
-        for k in model_keys:
-            if k in poses:
-                xyz = np.asarray(poses[k].translation(), dtype=float).reshape(3)
-                traj[k].append(xyz)
-
-    # 3) Log one strip per model (no cross-linking between models)
-    for k, pts in traj.items():
-        if len(pts) >= 2:
-            arr = np.vstack(pts)
-            log_line_strips3d(f"predictions/{k}/trajectory", arr)
-            log_points3d(f"predictions/{k}/waypoints", arr)
-        elif pts:
-            log_points3d(f"predictions/{k}/waypoints", np.vstack(pts))
