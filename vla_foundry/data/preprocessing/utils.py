@@ -67,6 +67,8 @@ def upload_sample_to_s3(
                 # Save as JSON
                 if isinstance(value, dict):
                     json_str = json.dumps(value, indent=2, default=str)
+                elif value is None:  # e.g. language_instructions can be None
+                    continue
                 else:
                     json_str = json.dumps(asdict(value), indent=2, default=str)
                 data_buffer.write(json_str.encode("utf-8"))

@@ -278,7 +278,7 @@ class LeRobotConverter(BaseRoboticsConverter):
         logger_actor.increment_total_potential_samples.remote()
 
         # Calculate windows
-        lowdim_start = max(0, anchor_timestep - self.cfg.past_lowdim_steps)
+        lowdim_start = anchor_timestep - self.cfg.past_lowdim_steps
         lowdim_end = anchor_timestep + self.cfg.future_lowdim_steps
 
         # Check padding
