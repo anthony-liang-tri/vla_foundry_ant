@@ -40,7 +40,6 @@ try:
 except Exception:
     _HAS_DRAKE = False
 
-from vla_foundry.visualizers.gradio_backend import GradioBackend  # Import the GradioBackend class
 from vla_foundry.visualizers.rerun_backend import RerunBackend  # Import the RerunBackend class
 
 # ---------------------------
@@ -79,11 +78,6 @@ def register_backend(backend: Backend) -> None:
 if _HAS_RERUN:
     register_backend(RerunBackend())
 
-# Register gradio if importable
-try:
-    register_backend(GradioBackend())
-except Exception as e:
-    print(f"[visualizer] Failed to register Gradio backend: {e}")
 
 # ---------------------------
 # Global state / facade
@@ -125,7 +119,7 @@ def _choose_backend_from_env() -> str:
         return "disabled"  # Default to disabled if no VISUALIZER is set
     if val in {"disabled", "off", "0", "none"}:
         return "disabled"
-    if val in {"rerun", "gradio"}:
+    if val in {"rerun"}:
         return val
     # Auto
     return "disabled"
