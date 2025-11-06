@@ -262,6 +262,56 @@ class GradioBackend:
                 return self._create_3d_trajectory_plot(trajectory)
             return Figure()  # Return an empty figure if no trajectory is logged
 
+        def _create_scalar_bar_chart(scalars: List[Dict[str, Any]]) -> Figure:
+            """
+            Create a bar chart for scalars using Plotly.
+
+            Parameters:
+            - scalars: A list of dictionaries with "tag" and "value" keys.
+
+            Returns:
+            - A Plotly Figure object for the scalar bar chart.
+            """
+            tags = [scalar["tag"] for scalar in scalars]
+            values = [scalar["value"] for scalar in scalars]
+            fig = Figure(data=[{"type": "bar", "x": tags, "y": values}])
+            fig.update_layout(title="Scalars", xaxis_title="Tags", yaxis_title="Values")
+            return fig
+
+        def _create_3d_points_plot(points3d: List[Dict[str, Any]]) -> Figure:
+            """
+            Create a 3D scatter plot for 3D points using Plotly.
+
+            Parameters:
+            - points3d: A list of dictionaries with "tag" and "points" keys.
+
+            Returns:
+            - A Plotly Figure object for the 3D points.
+            """
+            data = []
+            for point_set in points3d:
+                tag = point_set["tag"]
+                points = np.array(point_set["points"])
+                scatter = Scatter3d(
+                    x=points[:, 0],
+                    y=points[:, 1],
+                    z=points[:, 2],
+                    mode="markers",
+                    marker=dict(size=4),
+                    name=tag,
+                )
+                data.append(scatter)
+            fig = Figure(data=data)
+            fig.update_layout(
+                scene=dict(
+                    xaxis_title="X",
+                    yaxis_title="Y",
+                    zaxis_title="Z",
+                ),
+                title="3D Points",
+            )
+            return fig
+
         with gr.Blocks() as demo:
             gr.Markdown("# Gradio Visualizer")
 
@@ -276,9 +326,13 @@ class GradioBackend:
                     value=0,
                 )
 
-            # Display other data as JSON
+            # Display scalars as a bar chart
             with gr.Row():
-                state_display = gr.JSON(label="Logged Data")
+                scalar_chart = gr.Plot(label="Scalars")
+
+            # Display 3D points as a scatter plot
+            with gr.Row():
+                points3d_plot = gr.Plot(label="3D Points")
 
             # Display 3D trajectory
             with gr.Row():
@@ -286,9 +340,15 @@ class GradioBackend:
 
             # Refresh button to update the data
             gr.Button("Refresh").click(
-                fn=lambda: (display_state(), display_3d_trajectory()),
+                fn=lambda: (
+                    _create_scalar_bar_chart([{"tag": tag, "value": value} for tag, value in state["scalars"]]),
+                    _create_3d_points_plot(
+                        [{"tag": tag, "points": points.tolist()} for tag, points in state["points3d"]]
+                    ),
+                    display_3d_trajectory(),
+                ),
                 inputs=[],
-                outputs=[state_display, trajectory_plot],
+                outputs=[scalar_chart, points3d_plot, trajectory_plot],
             )
 
             # Update image display based on slider value
