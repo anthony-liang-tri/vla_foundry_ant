@@ -1,3 +1,4 @@
+import json
 import os
 import uuid
 from dataclasses import dataclass
@@ -57,7 +58,9 @@ def check_episode_validity_ray(episode_path: str) -> Optional[str]:
 
 
 @ray.remote
-def discover_and_validate_episodes_in_directory(diffusion_spartan_path: str, max_episodes: int = -1) -> List[str]:
+def discover_and_validate_episodes_in_directory(
+    diffusion_spartan_path: str, max_episodes: int = -1, validation_episodes=None
+) -> List[str]:
     """Discover and validate episodes in a diffusion_spartan directory in parallel."""
     fs, _ = fsspec.core.url_to_fs(diffusion_spartan_path)
     fs_path = diffusion_spartan_path.replace("s3://", "")
@@ -79,6 +82,10 @@ def discover_and_validate_episodes_in_directory(diffusion_spartan_path: str, max
             item_basename.endswith(ext) for ext in [".pkl", ".npz", ".txt", ".json", ".yaml", ".tar", ".gz"]
         ):
             episode_path = os.path.join(diffusion_spartan_path, item_basename)
+            task_name = episode_path.removeprefix("s3://robotics-manip-lbm/efs/data/tasks/").split("/")[0]
+            episode_num = int(item_basename.split("_")[-1])
+            if validation_episodes and episode_num in validation_episodes[task_name]:
+                continue
             episode_paths.append(episode_path)
 
             # Early exit if we have enough episodes
@@ -123,6 +130,13 @@ class SpartanConverter(BaseRoboticsConverter):
                 prev_index = cumulative_index
             print("🧭 Action field slices:", debug_slices)
 
+        # Load validation episodes
+        self.validation_episodes = None
+        if cfg.validation_episodes_path:
+            with open(cfg.validation_episodes_path, "r") as f:
+                self.validation_episodes = json.load(f)
+            print(f"Loaded validation episodes: {self.validation_episodes}")
+
         if self.action_key_fields and len(self.action_key_fields) != len(self.action_index_fields):
             raise ValueError("Action field configuration mismatch: key and index lists differ in length")
 
@@ -161,7 +175,9 @@ class SpartanConverter(BaseRoboticsConverter):
         # Discover and validate episodes in parallel using Ray
         print("Discovering and validating episodes in parallel...")
         discover_futures = [
-            discover_and_validate_episodes_in_directory.remote(dir_path, -1)  # Let each dir discover all episodes
+            discover_and_validate_episodes_in_directory.remote(
+                dir_path, -1, self.validation_episodes
+            )  # Let each dir discover all episodes
             for dir_path in diffusion_spartan_dirs
         ]
         discover_results = ray.get(discover_futures)

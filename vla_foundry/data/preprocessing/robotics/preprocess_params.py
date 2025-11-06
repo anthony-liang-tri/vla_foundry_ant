@@ -58,6 +58,8 @@ class PreprocessParams(BaseParams):
         default="vla_foundry/config_presets/data/lbm/lbm_action_fields.yaml",
     )
 
+    validation_episodes_path: Optional[str] = field(default=None)
+
     # Ray configuration
     ray_address: str = field(default=None)  # Ray cluster address, default to auto-detect
     ray_num_cpus: int = field(default=None)  # Number of CPUs for Ray, default to auto-detect

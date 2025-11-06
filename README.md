@@ -76,6 +76,8 @@ See `./examples` for more examples. [llm_11m.sh](examples/training/llm_11m.sh) i
 
 For an LBM policy evaluation walkthrough, follow the [LBM deployment guide](examples/deployment/lbm_eval/README.md).
 
+For TRI-specific scripts and documentation, see [vla_foundry/tri](vla_foundry/tri).
+
 ### Running on SageMaker
 Create a `secrets.env` file in the project's root directory:
 ```bash
