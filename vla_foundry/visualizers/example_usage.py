@@ -56,8 +56,7 @@ for step in range(10):
     arm_poses = {
         "client": PosesAndGrippers(
             poses={
-                "arm_joint_1": RigidTransform(RollPitchYaw(0, 0, 0), np.random.uniform(-1, 1, 3)),
-                "arm_joint_2": RigidTransform(RollPitchYaw(0, 0, np.pi / 2), np.random.uniform(-1, 1, 3)),
+                "arm_1": RigidTransform(RollPitchYaw(0, 0, 0), np.random.uniform(-1, 1, 3)),
             },
             grippers={"gripper_1": random.uniform(0, 1)},
         )
@@ -69,8 +68,7 @@ for step in range(10):
     action_predictions = [
         PosesAndGrippers(
             poses={
-                "arm_joint_1": RigidTransform(RollPitchYaw(0, 0, 0), np.random.uniform(-1, 1, 3)),
-                "arm_joint_2": RigidTransform(RollPitchYaw(0, 0, np.pi / 2), np.random.uniform(-1, 1, 3)),
+                "arm_1": RigidTransform(RollPitchYaw(0, 0, 0), np.random.uniform(-1, 1, 3)),
             },
             grippers={"gripper_1": random.uniform(0, 1)},
         )

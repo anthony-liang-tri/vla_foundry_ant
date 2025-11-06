@@ -81,7 +81,6 @@ class GradioBackend:
         Returns:
         - A Plotly Figure object for the 3D trajectory.
         """
-        print(f"Creating 3D trajectory plot for trajectory: {trajectory}")  # Debug print
         fig = Figure(
             data=[
                 Scatter3d(
@@ -312,6 +311,27 @@ class GradioBackend:
             )
             return fig
 
+        def get_scalar_by_index(index: int):
+            # Retrieve a specific scalar by index
+            if 0 <= index < len(state["scalars"]):
+                tag, value = state["scalars"][index]
+                return _create_scalar_bar_chart([{"tag": tag, "value": value}])
+            return Figure()  # Return an empty figure if no scalar is available
+
+        def get_points3d_by_index(index: int):
+            # Retrieve specific 3D points by index
+            if 0 <= index < len(state["points3d"]):
+                tag, points = state["points3d"][index]
+                return _create_3d_points_plot([{"tag": tag, "points": points.tolist()}])
+            return Figure()  # Return an empty figure if no 3D points are available
+
+        def get_trajectory_by_index(index: int):
+            # Retrieve a specific trajectory by index
+            if 0 <= index < len(state["trajectories"]):
+                _, trajectory = state["trajectories"][index]
+                return self._create_3d_trajectory_plot(trajectory)
+            return Figure()  # Return an empty figure if no trajectory is available
+
         with gr.Blocks() as demo:
             gr.Markdown("# Gradio Visualizer")
 
@@ -326,36 +346,65 @@ class GradioBackend:
                     value=0,
                 )
 
-            # Display scalars as a bar chart
+            # Display scalars dynamically with a slider
             with gr.Row():
-                scalar_chart = gr.Plot(label="Scalars")
+                scalar_display = gr.Plot(label="Selected Scalar")
+                scalar_slider = gr.Slider(
+                    label="Scalar Index",
+                    minimum=0,
+                    maximum=max(0, len(state["scalars"]) - 1),
+                    step=1,
+                    value=0,
+                )
 
-            # Display 3D points as a scatter plot
+            # Display 3D points dynamically with a slider
             with gr.Row():
-                points3d_plot = gr.Plot(label="3D Points")
+                points3d_display = gr.Plot(label="Selected 3D Points")
+                points3d_slider = gr.Slider(
+                    label="3D Points Index",
+                    minimum=0,
+                    maximum=max(0, len(state["points3d"]) - 1),
+                    step=1,
+                    value=0,
+                )
 
-            # Display 3D trajectory
+            # Display trajectories dynamically with a slider
             with gr.Row():
-                trajectory_plot = gr.Plot(label="3D Trajectory")
-
-            # Refresh button to update the data
-            gr.Button("Refresh").click(
-                fn=lambda: (
-                    _create_scalar_bar_chart([{"tag": tag, "value": value} for tag, value in state["scalars"]]),
-                    _create_3d_points_plot(
-                        [{"tag": tag, "points": points.tolist()} for tag, points in state["points3d"]]
-                    ),
-                    display_3d_trajectory(),
-                ),
-                inputs=[],
-                outputs=[scalar_chart, points3d_plot, trajectory_plot],
-            )
+                trajectory_display = gr.Plot(label="Selected Trajectory")
+                trajectory_slider = gr.Slider(
+                    label="Trajectory Index",
+                    minimum=0,
+                    maximum=max(0, len(state["trajectories"]) - 1),
+                    step=1,
+                    value=0,
+                )
 
             # Update image display based on slider value
             image_slider.change(
                 fn=get_image_by_index,
                 inputs=[image_slider],
-                outputs=[image_display],  # Only update the image display
+                outputs=[image_display],
+            )
+
+            # Update scalar display based on slider value
+            scalar_slider.change(
+                fn=get_scalar_by_index,
+                inputs=[scalar_slider],
+                outputs=[scalar_display],
+            )
+
+            # Update 3D points display based on slider value
+            points3d_slider.change(
+                fn=get_points3d_by_index,
+                inputs=[points3d_slider],
+                outputs=[points3d_display],
+            )
+
+            # Update trajectory display based on slider value
+            trajectory_slider.change(
+                fn=get_trajectory_by_index,
+                inputs=[trajectory_slider],
+                outputs=[trajectory_display],
             )
 
         self._app_launched = True
