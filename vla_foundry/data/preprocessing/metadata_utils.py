@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import fsspec
 from draccus.parsers import encoding as _draccus_encoding
 
-from vla_foundry.data.scripts.preprocessing.robotics.preprocess_params import PreprocessParams
+from vla_foundry.data.preprocessing.robotics.preprocess_params import PreprocessParams
 
 
 def find_repo_root(start_path):

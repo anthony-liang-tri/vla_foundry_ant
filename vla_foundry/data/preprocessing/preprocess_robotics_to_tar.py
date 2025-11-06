@@ -5,14 +5,14 @@ import random
 import draccus
 import ray
 
-from vla_foundry.data.scripts.preprocessing.metadata_utils import create_processing_metadata
-from vla_foundry.data.scripts.preprocessing.robotics.converters import get_converter
-from vla_foundry.data.scripts.preprocessing.robotics.preprocess_params import PreprocessParams
-from vla_foundry.data.scripts.preprocessing.robotics.preprocess_statistics import (
+from vla_foundry.data.preprocessing.metadata_utils import create_processing_metadata
+from vla_foundry.data.preprocessing.robotics.converters import get_converter
+from vla_foundry.data.preprocessing.robotics.preprocess_params import PreprocessParams
+from vla_foundry.data.preprocessing.robotics.preprocess_statistics import (
     LoggerActor,
     StreamingDatasetStatisticsRayActor,
 )
-from vla_foundry.data.scripts.preprocessing.utils import create_shard, upload_config_to_s3, upload_dict_to_s3
+from vla_foundry.data.preprocessing.utils import create_shard, upload_config_to_s3, upload_dict_to_s3
 from vla_foundry.file_utils import check_directory_has_files_with_substring
 
 

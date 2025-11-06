@@ -1,1 +1,125 @@
-{"metadata_version": "1.0", "created_at": "2025-11-05T03:24:08.400235", "command_line": {"script_name": "vla_foundry/data/scripts/preprocessing/preprocess_robotics_to_tar.py", "full_command": "vla_foundry/data/scripts/preprocessing/preprocess_robotics_to_tar.py --source_episodes ['s3://robotics-manip-lbm/efs/data/tasks/PickAndPlaceBox/cabot/sim/bc/teleop/2025-02-11T17-04-00-05-00/diffusion_spartan/'] --source_type spartan --output_dir s3://tri-ml-datasets-uw2/preprocess_lbm_test/lbm/PickAndPlaceBox/cabot/sim --action_fields_config_path vla_foundry/config_presets/data/lbm/lbm_action_fields.yaml --language_annotations_path vla_foundry/config_presets/data/lbm/lbm_language_annotations.yaml --data_discard_keys include vla_foundry/config_presets/data/lbm/lbm_data_discard_key.yaml --camera_names include vla_foundry/config_presets/data/lbm/lbm_data_camera_names.yaml --past_lowdim_steps 1 --future_lowdim_steps 14 --image_indices [-1, 0] --stride 1 --max_padding_left 3 --max_padding_right 12 --samples_per_shard 5 --max_episodes_to_process 1 --jpeg_quality 5 --filter_still_samples False --compute_statistics True --still_threshold 0.05 --resize_images_size [224, 224]", "arguments": {"source_type": "spartan", "source_episodes": ["s3://robotics-manip-lbm/efs/data/tasks/PickAndPlaceBox/cabot/sim/bc/teleop/2025-02-11T17-04-00-05-00/diffusion_spartan/"], "output_dir": "s3://tri-ml-datasets-uw2/preprocess_lbm_test/lbm/PickAndPlaceBox/cabot/sim", "past_lowdim_steps": 1, "future_lowdim_steps": 14, "image_indices": [-1, 0], "stride": 1, "max_padding_left": 3, "max_padding_right": 12, "padding_strategy": "copy", "filter_still_samples": false, "still_threshold": 0.05, "camera_names": ["scene_right_0", "scene_left_0", "wrist_left_minus", "wrist_left_plus", "wrist_right_minus", "wrist_right_plus"], "data_discard_keys": ["robot__desired__wrench__right::panda", "robot__desired__joint_torque__right::panda", "robot__desired__joint_torque__left::panda", "robot__desired__wrench__left::panda", "robot__desired__external_wrench__right::panda", "robot__desired__external_wrench__left::panda", "robot__desired__joint_torque_external__right::panda", "robot__desired__joint_torque_external__left::panda"], "samples_per_shard": 5, "num_workers": 20, "max_episodes_to_process": 1, "fail_on_nan": false, "compute_statistics": true, "auto_tag": true, "skip_git_tagging": false, "resize_images_size": [224, 224], "jpeg_quality": 5, "language_annotations_path": "vla_foundry/config_presets/data/lbm/lbm_language_annotations.yaml", "action_fields_config_path": "vla_foundry/config_presets/data/lbm/lbm_action_fields.yaml", "ray_address": null, "ray_num_cpus": null}}, "environment": {"python_version": "3.10.16 (main, Mar 17 2025, 21:01:46) [Clang 20.1.0 ]", "platform": "Linux-5.15.0-1038-aws-x86_64-with-glibc2.31", "hostname": "ip-10-242-11-210", "processor": "x86_64", "python_executable": "/home/ubuntu/vla_foundry/.venv/bin/python", "working_directory": "/home/ubuntu/vla_foundry", "user": "ubuntu", "timestamp_captured": "2025-11-05T03:24:08.343482", "package_versions": {"numpy": "1.26.4", "fsspec": "2025.7.0", "PIL": "11.3.0", "tqdm": "4.67.1", "boto3": "1.40.18", "webdataset": "0.2.111"}}, "git_info": {"commit_hash": "4b35988a76d18d7d15ae04bd96ed6815bc2232b1", "branch": "copilot/parallelize-discover-episode", "has_uncommitted_changes": true, "has_preprocessing_related_changes": false, "preprocessing_related_files": [], "critical_preprocessing_files": [], "relevant_preprocessing_files": [], "latest_commit_message": "Fix max_episodes_to_process handling for multiple directories", "remote_url": "https://github.com/sedrick-keh-tri/lbm2.git"}, "source_data": {"source_path": ["s3://robotics-manip-lbm/efs/data/tasks/PickAndPlaceBox/cabot/sim/bc/teleop/2025-02-11T17-04-00-05-00/diffusion_spartan/"], "num_episodes": 1, "episode_paths": ["s3://robotics-manip-lbm/efs/data/tasks/PickAndPlaceBox/cabot/sim/bc/teleop/2025-02-11T17-04-00-05-00/diffusion_spartan/episode_0"], "total_episodes_available": 1, "source_data_info_error": "'list' object has no attribute 'startswith'"}, "processing": {"timestamp_start": "2025-11-05T03:24:08.400246", "total_samples_created": 122, "timestamp_end": "2025-11-05T03:25:56.336565", "sample_counts": {"total_potential_samples": 124, "still_samples_filtered": 0, "padding_samples_filtered": 2}}, "reproducibility_notes": ["WARNING: Dataset created with uncommitted changes to commit 4b35988a76d18d7d15ae04bd96ed6815bc2232b1", "For exact reproduction, the following files had uncommitted changes:", "", "Basic reproduction (may differ due to uncommitted changes):", "  git clone https://github.com/sedrick-keh-tri/lbm2.git", "  git checkout 4b35988a76d18d7d15ae04bd96ed6815bc2232b1", "  vla_foundry/data/scripts/preprocessing/preprocess_robotics_to_tar.py --source_episodes ['s3://robotics-manip-lbm/efs/data/tasks/PickAndPlaceBox/cabot/sim/bc/teleop/2025-02-11T17-04-00-05-00/diffusion_spartan/'] --source_type spartan --output_dir s3://tri-ml-datasets-uw2/preprocess_lbm_test/lbm/PickAndPlaceBox/cabot/sim --action_fields_config_path vla_foundry/config_presets/data/lbm/lbm_action_fields.yaml --language_annotations_path vla_foundry/config_presets/data/lbm/lbm_language_annotations.yaml --data_discard_keys include vla_foundry/config_presets/data/lbm/lbm_data_discard_key.yaml --camera_names include vla_foundry/config_presets/data/lbm/lbm_data_camera_names.yaml --past_lowdim_steps 1 --future_lowdim_steps 14 --image_indices [-1, 0] --stride 1 --max_padding_left 3 --max_padding_right 12 --samples_per_shard 5 --max_episodes_to_process 1 --jpeg_quality 5 --filter_still_samples False --compute_statistics True --still_threshold 0.05 --resize_images_size [224, 224]", "", "Additional requirements:", "- Ensure the source data at the specified paths is unchanged (check episode_list_hash)", "- Use the same package versions if possible for identical results", "- Use the same hardware/OS for identical performance characteristics"]}
+{
+    "metadata_version": "1.0",
+    "created_at": "2025-11-05T03:24:08.400235",
+    "command_line": {
+        "script_name": "vla_foundry/data/preprocessing/preprocess_robotics_to_tar.py",
+        "full_command": "vla_foundry/data/preprocessing/preprocess_robotics_to_tar.py --source_episodes ['s3://robotics-manip-lbm/efs/data/tasks/PickAndPlaceBox/cabot/sim/bc/teleop/2025-02-11T17-04-00-05-00/diffusion_spartan/'] --source_type spartan --output_dir s3://tri-ml-datasets-uw2/preprocess_lbm_test/lbm/PickAndPlaceBox/cabot/sim --action_fields_config_path vla_foundry/config_presets/data/lbm/lbm_action_fields.yaml --language_annotations_path vla_foundry/config_presets/data/lbm/lbm_language_annotations.yaml --data_discard_keys include vla_foundry/config_presets/data/lbm/lbm_data_discard_key.yaml --camera_names include vla_foundry/config_presets/data/lbm/lbm_data_camera_names.yaml --past_lowdim_steps 1 --future_lowdim_steps 14 --image_indices [-1, 0] --stride 1 --max_padding_left 3 --max_padding_right 12 --samples_per_shard 5 --max_episodes_to_process 1 --jpeg_quality 5 --filter_still_samples False --compute_statistics True --still_threshold 0.05 --resize_images_size [224, 224]",
+        "arguments": {
+            "source_type": "spartan",
+            "source_episodes": [
+                "s3://robotics-manip-lbm/efs/data/tasks/PickAndPlaceBox/cabot/sim/bc/teleop/2025-02-11T17-04-00-05-00/diffusion_spartan/"
+            ],
+            "output_dir": "s3://tri-ml-datasets-uw2/preprocess_lbm_test/lbm/PickAndPlaceBox/cabot/sim",
+            "past_lowdim_steps": 1,
+            "future_lowdim_steps": 14,
+            "image_indices": [
+                -1,
+                0
+            ],
+            "stride": 1,
+            "max_padding_left": 3,
+            "max_padding_right": 12,
+            "padding_strategy": "copy",
+            "filter_still_samples": false,
+            "still_threshold": 0.05,
+            "camera_names": [
+                "scene_right_0",
+                "scene_left_0",
+                "wrist_left_minus",
+                "wrist_left_plus",
+                "wrist_right_minus",
+                "wrist_right_plus"
+            ],
+            "data_discard_keys": [
+                "robot__desired__wrench__right::panda",
+                "robot__desired__joint_torque__right::panda",
+                "robot__desired__joint_torque__left::panda",
+                "robot__desired__wrench__left::panda",
+                "robot__desired__external_wrench__right::panda",
+                "robot__desired__external_wrench__left::panda",
+                "robot__desired__joint_torque_external__right::panda",
+                "robot__desired__joint_torque_external__left::panda"
+            ],
+            "samples_per_shard": 5,
+            "num_workers": 20,
+            "max_episodes_to_process": 1,
+            "fail_on_nan": false,
+            "compute_statistics": true,
+            "auto_tag": true,
+            "skip_git_tagging": false,
+            "resize_images_size": [
+                224,
+                224
+            ],
+            "jpeg_quality": 5,
+            "language_annotations_path": "vla_foundry/config_presets/data/lbm/lbm_language_annotations.yaml",
+            "action_fields_config_path": "vla_foundry/config_presets/data/lbm/lbm_action_fields.yaml",
+            "ray_address": null,
+            "ray_num_cpus": null
+        }
+    },
+    "environment": {
+        "python_version": "3.10.16 (main, Mar 17 2025, 21:01:46) [Clang 20.1.0 ]",
+        "platform": "Linux-5.15.0-1038-aws-x86_64-with-glibc2.31",
+        "hostname": "ip-10-242-11-210",
+        "processor": "x86_64",
+        "python_executable": "/home/ubuntu/vla_foundry/.venv/bin/python",
+        "working_directory": "/home/ubuntu/vla_foundry",
+        "user": "ubuntu",
+        "timestamp_captured": "2025-11-05T03:24:08.343482",
+        "package_versions": {
+            "numpy": "1.26.4",
+            "fsspec": "2025.7.0",
+            "PIL": "11.3.0",
+            "tqdm": "4.67.1",
+            "boto3": "1.40.18",
+            "webdataset": "0.2.111"
+        }
+    },
+    "git_info": {
+        "commit_hash": "4b35988a76d18d7d15ae04bd96ed6815bc2232b1",
+        "branch": "copilot/parallelize-discover-episode",
+        "has_uncommitted_changes": true,
+        "has_preprocessing_related_changes": false,
+        "preprocessing_related_files": [],
+        "critical_preprocessing_files": [],
+        "relevant_preprocessing_files": [],
+        "latest_commit_message": "Fix max_episodes_to_process handling for multiple directories",
+        "remote_url": "https://github.com/sedrick-keh-tri/lbm2.git"
+    },
+    "source_data": {
+        "source_path": [
+            "s3://robotics-manip-lbm/efs/data/tasks/PickAndPlaceBox/cabot/sim/bc/teleop/2025-02-11T17-04-00-05-00/diffusion_spartan/"
+        ],
+        "num_episodes": 1,
+        "episode_paths": [
+            "s3://robotics-manip-lbm/efs/data/tasks/PickAndPlaceBox/cabot/sim/bc/teleop/2025-02-11T17-04-00-05-00/diffusion_spartan/episode_0"
+        ],
+        "total_episodes_available": 1,
+        "source_data_info_error": "'list' object has no attribute 'startswith'"
+    },
+    "processing": {
+        "timestamp_start": "2025-11-05T03:24:08.400246",
+        "total_samples_created": 122,
+        "timestamp_end": "2025-11-05T03:25:56.336565",
+        "sample_counts": {
+            "total_potential_samples": 124,
+            "still_samples_filtered": 0,
+            "padding_samples_filtered": 2
+        }
+    },
+    "reproducibility_notes": [
+        "WARNING: Dataset created with uncommitted changes to commit 4b35988a76d18d7d15ae04bd96ed6815bc2232b1",
+        "For exact reproduction, the following files had uncommitted changes:",
+        "",
+        "Basic reproduction (may differ due to uncommitted changes):",
+        "  git clone https://github.com/sedrick-keh-tri/lbm2.git",
+        "  git checkout 4b35988a76d18d7d15ae04bd96ed6815bc2232b1",
+        "  vla_foundry/data/preprocessing/preprocess_robotics_to_tar.py --source_episodes ['s3://robotics-manip-lbm/efs/data/tasks/PickAndPlaceBox/cabot/sim/bc/teleop/2025-02-11T17-04-00-05-00/diffusion_spartan/'] --source_type spartan --output_dir s3://tri-ml-datasets-uw2/preprocess_lbm_test/lbm/PickAndPlaceBox/cabot/sim --action_fields_config_path vla_foundry/config_presets/data/lbm/lbm_action_fields.yaml --language_annotations_path vla_foundry/config_presets/data/lbm/lbm_language_annotations.yaml --data_discard_keys include vla_foundry/config_presets/data/lbm/lbm_data_discard_key.yaml --camera_names include vla_foundry/config_presets/data/lbm/lbm_data_camera_names.yaml --past_lowdim_steps 1 --future_lowdim_steps 14 --image_indices [-1, 0] --stride 1 --max_padding_left 3 --max_padding_right 12 --samples_per_shard 5 --max_episodes_to_process 1 --jpeg_quality 5 --filter_still_samples False --compute_statistics True --still_threshold 0.05 --resize_images_size [224, 224]",
+        "",
+        "Additional requirements:",
+        "- Ensure the source data at the specified paths is unchanged (check episode_list_hash)",
+        "- Use the same package versions if possible for identical results",
+        "- Use the same hardware/OS for identical performance characteristics"
+    ]
+}

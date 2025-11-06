@@ -28,12 +28,12 @@ Add the --include-dashboard=True arg before the --head to include the ray dashbo
 # - file_mounts: It copies your HF token from ~/.cache/huggingface/token. Change this if it's somewhere else.
 # - rsync_exclude: It currently excludes rsyncing `.venv` and `wandb`. Add here if there are other paths you want to exclude (e.g. large checkpoints).
 ####################
-ray up vla_foundry/data/scripts/ray_cluster_configs.yaml
+ray up vla_foundry/config_presets/data/preprocessing/ray_cluster_configs.yaml
 ```
 
 3. [Optional] Attach the ray cluster. This will take you "inside" the cluster.
 ```bash
-ray attach vla_foundry/data/scripts/ray_cluster_configs.yaml
+ray attach vla_foundry/config_presets/data/preprocessing/ray_cluster_configs.yaml
 ```
 
 4. Run your script inside the cluster. Note that ray scripts currently do **not** work well with `uv run`. The requirements can still be used with `uv sync --group=preprocessing` (automatically done in `ray_cluster_configs.yaml`) and `source .venv/bin/activate`.
@@ -45,12 +45,12 @@ python (some-script-here)
 
 5. When finished, exit the cluster. Then, from your own machine, shut down the ray cluster with `ray down`.
 ```bash
-ray down vla_foundry/data/scripts/ray_cluster_configs.yaml
+ray down vla_foundry/config_presets/data/preprocessing/ray_cluster_configs.yaml
 ```
 
 # Downloading a Hugging Face dataset to S3
 ```bash
-python vla_foundry/data/scripts/hf_dataset_downloader.py --dataset IPEC-COMMUNITY/droid_lerobot --mode s3 --s3-output-path s3://tri-ml-datasets/hf_datasets/droid_lerobot --local-output-dir /datasets/hf_datasets/droid_lerobot --preserve-structure
+python vla_foundry/data/preprocessing/hf_utils/hf_dataset_downloader.py --dataset IPEC-COMMUNITY/droid_lerobot --mode s3 --s3-output-path s3://tri-ml-datasets/hf_datasets/droid_lerobot --local-output-dir /datasets/hf_datasets/droid_lerobot --preserve-structure
 ```
 
 # Converting VLM Hugging Face captions to tar shards
@@ -60,19 +60,19 @@ We use [img2dataset](https://github.com/rom1504/img2dataset) to handle image dow
 This assumes that the HF dataset is already downloaded to S3 (see above section).
 
 ```bash
-python vla_foundry/data/scripts/preprocessing/preprocess_captionshf_to_tar.py --cluster ray --input_path s3://tri-ml-datasets/scratch/sedrick.keh/downloads/ --output_path s3://tri-ml-datasets/scratch/sedrick.keh/downloads2/ --url_col images --caption_col texts --save_additional_columns metadata
+python vla_foundry/data/preprocessing/preprocess_captionshf_to_tar.py --cluster ray --input_path s3://tri-ml-datasets/scratch/sedrick.keh/downloads/ --output_path s3://tri-ml-datasets/scratch/sedrick.keh/downloads2/ --url_col images --caption_col texts --save_additional_columns metadata
 ```
 
 # Converting a text Hugging Face dataset to tar shards
 ```bash
-python vla_foundry/data/scripts/preprocessing/preprocess_untokenized_to_tar.py --s3_input_path s3://tri-ml-datasets/hf_datasets/fineweb-edu-350BT --s3_output_path s3://tri-ml-datasets/lbm2_datasets/text/fineweb-edu-350BT --tmp_dir /tmp/finewebshards
+python vla_foundry/data/preprocessing/preprocess_untokenized_to_tar.py --s3_input_path s3://tri-ml-datasets/hf_datasets/fineweb-edu-350BT --s3_output_path s3://tri-ml-datasets/lbm2_datasets/text/fineweb-edu-350BT --tmp_dir /tmp/finewebshards
 ```
 
 # Converting LeRobot to tar shards
 This assumes that the HF dataset is already downloaded to S3.
 
 ```bash
-source .venv/bin/activate && python vla_foundry/data/scripts/preprocessing/preprocess_robotics_to_tar.py \
+source .venv/bin/activate && python vla_foundry/data/preprocessing/preprocess_robotics_to_tar.py \
 --source_type "lerobot" \
 --source_episodes "['s3://tri-ml-datasets/hf_datasets/pi_libero/']" \
 --output_dir s3://tri-ml-datasets/scratch/sedrick.keh/tmp/lerobotdata/pi_libero/ \
@@ -83,7 +83,7 @@ source .venv/bin/activate && python vla_foundry/data/scripts/preprocessing/prepr
 
 # Converting LBM Spartan data to tar shards
 ```bash
-python vla_foundry/data/scripts/preprocessing/preprocess_robotics_to_tar.py \
+python vla_foundry/data/preprocessing/preprocess_robotics_to_tar.py \
 --source_type "spartan" \
 --source_episodes "[
     's3://robotics-manip-lbm/efs/data/tasks/BimanualPutRedBellPepperInBin/riverway/sim/bc/teleop/2025-01-02T10-49-28-05-00/diffusion_spartan/',

@@ -43,7 +43,7 @@ Data preparation and conversion scripts:
 - **`preprocess_lbm_tiny.sh`** - Small-scale preprocessing for testing
 - **`preprocess_and_push_to_hub.sh`** - Convert LBM data to LeRobot format and push to Hugging Face Hub
 
-For detailed preprocessing documentation, see [vla_foundry/data/scripts/preprocessing/README.md](../vla_foundry/data/scripts/preprocessing/README.md).
+For detailed preprocessing documentation, see [vla_foundry/data/preprocessing/README.md](../vla_foundry/data/preprocessing/README.md).
 
 ## Debug Examples
 

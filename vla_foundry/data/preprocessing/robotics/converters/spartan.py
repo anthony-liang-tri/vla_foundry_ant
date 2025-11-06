@@ -8,10 +8,10 @@ import numpy as np
 import ray
 import yaml
 
+from vla_foundry.data.preprocessing.robotics.converters.base import BaseRoboticsConverter
+from vla_foundry.data.preprocessing.robotics.preprocess_masks import create_past_and_future_masks
+from vla_foundry.data.preprocessing.utils import is_still_sample
 from vla_foundry.data.robotics.utils import any_to_actual_key, load_action_field_config
-from vla_foundry.data.scripts.preprocessing.robotics.converters.base import BaseRoboticsConverter
-from vla_foundry.data.scripts.preprocessing.robotics.preprocess_masks import create_past_and_future_masks
-from vla_foundry.data.scripts.preprocessing.utils import is_still_sample
 
 
 @dataclass

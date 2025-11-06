@@ -1,4 +1,4 @@
-from vla_foundry.data.scripts.hf_downloader_utils import check_lerobot_complete
+from vla_foundry.data.preprocessing.hf_utils.hf_downloader_utils import check_lerobot_complete
 
 datasets = [
     "austin_sailor_dataset_lerobot",

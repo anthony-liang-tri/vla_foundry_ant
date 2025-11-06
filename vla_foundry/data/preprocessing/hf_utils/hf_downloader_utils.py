@@ -4,7 +4,7 @@ from typing import List
 
 import boto3
 
-from vla_foundry.data.scripts.hf_dataset_downloader import _download_and_upload_file
+from vla_foundry.data.preprocessing.hf_utils.hf_dataset_downloader import _download_and_upload_file
 from vla_foundry.file_utils import list_directory_recursive, parse_s3_path
 
 

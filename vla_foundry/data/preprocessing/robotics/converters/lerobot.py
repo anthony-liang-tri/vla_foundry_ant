@@ -6,9 +6,9 @@ import numpy as np
 import pyarrow.parquet as pq
 import ray
 
-from vla_foundry.data.scripts.preprocessing.robotics.converters.base import BaseRoboticsConverter
-from vla_foundry.data.scripts.preprocessing.robotics.preprocess_masks import create_past_and_future_masks
-from vla_foundry.data.scripts.preprocessing.utils import is_still_sample
+from vla_foundry.data.preprocessing.robotics.converters.base import BaseRoboticsConverter
+from vla_foundry.data.preprocessing.robotics.preprocess_masks import create_past_and_future_masks
+from vla_foundry.data.preprocessing.utils import is_still_sample
 from vla_foundry.file_utils import copy_to_temp_file, file_exists, json_load, jsonl_load, list_directory
 
 

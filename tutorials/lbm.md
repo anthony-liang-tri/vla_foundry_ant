@@ -2,14 +2,14 @@
 This tutorial takes users through the process of preprocessing LBM Spartan data, then using the data to train, then loading and inferencing the model.
 
 ## Preprocessing
-We use the scripts [vla_foundry/data/scripts/preprocessing/preprocess_robotics_to_tar.py](/vla_foundry/data/scripts/preprocessing/preprocess_robotics_to_tar.py) to convert from raw Spartan data to VLA Foundry webdataset tar shards. 
+We use the scripts [vla_foundry/data/preprocessing/preprocess_robotics_to_tar.py](/vla_foundry/data/preprocessing/preprocess_robotics_to_tar.py) to convert from raw Spartan data to VLA Foundry webdataset tar shards. 
 
-These scripts use Ray. Ray can work either locally or on EC2 nodes. See [vla_foundry/data/scripts/README.md](/vla_foundry/data/scripts/README.md) for instructions on how to use Ray. 
+These scripts use Ray. Ray can work either locally or on EC2 nodes. See [vla_foundry/data/preprocessing/README.md](/vla_foundry/data/preprocessing/README.md) for instructions on how to use Ray. 
 
 This script below is taken from `examples/preprocessing/preprocess_robotics_data_lbm.sh`. It processes BimanualPutRedBellPepperInBin Spartan shards and converts them to tar shards in the given `output_dir`. 
 
 ```bash
-python vla_foundry/data/scripts/preprocessing/preprocess_robotics_to_tar.py \
+python vla_foundry/data/preprocessing/preprocess_robotics_to_tar.py \
 --source_type "spartan" \
 --source_episodes "[
     's3://robotics-manip-lbm/efs/data/tasks/BimanualPutRedBellPepperInBin/riverway/sim/bc/teleop/2025-01-02T10-49-28-05-00/diffusion_spartan/',

@@ -17,7 +17,7 @@ LeRobot Format Structure:
 
 Usage:
     # Create separate datasets for each task and push to HF
-    uv run --group preprocessing python vla_foundry/data/scripts/preprocessing/preprocess_lbm_to_lerobot.py \
+    uv run --group preprocessing python vla_foundry/data/preprocessing/preprocess_lbm_to_lerobot.py \
         --source_eps_csv_path examples/preprocessing/s3_episodes_list.csv \
         --output_dir lerobot/task_datasets/ \
         --dataset_name "lbm_eval" \
@@ -54,7 +54,7 @@ from huggingface_hub import HfApi
 from PIL import Image
 from tqdm import tqdm
 
-from vla_foundry.data.scripts.preprocessing.preprocess_lbm_to_tar import discover_episodes_targeted
+from vla_foundry.data.preprocessing.robotics.converters.spartan import discover_episodes
 from vla_foundry.params.base_params import BaseParams
 
 HF_AVAILABLE = True
@@ -1411,7 +1411,7 @@ def main():
         print(f"Loaded {len(episodes)} episodes from CSV")
     elif cfg.source_episodes:
         print(f"Using source episodes from: {cfg.source_episodes}")
-        episodes = discover_episodes_targeted(cfg.source_episodes, cfg.max_episodes_to_process)
+        episodes = discover_episodes(cfg.source_episodes, cfg.max_episodes_to_process)
 
     print(f"Found {len(episodes)} episodes")
     # Useful debug prints

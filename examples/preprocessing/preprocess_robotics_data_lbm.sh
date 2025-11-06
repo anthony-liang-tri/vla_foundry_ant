@@ -1,4 +1,4 @@
-source .venv/bin/activate && python vla_foundry/data/scripts/preprocessing/preprocess_robotics_to_tar.py \
+source .venv/bin/activate && python vla_foundry/data/preprocessing/preprocess_robotics_to_tar.py \
 --source_type "spartan" \
 --source_episodes "[
     's3://robotics-manip-lbm/efs/data/tasks/BimanualPutRedBellPepperInBin/riverway/sim/bc/teleop/2025-01-02T10-49-28-05-00/diffusion_spartan/',

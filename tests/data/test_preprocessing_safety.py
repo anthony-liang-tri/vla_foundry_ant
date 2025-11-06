@@ -8,8 +8,8 @@ import pytest
 class TestPreprocessRoboticsToTarSafety:
     """Tests for preprocessing safety checks in preprocess_robotics_to_tar.py."""
 
-    @patch("vla_foundry.data.scripts.preprocessing.preprocess_robotics_to_tar.check_directory_has_files_with_substring")
-    @patch("vla_foundry.data.scripts.preprocessing.preprocess_robotics_to_tar.draccus.parse")
+    @patch("vla_foundry.data.preprocessing.preprocess_robotics_to_tar.check_directory_has_files_with_substring")
+    @patch("vla_foundry.data.preprocessing.preprocess_robotics_to_tar.draccus.parse")
     def test_main_fails_with_existing_episode_files(self, mock_parse, mock_check_dir):
         """Test that main() fails when output directory has existing episode files."""
         # Mock the config
@@ -21,7 +21,7 @@ class TestPreprocessRoboticsToTarSafety:
         # Mock existing files
         mock_check_dir.return_value = ["episode_001_frame_00000.tar", "episode_002_frame_00000.tar"]
 
-        from vla_foundry.data.scripts.preprocessing.preprocess_robotics_to_tar import main
+        from vla_foundry.data.preprocessing.preprocess_robotics_to_tar import main
 
         # Should raise RuntimeError
         with pytest.raises(RuntimeError) as exc_info:
@@ -31,10 +31,10 @@ class TestPreprocessRoboticsToTarSafety:
         assert "episode_001_frame_00000.tar" in str(exc_info.value)
         mock_check_dir.assert_called_once_with("s3://bucket/output/episodes", "_frame_")
 
-    @patch("vla_foundry.data.scripts.preprocessing.preprocess_robotics_to_tar.get_converter")
-    @patch("vla_foundry.data.scripts.preprocessing.preprocess_robotics_to_tar.check_directory_has_files_with_substring")
-    @patch("vla_foundry.data.scripts.preprocessing.preprocess_robotics_to_tar.draccus.parse")
-    @patch("vla_foundry.data.scripts.preprocessing.preprocess_robotics_to_tar.ray.init")
+    @patch("vla_foundry.data.preprocessing.preprocess_robotics_to_tar.get_converter")
+    @patch("vla_foundry.data.preprocessing.preprocess_robotics_to_tar.check_directory_has_files_with_substring")
+    @patch("vla_foundry.data.preprocessing.preprocess_robotics_to_tar.draccus.parse")
+    @patch("vla_foundry.data.preprocessing.preprocess_robotics_to_tar.ray.init")
     def test_main_continues_with_empty_directory(self, mock_ray_init, mock_parse, mock_check_dir, mock_get_converter):
         """Test that main() continues when output directory is empty."""
         # Mock the config
@@ -54,7 +54,7 @@ class TestPreprocessRoboticsToTarSafety:
         mock_converter.discover_episodes.return_value = []
         mock_get_converter.return_value = mock_converter
 
-        from vla_foundry.data.scripts.preprocessing.preprocess_robotics_to_tar import main
+        from vla_foundry.data.preprocessing.preprocess_robotics_to_tar import main
 
         # Should not raise, but will exit early due to no episodes
         # We're just testing that it passes the safety check

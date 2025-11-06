@@ -3,10 +3,10 @@ from typing import Any, Dict, List
 
 import numpy as np
 
+from vla_foundry.data.preprocessing.image_utils import init_jpeg_encoder
+from vla_foundry.data.preprocessing.robotics.preprocess_masks import PaddingStrategy
+from vla_foundry.data.preprocessing.utils import upload_sample_to_s3
 from vla_foundry.data.robotics.utils import rot_6d_to_relative, xyz_to_relative
-from vla_foundry.data.scripts.preprocessing.image_utils import init_jpeg_encoder
-from vla_foundry.data.scripts.preprocessing.robotics.preprocess_masks import PaddingStrategy
-from vla_foundry.data.scripts.preprocessing.utils import upload_sample_to_s3
 
 
 class BaseRoboticsConverter:

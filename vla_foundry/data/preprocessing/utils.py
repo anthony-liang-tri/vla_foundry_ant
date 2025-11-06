@@ -13,7 +13,7 @@ import ray
 from botocore.config import Config
 from PIL import Image
 
-from vla_foundry.data.scripts.preprocessing.image_utils import image_to_bytes
+from vla_foundry.data.preprocessing.image_utils import image_to_bytes
 
 
 def upload_sample_to_s3(

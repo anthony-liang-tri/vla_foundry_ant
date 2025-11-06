@@ -10,7 +10,7 @@ import pytest
 import ray
 import yaml
 
-from vla_foundry.data.scripts.preprocessing.robotics.converters.spartan import (
+from vla_foundry.data.preprocessing.robotics.converters.spartan import (
     SpartanConverter,
     check_episode_validity_ray,
     discover_and_validate_episodes_in_directory,

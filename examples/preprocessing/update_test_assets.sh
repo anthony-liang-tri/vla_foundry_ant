@@ -2,7 +2,7 @@ output_dir=s3://tri-ml-datasets-uw2/preprocess_lbm_test/lbm/PickAndPlaceBox/cabo
 
 aws s3 rm --recursive $output_dir
 
-source .venv/bin/activate && python vla_foundry/data/scripts/preprocessing/preprocess_robotics_to_tar.py \
+source .venv/bin/activate && python vla_foundry/data/preprocessing/preprocess_robotics_to_tar.py \
     --source_episodes "['s3://robotics-manip-lbm/efs/data/tasks/PickAndPlaceBox/cabot/sim/bc/teleop/2025-02-11T17-04-00-05-00/diffusion_spartan/']" \
     --source_type "spartan" \
     --output_dir $output_dir \
