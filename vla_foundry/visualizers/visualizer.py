@@ -220,6 +220,19 @@ def log_image(path: str, image: np.ndarray, **kwargs) -> None:
     _STATE.backend.log_image(_prefix(path), image, **kwargs)
 
 
+def log_images(path: str, images: Dict[str, np.ndarray], **kwargs) -> None:
+    """
+    Log multiple images to the active backend.
+
+    Parameters
+    ----------
+    images : Dict[str, np.ndarray]
+        A dictionary where keys are image paths and values are NumPy arrays representing the images.
+    """
+    for path, image in images.items():
+        log_image(path, image, **kwargs)
+
+
 def log_points3d(path: str, points: np.ndarray, **kwargs) -> None:
     """
     Log 3D points to the active backend.

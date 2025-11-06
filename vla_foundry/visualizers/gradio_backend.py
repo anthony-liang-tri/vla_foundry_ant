@@ -48,6 +48,16 @@ class GradioBackend:
         """
         state["images"].append((path, image))
 
+    def log_images(self, path: str, images: Dict[str, np.ndarray], **kwargs) -> None:
+        """
+        Log multiple images to the Gradio backend.
+
+        Parameters:
+        - images: A dictionary where keys are image paths and values are NumPy arrays representing the images.
+        """
+        for path, image in images.items():
+            self.log_image(path, image, **kwargs)
+
     def log_scalar(self, path: str, value: float, **kwargs) -> None:
         """
         Log a scalar value to the Gradio backend.
