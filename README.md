@@ -74,6 +74,8 @@ An example command is something like this:
 
 See `./examples` for more examples. [llm_11m.sh](examples/training/llm_11m.sh) is a good place to start for the basic training loop, and [diffusion_policy.sh](examples/training/diffusion_policy.sh) is a good place to start for robotics training. We also have end-to-end examples in [tutorials](tutorials).
 
+For an LBM policy evaluation walkthrough, follow the [LBM deployment guide](examples/deployment/lbm_eval/README.md).
+
 ### Running on SageMaker
 Create a `secrets.env` file in the project's root directory:
 ```bash

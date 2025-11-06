@@ -8,6 +8,7 @@ reuse the repository's managed environment.
 - `launch_wave_policy.sh` – launches a dummy gRPC policy server that waves the
   robot end-effectors in a simple sinusoidal pattern. Helpful for verifying the
   evaluation pipeline.
+- `launch_inference_policy.sh` – launches a gRPC policy server that uses the DiffusionPolicy model to generate actions. The experiment path (e.g., model checkpoint) should be modified in the script or passed as an argument as needed.
 
 ### Prerequisites
 - Complete the project setup in the repository root (see main README for
@@ -39,3 +40,37 @@ Key behavior:
   `packages/grpc-workspace/src/grpc_workspace/wave_around_policy_server.py`.
 - Streams sinusoidal joint poses to connected clients until interrupted.
 
+### Running the Inference Policy Demo
+
+Follow these steps to download the trained policy and run the evaluation demo.
+
+#### 1. Download the policy checkpoint (from repo root)
+```bash
+bash examples/deployment/lbm_eval/download_model.sh <RUN_ID>
+```
+Example run id: `2025_11_05-21_34_11-model_diffusion_policy-lr_5e-05-bsz_1024`.
+
+#### 2. Launch the inference policy service (from repo root)
+```bash
+bash examples/deployment/lbm_eval/launch_inference_policy.sh
+```
+
+#### 3. Run the client demo on anzu (`lbm_eval_0_5` branch) (from anzu root)
+```bash
+source .venv/bin/activate
+touch .venv/COLCON_IGNORE
+export PYTHONPATH=`pwd`/venv/lib/python3.10/site-packages:$PYTHONPATH
+export ROS_LOCALHOST_ONLY=1
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+export DISPLAY=1
+
+CUDA_VISIBLE_DEVICES=1 xvfb-run -a bazel run //intuitive/visuomotor:demonstrate -- \
+  --config_file `pwd`/intuitive/visuomotor/config/bimanual_put_red_bell_pepper_in_bin_riverway.yaml \
+  --scenario GrpcServerToSim \
+  --demonstration_indices 0:50 \
+  --t_max 45.0 \
+  --save_dir=/tmp/lbm/rollouts/ \
+  --summary_dir=/tmp/lbm/rollouts/
+```
+
+The demo connects to the policy server started in step 2 and saves rollouts under `/tmp/lbm/rollouts/`.
