@@ -26,7 +26,7 @@ for step in range(10):
 
     # 1. Log a random image
     print("Logging a random image...")
-    image = np.random.randint(0, 256, (480, 640, 3), dtype=np.uint8)  # Random image
+    image = np.random.randint(0, 256, (255, 255, 3), dtype=np.uint8)  # Random image
     vz.log_image("images/step", image)
 
     # 2. Log a scalar value that changes over time
