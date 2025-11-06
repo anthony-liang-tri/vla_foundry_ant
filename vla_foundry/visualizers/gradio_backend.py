@@ -216,8 +216,15 @@ class GradioBackend:
             return
 
         def display_images():
-            # Prepare images for rendering in the gallery with valid captions
+            # Prepare images for rendering with valid captions
             return [(image, f"Path: {tag}") for tag, image in state["images"]]
+
+        def get_image_by_index(index: int):
+            # Retrieve a specific image by index
+            if 0 <= index < len(state["images"]):
+                _, image = state["images"][index]
+                return image  # Return only the image
+            return None  # Return None if no image is available
 
         def display_state():
             # Preprocess state for rendering
@@ -258,9 +265,16 @@ class GradioBackend:
         with gr.Blocks() as demo:
             gr.Markdown("# Gradio Visualizer")
 
-            # Display images dynamically
+            # Display images dynamically with a slider
             with gr.Row():
-                image_gallery = gr.Gallery(label="Images")
+                image_display = gr.Image(label="Selected Image")
+                image_slider = gr.Slider(
+                    label="Image Index",
+                    minimum=0,
+                    maximum=max(0, len(state["images"]) - 1),
+                    step=1,
+                    value=0,
+                )
 
             # Display other data as JSON
             with gr.Row():
@@ -272,9 +286,16 @@ class GradioBackend:
 
             # Refresh button to update the data
             gr.Button("Refresh").click(
-                fn=lambda: (display_images(), display_state(), display_3d_trajectory()),
+                fn=lambda: (display_state(), display_3d_trajectory()),
                 inputs=[],
-                outputs=[image_gallery, state_display, trajectory_plot],
+                outputs=[state_display, trajectory_plot],
+            )
+
+            # Update image display based on slider value
+            image_slider.change(
+                fn=get_image_by_index,
+                inputs=[image_slider],
+                outputs=[image_display],  # Only update the image display
             )
 
         self._app_launched = True
