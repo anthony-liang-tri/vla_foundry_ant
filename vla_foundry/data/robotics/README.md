@@ -28,7 +28,8 @@ dataset_directory_in_s3/
         - `future_mask`
     - It will also contain the keys that will be used to construct the actions, proprioceptions, intrinsics, and extrinsics. See sections below for more details.
 - `language_instructions.json` should be a dict with keys in set ["original", "randomized", "verbose", "alternative"]
-- The key names in the `lowdim.npz` dict should also exist as keys in `stats.json`
+- The names of keys you wish to normalize in the `lowdim.npz` dict should also exist as keys in `stats.json`. 
+    - Not all the keys in `lowdim.npz` will get normalized. During training time, you will need to supply flags like `--data.action_fields` and `--data.proprioception_fields` (can be empty),which should exist as fields in `lowdim.npz`. The normalizer will only normalize the keys in these two fields.
 
 **Sample yaml config**
 
@@ -94,7 +95,7 @@ These are optional. They are used for the visualization scripts but are not used
 ## 4. Normalization
 Normalization has its own dedicated params class `NormalizationParams`, which are used to instantiate the [RoboticsNormalizer class](/vla_foundry/data/robotics/normalization.py). This `NormalizationParams` class lives as an attribute inside `RoboticsDataParams` and can be set using the prefix `--data.normalization`. 
 
-By default, the keys in `action_fields` $\bigcup$ `proprioception_fields` $\bigcup$ `intrinsics_fields` $\bigcup$ `extrinsics_fields` are the fields that get normalized. 
+By default, the keys in `action_fields` $\bigcup$ `proprioception_fields` are the fields that get normalized. 
 The `NormalizationParams` class contains parameters on what type of normalization is done. In addition, `NormalizationParams` class also contains a `field_configs` dict, which can be used to specify how to handle certain fields that we may want to normalize differently from the default setting in `NormalizationParams`.
 
 For details on how the normalization is implemented, see the [RoboticsNormalizer class](/vla_foundry/data/robotics/normalization.py).
