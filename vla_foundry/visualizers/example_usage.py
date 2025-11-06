@@ -8,11 +8,11 @@ Make sure the `VISUALIZER` environment variable is set to `rerun` or `disabled` 
 """
 
 import os
-from collections import namedtuple
 
 import numpy as np
 import visualizer as vz
 from pydrake.math import RigidTransform, RollPitchYaw
+from robot_gym.multiarm_spaces import PosesAndGrippers  # Import PosesAndGrippers from robot_gym.multiarm_spaces
 
 # Initialize the visualizer
 backend = os.environ.get("VISUALIZER", "rerun").lower()
@@ -47,7 +47,6 @@ vz.log_rigid_transform("robot/pose", pose, axis_length=0.5)
 
 # 6. Log robot arm poses
 print("Logging robot arm poses...")
-PosesAndGrippers = namedtuple("PosesAndGrippers", ["poses", "grippers"])
 arm_poses = {
     "client_1": PosesAndGrippers(
         poses={
@@ -61,19 +60,20 @@ vz.log_arm_poses(arm_poses)
 
 # 7. Log model action predictions
 print("Logging model action predictions...")
-PosesAndGrippers = namedtuple("PosesAndGrippers", ["poses"])
 action_predictions = [
     PosesAndGrippers(
         poses={
             "arm_joint_1": RigidTransform(RollPitchYaw(0, 0, 0), np.array([0, 0, 0])),
             "arm_joint_2": RigidTransform(RollPitchYaw(0, 0, np.pi / 2), np.array([1, 0, 0])),
-        }
+        },
+        grippers={"gripper_1": 0.5},
     ),
     PosesAndGrippers(
         poses={
             "arm_joint_1": RigidTransform(RollPitchYaw(0, 0, 0), np.array([0.5, 0.5, 0])),
             "arm_joint_2": RigidTransform(RollPitchYaw(0, 0, np.pi / 2), np.array([1.5, 0.5, 0])),
-        }
+        },
+        grippers={"gripper_1": 0.5},
     ),
 ]
 vz.log_action_predictions(action_predictions)
