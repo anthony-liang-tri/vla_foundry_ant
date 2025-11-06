@@ -71,7 +71,7 @@ exclude = ["install*", "sagemaker*", "examples*"]
 
 [tool.uv.sources]
 # This specifies custom sources for dependencies
-draccus = { git = "https://github.com/jmercat/draccus.git", rev = "jean/fix_include" }
+draccus = { git = "https://github.com/marin-community/draccus" }
 robot-gym = { workspace = true }
 grpc_workspace = { workspace = true }
 
