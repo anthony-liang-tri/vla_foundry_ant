@@ -119,14 +119,16 @@ def _detect_rank_prefix() -> str:
 def _choose_backend_from_env() -> str:
     # VISUALIZER values:
     #   disabled|off|0 -> disabled
-    #   rerun|gradio (default to rerun if installed)
+    #   rerun|gradio (default to disabled if no env variable is set)
     val = (os.environ.get("VISUALIZER") or "").strip().lower()
+    if not val:
+        return "disabled"  # Default to disabled if no VISUALIZER is set
     if val in {"disabled", "off", "0", "none"}:
         return "disabled"
     if val in {"rerun", "gradio"}:
         return val
     # Auto
-    return "rerun" if "rerun" in _BACKENDS else "gradio" if "gradio" in _BACKENDS else "disabled"
+    return "disabled"
 
 
 def _get_backend(name: str) -> Optional[Backend]:
@@ -325,7 +327,9 @@ def shutdown() -> None:
         return
     try:
         if _STATE.backend is not None:
-            print(f"[visualizer] Shutting down backend: {_STATE.backend_name}")
+            # Only print if a backend was initialized
+            if _STATE.backend_name != "disabled":
+                print(f"[visualizer] Shutting down backend: {_STATE.backend_name}")
             _STATE.backend.shutdown()  # type: ignore[union-attr]
     finally:
         _STATE.enabled = False
