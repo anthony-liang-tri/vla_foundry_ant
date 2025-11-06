@@ -326,7 +326,10 @@ class LeRobotConverter(BaseRoboticsConverter):
         sample_lowdim["past_mask"] = past_mask
         sample_lowdim["future_mask"] = future_mask
 
-        sample_metadata = {"camera_names": list(camera_data.keys())}
+        sample_metadata = {
+            "camera_names": list(camera_data.keys()),
+            "anchor_relative_idx": int(self.cfg.past_lowdim_steps),
+        }
         for key, value in metadata_data.items():
             if isinstance(value, (list, np.ndarray)):
                 sample_metadata[key] = value[anchor_timestep]
