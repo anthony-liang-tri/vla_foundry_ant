@@ -27,7 +27,15 @@ for step in range(10):
     # 1. Log a random image
     print("Logging a random image...")
     image = np.random.randint(0, 256, (255, 255, 3), dtype=np.uint8)  # Random image
-    vz.log_image("images/step", image)
+    vz.log_image("single_image", image)
+
+    # 1. Log a dict of images
+    print("Logging a random image...")
+    image_dict = {}
+    for ii in range(5):
+        image = np.random.randint(0, 256, (255, 255, 3), dtype=np.uint8)  # Random image
+        image_dict[f"image_{ii}"] = image
+    vz.log_images("image_dict", image_dict)
 
     # 2. Log a scalar value that changes over time
     print("Logging a scalar value...")
@@ -36,12 +44,12 @@ for step in range(10):
     # 3. Log 3D points with random positions
     print("Logging random 3D points...")
     points = np.random.rand(5, 3) * 10  # Random points in a 10x10x10 cube
-    vz.log_points3d("points/step", points)
+    vz.log_points3d("points", points)
 
     # 4. Log a trajectory that changes shape
     print("Logging a dynamic trajectory...")
     trajectory = np.cumsum(np.random.randn(10, 3), axis=0)  # Random walk in 3D
-    vz.log_trajectory("trajectory/step", trajectory)
+    vz.log_trajectory("trajectory", trajectory)
 
     # 5. Log a rigid transform with random translation and rotation
     print("Logging a random rigid transform...")
@@ -49,7 +57,7 @@ for step in range(10):
         RollPitchYaw(*np.random.uniform(0, np.pi, 3)),  # Random rotation
         np.random.uniform(-5, 5, 3),  # Random translation
     )
-    vz.log_rigid_transform("robot/pose_step", pose, axis_length=0.5)
+    vz.log_rigid_transform("robot/pose", pose, axis_length=0.5)
 
     # 6. Log robot arm poses with random configurations
     print("Logging random robot arm poses...")

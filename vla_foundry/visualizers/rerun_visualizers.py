@@ -10,7 +10,7 @@ provide immediate value for debugging and visualization.
 import functools
 import subprocess
 from collections.abc import Iterable
-from typing import Callable
+from typing import Callable, Dict
 
 import numpy as np
 import rerun as rr
@@ -69,6 +69,18 @@ def log_rigid_transform(entity: str, X_AB: RigidTransform) -> None:
             clear=False,  # keep axes while you stream updates
         ),
     )
+
+
+def log_images(images: Dict[str, np.ndarray]) -> None:
+    """
+    Log multiple images to rerun.io.
+
+    Parameters:
+    - images: A dictionary where keys are image paths and values are NumPy arrays representing the images.
+    """
+    initialize_rerun_server()
+    for path, image in images.items():
+        rr.log(f"images/{path}", rr.Image(image))
 
 
 def rerun_log_images(func):
