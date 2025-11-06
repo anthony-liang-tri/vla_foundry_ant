@@ -7,7 +7,6 @@ and rigid transforms. It also shows how to use the methods for logging robot arm
 Make sure the `VISUALIZER` environment variable is set to `rerun` or `disabled` before running this script.
 """
 
-import os
 import random
 import time
 
@@ -17,19 +16,18 @@ from pydrake.math import RigidTransform, RollPitchYaw
 from robot_gym.multiarm_spaces import PosesAndGrippers  # Import PosesAndGrippers from robot_gym.multiarm_spaces
 
 # Initialize the visualizer
-backend = os.environ.get("VISUALIZER", "rerun").lower()
-vz.init(run_name="tutorial_logging", backend=backend, add_rank_to_run=True)
+vz.init(run_name="tutorial_logging", add_rank_to_run=True)
 
 # Loop to log dynamic data
 for step in range(10):
     print(f"Step {step + 1}/10")
 
-    # 1. Log a random image
+    # 1a. Log a random image
     print("Logging a random image...")
     image = np.random.randint(0, 256, (255, 255, 3), dtype=np.uint8)  # Random image
     vz.log_image("single_image", image)
 
-    # 1. Log a dict of images
+    # 1b. Log a dict of images
     print("Logging a random image...")
     image_dict = {}
     for ii in range(5):
@@ -86,11 +84,5 @@ for step in range(10):
 
     # Simulate time delay between steps
     time.sleep(1)
-
-# Launch the Gradio app if the backend is Gradio
-# TODO: move this into the backend...
-if backend == "gradio":
-    print("Launching Gradio app...")
-    vz._STATE.backend.launch()  # Explicitly call the launch method for Gradio
 
 print("Tutorial complete!")
