@@ -2,6 +2,7 @@ from typing import Any, Dict, List
 
 import gradio as gr
 import numpy as np
+from plotly.graph_objects import Figure, Scatter3d
 from pydrake.math import RigidTransform
 from robot_gym.multiarm_spaces import PosesAndGrippers  # Import from robot_gym.multiarm_spaces
 
@@ -65,7 +66,78 @@ class GradioBackend:
         - path: The hierarchical path for the 3D points.
         - points: The 3D points as a NumPy array of shape (N, 3).
         """
+        if points.size == 0:
+            print(f"[Warning] Empty points data for path: {path}")
+            return
         state["points3d"].append((path, points))
+
+    def _create_3d_trajectory_plot(self, trajectory: np.ndarray) -> Figure:
+        """
+        Create a 3D plot for a trajectory using Plotly.
+
+        Parameters:
+        - trajectory: The trajectory as a NumPy array of shape (N, 3).
+
+        Returns:
+        - A Plotly Figure object for the 3D trajectory.
+        """
+        print(f"Creating 3D trajectory plot for trajectory: {trajectory}")  # Debug print
+        fig = Figure(
+            data=[
+                Scatter3d(
+                    x=trajectory[:, 0],
+                    y=trajectory[:, 1],
+                    z=trajectory[:, 2],
+                    mode="lines+markers",
+                    marker=dict(size=4),
+                    line=dict(width=2),
+                )
+            ]
+        )
+        fig.update_layout(
+            scene=dict(
+                xaxis_title="X",
+                yaxis_title="Y",
+                zaxis_title="Z",
+            ),
+            title="3D Trajectory",
+        )
+        return fig
+
+    def _create_3d_pose_plot(self, poses: Dict[str, RigidTransform]) -> Figure:
+        """
+        Create a 3D plot for poses using Plotly.
+
+        Parameters:
+        - poses: A dictionary of RigidTransform objects representing poses.
+
+        Returns:
+        - A Plotly Figure object for the 3D poses.
+        """
+        print(f"Creating 3D pose plot for poses: {poses}")  # Debug print
+        data = []
+        for name, pose in poses.items():
+            translation = pose.translation()
+            data.append(
+                Scatter3d(
+                    x=[translation[0]],
+                    y=[translation[1]],
+                    z=[translation[2]],
+                    mode="markers",
+                    marker=dict(size=6),
+                    name=name,
+                )
+            )
+        fig = Figure(data=data)
+        fig.update_layout(
+            scene=dict(
+                xaxis_title="X",
+                yaxis_title="Y",
+                zaxis_title="Z",
+            ),
+            title="3D Poses",
+        )
+        return fig
 
     def log_trajectory(self, path: str, trajectory: np.ndarray, **kwargs) -> None:
         """
@@ -75,7 +147,11 @@ class GradioBackend:
         - path: The hierarchical path for the trajectory.
         - trajectory: The trajectory as a NumPy array of shape (N, 3).
         """
+        if trajectory.size == 0:
+            print(f"[Warning] Empty trajectory data for path: {path}")
+            return
         state["trajectories"].append((path, trajectory))
+        # No need to append the Plotly figure to images; it will be rendered directly in the Gradio app.
 
     def log_rigid_transform(self, path: str, transform: RigidTransform, axis_length: float = 1.0, **kwargs) -> None:
         """
@@ -96,6 +172,9 @@ class GradioBackend:
         - arm_poses: A dictionary containing arm pose data.
         """
         state["arm_poses"].append(arm_poses)
+        for client, poses_and_grippers in arm_poses.items():
+            pose_plot = self._create_3d_pose_plot(poses_and_grippers.poses)
+            state["images"].append((f"arm_poses_client_{client}_3d_plot", pose_plot.to_image(format="png")))
 
     def log_action_predictions(self, predictions: List[PosesAndGrippers], **kwargs: Any) -> None:
         """
@@ -169,6 +248,13 @@ class GradioBackend:
                 ],
             }
 
+        def display_3d_trajectory():
+            # Render the first trajectory in the state as a 3D plot
+            if state["trajectories"]:
+                _, trajectory = state["trajectories"][0]
+                return self._create_3d_trajectory_plot(trajectory)
+            return Figure()  # Return an empty figure if no trajectory is logged
+
         with gr.Blocks() as demo:
             gr.Markdown("# Gradio Visualizer")
 
@@ -180,11 +266,15 @@ class GradioBackend:
             with gr.Row():
                 state_display = gr.JSON(label="Logged Data")
 
+            # Display 3D trajectory
+            with gr.Row():
+                trajectory_plot = gr.Plot(label="3D Trajectory")
+
             # Refresh button to update the data
             gr.Button("Refresh").click(
-                fn=lambda: (display_images(), display_state()),
+                fn=lambda: (display_images(), display_state(), display_3d_trajectory()),
                 inputs=[],
-                outputs=[image_gallery, state_display],
+                outputs=[image_gallery, state_display, trajectory_plot],
             )
 
         self._app_launched = True
