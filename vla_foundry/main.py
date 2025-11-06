@@ -159,7 +159,7 @@ def main():
         wandb.init(
             project=cfg.wandb_project_name,
             name=experiment_name,
-            tags=[],
+            tags=cfg.wandb_tags,
             resume=None,
             config=vars(cfg),
         )

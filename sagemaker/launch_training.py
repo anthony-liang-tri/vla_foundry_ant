@@ -198,6 +198,7 @@ def main():
         "NCCL_DEBUG": "INFO",
         "TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS": "1",
         "SAGEMAKER_PROGRAM": "/opt/ml/code/vla_foundry/main.py",
+        "FI_EFA_FORK_SAFE": "1",
     }
     with open("secrets.env", "r") as f:
         for line in f:
