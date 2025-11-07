@@ -28,6 +28,7 @@ class DiffusionPolicy(BaseModel):
         self.output_layer = torch.nn.Linear(transformer.hidden_dim, model_params.action_dim)
         self.action_encode = torch.nn.Linear(model_params.action_dim, transformer.hidden_dim)
         self.condition_encode = torch.nn.Linear(clip.get_projection_dim(), transformer.hidden_dim)
+        self.input_noise_std = model_params.input_noise_std
         self.initialize_weights()
 
     def initialize_weights(self):
@@ -46,6 +47,8 @@ class DiffusionPolicy(BaseModel):
         # Sample action to denoise
         noisy_action = self.scheduler.add_noise(actions, noise, timesteps, mask=future_mask)
         noisy_action = torch.where(future_mask.unsqueeze(-1), noisy_action, actions)
+        if self.input_noise_std > 0:
+            noisy_action = noisy_action + torch.randn_like(noisy_action) * self.input_noise_std
         noisy_action = self.action_encode(noisy_action)
 
         # Create condition embeddings

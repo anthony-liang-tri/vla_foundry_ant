@@ -233,6 +233,7 @@ class DiffusionPolicyParams(ModelParams):
         default=False
     )  # Should be set automatically from data params when training, should be defined from checkpoint at inference time
     action_dim: int = field(default=None)
+    input_noise_std: float = field(default=0.0)
 
     def init_shared_attributes(self, cfg):
         super().init_shared_attributes(cfg)
