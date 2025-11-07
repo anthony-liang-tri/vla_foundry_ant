@@ -1,0 +1,32 @@
+name: Merge main into dev
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch dev branch
+        run: git fetch origin dev
+
+      - name: Merge main into dev
+        run: |
+          git checkout dev
+          git merge main --no-edit -X theirs
+          git push origin dev
+
