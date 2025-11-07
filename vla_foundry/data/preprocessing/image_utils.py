@@ -38,7 +38,7 @@ def resize_image(image: Union[np.ndarray, Image.Image], target_size: tuple = (22
     bottom = top + target_height
     pil_image = pil_image.crop((left, top, right, bottom))
 
-    return np.array(pil_image) if is_pil else pil_image
+    return pil_image if is_pil else np.array(pil_image)
 
 
 def image_to_bytes(
