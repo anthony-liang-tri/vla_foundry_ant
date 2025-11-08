@@ -211,7 +211,7 @@ class StreamingDatasetStatistics:
             # Compute percentiles if we have enough samples
             percentile_5, percentile_95 = None, None
             if key in self.samples_for_percentiles and len(self.samples_for_percentiles[key]) > 0:
-                samples_array = np.array(self.samples_for_percentiles[key])
+                samples_array = np.array(self.samples_for_percentiles[key], dtype=float)
                 samples_array[~np.array(self.sample_mask_for_percentiles[key])[..., 0]] = np.nan
                 percentiles = np.nanpercentile(
                     samples_array.reshape(-1, samples_array.shape[-1]), [1, 5, 95, 99], axis=0

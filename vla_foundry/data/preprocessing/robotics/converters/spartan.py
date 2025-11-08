@@ -363,6 +363,11 @@ class SpartanConverter(BaseRoboticsConverter):
         camera_mapping = episode_data["metadata"].get("camera_id_to_semantic_name", {})
 
         if self.cfg.camera_names:
+            # Fail loudly if camera_name argument is incompatible with existing camera_mapping
+            for camera_name in self.cfg.camera_names:
+                if camera_name not in list(camera_mapping.values()):
+                    raise ValueError(f"Camera name {camera_name} not found in camera mapping")
+
             filtered_mapping = {
                 cid: sname
                 for cid, sname in camera_mapping.items()
