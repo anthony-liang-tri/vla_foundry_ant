@@ -44,7 +44,7 @@ class LBMEval(BaseEvalRunner):
         self.model = None
         self.scenario_index = 0
 
-    def load_env(self, skill_type):
+    def load_env(self, env_name, skill_type):
         # TODO(katliu): Remove these hardcodes; put in the right config
         use_eval_seed = True
 
@@ -111,7 +111,7 @@ class LBMEval(BaseEvalRunner):
     def get_obs_tensor(self, obs):
         return obs
 
-    def get_current_image(self):
+    def get_image_for_video(self):
         return self.obs.obs.visuo["scene_left_0"].rgb.array
 
     def check_success(self):

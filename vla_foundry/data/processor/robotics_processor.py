@@ -64,6 +64,33 @@ class RoboticsProcessor:
 
         return batch
 
+    def apply_chat_template(self, num_images, instruction):
+        """
+        Wrapper around vlm_processor's HF apply_chat_template method.
+        Takes in number of images and instruction and adds keywords like <image> or <human></human> to the instruction.
+        """
+        # Apply chat template if available
+        if self.vlm_processor.chat_template:
+            content = [{"type": "image"} for _ in range(num_images)]
+            content.append({"type": "text", "text": instruction})
+            messages = [{"role": "user", "content": content}]
+            instruction = self.vlm_processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
+        elif self.vlm_processor.tokenizer and self.vlm_processor.tokenizer.chat_template:
+            content = [{"type": "image"} for _ in range(num_images)]
+            content.append({"type": "text", "text": instruction})
+            messages = [{"role": "user", "content": content}]
+            instruction = self.vlm_processor.tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=False
+            )
+        else:
+            # No chat template support, use instruction as-is
+            # Add image tokens for PaliGemma processor if we have images
+            if num_images > 0:
+                image_tokens = "<image> " * num_images
+                instruction = image_tokens + instruction
+
+        return instruction
+
     def process_inputs(self, batch, image_names, max_text_seq_len=None):
         """Tokenizes the text and converts the image to pixel_values
         Args:
@@ -79,29 +106,7 @@ class RoboticsProcessor:
                     f"Sample keys: {list(sample_images.keys())}"
                 )
             sample_images = [sample_images[k] for k in image_names if k in sample_images]
-            sample_num_images = len(sample_images)
-
-            # Apply chat template if available
-            if self.vlm_processor.chat_template:
-                content = [{"type": "image"} for _ in range(sample_num_images)]
-                content.append({"type": "text", "text": instruction})
-                messages = [{"role": "user", "content": content}]
-                instruction = self.vlm_processor.apply_chat_template(
-                    messages, tokenize=False, add_generation_prompt=False
-                )
-            elif self.vlm_processor.tokenizer and self.vlm_processor.tokenizer.chat_template:
-                content = [{"type": "image"} for _ in range(sample_num_images)]
-                content.append({"type": "text", "text": instruction})
-                messages = [{"role": "user", "content": content}]
-                instruction = self.vlm_processor.tokenizer.apply_chat_template(
-                    messages, tokenize=False, add_generation_prompt=False
-                )
-            else:
-                # No chat template support, use instruction as-is
-                # Add image tokens for PaliGemma processor if we have images
-                if sample_num_images > 0:
-                    image_tokens = "<image> " * sample_num_images
-                    instruction = image_tokens + instruction
+            instruction = self.apply_chat_template(len(sample_images), instruction)
 
             batch_text.append(instruction)
             if len(sample_images) > 0:

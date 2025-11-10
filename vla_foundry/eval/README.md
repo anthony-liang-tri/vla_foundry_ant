@@ -1,5 +1,5 @@
 # Eval
 
-This folder is almost entirely self-contained. Might considering moving this to a separate repo at some point.
+To add a new eval environment, created a new file based on the [base_eval_runner.py](lbm2/eval/runners/base_eval_runner.py), then add your new runner to [\_\_init\_\_.py](lbm2/eval/runners/__init__.py)
 
-Note that the files in `runners/libero.py` and `runners/robocasa.py` are not runnable without first installing the dependencies from the [LIBERO repo](https://github.com/Lifelong-Robot-Learning/LIBERO) and the [RoboCasa repo](https://github.com/robocasa/robocasa). We have not yet figured out the uv setup for these, so we recommend installing these sim environments on a separate conda/uv environment.
+Note that the requirements for the runners here are not handled in the uv `pyproject.toml`. We have not yet figured out the uv setup for these, so we recommend installing these sim environments on a separate conda/uv environment.

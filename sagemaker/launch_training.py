@@ -8,10 +8,10 @@ from uuid import uuid4
 
 import boto3
 import draccus
-
-import sagemaker
 from sagemaker.aws_batch.training_queue import TrainingQueue as Queue
 from sagemaker.pytorch import PyTorch
+
+import sagemaker
 from vla_foundry.params.base_params import BaseParams
 from vla_foundry.params.train_experiment_params import TrainExperimentParams
 

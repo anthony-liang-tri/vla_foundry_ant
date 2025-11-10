@@ -2,6 +2,7 @@ import io
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -468,6 +469,24 @@ def load_model_checkpoint(model, resume_from_checkpoint):
         model.load_state_dict(sd)
     logging.info(f"=> resuming checkpoint '{resume_from_checkpoint}' (checkpoint {start_checkpoint_num})")
     return start_checkpoint_num, global_step, shard_shuffle_seed_per_dataset
+
+
+def natural_key(string_):
+    """See http://www.codinghorror.com/blog/archives/001018.html"""
+    return [int(s) if s.isdigit() else s for s in re.split(r"(\d+)", string_.lower())]
+
+
+def get_latest_checkpoint(path: str):
+    is_s3 = path.startswith("s3")
+    fs, root_path = fsspec.core.url_to_fs(path)
+    if not root_path.rstrip("/").endswith("checkpoints"):
+        root_path = os.path.join(root_path, "checkpoints")
+    checkpoints = fs.glob(os.path.join(root_path, "checkpoint_*.pt"))
+    if checkpoints:
+        checkpoints = sorted(checkpoints, key=natural_key)
+        return f"s3://{checkpoints[-1]}" if is_s3 else checkpoints[-1]
+
+    return None
 
 
 def collect_processing_metadata(dataset_manifest_paths, experiment_path):
