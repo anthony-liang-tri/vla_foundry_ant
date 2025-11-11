@@ -49,6 +49,10 @@ preprocessing = [
     "imageio[ffmpeg]>=2.37.0",
 ]
 
+libero = [
+    "libero-wrapper",
+]
+
 # Add `--group visualization` to install visualization deps.
 visualization = [
     "gradio>=5.43.1",
@@ -72,11 +76,12 @@ exclude = ["install*", "sagemaker*", "examples*"]
 [tool.uv.sources]
 # This specifies custom sources for dependencies
 draccus = { git = "https://github.com/marin-community/draccus" }
+libero-wrapper = { path = "packages/libero-wrapper" }
 robot-gym = { workspace = true }
 grpc_workspace = { workspace = true }
 
 [tool.uv.workspace]
-members = ["packages/*"]
+members = ["packages/robot-gym", "packages/grpc-workspace"]
 
 [tool.ruff]
 line-length = 120

@@ -5,6 +5,8 @@ See https://github.com/Lifelong-Robot-Learning/LIBERO for more details.
 
 import os
 
+# We need this import to be able to import libero.
+import libero_wrapper  # noqa: F401
 import numpy as np
 import torch
 from libero.libero import benchmark, get_libero_path
