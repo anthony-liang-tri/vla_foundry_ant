@@ -84,7 +84,7 @@ class BaseEvalRunner:
     def load_model(self, model_path):
         cfg = load_experiment_params_from_yaml(os.path.join(model_path, "config.yaml"))
         model = create_model(cfg.model)
-        load_model_checkpoint(model, get_latest_checkpoint(model_path), cfg.distributed)
+        load_model_checkpoint(model, get_latest_checkpoint(model_path))
         model = model.to("cuda")
         self.model = model
         return model
