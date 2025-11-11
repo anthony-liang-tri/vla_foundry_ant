@@ -239,6 +239,6 @@ class RerunBackend:
             )
             print("[rerun_backend] Rerun analytics disabled.")
         except FileNotFoundError:
-            print("[rerun_backend] rerun CLI not found; analytics may be enabled.")
+            print("[rerun_backend] rerun CLI not found; analytics may be enabled. Ensure the rerun CLI is installed.")
         except subprocess.CalledProcessError as e:
             print(f"[rerun_backend] Failed to disable analytics: {e.stderr or e}")

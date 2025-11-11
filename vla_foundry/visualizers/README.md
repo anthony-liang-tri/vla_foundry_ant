@@ -12,7 +12,7 @@ This directory contains the visualization tools for the VLA Foundry project. The
      - Automatically selecting the appropriate backend based on the `VISUALIZER` environment variable.
    - **Key Features**:
      - Supports multiple backends (`rerun`, `gradio`, or `disabled`).
-     - Automatically disables visualization if no backend is selected.
+     - Automatically disables visualization if no backend is selected. Defaults to `disabled`.
 
 ### 2. **Rerun Visualizer**
    - **File**: `rerun_backend.py`
@@ -112,8 +112,8 @@ vz.shutdown()
 - **Environment Variable**: `VISUALIZER=disabled`
 
 ## Planned Backends:
-- **wandb**
-- **gradio**
+- **wandb**: Integration with Weights & Biases for experiment tracking.
+- **gradio**: Interactive web-based visualizations.
 
 ---
 
@@ -129,7 +129,7 @@ If you run simply
 ```
 uv run example_usage.py
 ```
-visualization should be bypassed entirely.
+visualization will default to `disabled` if no backend is selected.
 
 ---
 
