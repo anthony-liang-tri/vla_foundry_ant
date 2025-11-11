@@ -24,6 +24,7 @@ class RerunBackend:
         Initialize the RerunBackend instance.
         """
         self._initialized = False
+        self._disable_rerun_analytics()  # Ensure analytics are disabled during initialization
 
     def init(self, run_name: str, add_rank_to_run: bool = False, **kwargs) -> None:
         """
