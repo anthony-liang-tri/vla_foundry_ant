@@ -211,7 +211,7 @@ def log_image(path: str, image: np.ndarray, **kwargs) -> None:
     if not _STATE.initialized:
         init()
     if not enabled():
-        return
+        return  # Bypass if disabled
     assert _STATE.backend is not None
     _STATE.backend.log_image(_prefix(path), image, **kwargs)
 
@@ -225,6 +225,10 @@ def log_images(path: str, images: Dict[str, np.ndarray], **kwargs) -> None:
     images : Dict[str, np.ndarray]
         A dictionary where keys are image paths and values are NumPy arrays representing the images.
     """
+    if not _STATE.initialized:
+        init()
+    if not enabled():
+        return  # Bypass if disabled
     for path, image in images.items():
         log_image(path, image, **kwargs)
 
@@ -243,7 +247,7 @@ def log_points3d(path: str, points: np.ndarray, **kwargs) -> None:
     if not _STATE.initialized:
         init()
     if not enabled():
-        return
+        return  # Bypass if disabled
     assert _STATE.backend is not None
     _STATE.backend.log_points3d(_prefix(path), points, **kwargs)
 
@@ -262,7 +266,7 @@ def log_line_strips3d(path: str, line_strips: np.ndarray, **kwargs) -> None:
     if not _STATE.initialized:
         init()
     if not enabled():
-        return
+        return  # Bypass if disabled
     assert _STATE.backend is not None
     _STATE.backend.log_line_strips3d(_prefix(path), line_strips, **kwargs)
 
@@ -281,7 +285,7 @@ def log_scalar(path: str, value: float, **kwargs) -> None:
     if not _STATE.initialized:
         init()
     if not enabled():
-        return
+        return  # Bypass if disabled
     assert _STATE.backend is not None
     _STATE.backend.log_scalar(_prefix(path), value, **kwargs)
 
@@ -300,7 +304,7 @@ def log_trajectory(path: str, trajectory_points: np.ndarray) -> None:
     if not _STATE.initialized:
         init()
     if not enabled():
-        return
+        return  # Bypass if disabled
 
     if trajectory_points.ndim != 2 or trajectory_points.shape[1] != 3:
         raise ValueError("trajectory_points must be a (N, 3) array")
@@ -310,28 +314,6 @@ def log_trajectory(path: str, trajectory_points: np.ndarray) -> None:
 
     # Log path
     log_line_strips3d(f"{path}/path", trajectory_points)
-
-
-def flush() -> None:
-    if not enabled():
-        return
-    _STATE.backend.flush()  # type: ignore[union-attr]
-
-
-def shutdown() -> None:
-    """
-    Perform cleanup during shutdown. Ensure the backend is active before shutting down.
-    """
-    if not enabled():
-        return
-    try:
-        if _STATE.backend is not None:
-            # Only print if a backend was initialized
-            if _STATE.backend_name != "disabled":
-                print(f"[visualizer] Shutting down backend: {_STATE.backend_name}")
-            _STATE.backend.shutdown()  # type: ignore[union-attr]
-    finally:
-        _STATE.enabled = False
 
 
 def log_rigid_transform(path: str, transform: RigidTransform, **kwargs) -> None:
@@ -348,7 +330,7 @@ def log_rigid_transform(path: str, transform: RigidTransform, **kwargs) -> None:
     if not _STATE.initialized:
         init()
     if not enabled():
-        return
+        return  # Bypass if disabled
     assert _STATE.backend is not None
     _STATE.backend.log_rigid_transform(_prefix(path), transform, **kwargs)
 
@@ -365,7 +347,7 @@ def log_arm_poses(arm_poses: Dict[str, PosesAndGrippers], **kwargs) -> None:
     if not _STATE.initialized:
         init()
     if not enabled():
-        return
+        return  # Bypass if disabled
     assert _STATE.backend is not None
     _STATE.backend.log_arm_poses(arm_poses, **kwargs)
 
@@ -382,7 +364,7 @@ def log_action_predictions(predictions: List[PosesAndGrippers], **kwargs) -> Non
     if not _STATE.initialized:
         init()
     if not enabled():
-        return
+        return  # Bypass if disabled
     assert _STATE.backend is not None
     _STATE.backend.log_action_predictions(predictions, **kwargs)
 
@@ -401,7 +383,7 @@ def log_multiarm_observation(path: str, observation: MultiarmObservation, **kwar
     if not _STATE.initialized:
         init()
     if not enabled():
-        return
+        return  # Bypass if disabled
 
     # Log robot poses
     log_arm_poses({f"{path}/robot": observation.robot.actual}, **kwargs)
@@ -434,6 +416,28 @@ def log_text(path: str, text: str, **kwargs) -> None:
     if not _STATE.initialized:
         init()
     if not enabled():
-        return
+        return  # Bypass if disabled
     assert _STATE.backend is not None
     _STATE.backend.log_text(_prefix(path), text, **kwargs)
+
+
+def flush() -> None:
+    if not enabled():
+        return
+    _STATE.backend.flush()  # type: ignore[union-attr]
+
+
+def shutdown() -> None:
+    """
+    Perform cleanup during shutdown. Ensure the backend is active before shutting down.
+    """
+    if not enabled():
+        return
+    try:
+        if _STATE.backend is not None:
+            # Only print if a backend was initialized
+            if _STATE.backend_name != "disabled":
+                print(f"[visualizer] Shutting down backend: {_STATE.backend_name}")
+            _STATE.backend.shutdown()  # type: ignore[union-attr]
+    finally:
+        _STATE.enabled = False
