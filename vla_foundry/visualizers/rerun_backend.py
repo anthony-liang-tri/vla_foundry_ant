@@ -13,7 +13,7 @@ import rerun as rr
 from pydrake.math import RigidTransform
 from rerun import Transform3D
 from rerun.datatypes import Quaternion
-from robot_gym.multiarm_spaces import PosesAndGrippers  # Import from robot_gym.multiarm_spaces
+from robot_gym.multiarm_spaces import MultiarmObservation, PosesAndGrippers  # Import from robot_gym.multiarm_spaces
 
 
 class RerunBackend:
@@ -175,6 +175,33 @@ class RerunBackend:
         - line_strips: The 3D line strips as a NumPy array of shape (N, 3).
         """
         rr.log(path, rr.LineStrips3D([line_strips]))
+
+    def log_multiarm_observation(self, path: str, observation: MultiarmObservation, **kwargs) -> None:
+        """
+        Log a MultiarmObservation to the Rerun backend.
+
+        Parameters
+        ----------
+        path : str
+            Base path in the visualization hierarchy.
+        observation : MultiarmObservation
+            The MultiarmObservation object to log.
+        """
+        # Log robot poses
+        self.log_arm_poses({f"{path}/robot": observation.robot.actual}, **kwargs)
+
+        # Log camera images
+        for camera_id, image_set in observation.visuo.items():
+            if image_set.rgb:
+                self.log_image(f"{path}/cameras/{camera_id}/rgb", image_set.rgb.array, **kwargs)
+            if image_set.depth:
+                self.log_image(f"{path}/cameras/{camera_id}/depth", image_set.depth.array, **kwargs)
+            if image_set.label:
+                self.log_image(f"{path}/cameras/{camera_id}/label", image_set.label.array, **kwargs)
+
+        # Log language instruction if available
+        if observation.language_instruction:
+            self.log_scalar(f"{path}/language_instruction", observation.language_instruction, **kwargs)
 
     def flush(self) -> None:
         # rerun flush is implicit; no-op here

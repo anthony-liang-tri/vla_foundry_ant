@@ -16,6 +16,7 @@ import numpy as np
 from robot_gym.multiarm_spaces import MultiarmObservation, PosesAndGrippers
 from robot_gym.policy import Policy, PolicyMetadata
 
+import vla_foundry.visualizers.visualizer as vz
 from grpc_workspace.git_util import (
     maybe_get_current_commit_sha,
     maybe_get_remote_url_from_active_branch,
@@ -24,7 +25,6 @@ from grpc_workspace.lbm_policy_server import (
     LbmPolicyServerConfig,
     run_policy_server,
 )
-from vla_foundry.visualizers import visualizer
 
 
 def _get_policy_metadata():
@@ -62,8 +62,11 @@ class WaveAround(Policy):
             poses[robot_name].set_translation(observed_xyz + offset)
         self._counter += 1
 
+        # Log the entire MultiarmObservation to the visualizer
+        vz.log_multiarm_observation("WaveAround/observation", observation)
+
         # Log the arm poses to the visualizer
-        visualizer.log_arm_poses({"WaveAround": PosesAndGrippers(poses=poses, grippers=grippers)})
+        vz.log_arm_poses({"WaveAround": PosesAndGrippers(poses=poses, grippers=grippers)})
 
         return PosesAndGrippers(poses=poses, grippers=grippers)
 
@@ -112,12 +115,12 @@ def main():
     LbmPolicyServerConfig.add_argparse_arguments(parser)
     args = parser.parse_args()
     # Initialize the visualizer in main
-    visualizer.visualizer_init(run_name="WaveAroundPolicy")
+    vz.init(run_name="WaveAroundPolicy")
     policy = WaveAroundBatch()
     try:
         run_policy_server(policy, args)
     finally:
-        visualizer.shutdown()  # Ensure visualizer shutdown on exit
+        vz.shutdown()  # Ensure visualizer shutdown on exit
 
 
 if __name__ == "__main__":
