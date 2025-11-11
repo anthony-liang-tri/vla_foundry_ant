@@ -6,7 +6,7 @@ logging functionality to rerun.io.
 """
 
 import subprocess
-from typing import Any, Dict, List, Mapping
+from typing import Dict, List
 
 import numpy as np
 import rerun as rr
@@ -211,51 +211,6 @@ class RerunBackend:
     def shutdown(self) -> None:
         # rerun doesn't strictly need it; keep for parity
         return
-
-    def log_dict(
-        self,
-        data: Mapping[str, Any],
-        *,
-        base_path: str = "",
-        recurse: bool = True,
-        sanitize_keys: bool = True,
-        max_depth: int = 8,
-        _depth: int = 0,
-        **kwargs,
-    ) -> None:
-        if not self._initialized or data is None:
-            return
-        if _depth > max_depth:
-            print("[rerun_backend] log_dict: max_depth exceeded; truncating.")
-            return
-
-        def _join(a: str, b: str) -> str:
-            if not a:
-                return b
-            return f"{a.rstrip('/')}/{b.lstrip('/')}"
-
-        def _clean(k: str) -> str:
-            if not sanitize_keys:
-                return k
-            return "".join(ch if ch.isalnum() or ch in "-_./" else "_" for ch in str(k))
-
-        for k, v in data.items():
-            key = _clean(k)
-            p = _join(base_path, key)
-
-            if recurse and isinstance(v, Mapping):
-                self.log_dict(
-                    v,
-                    base_path=p,
-                    recurse=recurse,
-                    sanitize_keys=sanitize_keys,
-                    max_depth=max_depth,
-                    _depth=_depth + 1,
-                    **kwargs,
-                )
-                continue
-
-            self.log(p, v, **kwargs)
 
     def _disable_rerun_analytics(self) -> None:
         try:
