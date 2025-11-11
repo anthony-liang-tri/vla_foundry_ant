@@ -11,7 +11,7 @@ This directory contains the visualization tools for the VLA Foundry project. The
      - Abstracting backend-specific details.
      - Automatically selecting the appropriate backend based on the `VISUALIZER` environment variable.
    - **Key Features**:
-     - Supports multiple backends (`rerun`, `gradio`, or `disabled`).
+     - Supports multiple backends (`rerun` or `disabled`).
      - Automatically disables visualization if no backend is selected. Defaults to `disabled`.
 
 ### 2. **Rerun Visualizer**
@@ -21,6 +21,7 @@ This directory contains the visualization tools for the VLA Foundry project. The
      - Visualizing 3D points, trajectories, and rigid transforms.
      - Logging images and scalar values.
      - Debugging robot arm poses and action predictions.
+     - Useful for local visualization of realtime inference, etc
    - **Key Features**:
      - Supports hierarchical logging paths.
      - Provides decorators for logging images and robot arm poses.
