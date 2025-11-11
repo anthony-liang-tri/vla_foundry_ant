@@ -118,6 +118,89 @@ vz.shutdown()
 
 ---
 
+## Rank Variable Usage in Visualization
+
+TODO: This library has not been tested in a multi-GPU setting yet.
+
+### Purpose of the Rank Variable
+The `rank` variable is used to namespace logs in multi-node or multi-process environments. This ensures that logs from different processes or nodes do not overwrite each other and can be easily distinguished during debugging or visualization.
+
+### How It Works
+The rank is detected automatically from common environment variables such as:
+- `RANK` (used in PyTorch distributed training)
+- `SLURM_PROCID` (used in SLURM job scheduling)
+- `LOCAL_RANK` (used in local multi-GPU setups)
+- `OMPI_COMM_WORLD_RANK` (used in MPI environments)
+
+If no rank is detected, the visualizer assumes a single-process setup and does not add a rank prefix.
+
+### Examples
+
+#### Single-Process Logging
+If no rank is detected, logs are stored without a rank prefix:
+```python
+vz.init(run_name="example_run")
+vz.log_scalar("metrics/loss", 0.123)
+# Logs to: "metrics/loss"
+```
+
+#### Multi-Process Logging with `torchrun`
+In a multi-process setup using `torchrun`, the `RANK` environment variable is automatically set:
+```bash
+torchrun --nproc_per_node=4 example_script.py
+```
+
+In your script:
+```python
+import os
+import numpy as np
+import vla_foundry.visualizers as vz
+
+vz.init(run_name="example_run", add_rank_to_run=True)
+vz.log_scalar("metrics/loss", 0.123)
+# Logs to: "r{rank}/metrics/loss", where {rank} is the process rank
+```
+
+This ensures that logs from each process are stored separately.
+
+#### Multi-GPU Training Loop Example with Optional Rank 0 Logging
+When using PyTorch for distributed training across multiple GPUs, you can integrate the visualizer as follows. This example includes an option to log only from rank 0:
+
+```python
+import torch
+import numpy as np
+import vla_foundry.visualizers as vz
+
+# Detect rank from environment variables
+rank = int(os.environ.get("RANK", 0))
+
+# Initialize the visualizer with rank-aware logging
+vz.init(run_name="multi_gpu_training", add_rank_to_run=True)
+
+# Set this flag to True to log only from rank 0
+log_only_rank_0 = True
+
+# Example training loop
+for epoch in range(num_epochs):
+    for batch in dataloader:
+        # Perform training step
+        loss = compute_loss(batch)
+
+        # Log only from rank 0 if the flag is set
+        if not log_only_rank_0 or rank == 0:
+            vz.log_scalar("metrics/loss", loss.item())
+
+# Shutdown the visualizer
+vz.shutdown()
+```
+
+### Notes
+- The `log_only_rank_0` flag allows you to control whether all ranks log or only rank 0 logs. This can help reduce redundant logs in multi-GPU setups.
+- The rank prefix is optional and can be disabled by setting `add_rank_to_run=False` during initialization.
+- The rank detection logic is implemented in the `_detect_rank_prefix` function in `visualizer.py`.
+
+---
+
 ## Example Usage
 
 To see an example of how to use the interface, you can run
