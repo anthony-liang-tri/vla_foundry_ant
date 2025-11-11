@@ -26,6 +26,7 @@ from robot_gym.multiarm_spaces import MultiarmObservation, PosesAndGrippers
 
 # Optional imports (gate behind backend)
 _HAS_RERUN = importlib.util.find_spec("rerun") is not None
+_HAS_WANDB = importlib.util.find_spec("wandb") is not None  # Add this line
 
 # Optional Drake import for RigidTransform convenience
 try:
@@ -101,13 +102,13 @@ def _detect_rank_prefix() -> str:
 def _choose_backend_from_env() -> str:
     # VISUALIZER values:
     #   disabled|off|0 -> disabled
-    #   rerun (default to disabled if no env variable is set)
+    #   rerun | wandb (default to disabled if no env variable is set)
     val = (os.environ.get("VISUALIZER") or "").strip().lower()
     if not val:
         return "disabled"  # Default to disabled if no VISUALIZER is set
     if val in {"disabled", "off", "0", "none"}:
         return "disabled"
-    if val in {"rerun"}:
+    if val in {"rerun", "wandb"}:
         return val
     # Auto
     return "disabled"
@@ -126,6 +127,17 @@ def _get_backend(name: str) -> Optional[Backend]:
             register_backend(RerunBackend())
         except ImportError as e:
             print(f"[visualizer] Rerun backend import failed: {e}")
+            return None
+    if name == "wandb":  # Add this block
+        if not _HAS_WANDB:
+            print("[visualizer] WandB package not available; using disabled.")
+            return None
+        try:
+            from vla_foundry.visualizers.wandb_backend import WandbBackend  # Import only when needed
+
+            register_backend(WandbBackend())
+        except ImportError as e:
+            print(f"[visualizer] WandB backend import failed: {e}")
             return None
     b = _BACKENDS.get(name)
     if b is None:
