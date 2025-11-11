@@ -269,3 +269,16 @@ class RerunBackend:
             print("[rerun_backend] rerun CLI not found; analytics may be enabled. Ensure the rerun CLI is installed.")
         except subprocess.CalledProcessError as e:
             print(f"[rerun_backend] Failed to disable analytics: {e.stderr or e}")
+
+    def log_text(self, path: str, text: str, **kwargs) -> None:
+        """
+        Log a text value to the Rerun backend.
+
+        Parameters
+        ----------
+        path : str
+            Path in the visualization hierarchy.
+        text : str
+            Text value to log.
+        """
+        rr.log(path, rr.TextLog(text))

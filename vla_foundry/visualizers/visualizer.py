@@ -415,6 +415,25 @@ def log_multiarm_observation(path: str, observation: MultiarmObservation, **kwar
         if image_set.label:
             log_image(f"{path}/cameras/{camera_id}/label", image_set.label.array, **kwargs)
 
-    # Log language instruction if available
+    # Log language instruction as text
     if observation.language_instruction:
-        log_scalar(f"{path}/language_instruction", observation.language_instruction, **kwargs)
+        log_text(f"{path}/language_instruction", observation.language_instruction, **kwargs)
+
+
+def log_text(path: str, text: str, **kwargs) -> None:
+    """
+    Log a text value to the active backend.
+
+    Parameters
+    ----------
+    path : str
+        Path in the visualization hierarchy (e.g., "language/instruction").
+    text : str
+        Text value to log.
+    """
+    if not _STATE.initialized:
+        init()
+    if not enabled():
+        return
+    assert _STATE.backend is not None
+    _STATE.backend.log_text(_prefix(path), text, **kwargs)
