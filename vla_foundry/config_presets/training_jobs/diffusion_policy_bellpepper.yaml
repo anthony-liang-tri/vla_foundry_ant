@@ -22,6 +22,16 @@ data:
     - robotics
   dataset_weighting: 
     - 1.0
+  camera_names:
+    - scene_right_0
+    - scene_left_0
+    - wrist_left_minus
+    - wrist_left_plus
+    - wrist_right_minus
+    - wrist_right_plus
+  image_indices:
+    - -1
+    - 0
 distributed:
   fsdp: True
 hparams:
