@@ -1,4 +1,3 @@
-import io
 import json
 import logging
 import os
@@ -26,12 +25,9 @@ except ImportError:
 
 
 def _pt_load_s3_cp(file_path, map_location=None):
-    cmd = f"aws s3 cp {file_path} -"
-    proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    stdout, stderr = proc.communicate()
-    if proc.returncode != 0:
-        raise Exception(f"Failed to fetch model from s3. stderr: {stderr.decode()}")
-    return torch.load(io.BytesIO(stdout), map_location=map_location, weights_only=False)
+    of = fsspec.open(file_path, "rb")
+    with of as f:
+        return torch.load(f, map_location=map_location, weights_only=False)
 
 
 def pt_load(file_path, map_location=None):
@@ -45,14 +41,9 @@ def pt_load(file_path, map_location=None):
 
 
 def _json_load_s3_cp(file_path):
-    cmd = f"aws s3 cp {file_path} -"
-    proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    stdout, stderr = proc.communicate()
-
-    if proc.returncode != 0:
-        raise RuntimeError(f"Failed to fetch JSON from S3: {stderr.decode().strip()}")
-
-    return json.load(io.BytesIO(stdout))
+    of = fsspec.open(file_path, "rb")
+    with of as f:
+        return json.load(f)
 
 
 def json_load(file_path):
@@ -65,15 +56,10 @@ def json_load(file_path):
 
 
 def _jsonl_load_s3_cp(file_path):
-    cmd = f"aws s3 cp {file_path} -"
-    proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    stdout, stderr = proc.communicate()
-
-    if proc.returncode != 0:
-        raise RuntimeError(f"Failed to fetch JSONL from S3: {stderr.decode().strip()}")
-
-    content = stdout.decode("utf-8")
-    return [json.loads(line) for line in content.strip().split("\n") if line.strip()]
+    of = fsspec.open(file_path, "rb")
+    with of as f:
+        content = f.read().decode("utf-8")
+        return [json.loads(line) for line in content.strip().split("\n") if line.strip()]
 
 
 def jsonl_load(file_path):
@@ -86,14 +72,9 @@ def jsonl_load(file_path):
 
 
 def _yaml_load_s3_cp(file_path):
-    cmd = f"aws s3 cp {file_path} -"
-    proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    stdout, stderr = proc.communicate()
-
-    if proc.returncode != 0:
-        raise RuntimeError(f"Failed to fetch YAML from S3: {stderr.decode().strip()}")
-
-    return yaml.safe_load(io.BytesIO(stdout))
+    of = fsspec.open(file_path, "rb")
+    with of as f:
+        return yaml.safe_load(f)
 
 
 def yaml_load(file_path):
@@ -106,27 +87,19 @@ def yaml_load(file_path):
 
 
 def _list_directory_s3_ls(dir_path):
-    cmd = f"aws s3 ls {dir_path.rstrip('/') + '/'}"
-    proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    stdout, stderr = proc.communicate()
-
-    if proc.returncode != 0:
-        raise RuntimeError(f"Failed to list S3 directory: {stderr.decode().strip()}")
-
-    items = []
-    for line in stdout.decode("utf-8").strip().split("\n"):
-        if line.strip():
-            parts = line.strip().split()
-            if len(parts) >= 1:
-                if "PRE" in parts:
-                    # Directory (prefix)
-                    dirname = parts[-1].rstrip("/")
-                    items.append(dirname)
-                elif len(parts) >= 4:
-                    # File
-                    filename = " ".join(parts[3:])  # Handle filenames with spaces
-                    items.append(filename)
-    return items
+    fs, path = fsspec.core.url_to_fs(dir_path)
+    try:
+        entries = fs.ls(path, detail=False)
+        # Extract just the basename (filename or dirname) from full paths
+        items = []
+        for entry in entries:
+            # Remove the parent path to get just the name
+            basename = entry.split("/")[-1]
+            if basename:  # Skip empty strings
+                items.append(basename)
+        return items
+    except Exception as e:
+        raise RuntimeError(f"Failed to list S3 directory: {str(e)}") from e
 
 
 def list_directory(dir_path):
@@ -163,11 +136,11 @@ def check_directory_has_files_with_substring(dir_path, substring):
 
 
 def _is_dir_s3_ls(dir_path):
-    """Check if an S3 path is a directory by trying to list it."""
+    """Check if an S3 path is a directory using fsspec."""
+    fs, path = fsspec.core.url_to_fs(dir_path)
     try:
-        _list_directory_s3_ls(dir_path)
-        return True
-    except RuntimeError:
+        return fs.isdir(path)
+    except Exception:
         return False
 
 
@@ -202,28 +175,12 @@ def list_directory_recursive(dir_path):
 
 
 def _file_exists_s3_ls(file_path):
-    """Check if an S3 file exists using aws s3 ls."""
-    cmd = f"aws s3 ls {file_path}"
-    proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    stdout, stderr = proc.communicate()
-
-    if proc.returncode != 0:
+    """Check if an S3 file exists using fsspec."""
+    fs, path = fsspec.core.url_to_fs(file_path)
+    try:
+        return fs.exists(path)
+    except Exception:
         return False
-
-    # Parse the output to ensure it's an exact match, not a prefix match
-    output = stdout.decode("utf-8").strip()
-    if not output:
-        return False
-
-    expected_filename = file_path.split("/")[-1]
-    for line in output.split("\n"):
-        if line.strip():
-            parts = line.strip().split()
-            if len(parts) >= 4:
-                actual_filename = " ".join(parts[3:])
-                if actual_filename == expected_filename:
-                    return True
-    return False
 
 
 def file_exists(path):
@@ -265,12 +222,9 @@ def copy_to_temp_file(file_path):
 
     try:
         if file_path.startswith("s3"):
-            cmd = f"aws s3 cp {file_path} {temp_path}"
-            proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            stdout, stderr = proc.communicate()
-
-            if proc.returncode != 0:
-                raise RuntimeError(f"Failed to copy S3 file: {stderr.decode().strip()}")
+            of = fsspec.open(file_path, "rb")
+            with of as f_in, open(temp_path, "wb") as f_out:
+                f_out.write(f_in.read())
         else:
             shutil.copy(file_path, temp_path)
 
