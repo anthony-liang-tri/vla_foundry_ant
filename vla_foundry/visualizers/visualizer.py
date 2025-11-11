@@ -22,7 +22,6 @@ from functools import wraps
 from typing import Any, Dict, List, Optional
 
 import numpy as np
-from pydrake.math import RigidTransform  # Ensure consistent import for RigidTransform
 from robot_gym.multiarm_spaces import MultiarmObservation, PosesAndGrippers
 
 # Optional imports (gate behind backend)
