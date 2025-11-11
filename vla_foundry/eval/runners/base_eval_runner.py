@@ -1,10 +1,11 @@
 import os
 
 import numpy as np
-from lbm2.data.processor.robotics_processor import RoboticsProcessor
-from lbm2.file_utils import get_latest_checkpoint, load_model_checkpoint
-from lbm2.models import create_model
-from lbm2.params.train_experiment_params import load_experiment_params_from_yaml
+
+from vla_foundry.data.processor.robotics_processor import RoboticsProcessor
+from vla_foundry.file_utils import get_latest_checkpoint, load_model_checkpoint
+from vla_foundry.models import create_model
+from vla_foundry.params.train_experiment_params import load_experiment_params_from_yaml
 
 
 class BaseEvalRunner:
