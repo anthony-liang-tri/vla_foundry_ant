@@ -16,21 +16,22 @@ from __future__ import annotations
 
 import atexit
 import os
-from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
+from pydrake.math import RigidTransform  # Ensure consistent import for RigidTransform
+from robot_gym.multiarm_spaces import PosesAndGrippers
 
 # Optional imports (gate behind backend)
 try:
-
     _HAS_RERUN = True
 except Exception:
     _HAS_RERUN = False
 
 # Optional Drake import for RigidTransform convenience
 try:
+    from pydrake.math import RigidTransform  # type: ignore
 
     _HAS_DRAKE = True
 except Exception:
@@ -326,7 +327,7 @@ def shutdown() -> None:
         _STATE.enabled = False
 
 
-def log_rigid_transform(path: str, transform: Any, **kwargs) -> None:
+def log_rigid_transform(path: str, transform: RigidTransform, **kwargs) -> None:
     """
     Log a rigid transform to the active backend.
 
@@ -334,8 +335,8 @@ def log_rigid_transform(path: str, transform: Any, **kwargs) -> None:
     ----------
     path : str
         Path in the visualization hierarchy.
-    transform : Any
-        Rigid transform object (backend-specific).
+    transform : RigidTransform
+        Rigid transform object.
     """
     if not _STATE.initialized:
         init()
@@ -345,13 +346,13 @@ def log_rigid_transform(path: str, transform: Any, **kwargs) -> None:
     _STATE.backend.log_rigid_transform(_prefix(path), transform, **kwargs)
 
 
-def log_arm_poses(arm_poses: Dict[str, Any], **kwargs) -> None:
+def log_arm_poses(arm_poses: Dict[str, PosesAndGrippers], **kwargs) -> None:
     """
     Log arm poses to the active backend.
 
     Parameters
     ----------
-    arm_poses : Dict[str, Any]
+    arm_poses : Dict[str, PosesAndGrippers]
         A dictionary containing arm pose data.
     """
     if not _STATE.initialized:
@@ -362,13 +363,13 @@ def log_arm_poses(arm_poses: Dict[str, Any], **kwargs) -> None:
     _STATE.backend.log_arm_poses(arm_poses, **kwargs)
 
 
-def log_action_predictions(predictions: Iterable[Any], **kwargs) -> None:
+def log_action_predictions(predictions: List[PosesAndGrippers], **kwargs) -> None:
     """
     Log action predictions to the active backend.
 
     Parameters
     ----------
-    predictions : Iterable[Any]
+    predictions : List[PosesAndGrippers]
         A list of objects containing action prediction data.
     """
     if not _STATE.initialized:
