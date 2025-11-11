@@ -132,7 +132,7 @@ def _get_backend(name: str) -> Optional[Backend]:
     return b
 
 
-def init(
+def visualizer_init(
     run_name: Optional[str] = None,
     *,
     backend: Optional[str] = None,
@@ -208,7 +208,7 @@ def log_image(path: str, image: np.ndarray, **kwargs) -> None:
         Image data as a NumPy array.
     """
     if not _STATE.initialized:
-        init()
+        visualizer_init()
     if not enabled():
         return
     assert _STATE.backend is not None
@@ -240,7 +240,7 @@ def log_points3d(path: str, points: np.ndarray, **kwargs) -> None:
         3D points as a NumPy array of shape (N, 3).
     """
     if not _STATE.initialized:
-        init()
+        visualizer_init()
     if not enabled():
         return
     assert _STATE.backend is not None
@@ -259,7 +259,7 @@ def log_line_strips3d(path: str, line_strips: np.ndarray, **kwargs) -> None:
         Line strips as a NumPy array of shape (N, 3).
     """
     if not _STATE.initialized:
-        init()
+        visualizer_init()
     if not enabled():
         return
     assert _STATE.backend is not None
@@ -278,7 +278,7 @@ def log_scalar(path: str, value: float, **kwargs) -> None:
         Scalar value to log.
     """
     if not _STATE.initialized:
-        init()
+        visualizer_init()
     if not enabled():
         return
     assert _STATE.backend is not None
@@ -296,6 +296,11 @@ def log_trajectory(path: str, trajectory_points: np.ndarray) -> None:
     trajectory_points : np.ndarray
         Array of shape (N, 3) representing the trajectory points.
     """
+    if not _STATE.initialized:
+        visualizer_init()
+    if not enabled():
+        return
+
     if trajectory_points.ndim != 2 or trajectory_points.shape[1] != 3:
         raise ValueError("trajectory_points must be a (N, 3) array")
 
@@ -340,7 +345,7 @@ def log_rigid_transform(path: str, transform: RigidTransform, **kwargs) -> None:
         Rigid transform object.
     """
     if not _STATE.initialized:
-        init()
+        visualizer_init()
     if not enabled():
         return
     assert _STATE.backend is not None
@@ -357,7 +362,7 @@ def log_arm_poses(arm_poses: Dict[str, PosesAndGrippers], **kwargs) -> None:
         A dictionary containing arm pose data.
     """
     if not _STATE.initialized:
-        init()
+        visualizer_init()
     if not enabled():
         return
     assert _STATE.backend is not None
@@ -374,7 +379,7 @@ def log_action_predictions(predictions: List[PosesAndGrippers], **kwargs) -> Non
         A list of objects containing action prediction data.
     """
     if not _STATE.initialized:
-        init()
+        visualizer_init()
     if not enabled():
         return
     assert _STATE.backend is not None
