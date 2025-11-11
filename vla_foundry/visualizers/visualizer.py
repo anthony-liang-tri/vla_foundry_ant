@@ -18,6 +18,7 @@ import atexit
 import importlib.util  # Add this import
 import os
 from dataclasses import dataclass
+from functools import wraps
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -197,6 +198,21 @@ def _prefix(path: str) -> str:
     return path
 
 
+def ensure_initialized_and_enabled(func):
+    """Decorator to ensure the visualizer is initialized and enabled before logging."""
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if not _STATE.initialized:
+            init()
+        if not enabled():
+            return  # Bypass if disabled
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
+@ensure_initialized_and_enabled
 def log_image(path: str, image: np.ndarray, **kwargs) -> None:
     """
     Log an image to the active backend.
@@ -208,31 +224,26 @@ def log_image(path: str, image: np.ndarray, **kwargs) -> None:
     image : np.ndarray
         Image data as a NumPy array.
     """
-    if not _STATE.initialized:
-        init()
-    if not enabled():
-        return  # Bypass if disabled
-    assert _STATE.backend is not None
-    _STATE.backend.log_image(_prefix(path), image, **kwargs)
+    _STATE.backend.log_image(_prefix(path), image, **kwargs)  # type: ignore[union-attr]
 
 
+@ensure_initialized_and_enabled
 def log_images(path: str, images: Dict[str, np.ndarray], **kwargs) -> None:
     """
     Log multiple images to the active backend.
 
     Parameters
     ----------
+    path : str
+        Base path in the visualization hierarchy.
     images : Dict[str, np.ndarray]
         A dictionary where keys are image paths and values are NumPy arrays representing the images.
     """
-    if not _STATE.initialized:
-        init()
-    if not enabled():
-        return  # Bypass if disabled
     for path, image in images.items():
         log_image(path, image, **kwargs)
 
 
+@ensure_initialized_and_enabled
 def log_points3d(path: str, points: np.ndarray, **kwargs) -> None:
     """
     Log 3D points to the active backend.
@@ -244,14 +255,10 @@ def log_points3d(path: str, points: np.ndarray, **kwargs) -> None:
     points : np.ndarray
         3D points as a NumPy array of shape (N, 3).
     """
-    if not _STATE.initialized:
-        init()
-    if not enabled():
-        return  # Bypass if disabled
-    assert _STATE.backend is not None
-    _STATE.backend.log_points3d(_prefix(path), points, **kwargs)
+    _STATE.backend.log_points3d(_prefix(path), points, **kwargs)  # type: ignore[union-attr]
 
 
+@ensure_initialized_and_enabled
 def log_line_strips3d(path: str, line_strips: np.ndarray, **kwargs) -> None:
     """
     Log 3D line strips to the active backend.
@@ -259,18 +266,14 @@ def log_line_strips3d(path: str, line_strips: np.ndarray, **kwargs) -> None:
     Parameters
     ----------
     path : str
-        Path in the rerun hierarchy (e.g., "lines/trajectory").
+        Path in the visualization hierarchy (e.g., "lines/trajectory").
     line_strips : np.ndarray
         Line strips as a NumPy array of shape (N, 3).
     """
-    if not _STATE.initialized:
-        init()
-    if not enabled():
-        return  # Bypass if disabled
-    assert _STATE.backend is not None
-    _STATE.backend.log_line_strips3d(_prefix(path), line_strips, **kwargs)
+    _STATE.backend.log_line_strips3d(_prefix(path), line_strips, **kwargs)  # type: ignore[union-attr]
 
 
+@ensure_initialized_and_enabled
 def log_scalar(path: str, value: float, **kwargs) -> None:
     """
     Log a scalar value to the active backend.
@@ -278,44 +281,32 @@ def log_scalar(path: str, value: float, **kwargs) -> None:
     Parameters
     ----------
     path : str
-        Path in the rerun hierarchy (e.g., "metrics/loss").
+        Path in the visualization hierarchy (e.g., "metrics/loss").
     value : float
         Scalar value to log.
     """
-    if not _STATE.initialized:
-        init()
-    if not enabled():
-        return  # Bypass if disabled
-    assert _STATE.backend is not None
-    _STATE.backend.log_scalar(_prefix(path), value, **kwargs)
+    _STATE.backend.log_scalar(_prefix(path), value, **kwargs)  # type: ignore[union-attr]
 
 
+@ensure_initialized_and_enabled
 def log_trajectory(path: str, trajectory_points: np.ndarray) -> None:
     """
-    Log a trajectory as waypoints and a path in rerun.
+    Log a trajectory as waypoints and a path in the visualization hierarchy.
 
     Parameters
     ----------
     path : str
-        Base path in the rerun hierarchy (e.g., "robot/trajectory").
+        Base path in the visualization hierarchy (e.g., "robot/trajectory").
     trajectory_points : np.ndarray
         Array of shape (N, 3) representing the trajectory points.
     """
-    if not _STATE.initialized:
-        init()
-    if not enabled():
-        return  # Bypass if disabled
-
     if trajectory_points.ndim != 2 or trajectory_points.shape[1] != 3:
         raise ValueError("trajectory_points must be a (N, 3) array")
-
-    # Log waypoints
     log_points3d(f"{path}/waypoints", trajectory_points)
-
-    # Log path
     log_line_strips3d(f"{path}/path", trajectory_points)
 
 
+@ensure_initialized_and_enabled
 def log_rigid_transform(path: str, transform: RigidTransform, **kwargs) -> None:
     """
     Log a rigid transform to the active backend.
@@ -327,14 +318,10 @@ def log_rigid_transform(path: str, transform: RigidTransform, **kwargs) -> None:
     transform : RigidTransform
         Rigid transform object.
     """
-    if not _STATE.initialized:
-        init()
-    if not enabled():
-        return  # Bypass if disabled
-    assert _STATE.backend is not None
-    _STATE.backend.log_rigid_transform(_prefix(path), transform, **kwargs)
+    _STATE.backend.log_rigid_transform(_prefix(path), transform, **kwargs)  # type: ignore[union-attr]
 
 
+@ensure_initialized_and_enabled
 def log_arm_poses(arm_poses: Dict[str, PosesAndGrippers], **kwargs) -> None:
     """
     Log arm poses to the active backend.
@@ -344,14 +331,10 @@ def log_arm_poses(arm_poses: Dict[str, PosesAndGrippers], **kwargs) -> None:
     arm_poses : Dict[str, PosesAndGrippers]
         A dictionary containing arm pose data.
     """
-    if not _STATE.initialized:
-        init()
-    if not enabled():
-        return  # Bypass if disabled
-    assert _STATE.backend is not None
-    _STATE.backend.log_arm_poses(arm_poses, **kwargs)
+    _STATE.backend.log_arm_poses(arm_poses, **kwargs)  # type: ignore[union-attr]
 
 
+@ensure_initialized_and_enabled
 def log_action_predictions(predictions: List[PosesAndGrippers], **kwargs) -> None:
     """
     Log action predictions to the active backend.
@@ -361,14 +344,10 @@ def log_action_predictions(predictions: List[PosesAndGrippers], **kwargs) -> Non
     predictions : List[PosesAndGrippers]
         A list of objects containing action prediction data.
     """
-    if not _STATE.initialized:
-        init()
-    if not enabled():
-        return  # Bypass if disabled
-    assert _STATE.backend is not None
-    _STATE.backend.log_action_predictions(predictions, **kwargs)
+    _STATE.backend.log_action_predictions(predictions, **kwargs)  # type: ignore[union-attr]
 
 
+@ensure_initialized_and_enabled
 def log_multiarm_observation(path: str, observation: MultiarmObservation, **kwargs) -> None:
     """
     Log a MultiarmObservation to the active backend.
@@ -380,15 +359,7 @@ def log_multiarm_observation(path: str, observation: MultiarmObservation, **kwar
     observation : MultiarmObservation
         The MultiarmObservation object to log.
     """
-    if not _STATE.initialized:
-        init()
-    if not enabled():
-        return  # Bypass if disabled
-
-    # Log robot poses
     log_arm_poses({f"{path}/robot": observation.robot.actual}, **kwargs)
-
-    # Log camera images
     for camera_id, image_set in observation.visuo.items():
         if image_set.rgb:
             log_image(f"{path}/cameras/{camera_id}/rgb", image_set.rgb.array, **kwargs)
@@ -396,12 +367,11 @@ def log_multiarm_observation(path: str, observation: MultiarmObservation, **kwar
             log_image(f"{path}/cameras/{camera_id}/depth", image_set.depth.array, **kwargs)
         if image_set.label:
             log_image(f"{path}/cameras/{camera_id}/label", image_set.label.array, **kwargs)
-
-    # Log language instruction as text
     if observation.language_instruction:
         log_text(f"{path}/language_instruction", observation.language_instruction, **kwargs)
 
 
+@ensure_initialized_and_enabled
 def log_text(path: str, text: str, **kwargs) -> None:
     """
     Log a text value to the active backend.
@@ -413,12 +383,7 @@ def log_text(path: str, text: str, **kwargs) -> None:
     text : str
         Text value to log.
     """
-    if not _STATE.initialized:
-        init()
-    if not enabled():
-        return  # Bypass if disabled
-    assert _STATE.backend is not None
-    _STATE.backend.log_text(_prefix(path), text, **kwargs)
+    _STATE.backend.log_text(_prefix(path), text, **kwargs)  # type: ignore[union-attr]
 
 
 def flush() -> None:
