@@ -39,6 +39,28 @@ class RerunBackend:
             rr.init(run_name, spawn=True)
             self._initialized = True
 
+    def flush(self) -> None:
+        # rerun flush is implicit; no-op here
+        return
+
+    def shutdown(self) -> None:
+        # rerun doesn't strictly need it; keep for parity
+        return
+
+    def _disable_rerun_analytics(self) -> None:
+        try:
+            subprocess.run(
+                ["rerun", "analytics", "disable"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            print("[rerun_backend] Rerun analytics disabled.")
+        except FileNotFoundError:
+            print("[rerun_backend] rerun CLI not found; analytics may be enabled. Ensure the rerun CLI is installed.")
+        except subprocess.CalledProcessError as e:
+            print(f"[rerun_backend] Failed to disable analytics: {e.stderr or e}")
+
     def log_image(self, path: str, image: np.ndarray, **kwargs) -> None:
         """
         Log an image to the Rerun backend.
@@ -203,28 +225,6 @@ class RerunBackend:
         # Log language instruction if available
         if observation.language_instruction:
             self.log_scalar(f"{path}/language_instruction", observation.language_instruction, **kwargs)
-
-    def flush(self) -> None:
-        # rerun flush is implicit; no-op here
-        return
-
-    def shutdown(self) -> None:
-        # rerun doesn't strictly need it; keep for parity
-        return
-
-    def _disable_rerun_analytics(self) -> None:
-        try:
-            subprocess.run(
-                ["rerun", "analytics", "disable"],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            print("[rerun_backend] Rerun analytics disabled.")
-        except FileNotFoundError:
-            print("[rerun_backend] rerun CLI not found; analytics may be enabled. Ensure the rerun CLI is installed.")
-        except subprocess.CalledProcessError as e:
-            print(f"[rerun_backend] Failed to disable analytics: {e.stderr or e}")
 
     def log_text(self, path: str, text: str, **kwargs) -> None:
         """
