@@ -11,9 +11,10 @@ import random
 import time
 
 import numpy as np
-import visualizer as vz
 from pydrake.math import RigidTransform, RollPitchYaw
 from robot_gym.multiarm_spaces import PosesAndGrippers  # Import PosesAndGrippers from robot_gym.multiarm_spaces
+
+import vla_foundry.visualizers.visualizer as vz
 
 # Initialize the visualizer
 vz.init(run_name="tutorial_logging", add_rank_to_run=True)

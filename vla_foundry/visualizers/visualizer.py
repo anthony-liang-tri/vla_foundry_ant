@@ -15,19 +15,17 @@ Current support: rerun.io only (optional dependency)
 from __future__ import annotations
 
 import atexit
+import importlib.util  # Add this import
 import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 import numpy as np
 from pydrake.math import RigidTransform  # Ensure consistent import for RigidTransform
-from robot_gym.multiarm_spaces import PosesAndGrippers
+from robot_gym.multiarm_spaces import MultiarmObservation, PosesAndGrippers
 
 # Optional imports (gate behind backend)
-try:
-    _HAS_RERUN = True
-except Exception:
-    _HAS_RERUN = False
+_HAS_RERUN = importlib.util.find_spec("rerun") is not None
 
 # Optional Drake import for RigidTransform convenience
 try:
@@ -119,12 +117,15 @@ def _get_backend(name: str) -> Optional[Backend]:
     if name == "disabled":
         return None
     if name == "rerun":
+        if not _HAS_RERUN:
+            print("[visualizer] Rerun package not available; using disabled.")
+            return None
         try:
             from vla_foundry.visualizers.rerun_backend import RerunBackend  # Import only when needed
 
             register_backend(RerunBackend())
-        except ImportError:
-            print("[visualizer] Rerun backend not available; using disabled.")
+        except ImportError as e:
+            print(f"[visualizer] Rerun backend import failed: {e}")
             return None
     b = _BACKENDS.get(name)
     if b is None:
@@ -132,7 +133,7 @@ def _get_backend(name: str) -> Optional[Backend]:
     return b
 
 
-def visualizer_init(
+def init(
     run_name: Optional[str] = None,
     *,
     backend: Optional[str] = None,
@@ -208,7 +209,7 @@ def log_image(path: str, image: np.ndarray, **kwargs) -> None:
         Image data as a NumPy array.
     """
     if not _STATE.initialized:
-        visualizer_init()
+        init()
     if not enabled():
         return
     assert _STATE.backend is not None
@@ -240,7 +241,7 @@ def log_points3d(path: str, points: np.ndarray, **kwargs) -> None:
         3D points as a NumPy array of shape (N, 3).
     """
     if not _STATE.initialized:
-        visualizer_init()
+        init()
     if not enabled():
         return
     assert _STATE.backend is not None
@@ -259,7 +260,7 @@ def log_line_strips3d(path: str, line_strips: np.ndarray, **kwargs) -> None:
         Line strips as a NumPy array of shape (N, 3).
     """
     if not _STATE.initialized:
-        visualizer_init()
+        init()
     if not enabled():
         return
     assert _STATE.backend is not None
@@ -278,7 +279,7 @@ def log_scalar(path: str, value: float, **kwargs) -> None:
         Scalar value to log.
     """
     if not _STATE.initialized:
-        visualizer_init()
+        init()
     if not enabled():
         return
     assert _STATE.backend is not None
@@ -297,7 +298,7 @@ def log_trajectory(path: str, trajectory_points: np.ndarray) -> None:
         Array of shape (N, 3) representing the trajectory points.
     """
     if not _STATE.initialized:
-        visualizer_init()
+        init()
     if not enabled():
         return
 
@@ -345,7 +346,7 @@ def log_rigid_transform(path: str, transform: RigidTransform, **kwargs) -> None:
         Rigid transform object.
     """
     if not _STATE.initialized:
-        visualizer_init()
+        init()
     if not enabled():
         return
     assert _STATE.backend is not None
@@ -362,7 +363,7 @@ def log_arm_poses(arm_poses: Dict[str, PosesAndGrippers], **kwargs) -> None:
         A dictionary containing arm pose data.
     """
     if not _STATE.initialized:
-        visualizer_init()
+        init()
     if not enabled():
         return
     assert _STATE.backend is not None
@@ -379,8 +380,41 @@ def log_action_predictions(predictions: List[PosesAndGrippers], **kwargs) -> Non
         A list of objects containing action prediction data.
     """
     if not _STATE.initialized:
-        visualizer_init()
+        init()
     if not enabled():
         return
     assert _STATE.backend is not None
     _STATE.backend.log_action_predictions(predictions, **kwargs)
+
+
+def log_multiarm_observation(path: str, observation: MultiarmObservation, **kwargs) -> None:
+    """
+    Log a MultiarmObservation to the active backend.
+
+    Parameters
+    ----------
+    path : str
+        Base path in the visualization hierarchy.
+    observation : MultiarmObservation
+        The MultiarmObservation object to log.
+    """
+    if not _STATE.initialized:
+        init()
+    if not enabled():
+        return
+
+    # Log robot poses
+    log_arm_poses({f"{path}/robot": observation.robot.actual}, **kwargs)
+
+    # Log camera images
+    for camera_id, image_set in observation.visuo.items():
+        if image_set.rgb:
+            log_image(f"{path}/cameras/{camera_id}/rgb", image_set.rgb.array, **kwargs)
+        if image_set.depth:
+            log_image(f"{path}/cameras/{camera_id}/depth", image_set.depth.array, **kwargs)
+        if image_set.label:
+            log_image(f"{path}/cameras/{camera_id}/label", image_set.label.array, **kwargs)
+
+    # Log language instruction if available
+    if observation.language_instruction:
+        log_scalar(f"{path}/language_instruction", observation.language_instruction, **kwargs)
