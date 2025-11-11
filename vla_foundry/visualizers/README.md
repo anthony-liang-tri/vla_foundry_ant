@@ -11,7 +11,7 @@ This directory contains the visualization tools for the VLA Foundry project. The
      - Abstracting backend-specific details.
      - Automatically selecting the appropriate backend based on the `VISUALIZER` environment variable.
    - **Key Features**:
-     - Supports multiple backends (`rerun`, `gradio`, or `disabled`).
+     - Supports multiple backends (`rerun`, `wandb`, `gradio`, or `disabled`).
      - Automatically disables visualization if no backend is selected. Defaults to `disabled`.
 
 ### 2. **Rerun Visualizer**
@@ -24,6 +24,13 @@ This directory contains the visualization tools for the VLA Foundry project. The
    - **Key Features**:
      - Supports hierarchical logging paths.
      - Provides decorators for logging images and robot arm poses.
+
+### 3. **WandB Visualizer**
+   - **File**: `wandb_backend.py`
+   - **Purpose**: Logs data to the [Weights & Biases](https://wandb.ai/) experiment tracking platform.
+   - **Use Cases**:
+     - Tracking scalar metrics, images, 3D points, and trajectories in wandb
+     - Useful for integrating into training loops
 
 ---
 
@@ -44,6 +51,7 @@ vz.init(run_name="example_run", add_rank_to_run=True)
 
 - **Environment Variable**: Set `VISUALIZER` to one of the following:
   - `rerun`: Use the Rerun.io backend.
+  - `wandb`: Use the Weights & Biases backend.
   - `disabled`: Disable visualization.
 
 ### 3. **Logging Data**
@@ -106,13 +114,17 @@ vz.shutdown()
 - **Setup**: Install the `rerun` Python package.
 - **Environment Variable**: `VISUALIZER=rerun`
 
+### WandB Backend
+- **Best For**: Experiment tracking, logging scalar metrics, and visualizing 3D data.
+- **Setup**: Install the `wandb` Python package.
+- **Environment Variable**: `VISUALIZER=wandb`
+
 ### Disabled
 - **Best For**: Running without visualization (e.g., in production or testing environments).
 - **Setup**: No additional setup required.
 - **Environment Variable**: `VISUALIZER=disabled`
 
 ## Planned Backends:
-- **wandb**: Integration with Weights & Biases for experiment tracking.
 - **gradio**: Interactive web-based visualizations.
 
 ---
@@ -123,6 +135,10 @@ To see an example of how to use the interface, you can run
 
 ```
 VISUALIZER=rerun uv run example_usage.py
+```
+or
+```
+VISUALIZER=wandb uv run example_usage.py
 ```
 
 If you run simply
@@ -136,4 +152,4 @@ visualization will default to `disabled` if no backend is selected.
 ## Notes
 - The `visualizer.py` facade automatically disables visualization if no backend is selected.
 - Use the `VISUALIZER` environment variable to control the backend selection.
-- For more advanced use cases, refer to the backend-specific files (`rerun_backend.py`, etc.).
+- For more advanced use cases, refer to the backend-specific files (`rerun_backend.py`, `wandb_backend.py`, etc.).

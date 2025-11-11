@@ -91,17 +91,6 @@ class WandbBackend:
         """
         wandb.log({path: wandb.Object3D(line_strips)})
 
-    def log_trajectory(self, path: str, trajectory: np.ndarray, **kwargs) -> None:
-        """
-        Log a trajectory to the WandB backend.
-
-        Parameters:
-        - path: The hierarchical path for the trajectory.
-        - trajectory: The trajectory as a NumPy array of shape (N, 3).
-        """
-        self.log_line_strips3d(f"{path}/trajectory", trajectory, **kwargs)
-        self.log_points3d(f"{path}/waypoints", trajectory, **kwargs)
-
     def log_rigid_transform(self, path: str, transform: Any, **kwargs) -> None:
         """
         Log a rigid transform to the WandB backend.
