@@ -37,8 +37,6 @@ try:
 except Exception:
     _HAS_DRAKE = False
 
-from vla_foundry.visualizers.rerun_backend import RerunBackend  # Import the RerunBackend class
-
 # ---------------------------
 # Backend interface + registry
 # ---------------------------
@@ -69,11 +67,6 @@ _BACKENDS: Dict[str, Backend] = {}
 
 def register_backend(backend: Backend) -> None:
     _BACKENDS[backend.name] = backend
-
-
-# Register rerun if importable
-if _HAS_RERUN:
-    register_backend(RerunBackend())
 
 
 # ---------------------------
@@ -125,6 +118,14 @@ def _choose_backend_from_env() -> str:
 def _get_backend(name: str) -> Optional[Backend]:
     if name == "disabled":
         return None
+    if name == "rerun":
+        try:
+            from vla_foundry.visualizers.rerun_backend import RerunBackend  # Import only when needed
+
+            register_backend(RerunBackend())
+        except ImportError:
+            print("[visualizer] Rerun backend not available; using disabled.")
+            return None
     b = _BACKENDS.get(name)
     if b is None:
         print(f"[visualizer] Backend '{name}' not registered; using disabled.")
