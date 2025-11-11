@@ -93,10 +93,14 @@ class RerunBackend:
         """
         Log a rigid transform to the Rerun backend.
 
-        Parameters:
-        - path: The hierarchical path for the rigid transform.
-        - transform: The RigidTransform object.
-        - axis_length: The length of the axes for visualization.
+        Parameters
+        ----------
+        path : str
+            Path in the visualization hierarchy.
+        transform : RigidTransform
+            Rigid transform object.
+        axis_length : float, optional
+            Length of the axes for visualization, by default 1.0.
         """
         translation = transform.translation()
         rotation = transform.rotation().ToQuaternion()
@@ -105,17 +109,19 @@ class RerunBackend:
             path,
             Transform3D(
                 translation=translation,
-                quaternion=quaternion,
+                rotation=Quaternion(xyzw=quaternion),
                 axis_length=axis_length,
             ),
         )
 
-    def log_arm_poses(self, arm_poses: Dict[str, PosesAndGrippers], **kwargs: Any) -> None:
+    def log_arm_poses(self, arm_poses: Dict[str, PosesAndGrippers], **kwargs) -> None:
         """
         Log arm poses to the Rerun backend.
 
-        Parameters:
-        - arm_poses: A dictionary containing arm pose data.
+        Parameters
+        ----------
+        arm_poses : Dict[str, PosesAndGrippers]
+            A dictionary containing arm pose data.
         """
         for client_id, poses_and_grippers in arm_poses.items():
             if not poses_and_grippers or not hasattr(poses_and_grippers, "poses"):
@@ -134,14 +140,16 @@ class RerunBackend:
 
             if hasattr(poses_and_grippers, "grippers") and poses_and_grippers.grippers:
                 for gripper_name, value in poses_and_grippers.grippers.items():
-                    rr.log(f"clients/{client_id}/grippers/{gripper_name}/grip", rr.Scalar(value))
+                    rr.log(f"clients/{client_id}/grippers/{gripper_name}/grip", rr.Scalars(value))
 
-    def log_action_predictions(self, predictions: List[PosesAndGrippers], **kwargs: Any) -> None:
+    def log_action_predictions(self, predictions: List[PosesAndGrippers], **kwargs) -> None:
         """
         Log action predictions to the Rerun backend.
 
-        Parameters:
-        - predictions: A list of PosesAndGrippers objects containing action prediction data.
+        Parameters
+        ----------
+        predictions : List[PosesAndGrippers]
+            A list of objects containing action prediction data.
         """
         traj = {}
         for step in predictions:

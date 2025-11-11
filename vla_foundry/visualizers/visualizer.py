@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import atexit
 import os
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
@@ -140,14 +141,15 @@ def init(
     """
     Initialize the visualizer once per process.
 
-    - backend: override backend selection (e.g., "rerun"). If None, use VISUALIZER env.
+    - backend: If None, automatically detect the backend using the VISUALIZER environment variable.
     - VISUALIZER=disabled disables everything.
-    - run_name: default from VISUALIZER_RUN_NAME or basename of CWD.
-    - add_rank_to_run: append "-r{rank}" to run name.
+    - run_name: Default from VISUALIZER_RUN_NAME or basename of CWD.
+    - add_rank_to_run: Append "-r{rank}" to run name.
     """
     if _STATE.initialized:
         return
 
+    # Automatically detect the backend if not explicitly provided
     chosen = backend or _choose_backend_from_env()
     be = _get_backend(chosen)
 
@@ -322,3 +324,56 @@ def shutdown() -> None:
             _STATE.backend.shutdown()  # type: ignore[union-attr]
     finally:
         _STATE.enabled = False
+
+
+def log_rigid_transform(path: str, transform: Any, **kwargs) -> None:
+    """
+    Log a rigid transform to the active backend.
+
+    Parameters
+    ----------
+    path : str
+        Path in the visualization hierarchy.
+    transform : Any
+        Rigid transform object (backend-specific).
+    """
+    if not _STATE.initialized:
+        init()
+    if not enabled():
+        return
+    assert _STATE.backend is not None
+    _STATE.backend.log_rigid_transform(_prefix(path), transform, **kwargs)
+
+
+def log_arm_poses(arm_poses: Dict[str, Any], **kwargs) -> None:
+    """
+    Log arm poses to the active backend.
+
+    Parameters
+    ----------
+    arm_poses : Dict[str, Any]
+        A dictionary containing arm pose data.
+    """
+    if not _STATE.initialized:
+        init()
+    if not enabled():
+        return
+    assert _STATE.backend is not None
+    _STATE.backend.log_arm_poses(arm_poses, **kwargs)
+
+
+def log_action_predictions(predictions: Iterable[Any], **kwargs) -> None:
+    """
+    Log action predictions to the active backend.
+
+    Parameters
+    ----------
+    predictions : Iterable[Any]
+        A list of objects containing action prediction data.
+    """
+    if not _STATE.initialized:
+        init()
+    if not enabled():
+        return
+    assert _STATE.backend is not None
+    _STATE.backend.log_action_predictions(predictions, **kwargs)
