@@ -7,7 +7,7 @@ source .venv/bin/activate && python vla_foundry/data/preprocessing/preprocess_ro
     ]" \
 --output_dir s3://tri-ml-datasets/scratch/sedrick.keh/tmp/lbmdata/bimanualputredbellpepperinbin3/ \
 --data_discard_keys "include vla_foundry/config_presets/data/lbm/lbm_data_discard_key.yaml" \
---camera_names "include vla_foundry/config_presets/data/lbm/lbm_data_camera_names.yaml" \
+--camera_names "include vla_foundry/config_presets/data/lbm/lbm_data_camera_names_4cameras.yaml" \
 --language_annotations_path vla_foundry/config_presets/data/lbm/lbm_language_annotations.yaml \
 --action_fields_config_path vla_foundry/config_presets/data/lbm/lbm_action_fields.yaml \
 --samples_per_shard 100 \
