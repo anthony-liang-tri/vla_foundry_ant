@@ -505,7 +505,7 @@ class SpartanConverter(BaseRoboticsConverter):
         )
 
         # Create metadata
-        episode_id = os.path.basename(episode_path.rstrip("/"))
+        episode_id = self.get_episode_id(episode_path)
         sample_metadata = SampleMetadata(
             episode_id=episode_id,
             sample_id=f"{uuid.uuid4()}_{episode_id}_t{anchor_timestep:04d}",

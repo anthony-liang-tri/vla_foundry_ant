@@ -5,7 +5,7 @@ from typing import List
 import boto3
 
 from vla_foundry.data.preprocessing.hf_utils.hf_dataset_downloader import _download_and_upload_file
-from vla_foundry.file_utils import list_directory_recursive, parse_s3_path
+from vla_foundry.file_utils import list_s3_directory_recursive, parse_s3_path
 
 
 def get_camera_names_from_s3(s3_client, bucket: str, prefix: str, chunk_num: int) -> List[str]:
@@ -78,7 +78,7 @@ def check_lerobot_complete(s3_path: str) -> List[str]:
 
     # Generate expected files and existing files. Pre-compute to avoid repetitive checks.
     expected_data_files, expected_video_files = generate_expected_files(total_episodes, chunks_size, camera_names)
-    existing_objects = list_directory_recursive(s3_path)
+    existing_objects = list_s3_directory_recursive(s3_path)
 
     # Check missing data (parquet) files
     for expected_file in expected_data_files:

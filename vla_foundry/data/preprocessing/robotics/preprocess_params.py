@@ -1,5 +1,7 @@
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Dict, List, Optional, Union
+
+import draccus
 
 from vla_foundry.params.base_params import BaseParams
 
@@ -70,3 +72,66 @@ class PreprocessParams(BaseParams):
         # Validate required paths
         assert self.source_episodes is not None, "--source_episodes is required (or set in config_path)"
         assert self.output_dir is not None, "--output_dir is required (or set in config_path)"
+
+
+@dataclass(frozen=True)
+class RangeSpec:
+    """Dataclass for specifying a range with optional start, end, and step."""
+
+    start: Optional[int] = field(default=None)
+    end: Optional[int] = field(default=None)
+    step: Optional[int] = field(default=None)
+
+
+@dataclass(frozen=True)
+class MMTPreprocessParams(PreprocessParams):
+    """Dataclass for MMT-specific preprocessing configuration parsed by draccus."""
+
+    mmt_lowdim_flatten_indices_selection: Optional[Dict[str, Union[int, List[int], List[RangeSpec]]]] = field(
+        default_factory=dict
+    )
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        if self.mmt_lowdim_flatten_indices_selection:
+            selections = {}
+            for k, v in self.mmt_lowdim_flatten_indices_selection.items():
+                if isinstance(v, int):
+                    v = [v]
+                if not isinstance(v, list):
+                    raise ValueError(
+                        f"Invalid type for mmt_lowdim_flatten_indices_selection[{k}]: "
+                        f"expected int or list, got {type(v)}"
+                    )
+                new_v = []
+                for item in v:
+                    if isinstance(item, RangeSpec):
+                        if item.start is None or item.end is None:
+                            raise ValueError(
+                                f"RangeSpec for mmt_lowdim_flatten_indices_selection[{k}] must have start and end"
+                            )
+                        step = item.step if item.step is not None else 1
+                        new_v.extend(list(range(item.start, item.end, step)))
+                    elif isinstance(item, int):
+                        new_v.append(item)
+                    else:
+                        raise ValueError(
+                            f"Invalid item type in mmt_lowdim_flatten_indices_selection[{k}]: "
+                            f"expected int or RangeSpec, got {type(item)}"
+                        )
+                selections[k] = new_v
+            object.__setattr__(self, "mmt_lowdim_flatten_indices_selection", selections)
+
+
+@draccus.decode.register(PreprocessParams)
+def _decode_preprocess_params(raw):
+    """
+    Allow YAML to choose the subclass with a 'type' selector.
+    Different from draccus ChoiceRegistry, this allows fallback to default
+    class, i.e., PreprocessParams, if no type is specified.
+    """
+    if raw.get("source_type") == "mmt_npz":
+        return draccus.decode(MMTPreprocessParams, raw)
+    # Fallback base behavior
+    return draccus.decode(PreprocessParams, raw)

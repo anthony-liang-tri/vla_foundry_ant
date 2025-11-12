@@ -98,3 +98,16 @@ python vla_foundry/data/preprocessing/preprocess_robotics_to_tar.py \
 --samples_per_shard 100 \
 --config_path "vla_foundry/config_presets/data/robotics_preprocessing_params_1past_14future.yaml" \
 ```
+
+# Converting MMT NPZ data to tar shards
+Data ripped from MMT robots is stored as npz files, named as `ep\d{4}_t\d{4}\.npz`. Each npz file store all data from one time step.
+```
+uv run vla_foundry/data/preprocessing/preprocess_robotics_to_tar.py \
+--source_episodes "[
+    # Local path also supported
+    's3://tri-mmt-data/lpp_data/20251028_paper_towel/npz_head/'
+    ]" \
+--output_dir s3://tri-mmt-data/lpp_data/vla_foundry/20251028_paper_towel \
+--samples_per_shard 100
+--config_path "vla_foundry/config_presets/data/mmt_preprocessing_params_1past_14future.yaml"
+```

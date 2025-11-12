@@ -1,6 +1,5 @@
 import io
 import json
-import os
 import tarfile
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -20,6 +19,7 @@ def upload_sample_to_s3(
     sample_data: Dict[str, Any],
     output_dir: str,
     episode_path: str,
+    episode_id: str,
     frame_idx: int,
     jpeg_quality: int = 95,
     resize_images_size: List[int] = None,
@@ -27,7 +27,6 @@ def upload_sample_to_s3(
     """Upload sample data to S3 as tar file."""
     if resize_images_size is None:
         resize_images_size = [224, 224]
-    episode_id = os.path.basename(episode_path.rstrip("/"))
     s3_client = boto3.client("s3")
     tar_buffer = io.BytesIO()
     uuid_prefix = str(uuid.uuid4())
@@ -93,7 +92,7 @@ def upload_sample_to_s3(
     s3_key = f"{s3_prefix.rstrip('/')}/episodes/{unique_id}_{episode_id}_frame_{frame_idx}.tar"
     s3_client.upload_fileobj(tar_buffer, bucket_name, s3_key)
     print(f"Uploaded {bucket_name.rstrip('/')}/{s3_key}", flush=True)
-    return s3_key.split("/")[-1]
+    return f"{unique_id}_{episode_id}_frame_{frame_idx}.tar"
 
 
 def extract_unique_id(episode_path: str) -> str:

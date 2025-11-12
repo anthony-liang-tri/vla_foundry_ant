@@ -108,6 +108,18 @@ def list_directory(dir_path):
     return os.listdir(dir_path)
 
 
+def list_directory_recursive(dir_path):
+    """Similar to list_directory but lists all files recursively."""
+    if dir_path.startswith("s3"):
+        return list(list_s3_directory_recursive(dir_path))
+    all_files = []
+    for root, _, files in os.walk(dir_path):
+        for file in files:
+            relative_path = os.path.relpath(os.path.join(root, file), dir_path)
+            all_files.append(relative_path)
+    return all_files
+
+
 def check_directory_has_files_with_prefix(dir_path, prefix):
     """Check if directory exists and contains files with the given prefix.
 
@@ -129,7 +141,7 @@ def check_directory_has_files_with_prefix(dir_path, prefix):
 def check_directory_has_files_with_substring(dir_path, substring):
     """Check if directory exists and contains files with the given substring."""
     try:
-        files = list_directory(dir_path)
+        files = list_directory_recursive(dir_path)
         return [f for f in files if substring in f]
     except (RuntimeError, FileNotFoundError, OSError):
         return []
@@ -150,7 +162,7 @@ def is_dir(path):
     return os.path.isdir(path)
 
 
-def list_directory_recursive(dir_path):
+def list_s3_directory_recursive(dir_path):
     """Get all S3 objects under a prefix efficiently using pagination."""
     assert dir_path.startswith("s3"), "Only S3 paths are supported for now"
     s3_client = boto3.client("s3")

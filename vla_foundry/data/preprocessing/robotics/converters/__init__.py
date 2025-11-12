@@ -13,5 +13,9 @@ def get_converter(source_type: str, cfg: PreprocessParams) -> BaseRoboticsConver
         from vla_foundry.data.preprocessing.robotics.converters.lerobot import LeRobotConverter
 
         return LeRobotConverter(cfg)
+    elif source_type == "mmt_npz":
+        from vla_foundry.data.preprocessing.robotics.converters.mmt import MMTNPZConverter
+
+        return MMTNPZConverter(cfg)
     else:
         raise ValueError(f"Unsupported source type: {source_type}")

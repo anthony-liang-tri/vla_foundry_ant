@@ -1,3 +1,4 @@
+import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List
 
@@ -143,6 +144,10 @@ class BaseRoboticsConverter:
 
         return relative_data
 
+    def get_episode_id(self, episode_path: str) -> str:
+        """Get episode ID from episode path."""
+        return os.path.basename(episode_path.rstrip("/"))
+
     def process_episode(self, episode_path: str, statistics_ray_actor, logger_actor) -> None:
         """
         Process an episode and return a dictionary of the processed episode.
@@ -208,6 +213,7 @@ class BaseRoboticsConverter:
                         sample_data=sample_data,
                         output_dir=self.cfg.output_dir,
                         episode_path=episode_path,
+                        episode_id=self.get_episode_id(episode_path),
                         frame_idx=anchor_timestep,
                         jpeg_quality=self.cfg.jpeg_quality,
                         resize_images_size=self.resize_images_size,
