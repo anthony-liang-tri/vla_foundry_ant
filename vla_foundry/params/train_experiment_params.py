@@ -32,6 +32,7 @@ class TrainExperimentParams(BaseParams):
     wandb_project_name: str = field(default="vla_foundry")
     wandb_tags: list[str] = field(default_factory=list)
     log_every_n_steps: int = field(default=20)
+    log_level: str = field(default="INFO")
     # Optional path to S3 to which the experiment directory is synced.
     remote_sync: str = field(default=None)
 

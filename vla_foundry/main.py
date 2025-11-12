@@ -35,7 +35,7 @@ from vla_foundry.optimizer import create_optimizer, load_optimizer
 from vla_foundry.params.train_experiment_params import TrainExperimentParams
 from vla_foundry.scheduler import create_scheduler
 from vla_foundry.train import train_one_checkpoint
-from vla_foundry.utils import get_experiment_name, set_random_seed
+from vla_foundry.utils import get_experiment_name, set_random_seed, summarize_datastrings
 
 
 def main():
@@ -68,7 +68,9 @@ def main():
         experiment_path = os.path.join(cfg.save_path, experiment_name)
     os.makedirs(experiment_path, exist_ok=True)
     log_path = os.path.join(experiment_path, "out.log")
-    setup_logging(log_path, logging.INFO)
+    # Convert string log level to logging constant
+    log_level = getattr(logging, cfg.log_level.upper(), logging.INFO)
+    setup_logging(log_path, log_level)
     checkpoint_path = os.path.join(experiment_path, "checkpoints")
     os.makedirs(checkpoint_path, exist_ok=True)
 
@@ -198,7 +200,7 @@ def main():
         )
 
         if is_master(cfg):
-            logging.info(f"Now training on: {datastrings}")
+            logging.info(f"Now training on: {summarize_datastrings(datastrings)}")
             logging.info(f"Samples: {samples_seen} / {cfg.total_train_samples}")
             logging.info(f"Samples in this checkpoint (per dataset): {num_samples_per_dataset}")
 
