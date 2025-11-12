@@ -9,7 +9,7 @@ source .venv/bin/activate && python vla_foundry/data/preprocessing/preprocess_ro
     --action_fields_config_path vla_foundry/config_presets/data/lbm/lbm_action_fields.yaml \
     --language_annotations_path vla_foundry/config_presets/data/lbm/lbm_language_annotations.yaml \
     --data_discard_keys "include vla_foundry/config_presets/data/lbm/lbm_data_discard_key.yaml" \
-    --camera_names "include vla_foundry/config_presets/data/lbm/lbm_data_camera_names.yaml" \
+    --camera_names "include vla_foundry/config_presets/data/lbm/lbm_data_camera_names_6cameras.yaml" \
     --past_lowdim_steps 1 \
     --future_lowdim_steps 14 \
     --image_indices "[-1, 0]" \
