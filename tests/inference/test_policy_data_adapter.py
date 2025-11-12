@@ -579,7 +579,10 @@ def test_policy_data_adapter_end_to_end_flow(field_mapping_file):
         ],
         axis=0,
     )
-    expected_xyz_relative = xyz_to_relative(stacked_xyz, reference_xyz=stacked_xyz[reference_index])
+    absolute_xyz_field = relative_to_absolute_map(action_fields[0])
+    absolute_actual_xyz_field = any_to_actual_map(absolute_xyz_field)
+    reference_xyz = adapter.reference[absolute_actual_xyz_field]
+    expected_xyz_relative = xyz_to_relative(stacked_xyz, reference_xyz=reference_xyz)
     expected_xyz_tensor = torch.tensor(expected_xyz_relative, dtype=torch.float32)
 
     stacked_rot6d = np.stack(
@@ -589,8 +592,11 @@ def test_policy_data_adapter_end_to_end_flow(field_mapping_file):
         ],
         axis=0,
     )
+    absolute_rot_field = relative_to_absolute_map(action_fields[1])
+    absolute_actual_rot_field = any_to_actual_map(absolute_rot_field)
+    reference_rot = adapter.reference[absolute_actual_rot_field]
     with np.errstate(invalid="ignore"):
-        expected_rot_relative = rot_6d_to_relative(stacked_rot6d, reference_6d=stacked_rot6d[reference_index])
+        expected_rot_relative = rot_6d_to_relative(stacked_rot6d, reference_6d=reference_rot)
     expected_rot_tensor = torch.tensor(expected_rot_relative, dtype=torch.float32)
 
     stacked_gripper = np.stack(
@@ -672,16 +678,12 @@ def test_policy_data_adapter_end_to_end_flow(field_mapping_file):
                 np.testing.assert_allclose(actual_value, expected_gripper)
     absolute_xyz_field = relative_to_absolute_map(action_fields[0])
     absolute_actual_xyz_field = relative_to_absolute_map(any_to_actual_map(action_fields[0]))
-    field_std = adapter.action_mapping.get_field_std(action_fields[0], scope="per_timestep")[reference_index]
     action_reference = adapter.action_buffer[reference_index][absolute_xyz_field]
     actual_reference = adapter.reference[absolute_actual_xyz_field]
-    clipped_reference = np.clip(
-        action_reference,
-        actual_reference - adapter.action_mapping.clamp_std * field_std,
-        actual_reference + adapter.action_mapping.clamp_std * field_std,
-    )
+    np.testing.assert_allclose(action_reference, translation0, atol=1e-6)
+    np.testing.assert_allclose(actual_reference, translation1, atol=1e-6)
     relative_xyz = _denormalize_ref(model_output[0, num_past, xyz_slice])
-    expected_translation = xyz_from_relative(relative_xyz.cpu().numpy(), clipped_reference)
+    expected_translation = xyz_from_relative(relative_xyz.cpu().numpy(), actual_reference)
     np.testing.assert_allclose(
         actions[num_past].poses["left::panda"].translation(),
         expected_translation,
@@ -689,16 +691,13 @@ def test_policy_data_adapter_end_to_end_flow(field_mapping_file):
     )
     absolute_rot_field = relative_to_absolute_map(action_fields[1])
     absolute_actual_rot_field = relative_to_absolute_map(any_to_actual_map(action_fields[1]))
-    field_std_rot = adapter.action_mapping.get_field_std(action_fields[1], scope="per_timestep")[reference_index]
     action_reference_rot = adapter.action_buffer[reference_index][absolute_rot_field]
     actual_reference_rot = adapter.reference[absolute_actual_rot_field]
-    clipped_reference_rot = np.clip(
-        action_reference_rot,
-        actual_reference_rot - adapter.action_mapping.clamp_std * field_std_rot,
-        actual_reference_rot + adapter.action_mapping.clamp_std * field_std_rot,
-    )
+    np.testing.assert_allclose(action_reference_rot, stacked_rot6d[reference_index], atol=1e-6)
+    rotation1_6d = rotation1.matrix()[:, :2].flatten("F")
+    np.testing.assert_allclose(actual_reference_rot, rotation1_6d, atol=1e-6)
     relative_rot = _denormalize_ref(model_output[0, num_past, rot_slice])
-    expected_rot6d = rot_6d_from_relative(relative_rot.cpu().numpy(), clipped_reference_rot)
+    expected_rot6d = rot_6d_from_relative(relative_rot.cpu().numpy(), actual_reference_rot)
     expected_rot_matrix = rot_6d_to_matrix(expected_rot6d)
     np.testing.assert_allclose(
         actions[num_past].poses["left::panda"].rotation().matrix(),
