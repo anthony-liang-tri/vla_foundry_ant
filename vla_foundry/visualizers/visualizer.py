@@ -333,35 +333,66 @@ class Visualizer:
             - Rotation matrix of shape (3, 3)
             - Transformation matrix of shape (4, 4) (translation will be ignored)
         """
+        # Ensure inputs are numpy arrays
+        translation = np.asarray(translation)
+        rotation = np.asarray(rotation)
+
         # Handle translation validation
         if translation.shape != (3,):
             raise ValueError(f"Translation must be shape (3,), got {translation.shape}")
 
         # Handle different rotation formats and convert to quaternion [x, y, z, w]
         if rotation.shape == (4,):
-            # Already quaternion [x, y, z, w]
-            quaternion = rotation
+            # Already quaternion [x, y, z, w] - validate it's normalized
+            quaternion = rotation.copy()
+            quat_norm = np.linalg.norm(quaternion)
+            if quat_norm < 1e-6:
+                raise ValueError("Zero-norm quaternion is invalid")
+            if not np.isclose(quat_norm, 1.0, atol=1e-3):
+                # Normalize quaternion if it's not already normalized
+                quaternion = quaternion / quat_norm
             final_translation = translation
         elif rotation.shape == (3, 3):
-            # Rotation matrix - convert to quaternion
+            # Rotation matrix - validate and convert to quaternion
             try:
                 from scipy.spatial.transform import Rotation
 
+                # Validate that it's a proper rotation matrix
+                if not np.allclose(np.dot(rotation, rotation.T), np.eye(3), atol=1e-6):
+                    raise ValueError("Matrix is not orthogonal (not a valid rotation matrix)")
+                if not np.isclose(np.linalg.det(rotation), 1.0, atol=1e-6):
+                    raise ValueError("Matrix determinant is not 1 (not a proper rotation matrix)")
                 quaternion = Rotation.from_matrix(rotation).as_quat()  # Returns [x, y, z, w]
                 final_translation = translation
             except ImportError as err:
                 raise ImportError("scipy is required for rotation matrix conversion") from err
         elif rotation.shape == (4, 4):
-            # Transformation matrix - extract translation and rotation
+            # Transformation matrix - validate and extract translation and rotation
             try:
                 from scipy.spatial.transform import Rotation
 
-                final_translation = rotation[:3, 3]  # Override translation with matrix translation
-                quaternion = Rotation.from_matrix(rotation[:3, :3]).as_quat()  # Returns [x, y, z, w]
+                # Validate that the bottom row is [0, 0, 0, 1]
+                if not np.allclose(rotation[3, :], [0, 0, 0, 1], atol=1e-6):
+                    raise ValueError("Bottom row of 4x4 matrix must be [0, 0, 0, 1]")
+
+                final_translation = rotation[:3, 3].copy()  # Extract translation
+                rot_matrix = rotation[:3, :3]
+
+                # Validate the rotation part
+                if not np.allclose(np.dot(rot_matrix, rot_matrix.T), np.eye(3), atol=1e-6):
+                    raise ValueError("Rotation part of 4x4 matrix is not orthogonal")
+                if not np.isclose(np.linalg.det(rot_matrix), 1.0, atol=1e-6):
+                    raise ValueError("Rotation part of 4x4 matrix has determinant != 1")
+
+                quaternion = Rotation.from_matrix(rot_matrix).as_quat()  # Returns [x, y, z, w]
             except ImportError as err:
                 raise ImportError("scipy is required for transformation matrix conversion") from err
         else:
             raise ValueError(f"Unsupported rotation format with shape {rotation.shape}")
+
+        # Ensure final outputs are contiguous float arrays (backend safety)
+        final_translation = np.ascontiguousarray(final_translation, dtype=np.float64)
+        quaternion = np.ascontiguousarray(quaternion, dtype=np.float64)
 
         # Backend expects quaternion [x, y, z, w] and translation vector
         _STATE.backend.log_pose(_prefix(path), final_translation, quaternion, **kwargs)  # type: ignore[union-attr]
