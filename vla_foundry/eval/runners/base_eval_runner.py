@@ -82,7 +82,9 @@ class BaseEvalRunner:
         raise NotImplementedError("check_success method not implemented")
 
     def load_model(self, model_path):
-        cfg = load_experiment_params_from_yaml(os.path.join(model_path, "config.yaml"))
+        cfg = load_experiment_params_from_yaml(
+            os.path.join(model_path, "config.yaml"), localize_params=not model_path.startswith("s3://")
+        )
         model = create_model(cfg.model)
         load_model_checkpoint(model, get_latest_checkpoint(model_path))
         model = model.to("cuda")

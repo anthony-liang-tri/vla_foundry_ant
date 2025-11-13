@@ -14,7 +14,7 @@ FILES_TO_DOWNLOAD=(
     "config.yaml"
     "config_normalizer.yaml"
     "config_processor.yaml"
-    "stats_normalizer.json"
+    "stats.json"
     "preprocessing_configs.yaml"
 )
 

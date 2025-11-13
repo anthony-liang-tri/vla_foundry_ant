@@ -73,7 +73,9 @@ class InferenceDiffusionPolicy(Policy):
         self.num_flow_steps = num_flow_steps
 
         # Load model configuration and create model
-        self.cfg = load_experiment_params_from_yaml(self.model_config_path)
+        self.cfg = load_experiment_params_from_yaml(
+            self.model_config_path, localize_params=not self.model_config_path.startswith("s3://")
+        )
         self.model = create_model(self.cfg.model)
 
         # Create RoboticsProcessor for all data processing (text, images, normalization)

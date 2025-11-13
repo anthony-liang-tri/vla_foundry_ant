@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 import time
 from contextlib import contextmanager
-from typing import Tuple
+from typing import Any, Tuple
 
 import boto3
 import fsspec
@@ -187,6 +187,21 @@ def file_exists(path):
     if path.startswith("s3"):
         return _file_exists_s3_ls(path)
     return os.path.exists(path)
+
+
+def localize_paths(data: Any, base_path: str) -> Any:
+    """
+    Loops through data and converts s3 paths to local paths.
+    """
+    if isinstance(data, str) and data.startswith("s3"):
+        base_path_s3, _ = os.path.split(data)
+        return data.replace(base_path_s3, base_path)
+    elif isinstance(data, list):
+        return [localize_paths(item, base_path) for item in data]
+    elif isinstance(data, dict):
+        for key, value in data.items():
+            data[key] = localize_paths(value, base_path)
+    return data
 
 
 def get_lowdim_past_future_timesteps(statistics_path: str) -> Tuple[int, int]:

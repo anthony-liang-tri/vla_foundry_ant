@@ -1,11 +1,20 @@
+import os
 import sys
+import tempfile
 from dataclasses import FrozenInstanceError
 from unittest.mock import patch
 
 import draccus
 import pytest
+import yaml
 
-from vla_foundry.params.train_experiment_params import TrainExperimentParams, load_experiment_params_from_yaml
+from vla_foundry.params.model_params import ModelParams
+from vla_foundry.params.train_experiment_params import (
+    TrainExperimentParams,
+    load_experiment_params_from_yaml,
+    load_params_from_yaml,
+    localize_paths,
+)
 
 
 def get_args_text():
@@ -194,3 +203,164 @@ def test_immutable_params():
     assert params.model.hidden_dim == 999
     object.__setattr__(params.model, "hidden_dim", 1000)
     assert params.model.hidden_dim == 1000
+
+
+def test_localize_paths_string_s3_to_local():
+    """Test that s3 paths are converted to local paths with new base path."""
+    s3_path = "s3://bucket/some/dir/file.yaml"
+    base_path = "/local/base"
+    result = localize_paths(s3_path, base_path)
+    assert result == "/local/base/file.yaml"
+
+
+def test_localize_paths_string_non_s3():
+    """Test that non-s3 paths are left unchanged."""
+    local_path = "/local/path/to/file.yaml"
+    base_path = "/local/base"
+    result = localize_paths(local_path, base_path)
+    assert result == local_path
+
+
+def test_localize_paths_list():
+    """Test that s3 paths in lists are converted."""
+    data = [
+        "s3://bucket/dir1/file1.yaml",
+        "/local/file.yaml",
+        "s3://bucket/dir2/file2.yaml",
+    ]
+    base_path = "/local/base"
+    result = localize_paths(data, base_path)
+    assert result == [
+        "/local/base/file1.yaml",
+        "/local/file.yaml",
+        "/local/base/file2.yaml",
+    ]
+
+
+def test_localize_paths_nested_dict():
+    """Test that s3 paths in nested dictionaries are converted."""
+    data = {
+        "model": {
+            "checkpoint": "s3://bucket/models/checkpoint.pt",
+            "config": "/local/config.yaml",
+        },
+        "data": {
+            "manifest": "s3://bucket/data/manifest.jsonl",
+            "nested": {
+                "path": "s3://bucket/nested/file.yaml",
+            },
+        },
+        "other": "value",
+    }
+    base_path = "/local/base"
+    result = localize_paths(data, base_path)
+    assert result["model"]["checkpoint"] == "/local/base/checkpoint.pt"
+    assert result["model"]["config"] == "/local/config.yaml"
+    assert result["data"]["manifest"] == "/local/base/manifest.jsonl"
+    assert result["data"]["nested"]["path"] == "/local/base/file.yaml"
+    assert result["other"] == "value"
+
+
+def test_localize_paths_mixed_list_and_dict():
+    """Test that s3 paths in mixed structures are converted."""
+    data = {
+        "datasets": [
+            "s3://bucket/dataset1/manifest.jsonl",
+            "s3://bucket/dataset2/manifest.jsonl",
+        ],
+        "weights": [0.5, 0.5],
+    }
+    base_path = "/local/base"
+    result = localize_paths(data, base_path)
+    assert result["datasets"] == [
+        "/local/base/manifest.jsonl",
+        "/local/base/manifest.jsonl",
+    ]
+    assert result["weights"] == [0.5, 0.5]
+
+
+def test_load_params_from_yaml_without_localize():
+    """Test loading params from yaml without localization."""
+    params = load_params_from_yaml(
+        ModelParams, "tests/params/dummy_configs/dummy_transformer_config.yaml", localize_params=False
+    )
+    assert params.type == "transformer"
+    assert params.hidden_dim == 128
+    assert params.n_layers == 2
+
+
+def test_load_params_from_yaml_with_localize():
+    """Test loading params from yaml with path localization."""
+    # Create a temporary yaml file with s3 paths
+    config_data = {
+        "type": "transformer",
+        "hidden_dim": 256,
+        "n_layers": 4,
+        "n_heads": 4,
+        "max_seq_len": 512,
+        "vocab_size": 1000,
+        "resume_from_checkpoint": "s3://bucket/models/checkpoint.pt",
+    }
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+        yaml.dump(config_data, f)
+        temp_yaml_path = f.name
+
+    try:
+        params = load_params_from_yaml(ModelParams, temp_yaml_path, localize_params=True)
+        assert params.type == "transformer"
+        assert params.hidden_dim == 256
+        assert params.n_layers == 4
+        # The s3 path should be converted to use the same base directory as the config file
+        base_path = os.path.dirname(temp_yaml_path)
+        assert params.resume_from_checkpoint == f"{base_path}/checkpoint.pt"
+    finally:
+        # Clean up
+        if os.path.exists(temp_yaml_path):
+            os.unlink(temp_yaml_path)
+
+
+def test_load_params_from_yaml_with_localize_complex():
+    """Test loading params with nested s3 paths that need localization."""
+    # Create a config with multiple s3 paths at different nesting levels
+    base_dir = tempfile.mkdtemp()
+    config_data = {
+        "type": "vlm",
+        "image_token_id": 257152,
+        "transformer": {
+            "type": "transformer",
+            "hidden_dim": 128,
+            "n_layers": 2,
+            "n_heads": 2,
+            "max_seq_len": 16,
+            "vocab_size": 1000,
+            "resume_from_checkpoint": "s3://bucket/transformer/checkpoint.pt",
+        },
+        "vit": {
+            "type": "vit",
+            "hidden_dim": 128,
+            "img_size": 224,
+            "patch_size": 14,
+            "n_layers": 2,
+            "n_heads": 4,
+            "resume_from_checkpoint": "s3://bucket/vit/checkpoint.pt",
+        },
+    }
+
+    yaml_path = os.path.join(base_dir, "config.yaml")
+    with open(yaml_path, "w") as f:
+        yaml.dump(config_data, f)
+
+    try:
+        from vla_foundry.params.model_params import VLMParams
+
+        params = load_params_from_yaml(VLMParams, yaml_path, localize_params=True)
+        assert params.type == "vlm"
+        assert params.transformer.resume_from_checkpoint == f"{base_dir}/checkpoint.pt"
+        assert params.vit.resume_from_checkpoint == f"{base_dir}/checkpoint.pt"
+    finally:
+        # Clean up
+        if os.path.exists(yaml_path):
+            os.unlink(yaml_path)
+        if os.path.exists(base_dir):
+            os.rmdir(base_dir)

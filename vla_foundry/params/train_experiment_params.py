@@ -1,11 +1,14 @@
 import logging
+import os
+import tempfile
 from dataclasses import dataclass, field
 from typing import Type
 
 import draccus
+import yaml
 
 from vla_foundry.data.utils import epochs_to_samples
-from vla_foundry.file_utils import copy_to_temp_file
+from vla_foundry.file_utils import copy_to_temp_file, localize_paths, yaml_load
 from vla_foundry.params.base_params import BaseParams
 from vla_foundry.params.data_params import DataParams  # not from base_data_params so it loads registered params
 from vla_foundry.params.distributed_params import DistributedParams
@@ -103,7 +106,7 @@ class TrainExperimentParams(BaseParams):
         #     raise ValueError(f"--fsdp can only be specified in distributed mode.")
 
 
-def load_params_from_yaml(params_class: Type[BaseParams], path: str) -> BaseParams:
+def load_params_from_yaml(params_class: Type[BaseParams], path: str, localize_params: bool = False) -> BaseParams:
     """
     Load a draccus params object from a yaml file with support for s3 paths.
 
@@ -115,7 +118,20 @@ def load_params_from_yaml(params_class: Type[BaseParams], path: str) -> BasePara
     Args:
         params_class: dataclass type to load.
         path: local filesystem path or S3 URI to the YAML file.
+        localize_params: if True, first localize all paths in the config before loading.
     """
+    if localize_params:
+        config_dict = yaml_load(path)
+        base_path, _ = os.path.split(path)
+        yaml_dict = localize_paths(config_dict, base_path)
+
+        # Create a temporary file
+        fd, temp_file_path = tempfile.mkstemp(suffix=".yaml", prefix="localized_config_")
+        os.close(fd)  # Close the file descriptor
+        with open(temp_file_path, "w") as f:
+            yaml.dump(yaml_dict, f)
+        path = temp_file_path
+
     # Need to copy to temp file because draccus doesn't support loading from s3.
     if path.startswith("s3"):
         with copy_to_temp_file(path) as temp_path:
@@ -127,8 +143,9 @@ def load_params_from_yaml(params_class: Type[BaseParams], path: str) -> BasePara
     return params
 
 
-def load_experiment_params_from_yaml(path: str) -> TrainExperimentParams:
+def load_experiment_params_from_yaml(path: str, localize_params: bool = False) -> TrainExperimentParams:
     """
     Convenience wrapper to load `TrainExperimentParams` from YAML.
+    If `localize_params` is True, first localize all paths in the config before loading.
     """
-    return load_params_from_yaml(TrainExperimentParams, path)
+    return load_params_from_yaml(TrainExperimentParams, path, localize_params)

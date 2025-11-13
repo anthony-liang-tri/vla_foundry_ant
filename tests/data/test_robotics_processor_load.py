@@ -432,8 +432,8 @@ class TestRoboticsNormalizerLoad:
                 f.write("    scope: per_timestep\n")
                 f.write("    epsilon: 1.0e-06\n")
 
-            # Create stats_normalizer.json
-            stats_path = os.path.join(temp_dir, "stats_normalizer.json")
+            # Create stats.json
+            stats_path = os.path.join(temp_dir, "stats.json")
             with open(stats_path, "w") as f:
                 json.dump(sample_statistics_data, f)
 
@@ -554,7 +554,7 @@ class TestRoboticsNormalizerLoad:
         """Test RoboticsNormalizer.from_pretrained() with missing config file."""
         with tempfile.TemporaryDirectory() as temp_dir:
             # Only create stats file, not config file
-            stats_path = os.path.join(temp_dir, "stats_normalizer.json")
+            stats_path = os.path.join(temp_dir, "stats.json")
             with open(stats_path, "w") as f:
                 json.dump(sample_statistics_data, f)
 

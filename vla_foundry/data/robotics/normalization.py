@@ -77,7 +77,7 @@ class RoboticsNormalizer:
     def save(self, experiment_path: str):
         with open(os.path.join(experiment_path, "config_normalizer.yaml"), "w") as f:
             draccus.dump(self.normalization_params, f)
-        with open(os.path.join(experiment_path, "stats_normalizer.json"), "w") as f:
+        with open(os.path.join(experiment_path, "stats.json"), "w") as f:
             json.dump(self.stats, f)
 
     @classmethod
@@ -88,7 +88,7 @@ class RoboticsNormalizer:
     def from_pretrained(cls, config_path: str):
         return cls(
             NormalizationParams.from_file(os.path.join(config_path, "config_normalizer.yaml")),
-            statistics_path=os.path.join(config_path, "stats_normalizer.json"),
+            statistics_path=os.path.join(config_path, "stats.json"),
         )
 
     def get_field_dimension(self, field_name: str) -> int:
