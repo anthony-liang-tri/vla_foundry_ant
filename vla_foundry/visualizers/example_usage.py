@@ -26,10 +26,10 @@ for step in range(10):
     # 1a. Log a random image
     print("Logging a random image...")
     image = np.random.randint(0, 256, (255, 255, 3), dtype=np.uint8)  # Random image
-    vz.log_image("single_image", image)
+    vz.log_images("single_image", image)  # Updated to use log_images for single image
 
     # 1b. Log a dict of images
-    print("Logging a random image...")
+    print("Logging a dictionary of images...")
     image_dict = {}
     for ii in range(5):
         image = np.random.randint(0, 256, (255, 255, 3), dtype=np.uint8)  # Random image

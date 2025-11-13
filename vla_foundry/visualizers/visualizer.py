@@ -229,19 +229,26 @@ class Visualizer:
         _STATE.backend.log_image(_prefix(path), image, **kwargs)  # type: ignore[union-attr]
 
     @ensure_initialized_and_enabled
-    def log_images(self, path: str, images: Dict[str, np.ndarray], **kwargs) -> None:
+    def log_images(self, path: str, images: Any, **kwargs) -> None:
         """
-        Log multiple images to the active backend.
+        Log images to the active backend. Supports both single images and dictionaries of images.
 
         Parameters
         ----------
         path : str
             Base path in the visualization hierarchy.
-        images : Dict[str, np.ndarray]
-            A dictionary where keys are image paths and values are NumPy arrays representing the images.
+        images : Any
+            Either a single NumPy array representing an image or a dictionary of images.
         """
-        for path, image in images.items():
-            self.log_image(path, image, **kwargs)
+        if isinstance(images, np.ndarray):
+            # Single image
+            self.log_image(path, images, **kwargs)
+        elif isinstance(images, dict):
+            # Dictionary of images
+            for sub_path, image in images.items():
+                self.log_image(f"{path}/{sub_path}", image, **kwargs)
+        else:
+            raise TypeError("Unsupported type for 'images'. Must be a NumPy array or a dictionary of NumPy arrays.")
 
     @ensure_initialized_and_enabled
     def log_scalar(self, path: str, value: float, **kwargs) -> None:
