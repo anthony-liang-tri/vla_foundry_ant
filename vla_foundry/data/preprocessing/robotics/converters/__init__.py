@@ -14,7 +14,7 @@ def get_converter(source_type: str, cfg: PreprocessParams) -> BaseRoboticsConver
 
         return LeRobotConverter(cfg)
     elif source_type == "mmt_npz":
-        from vla_foundry.data.preprocessing.robotics.converters.mmt import MMTNPZConverter
+        from vla_foundry.data.preprocessing.robotics.converters.mmt_npz import MMTNPZConverter
 
         return MMTNPZConverter(cfg)
     else:

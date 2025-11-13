@@ -39,14 +39,19 @@ def main():
         raise RuntimeError(error_msg)
 
     # Initialize Ray
+    runtime_env = {
+        "env_vars": {
+            "AWS_PROFILE": os.environ.get("AWS_PROFILE"),
+        }
+    }
     if cfg.ray_address:
-        ray.init(address=cfg.ray_address)
+        ray.init(address=cfg.ray_address, runtime_env=runtime_env)
         print(f"Connected to Ray cluster at {cfg.ray_address}")
     else:
         ray.init(
             address="auto",
             num_cpus=cfg.ray_num_cpus,
-            runtime_env={"excludes": [".git", "*.pt", "*.pyc", "__pycache__", ".pytest_cache"]},
+            runtime_env=runtime_env | {"excludes": [".git", "*.pt", "*.pyc", "__pycache__", ".pytest_cache"]},
         )
         print(f"Started auto Ray cluster with num_cpus={cfg.ray_num_cpus}")
 
