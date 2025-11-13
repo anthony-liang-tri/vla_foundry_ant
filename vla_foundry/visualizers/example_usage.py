@@ -60,15 +60,13 @@ for step in range(10):
 
     # 6. Log robot arm poses with random configurations
     print("Logging random robot arm poses...")
-    arm_poses = {
-        "client": PosesAndGrippers(
-            poses={
-                "arm_1": RigidTransform(RollPitchYaw(0, 0, 0), np.random.uniform(-1, 1, 3)),
-            },
-            grippers={"gripper_1": random.uniform(0, 1)},
-        )
-    }
-    vz.log_arm_poses(arm_poses)
+    arm_poses = PosesAndGrippers(
+        poses={
+            "arm_1": RigidTransform(RollPitchYaw(0, 0, 0), np.random.uniform(-1, 1, 3)),
+        },
+        grippers={"gripper_1": random.uniform(0, 1)},
+    )
+    vz.log_robot_gym_arm_poses("robot_gym/arm_poses", arm_poses)
 
     # 7. Log model action predictions with random data
     print("Logging random model action predictions...")
@@ -81,7 +79,7 @@ for step in range(10):
         )
         for _ in range(2)
     ]
-    vz.log_action_predictions(action_predictions)
+    vz.log_robot_gym_action_predictions("robot_gym/action_predictions", action_predictions)
 
     # Simulate time delay between steps
     time.sleep(1)

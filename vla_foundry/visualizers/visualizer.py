@@ -321,35 +321,65 @@ def log_rigid_transform(path: str, transform: RigidTransform, **kwargs) -> None:
 
 
 @ensure_initialized_and_enabled
-def log_arm_poses(arm_poses: Dict[str, PosesAndGrippers], **kwargs) -> None:
+def log_robot_gym_arm_poses(path: str, arm_poses: PosesAndGrippers, **kwargs) -> None:
     """
-    Log arm poses to the active backend.
+    Log arm poses (robot-gym-specific) to the active backend.
 
     Parameters
     ----------
-    arm_poses : Dict[str, PosesAndGrippers]
-        A dictionary containing arm pose data.
+    path : str
+        Base path in the visualization hierarchy.
+    arm_poses : PosesAndGrippers
+        Object containing arm pose data.
     """
-    _STATE.backend.log_arm_poses(arm_poses, **kwargs)  # type: ignore[union-attr]
+    if not arm_poses or not hasattr(arm_poses, "poses"):
+        return
+
+    for model_name, transform in arm_poses.poses.items():
+        log_rigid_transform(
+            f"{path}/models/{model_name}/pose",
+            transform,
+            axis_length=0.25,
+            **kwargs,
+        )
+
+    if hasattr(arm_poses, "grippers") and arm_poses.grippers:
+        for gripper_name, value in arm_poses.grippers.items():
+            log_scalar(f"{path}/grippers/{gripper_name}/grip", value, **kwargs)
 
 
 @ensure_initialized_and_enabled
-def log_action_predictions(predictions: List[PosesAndGrippers], **kwargs) -> None:
+def log_robot_gym_action_predictions(path: str, predictions: List[PosesAndGrippers], **kwargs) -> None:
     """
-    Log action predictions to the active backend.
+    Log action predictions (robot-gym-specific) to the active backend.
 
     Parameters
     ----------
+    path : str
+        Base path in the visualization hierarchy.
     predictions : List[PosesAndGrippers]
         A list of objects containing action prediction data.
     """
-    _STATE.backend.log_action_predictions(predictions, **kwargs)  # type: ignore[union-attr]
+    traj = {}
+    for step in predictions:
+        poses = getattr(step, "poses", {})
+        for model_name, transform in poses.items():
+            if model_name not in traj:
+                traj[model_name] = []
+            traj[model_name].append(transform.translation())
+
+    for model_name, points in traj.items():
+        points_array = np.array(points)
+        if len(points) >= 2:
+            log_trajectory(f"{path}/{model_name}", points_array, **kwargs)
+        elif points:
+            log_points3d(f"{path}/{model_name}/waypoints", points_array, **kwargs)
 
 
 @ensure_initialized_and_enabled
-def log_multiarm_observation(path: str, observation: MultiarmObservation, **kwargs) -> None:
+def log_robot_gym_multiarm_observation(path: str, observation: MultiarmObservation, **kwargs) -> None:
     """
-    Log a MultiarmObservation to the active backend.
+    Log a MultiarmObservation (robot-gym-specific) to the active backend.
 
     Parameters
     ----------
@@ -358,7 +388,7 @@ def log_multiarm_observation(path: str, observation: MultiarmObservation, **kwar
     observation : MultiarmObservation
         The MultiarmObservation object to log.
     """
-    log_arm_poses({f"{path}/robot": observation.robot.actual}, **kwargs)
+    log_robot_gym_arm_poses(f"{path}/robot", observation.robot.actual, **kwargs)
     for camera_id, image_set in observation.visuo.items():
         if image_set.rgb:
             log_image(f"{path}/cameras/{camera_id}/rgb", image_set.rgb.array, **kwargs)
