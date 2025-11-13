@@ -316,6 +316,56 @@ class Visualizer:
         """
         _STATE.backend.log_text(_prefix(path), text, **kwargs)  # type: ignore[union-attr]
 
+    @ensure_initialized_and_enabled
+    def log_pose(self, path: str, translation: np.ndarray, rotation: np.ndarray, **kwargs) -> None:
+        """
+        Log a generic pose to the active backend.
+
+        Parameters
+        ----------
+        path : str
+            Path in the visualization hierarchy (e.g., "poses/end_effector").
+        translation : np.ndarray
+            Translation vector of shape (3,).
+        rotation : np.ndarray
+            Rotation representation. Can be:
+            - Quaternion [x, y, z, w] of shape (4,)
+            - Rotation matrix of shape (3, 3)
+            - Transformation matrix of shape (4, 4) (translation will be ignored)
+        """
+        # Handle translation validation
+        if translation.shape != (3,):
+            raise ValueError(f"Translation must be shape (3,), got {translation.shape}")
+
+        # Handle different rotation formats and convert to quaternion [x, y, z, w]
+        if rotation.shape == (4,):
+            # Already quaternion [x, y, z, w]
+            quaternion = rotation
+            final_translation = translation
+        elif rotation.shape == (3, 3):
+            # Rotation matrix - convert to quaternion
+            try:
+                from scipy.spatial.transform import Rotation
+
+                quaternion = Rotation.from_matrix(rotation).as_quat()  # Returns [x, y, z, w]
+                final_translation = translation
+            except ImportError as err:
+                raise ImportError("scipy is required for rotation matrix conversion") from err
+        elif rotation.shape == (4, 4):
+            # Transformation matrix - extract translation and rotation
+            try:
+                from scipy.spatial.transform import Rotation
+
+                final_translation = rotation[:3, 3]  # Override translation with matrix translation
+                quaternion = Rotation.from_matrix(rotation[:3, :3]).as_quat()  # Returns [x, y, z, w]
+            except ImportError as err:
+                raise ImportError("scipy is required for transformation matrix conversion") from err
+        else:
+            raise ValueError(f"Unsupported rotation format with shape {rotation.shape}")
+
+        # Backend expects quaternion [x, y, z, w] and translation vector
+        _STATE.backend.log_pose(_prefix(path), final_translation, quaternion, **kwargs)  # type: ignore[union-attr]
+
     def flush(self) -> None:
         if not enabled():
             return
@@ -353,7 +403,13 @@ class DrakeVisualizer(Visualizer):
         transform : RigidTransform
             Rigid transform object.
         """
-        _STATE.backend.log_rigid_transform(_prefix(path), transform, **kwargs)  # type: ignore[union-attr]
+        # Convert Drake RigidTransform to translation + quaternion for generic log_pose
+        translation = transform.translation()
+        rotation = transform.rotation().ToQuaternion()
+        quaternion = np.array([rotation.x(), rotation.y(), rotation.z(), rotation.w()])  # [x, y, z, w]
+
+        # Use the generic log_pose method
+        self.log_pose(path, translation, quaternion, **kwargs)
 
     @ensure_initialized_and_enabled
     def log_robot_gym_poses_and_grippers(self, path: str, poses_and_grippers: PosesAndGrippers, **kwargs) -> None:
@@ -458,6 +514,7 @@ log_points3d = _default_visualizer.log_points3d
 log_trajectory = _default_visualizer.log_trajectory
 log_line_strips3d = _default_visualizer.log_line_strips3d
 log_text = _default_visualizer.log_text
+log_pose = _default_visualizer.log_pose
 flush = _default_visualizer.flush
 shutdown = _default_visualizer.shutdown
 
@@ -476,4 +533,6 @@ def log_robot_gym_action_predictions(path: str, predictions: List[PosesAndGrippe
 
 
 def log_robot_gym_multiarm_observation(path: str, observation: MultiarmObservation, **kwargs) -> None:
+    _get_drake_visualizer().log_robot_gym_multiarm_observation(path, observation, **kwargs)
+
     _get_drake_visualizer().log_robot_gym_multiarm_observation(path, observation, **kwargs)

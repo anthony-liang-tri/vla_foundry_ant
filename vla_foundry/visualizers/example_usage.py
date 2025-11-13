@@ -58,6 +58,24 @@ for step in range(10):
     )
     vz.log_rigid_transform("robot/pose", pose, axis_length=0.5)
 
+    # 5b. Log generic poses with different formats
+    print("Logging generic poses with different formats...")
+
+    # Example 1: Using quaternion [x, y, z, w]
+    translation = np.random.uniform(-2, 2, 3)
+    quaternion = np.array([0.0, 0.0, 0.0, 1.0])  # Identity quaternion
+    vz.log_pose("generic_poses/quaternion", translation, quaternion)
+
+    # Example 2: Using rotation matrix
+    rotation_matrix = np.eye(3)  # Identity rotation
+    translation = np.random.uniform(-2, 2, 3)
+    vz.log_pose("generic_poses/rotation_matrix", translation, rotation_matrix)
+
+    # Example 3: Using 4x4 transformation matrix
+    transform_matrix = np.eye(4)
+    transform_matrix[:3, 3] = np.random.uniform(-2, 2, 3)  # Random translation
+    vz.log_pose("generic_poses/transform_matrix", np.zeros(3), transform_matrix)  # translation ignored
+
     # 6. Log robot poses and grippers with random configurations
     print("Logging random robot poses and grippers...")
     poses_and_grippers = PosesAndGrippers(

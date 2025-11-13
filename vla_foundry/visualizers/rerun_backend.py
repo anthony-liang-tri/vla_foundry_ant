@@ -10,7 +10,6 @@ from typing import Dict
 
 import numpy as np
 import rerun as rr
-from pydrake.math import RigidTransform
 from rerun import Transform3D
 from rerun.datatypes import Quaternion
 
@@ -111,27 +110,28 @@ class RerunBackend:
         rr.log(path, rr.LineStrips3D([trajectory]))
         rr.log(f"{path}/waypoints", rr.Points3D(trajectory))
 
-    def log_rigid_transform(self, path: str, transform: RigidTransform, axis_length: float = 1.0, **kwargs) -> None:
+    def log_pose(
+        self, path: str, translation: np.ndarray, rotation: np.ndarray, axis_length: float = 1.0, **kwargs
+    ) -> None:
         """
-        Log a rigid transform to the Rerun backend.
+        Log a generic pose to the Rerun backend.
 
         Parameters
         ----------
         path : str
             Path in the visualization hierarchy.
-        transform : RigidTransform
-            Rigid transform object.
+        translation : np.ndarray
+            Translation vector of shape (3,).
+        rotation : np.ndarray
+            Quaternion [x, y, z, w] of shape (4,).
         axis_length : float, optional
             Length of the axes for visualization, by default 1.0.
         """
-        translation = transform.translation()
-        rotation = transform.rotation().ToQuaternion()
-        quaternion = np.roll([rotation.w(), rotation.x(), rotation.y(), rotation.z()], -1)  # Drake to Rerun order
         rr.log(
             path,
             Transform3D(
                 translation=translation,
-                rotation=Quaternion(xyzw=quaternion),
+                rotation=Quaternion(xyzw=rotation),
                 axis_length=axis_length,
             ),
         )
