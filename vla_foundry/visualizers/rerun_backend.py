@@ -6,7 +6,7 @@ logging functionality to rerun.io.
 """
 
 import subprocess
-from typing import Dict
+from typing import Any
 
 import numpy as np
 import rerun as rr
@@ -59,25 +59,26 @@ class RerunBackend:
         except subprocess.CalledProcessError as e:
             print(f"[rerun_backend] Failed to disable analytics: {e.stderr or e}")
 
-    def log_image(self, path: str, image: np.ndarray, **kwargs) -> None:
+    def log_images(self, path: str, images: Any, **kwargs) -> None:
         """
-        Log an image to the Rerun backend.
+        Log images to the rerun backend. Supports both single images and dictionaries of images.
 
-        Parameters:
-        - path: The hierarchical path for the image.
-        - image: The image data as a NumPy array.
+        Parameters
+        ----------
+        path : str
+            Base path in the visualization hierarchy.
+        images : Any
+            Either a single NumPy array representing an image or a dictionary of images.
         """
-        rr.log(path, rr.Image(image))
-
-    def log_images(self, path: str, images: Dict[str, np.ndarray], **kwargs) -> None:
-        """
-        Log multiple images to the Rerun backend.
-
-        Parameters:
-        - images: A dictionary where keys are image paths and values are NumPy arrays representing the images.
-        """
-        for path, image in images.items():
-            self.log_image(path, image, **kwargs)
+        if isinstance(images, np.ndarray):
+            # Single image
+            rr.log(path, rr.Image(images))  # Updated to use rr.Image for logging
+        elif isinstance(images, dict):
+            # Dictionary of images
+            for sub_path, image in images.items():
+                rr.log(f"{path}/{sub_path}", rr.Image(image))  # Updated to use rr.Image for logging
+        else:
+            raise TypeError("Unsupported type for 'images'. Must be a NumPy array or a dictionary of NumPy arrays.")
 
     def log_scalar(self, path: str, value: float, **kwargs) -> None:
         """

@@ -228,11 +228,10 @@ class Visualizer:
         """
         if isinstance(images, np.ndarray):
             # Single image
-            self.log_image(path, images, **kwargs)
+            _STATE.backend.log_images(path, images, **kwargs)  # Updated to call log_images in the backend
         elif isinstance(images, dict):
             # Dictionary of images
-            for sub_path, image in images.items():
-                self.log_image(f"{path}/{sub_path}", image, **kwargs)
+            _STATE.backend.log_images(path, images, **kwargs)  # Updated to call log_images in the backend
         else:
             raise TypeError("Unsupported type for 'images'. Must be a NumPy array or a dictionary of NumPy arrays.")
 
@@ -504,11 +503,11 @@ class DrakeVisualizer(Visualizer):
         self.log_robot_gym_poses_and_grippers(f"{path}/robot", observation.robot.actual, **kwargs)
         for camera_id, image_set in observation.visuo.items():
             if image_set.rgb:
-                self.log_image(f"{path}/cameras/{camera_id}/rgb", image_set.rgb.array, **kwargs)
+                self.log_images(f"{path}/cameras/{camera_id}/rgb", image_set.rgb.array, **kwargs)
             if image_set.depth:
-                self.log_image(f"{path}/cameras/{camera_id}/depth", image_set.depth.array, **kwargs)
+                self.log_images(f"{path}/cameras/{camera_id}/depth", image_set.depth.array, **kwargs)
             if image_set.label:
-                self.log_image(f"{path}/cameras/{camera_id}/label", image_set.label.array, **kwargs)
+                self.log_images(f"{path}/cameras/{camera_id}/label", image_set.label.array, **kwargs)
         if observation.language_instruction:
             self.log_text(f"{path}/language_instruction", observation.language_instruction, **kwargs)
 
@@ -531,8 +530,8 @@ def _get_drake_visualizer() -> DrakeVisualizer:
 
 
 # Expose module-level functions for the default visualizer
-log_image = _default_visualizer.log_image
 log_images = _default_visualizer.log_images
+# Removed log_image reference
 log_scalar = _default_visualizer.log_scalar
 log_points3d = _default_visualizer.log_points3d
 log_trajectory = _default_visualizer.log_trajectory
