@@ -215,20 +215,6 @@ class Visualizer:
     """Base visualizer facade with general-purpose logging methods."""
 
     @ensure_initialized_and_enabled
-    def log_image(self, path: str, image: np.ndarray, **kwargs) -> None:
-        """
-        Log an image to the active backend.
-
-        Parameters
-        ----------
-        path : str
-            Path in the visualization hierarchy (e.g., "images/cam0").
-        image : np.ndarray
-            Image data as a NumPy array.
-        """
-        _STATE.backend.log_image(_prefix(path), image, **kwargs)  # type: ignore[union-attr]
-
-    @ensure_initialized_and_enabled
     def log_images(self, path: str, images: Any, **kwargs) -> None:
         """
         Log images to the active backend. Supports both single images and dictionaries of images.
