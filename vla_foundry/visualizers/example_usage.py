@@ -58,15 +58,15 @@ for step in range(10):
     )
     vz.log_rigid_transform("robot/pose", pose, axis_length=0.5)
 
-    # 6. Log robot arm poses with random configurations
-    print("Logging random robot arm poses...")
-    arm_poses = PosesAndGrippers(
+    # 6. Log robot poses and grippers with random configurations
+    print("Logging random robot poses and grippers...")
+    poses_and_grippers = PosesAndGrippers(
         poses={
             "arm_1": RigidTransform(RollPitchYaw(0, 0, 0), np.random.uniform(-1, 1, 3)),
         },
         grippers={"gripper_1": random.uniform(0, 1)},
     )
-    vz.log_robot_gym_arm_poses("robot_gym/arm_poses", arm_poses)
+    vz.log_robot_gym_poses_and_grippers("robot_gym/poses_and_grippers", poses_and_grippers)
 
     # 7. Log model action predictions with random data
     print("Logging random model action predictions...")

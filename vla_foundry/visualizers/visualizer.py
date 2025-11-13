@@ -321,21 +321,21 @@ def log_rigid_transform(path: str, transform: RigidTransform, **kwargs) -> None:
 
 
 @ensure_initialized_and_enabled
-def log_robot_gym_arm_poses(path: str, arm_poses: PosesAndGrippers, **kwargs) -> None:
+def log_robot_gym_poses_and_grippers(path: str, poses_and_grippers: PosesAndGrippers, **kwargs) -> None:
     """
-    Log arm poses (robot-gym-specific) to the active backend.
+    Log poses and grippers (robot-gym-specific) to the active backend.
 
     Parameters
     ----------
     path : str
         Base path in the visualization hierarchy.
-    arm_poses : PosesAndGrippers
-        Object containing arm pose data.
+    poses_and_grippers : PosesAndGrippers
+        Object containing poses and gripper data.
     """
-    if not arm_poses or not hasattr(arm_poses, "poses"):
+    if not poses_and_grippers or not hasattr(poses_and_grippers, "poses"):
         return
 
-    for model_name, transform in arm_poses.poses.items():
+    for model_name, transform in poses_and_grippers.poses.items():
         log_rigid_transform(
             f"{path}/models/{model_name}/pose",
             transform,
@@ -343,8 +343,8 @@ def log_robot_gym_arm_poses(path: str, arm_poses: PosesAndGrippers, **kwargs) ->
             **kwargs,
         )
 
-    if hasattr(arm_poses, "grippers") and arm_poses.grippers:
-        for gripper_name, value in arm_poses.grippers.items():
+    if hasattr(poses_and_grippers, "grippers") and poses_and_grippers.grippers:
+        for gripper_name, value in poses_and_grippers.grippers.items():
             log_scalar(f"{path}/grippers/{gripper_name}/grip", value, **kwargs)
 
 
@@ -388,7 +388,7 @@ def log_robot_gym_multiarm_observation(path: str, observation: MultiarmObservati
     observation : MultiarmObservation
         The MultiarmObservation object to log.
     """
-    log_robot_gym_arm_poses(f"{path}/robot", observation.robot.actual, **kwargs)
+    log_robot_gym_poses_and_grippers(f"{path}/robot", observation.robot.actual, **kwargs)
     for camera_id, image_set in observation.visuo.items():
         if image_set.rgb:
             log_image(f"{path}/cameras/{camera_id}/rgb", image_set.rgb.array, **kwargs)
