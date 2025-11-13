@@ -1,8 +1,9 @@
+import os
 from dataclasses import dataclass, field
 from typing import Optional
 
 from vla_foundry.data.processor import get_processor
-from vla_foundry.file_utils import get_lowdim_past_future_timesteps
+from vla_foundry.file_utils import yaml_load
 from vla_foundry.params.base_data_params import DataParams
 from vla_foundry.params.robotics.augmentation_params import DataAugmentationParams
 from vla_foundry.params.robotics.normalization_params import FieldNormalizationParams, NormalizationParams
@@ -103,6 +104,43 @@ class RoboticsDataParams(DataParams):
         if invalid_types:
             raise ValueError(f"Invalid language instruction types: {invalid_types}. Valid types are: {valid_types}")
 
+        # Get processing configs from statistics path and read past and future lowdim steps from each config
+        past_lowdim_steps = set()
+        future_lowdim_steps = set()
+        processing_configs = []
+        for stats_path in self.dataset_statistics:
+            path = os.path.dirname(stats_path)
+            processing_config = yaml_load(os.path.join(path, "preprocessing_config.yaml"))
+            processing_configs.append(processing_config)
+            past_lowdim_steps.update([processing_config["past_lowdim_steps"]])
+            future_lowdim_steps.update([processing_config["future_lowdim_steps"]])
+
+        # Get the minimum past and future lowdim steps from all configs
+        past_lowdim_steps = min(past_lowdim_steps)
+        future_lowdim_steps = min(future_lowdim_steps)
+
+        # If no camera names are provided, use the ones from the preprocessing configs but check that they are coherent
+        if self.camera_names is None or len(self.camera_names) == 0:
+            camera_names = processing_configs[0]["camera_names"]
+            for processing_config in processing_configs:
+                if processing_config["camera_names"] != camera_names:
+                    raise ValueError(
+                        f"Camera names mismatch between preprocessing configs: {processing_config['camera_names']} and "
+                        f"{camera_names}. Please provide camera names explicitly or use coherent data sources."
+                    )
+            object.__setattr__(self, "camera_names", camera_names)
+
+        # If no image indices are provided, use the ones from the preprocessing configs but check that they are coherent
+        if self.image_indices is None or len(self.image_indices) == 0:
+            image_indices = processing_configs[0]["image_indices"]
+            for processing_config in processing_configs:
+                if processing_config["image_indices"] != image_indices:
+                    raise ValueError(
+                        f"Image indices mismatch between preprocessing configs: {processing_config['image_indices']} "
+                        f"and {image_indices}. Please provide image indices explicitly or use coherent data sources."
+                    )
+            object.__setattr__(self, "image_indices", image_indices)
+
         # Compute image_names from camera_names and image_indices
         if self.image_names is None or len(self.image_names) == 0:
             image_names = [f"{cname}_t{idx}" for idx in self.image_indices for cname in self.camera_names]
@@ -126,21 +164,19 @@ class RoboticsDataParams(DataParams):
         if not self.dataset_statistics:
             raise ValueError("Robotics datasets require dataset_statistics to be provided.")
 
-        for stats_path in self.dataset_statistics:
-            past, future = get_lowdim_past_future_timesteps(stats_path)
-            if self.lowdim_past_timesteps is not None and self.lowdim_past_timesteps > past:
-                raise ValueError(
-                    f"Requested lowdim_past_timesteps {self.lowdim_past_timesteps} exceeds "
-                    f"available past timesteps {past} from preprocessing metadata."
-                )
-            if self.lowdim_future_timesteps is not None and self.lowdim_future_timesteps > future:
-                raise ValueError(
-                    f"Requested lowdim_future_timesteps {self.lowdim_future_timesteps} exceeds "
-                    f"available future timesteps {future} from preprocessing metadata."
-                )
+        if self.lowdim_past_timesteps is not None and self.lowdim_past_timesteps > past_lowdim_steps:
+            raise ValueError(
+                f"Requested lowdim_past_timesteps {self.lowdim_past_timesteps} exceeds "
+                f"available past timesteps {past_lowdim_steps} from at least one of your data sources."
+            )
+        if self.lowdim_future_timesteps is not None and self.lowdim_future_timesteps > future_lowdim_steps:
+            raise ValueError(
+                f"Requested lowdim_future_timesteps {self.lowdim_future_timesteps} exceeds "
+                f"available future timesteps {future_lowdim_steps} from at least one of your data sources."
+            )
         # TODO: Jean handle multiple values of past and future timesteps for different statistics files
-        object.__setattr__(self.normalization, "lowdim_past_timesteps", past)
-        object.__setattr__(self.normalization, "lowdim_future_timesteps", future)
+        object.__setattr__(self.normalization, "lowdim_past_timesteps", past_lowdim_steps)
+        object.__setattr__(self.normalization, "lowdim_future_timesteps", future_lowdim_steps)
 
         normalizer = RoboticsNormalizer(
             normalization_params=self.normalization,
@@ -150,12 +186,12 @@ class RoboticsDataParams(DataParams):
         object.__setattr__(
             self,
             "lowdim_future_timesteps",
-            self.lowdim_future_timesteps if self.lowdim_future_timesteps is not None else future,
+            self.lowdim_future_timesteps if self.lowdim_future_timesteps is not None else future_lowdim_steps,
         )
         object.__setattr__(
             self,
             "lowdim_past_timesteps",
-            self.lowdim_past_timesteps if self.lowdim_past_timesteps is not None else past,
+            self.lowdim_past_timesteps if self.lowdim_past_timesteps is not None else past_lowdim_steps,
         )
 
         action_dim = 0

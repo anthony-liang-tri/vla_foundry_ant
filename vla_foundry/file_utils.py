@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 import time
 from contextlib import contextmanager
-from typing import Any, Tuple
+from typing import Any
 
 import boto3
 import fsspec
@@ -202,18 +202,6 @@ def localize_paths(data: Any, base_path: str) -> Any:
         for key, value in data.items():
             data[key] = localize_paths(value, base_path)
     return data
-
-
-def get_lowdim_past_future_timesteps(statistics_path: str) -> Tuple[int, int]:
-    try:
-        metadata_path = os.path.join(os.path.dirname(statistics_path), "processing_metadata.json")
-        metadata = json_load(metadata_path)
-        past_lowdim = metadata["command_line"]["arguments"]["past_lowdim_steps"]
-        future_lowdim = metadata["command_line"]["arguments"]["future_lowdim_steps"]
-        return int(past_lowdim), int(future_lowdim)
-    except Exception as e:
-        logging.warning(f"Failed to get lowdim past and future timesteps from {statistics_path}: {e}")
-        return None, None
 
 
 def parse_s3_path(s3_path: str):

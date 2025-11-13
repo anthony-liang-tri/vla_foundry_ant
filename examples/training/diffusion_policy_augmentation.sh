@@ -3,8 +3,8 @@
   --model.clip.freeze_text_encoder True \
   --model.transformer.is_causal True \
   --data "include vla_foundry/config_presets/data/lbm/lbm_data_params.yaml" \
-  --data.dataset_manifest ["s3://tri-ml-datasets-uw2/vlm_datasets/preprocess_224_shuffled_2/lbm/BimanualPutRedBellPepperInBin/riverway/sim/shards/manifest.jsonl"] \
-  --data.dataset_statistics ["s3://tri-ml-datasets-uw2/vlm_datasets/preprocess_224_shuffled_2/lbm/BimanualPutRedBellPepperInBin/riverway/sim/shards/stats.json"] \
+  --data.dataset_manifest ["s3://tri-ml-datasets-uw2/vla_foundry_datasets/stage3_singletask_sim/BimanualPutRedBellPepperInBin/shards/manifest.jsonl"] \
+  --data.dataset_statistics ["s3://tri-ml-datasets-uw2/vla_foundry_datasets/stage3_singletask_sim/BimanualPutRedBellPepperInBin/shards/stats.json"] \
   --data.dataset_modality ["robotics"] \
   --data.augmentation.enabled True \
   --data.augmentation.image "include vla_foundry/config_presets/data/lbm/lbm_image_augmentation_params.yaml" \
