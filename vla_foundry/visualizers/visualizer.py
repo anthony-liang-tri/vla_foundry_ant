@@ -442,7 +442,7 @@ class DrakeVisualizer(Visualizer):
 
         for model_name, transform in poses_and_grippers.poses.items():
             self.log_rigid_transform(
-                f"{path}/models/{model_name}/pose",
+                f"{path}/{model_name}",
                 transform,
                 axis_length=0.25,
                 **kwargs,
@@ -450,7 +450,7 @@ class DrakeVisualizer(Visualizer):
 
         if hasattr(poses_and_grippers, "grippers") and poses_and_grippers.grippers:
             for gripper_name, value in poses_and_grippers.grippers.items():
-                self.log_scalar(f"{path}/grippers/{gripper_name}/grip", value, **kwargs)
+                self.log_scalar(f"{path}/{gripper_name}", value, **kwargs)
 
     @ensure_initialized_and_enabled
     def log_robot_gym_action_predictions(self, path: str, predictions: List[PosesAndGrippers], **kwargs) -> None:
@@ -494,11 +494,11 @@ class DrakeVisualizer(Visualizer):
         self.log_robot_gym_poses_and_grippers(f"{path}/robot", observation.robot.actual, **kwargs)
         for camera_id, image_set in observation.visuo.items():
             if image_set.rgb:
-                self.log_images(f"{path}/cameras/{camera_id}/rgb", image_set.rgb.array, **kwargs)
+                self.log_images(f"{path}/{camera_id}/rgb", image_set.rgb.array, **kwargs)
             if image_set.depth:
-                self.log_images(f"{path}/cameras/{camera_id}/depth", image_set.depth.array, **kwargs)
+                self.log_images(f"{path}/{camera_id}/depth", image_set.depth.array, **kwargs)
             if image_set.label:
-                self.log_images(f"{path}/cameras/{camera_id}/label", image_set.label.array, **kwargs)
+                self.log_images(f"{path}/{camera_id}/label", image_set.label.array, **kwargs)
         if observation.language_instruction:
             self.log_text(f"{path}/language_instruction", observation.language_instruction, **kwargs)
 
