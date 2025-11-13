@@ -270,6 +270,9 @@ def main():
     if cfg.wandb and is_master(cfg):
         wandb.finish()
 
+    if cfg.distributed.use_distributed and torch.distributed.is_initialized():
+        torch.distributed.destroy_process_group()
+
 
 if __name__ == "__main__":
     main()

@@ -23,6 +23,6 @@
   --hparams.grad_clip_norm 1.0 \
   --hparams.lr 5e-4 \
   --hparams.lr_cooldown_end 1e-5 \
-  --remote_sync s3://tri-ml-datasets-uw2/lbm2_vla/model_checkpoints/diffusion_policy \
+  --remote_sync s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy \
   --total_train_samples 100000 \
   --wandb True

@@ -1,6 +1,8 @@
 import hashlib
+import importlib
 import logging
 import random
+import subprocess
 import traceback
 from multiprocessing import Value
 from typing import Iterable, Sequence
@@ -9,6 +11,32 @@ import webdataset as wds
 from torch.utils.data import get_worker_info
 
 from vla_foundry.file_utils import load_dataset_manifest, pt_load
+
+
+def _install_webdataset_broken_pipe_guard() -> None:
+    """Extend webdataset Pipe ignore_status to skip benign AWS broken pipes."""
+
+    wds_gopen = importlib.import_module("webdataset.gopen")
+    # If we've already patched the constructor, skip re-applying it.
+    if getattr(wds_gopen.Pipe, "_lbm_ignore_status_patch", False):
+        return
+
+    original_init = wds_gopen.Pipe.__init__
+
+    def patched_init(self, *args, ignore_status=None, **kwargs):  # type: ignore[override]
+        ignore = list(ignore_status or [])
+        if 1 not in ignore:
+            ignore.append(1)
+        cmd = args[0] if args else None
+        if isinstance(cmd, str) and "aws s3 cp" in cmd and "stderr" not in kwargs:
+            kwargs["stderr"] = subprocess.DEVNULL
+        original_init(self, *args, ignore_status=ignore, **kwargs)
+
+    wds_gopen.Pipe.__init__ = patched_init  # type: ignore[assignment]
+    wds_gopen.Pipe._lbm_ignore_status_patch = True
+
+
+_install_webdataset_broken_pipe_guard()
 
 
 class SharedCheckpointCounter:
