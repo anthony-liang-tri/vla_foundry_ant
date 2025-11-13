@@ -439,8 +439,6 @@ class DrakeVisualizer(Visualizer):
         poses_and_grippers : PosesAndGrippers
             Object containing poses and gripper data.
         """
-        if not poses_and_grippers or not hasattr(poses_and_grippers, "poses"):
-            return
 
         for model_name, transform in poses_and_grippers.poses.items():
             self.log_rigid_transform(
