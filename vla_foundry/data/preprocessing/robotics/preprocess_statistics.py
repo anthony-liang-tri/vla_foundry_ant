@@ -204,9 +204,20 @@ class StreamingDatasetStatistics:
                 variance = np.where(mask_count_minus_one, self.running_m2s[key] / count_minus_one, 0.0)
                 # Handle potential NaN/inf values in variance
                 variance = np.nan_to_num(variance, nan=0.0, posinf=0.0, neginf=0.0)
-                std = np.sqrt(np.maximum(variance, 0.0)).tolist()  # Ensure non-negative before sqrt
+                std_per_timestep = np.sqrt(np.maximum(variance, 0.0)).tolist()  # Ensure non-negative before sqrt
+
+                # Compute overall std using law of total variance: σ²_overall = E[σ²_t] + Var[μ_t]
+                # Use weighted means and variances based on counts per timestep
+                mean_variance = np.average(variance, axis=0, weights=self.counts[key].squeeze())
+                weighted_mean = np.average(self.running_means[key], axis=0, weights=self.counts[key].squeeze())
+                variance_of_means = np.average(
+                    (self.running_means[key] - weighted_mean) ** 2, axis=0, weights=self.counts[key].squeeze()
+                )
+                overall_variance = mean_variance + variance_of_means
+                overall_std = np.sqrt(np.maximum(overall_variance, 0.0)).tolist()
             else:
-                std = 0.0
+                std_per_timestep = 0.0
+                overall_std = 0.0
 
             # Compute percentiles if we have enough samples
             percentile_5, percentile_95 = None, None
@@ -226,12 +237,12 @@ class StreamingDatasetStatistics:
                 ) = per_timestep_percentiles.tolist()
 
             stats[key] = {
-                "mean": np.mean(self.running_means[key], axis=0).tolist(),
-                "std": np.std(self.running_means[key], axis=0).tolist(),
+                "mean": np.average(self.running_means[key], axis=0, weights=self.counts[key].squeeze()).tolist(),
+                "std": overall_std,
                 "min": np.min(self.mins[key], axis=0).tolist(),
                 "max": np.max(self.maxs[key], axis=0).tolist(),
                 "mean_per_timestep": self.running_means[key].tolist(),
-                "std_per_timestep": std,
+                "std_per_timestep": std_per_timestep,
                 "min_per_timestep": self.mins[key].tolist(),
                 "max_per_timestep": self.maxs[key].tolist(),
                 "percentile_5": percentile_5,

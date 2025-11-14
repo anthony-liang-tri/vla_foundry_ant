@@ -247,3 +247,114 @@ def crop_sequence(
     end_idx = anchor_idx + future_timesteps + 1
 
     return data[start_idx:end_idx]
+
+
+def merge_statistics_single_field(tensor_stats: Dict[str, List[Any]], stat_name: str) -> np.ndarray:
+    """
+    tensor_stats: {mean: [m1, m2, ... mn], std: [s1, s2, ... sn], ...}
+    stat_name: mean, std, min, max, etc.
+    """
+    # Tensor sizes:
+    # mean, min, max, etc. [num_datasets, action_dim]
+    # mean_per_timestep, etc. [num_datasets, T, action_dim]
+    # count [num_datasets, T]
+    if stat_name == "mean":
+        mean_per_timestep = merge_statistics_single_field(tensor_stats, "mean_per_timestep")
+        counts = np.sum(tensor_stats["count"], axis=0)
+        return np.average(mean_per_timestep, axis=0, weights=counts)
+    elif stat_name == "mean_per_timestep":
+        counts = np.broadcast_to(tensor_stats["count"][..., None], tensor_stats["mean_per_timestep"].shape)
+        return np.average(tensor_stats["mean_per_timestep"], axis=0, weights=counts)
+    elif stat_name == "std":
+        # Use law of total variance: σ²_overall = E[σ²_t] + Var[μ_t]
+        std_per_timestep = merge_statistics_single_field(tensor_stats, "std_per_timestep")
+        variance_per_timestep = std_per_timestep**2
+        mean_per_timestep = merge_statistics_single_field(tensor_stats, "mean_per_timestep")
+        # Use weighted mean and variance based on counts per timestep
+        counts_per_timestep = np.sum(tensor_stats["count"], axis=0)
+        mean_variance = np.average(variance_per_timestep, axis=0, weights=counts_per_timestep)
+        weighted_mean = np.average(mean_per_timestep, axis=0, weights=counts_per_timestep)
+        variance_of_means = np.average((mean_per_timestep - weighted_mean) ** 2, axis=0, weights=counts_per_timestep)
+        overall_variance = mean_variance + variance_of_means
+        return np.sqrt(np.maximum(overall_variance, 0.0))
+
+    elif stat_name == "std_per_timestep":
+        # Use pooled variance formula to merge per-timestep standard deviations
+        # σ²_pooled = [Σ((nᵢ-1)×σᵢ² + nᵢ×(μᵢ - μ_global)²)] / (n_total - 1)
+        counts = np.array(tensor_stats["count"])[..., np.newaxis]  # [num_datasets, T, 1]
+        total_counts = np.sum(counts, axis=0)  # [T, 1]
+        variances = np.array(tensor_stats[stat_name]) ** 2
+
+        pooled_mean_per_timestep = merge_statistics_single_field(tensor_stats, "mean_per_timestep")
+        mean_diffs_squared = (tensor_stats["mean_per_timestep"] - pooled_mean_per_timestep[np.newaxis, :, :]) ** 2
+        pooled_variance = np.sum((counts - 1) * variances + counts * mean_diffs_squared, axis=0) / np.maximum(
+            total_counts - 1, 1
+        )
+        return np.sqrt(pooled_variance)
+
+    elif stat_name in ["min", "min_per_timestep"]:
+        return np.min(tensor_stats[stat_name], axis=0)
+    elif stat_name in ["max", "max_per_timestep"]:
+        return np.max(tensor_stats[stat_name], axis=0)
+    elif stat_name in ["count"]:
+        return np.sum(tensor_stats["count"], axis=0)
+    elif stat_name in [
+        "percentile_5",
+        "percentile_95",
+        "percentile_1",
+        "percentile_99",
+        "percentile_1_per_timestep",
+        "percentile_5_per_timestep",
+        "percentile_95_per_timestep",
+        "percentile_99_per_timestep",
+    ]:
+        mean_counts = np.mean(tensor_stats["count"], axis=1, keepdims=True)
+        weights = mean_counts / np.sum(mean_counts, axis=0, keepdims=True)
+        if len(tensor_stats[stat_name].shape) == 3:
+            weights = np.expand_dims(weights, axis=2)
+        return np.sum(tensor_stats[stat_name] * weights, axis=0)
+    elif stat_name in ["percentile_sample_count"]:
+        return None  # We don't really use this.
+    else:
+        raise ValueError(f"Invalid stat name: {stat_name}")
+
+
+def merge_statistics(statistics: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    `statistics` is a list of dictionaries. Each item on the list represents a different dataset.
+    Keys are tensor names. Values are dictionaries with keys mean, std, min, max, etc.
+
+    Merging is done as follows:
+    - mean - We can calculate this exactly
+    - std - We can calculate this exactly (pooled variance formula)
+    - min, max - We can calculate this exactly
+    - percentiles - We take a weighted average of the percentiles weighted by the counts
+    - count - We sum the counts
+    """
+    tensor_names, stat_names = set(), set()
+    for dataset_statistics in statistics:
+        tensor_names.update(dataset_statistics.keys())
+        for tensor_name in dataset_statistics:
+            stat_names.update(dataset_statistics[tensor_name].keys())
+
+    # Create batched = {
+    # robot:left:xyz: {mean: np.array([m1, m2, ... mn]), std: np.array([s1, s2, ... sn]), ...},
+    # robot:right:xyz: {mean: np.array([m1, m2, ... mn]), std: np.array([s1, s2, ... sn]), ...},
+    # ...
+    # }
+    batched_stats = {tensor_name: {s: [] for s in stat_names} for tensor_name in tensor_names}
+    for tensor_name in tensor_names:
+        for stat_name in stat_names:
+            for dataset_statistics in statistics:
+                batched_stats[tensor_name][stat_name].append(dataset_statistics[tensor_name][stat_name])
+            batched_stats[tensor_name][stat_name] = np.array(batched_stats[tensor_name][stat_name])
+
+    merged_stats = {}
+    for tensor_name in batched_stats:
+        merged_stats[tensor_name] = {}
+        for stat_name in batched_stats[tensor_name]:
+            merged_stats[tensor_name][stat_name] = merge_statistics_single_field(batched_stats[tensor_name], stat_name)
+            if merged_stats[tensor_name][stat_name] is not None:
+                merged_stats[tensor_name][stat_name] = merged_stats[tensor_name][stat_name].tolist()
+
+    return merged_stats

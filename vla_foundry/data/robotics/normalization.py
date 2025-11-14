@@ -10,7 +10,7 @@ from typing import Any, Dict, Optional, Tuple, Union
 import draccus
 import torch
 
-from vla_foundry.data.robotics.utils import crop_sequence
+from vla_foundry.data.robotics.utils import crop_sequence, merge_statistics
 from vla_foundry.file_utils import json_load
 from vla_foundry.params.robotics.normalization_params import FieldNormalizationParams, NormalizationParams
 
@@ -60,10 +60,9 @@ class RoboticsNormalizer:
 
         if isinstance(self.stats, list):
             if len(self.stats) > 1:
-                # TODO: Jean handle statistics merging
-                raise ValueError("Merging statistics is not supported yet")
-                # self.stats = merge_statistics(self.stats)
-            self.stats = self.stats[0]
+                self.stats = merge_statistics(self.stats)
+            else:
+                self.stats = self.stats[0]
 
         # Parse configuration from dataclass
         self.method = self.normalization_params.method
