@@ -128,6 +128,11 @@ def main():
     assert args.remote_sync is not None
     assert args.wandb
 
+    # Check that batch sizes align. We do this here because the world_size is not known during `__post_init__`.
+    world_size = args.sagemaker.instance_count * 8
+    combined_batch_size = world_size * args.hparams.per_gpu_batch_size
+    assert args.hparams.global_batch_size % combined_batch_size == 0
+
     args = args.sagemaker
     assert args.instance_type in INSTANCE_MAPPER
     if args.arn is None:
