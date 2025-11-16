@@ -104,20 +104,22 @@ class RoboticsDataParams(DataParams):
         if invalid_types:
             raise ValueError(f"Invalid language instruction types: {invalid_types}. Valid types are: {valid_types}")
 
-        # Get processing configs from statistics path and read past and future lowdim steps from each config
-        past_lowdim_steps = set()
-        future_lowdim_steps = set()
-        processing_configs = []
-        for stats_path in self.dataset_statistics:
-            path = os.path.dirname(stats_path)
-            processing_config = yaml_load(os.path.join(path, "preprocessing_config.yaml"))
-            processing_configs.append(processing_config)
-            past_lowdim_steps.update([processing_config["past_lowdim_steps"]])
-            future_lowdim_steps.update([processing_config["future_lowdim_steps"]])
-
-        # Get the minimum past and future lowdim steps from all configs
-        past_lowdim_steps = min(past_lowdim_steps)
-        future_lowdim_steps = min(future_lowdim_steps)
+        # Get processing configs from statistics path
+        if any(
+            x is None or len(x) == 0
+            for x in [
+                self.camera_names,
+                self.image_indices,
+                self.image_names,
+            ]
+        ):
+            processing_configs = []
+            for stats_path in self.dataset_statistics:
+                path = os.path.dirname(stats_path)
+                processing_config = yaml_load(os.path.join(path, "preprocessing_config.yaml"))
+                processing_configs.append(processing_config)
+        else:
+            processing_configs = []
 
         # If no camera names are provided, use the ones from the preprocessing configs but check that they are coherent
         if self.camera_names is None or len(self.camera_names) == 0:
@@ -164,34 +166,9 @@ class RoboticsDataParams(DataParams):
         if not self.dataset_statistics:
             raise ValueError("Robotics datasets require dataset_statistics to be provided.")
 
-        if self.lowdim_past_timesteps is not None and self.lowdim_past_timesteps > past_lowdim_steps:
-            raise ValueError(
-                f"Requested lowdim_past_timesteps {self.lowdim_past_timesteps} exceeds "
-                f"available past timesteps {past_lowdim_steps} from at least one of your data sources."
-            )
-        if self.lowdim_future_timesteps is not None and self.lowdim_future_timesteps > future_lowdim_steps:
-            raise ValueError(
-                f"Requested lowdim_future_timesteps {self.lowdim_future_timesteps} exceeds "
-                f"available future timesteps {future_lowdim_steps} from at least one of your data sources."
-            )
-        # TODO: Jean handle multiple values of past and future timesteps for different statistics files
-        object.__setattr__(self.normalization, "lowdim_past_timesteps", past_lowdim_steps)
-        object.__setattr__(self.normalization, "lowdim_future_timesteps", future_lowdim_steps)
-
         normalizer = RoboticsNormalizer(
             normalization_params=self.normalization,
             statistics_path=self.dataset_statistics,
-        )
-
-        object.__setattr__(
-            self,
-            "lowdim_future_timesteps",
-            self.lowdim_future_timesteps if self.lowdim_future_timesteps is not None else future_lowdim_steps,
-        )
-        object.__setattr__(
-            self,
-            "lowdim_past_timesteps",
-            self.lowdim_past_timesteps if self.lowdim_past_timesteps is not None else past_lowdim_steps,
         )
 
         action_dim = 0

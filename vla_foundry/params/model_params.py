@@ -229,11 +229,11 @@ class DiffusionPolicyParams(ModelParams):
     noise_scheduler: NoiseSchedulerParams = field(default_factory=NoiseSchedulerParams)
 
     use_diffusers_scheduler: bool = field(default=False)
-    use_flow_matching_scheduler: bool = field(
-        default=False
-    )  # Should be set automatically from data params when training, should be defined from checkpoint at inference time
-    action_dim: int = field(default=None)
+    use_flow_matching_scheduler: bool = field(default=False)
     input_noise_std: float = field(default=0.0)
+
+    # Shared attributes. Overwritten in init_shared_attributes.
+    action_dim: int = field(default=None)
 
     def init_shared_attributes(self, cfg):
         super().init_shared_attributes(cfg)

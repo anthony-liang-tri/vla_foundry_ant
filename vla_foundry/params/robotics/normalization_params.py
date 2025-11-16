@@ -1,6 +1,8 @@
+import os
 from dataclasses import dataclass, field
 from typing import Dict, Optional
 
+from vla_foundry.file_utils import yaml_load
 from vla_foundry.params.base_params import BaseParams
 
 
@@ -41,6 +43,17 @@ class FieldNormalizationParams:
 
 @dataclass(frozen=True)
 class NormalizationParams(BaseParams):
+    """
+    Configuration for robotics data normalization that defines which fields to normalize and how.
+
+    Note about per-timestep normalization:
+    Some fields may be normalized "per-timestep". In such a case, the time sequences are normalized with respective
+    time sequences in the statistics. However, we may want to use different windows of the time sequences for data
+    loading. To handle this, we may have a different `lowdim_past_timesteps` and `lowdim_future_timesteps` for data
+    loading than the ones used for normalization.
+    Normalization will always use the `lowdim_past_timesteps` and `lowdim_future_timesteps` from the statistics.
+    """
+
     enabled: bool = field(default=True)
 
     # Default parameters to be used for all fields if not specified in field_configs
@@ -53,6 +66,7 @@ class NormalizationParams(BaseParams):
     # Field-specific configurations (initialized in __post_init__)
     field_configs: Dict[str, FieldNormalizationParams] = field(default_factory=dict)
 
+    # Shared attributes. Overwritten in init_shared_attributes.
     # Low-dimensional trajectory window captured during preprocessing
     lowdim_past_timesteps: Optional[int] = field(default=None)
     lowdim_future_timesteps: Optional[int] = field(default=None)
@@ -84,5 +98,64 @@ class NormalizationParams(BaseParams):
 
     def init_shared_attributes(self, cfg):
         super().init_shared_attributes(cfg)
+        include_fields = list(cfg.data.proprioception_fields + cfg.data.action_fields)
         # Currently we don't support normalization of intrinsics and extrinsics fields
-        object.__setattr__(self, "include_fields", cfg.data.proprioception_fields + cfg.data.action_fields)
+        object.__setattr__(self, "include_fields", include_fields)
+
+        field_configs = dict(self.field_configs)
+        for field_name in include_fields:
+            if field_name not in field_configs:
+                field_configs[field_name] = FieldNormalizationParams(
+                    method=self.method,
+                    scope=self.scope,
+                    epsilon=self.epsilon,
+                    enabled=self.enabled,
+                )
+        object.__setattr__(self, "field_configs", field_configs)
+
+        dataset_statistics = cfg.data.dataset_statistics
+        requested_past_from_data_params = cfg.data.lowdim_past_timesteps
+        requested_future_from_data_params = cfg.data.lowdim_future_timesteps
+        requested_past = (
+            max(self.lowdim_past_timesteps, requested_past_from_data_params)
+            if self.lowdim_past_timesteps is not None and requested_past_from_data_params is not None
+            else requested_past_from_data_params or self.lowdim_past_timesteps
+        )
+        requested_future = (
+            max(self.lowdim_future_timesteps, requested_future_from_data_params)
+            if self.lowdim_future_timesteps is not None and requested_future_from_data_params is not None
+            else requested_future_from_data_params or self.lowdim_future_timesteps
+        )
+
+        if not dataset_statistics:
+            raise ValueError("Robotics normalization requires dataset_statistics.")
+
+        stats_paths = [dataset_statistics] if isinstance(dataset_statistics, str) else list(dataset_statistics)
+
+        past_lowdim_candidates = set()
+        future_lowdim_candidates = set()
+        for stats_path in stats_paths:
+            path = os.path.dirname(stats_path)
+            processing_config = yaml_load(os.path.join(path, "preprocessing_config.yaml"))
+            past_lowdim_candidates.add(processing_config["past_lowdim_steps"])
+            future_lowdim_candidates.add(processing_config["future_lowdim_steps"])
+
+        available_past = min(past_lowdim_candidates)
+        available_future = min(future_lowdim_candidates)
+
+        if requested_past is not None and requested_past > available_past:
+            raise ValueError(
+                f"Requested lowdim_past_timesteps {requested_past} exceeds available past timesteps "
+                f"{available_past} from at least one data source."
+            )
+        if requested_future is not None and requested_future > available_future:
+            raise ValueError(
+                f"Requested lowdim_future_timesteps {requested_future} exceeds available future timesteps "
+                f"{available_future} from at least one data source."
+            )
+
+        # We set the lowdim_past_timesteps and lowdim_future_timesteps to the available past and future timesteps
+        # Or the ones present in the data params if provided. Not to the requested values.
+        # Requested sequence lengths are used for data loading, not normalization.
+        object.__setattr__(self, "lowdim_past_timesteps", self.lowdim_past_timesteps or available_past)
+        object.__setattr__(self, "lowdim_future_timesteps", self.lowdim_future_timesteps or available_future)

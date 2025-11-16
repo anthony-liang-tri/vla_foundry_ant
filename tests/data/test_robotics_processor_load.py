@@ -4,6 +4,7 @@ import tempfile
 from unittest.mock import Mock, patch
 
 import pytest
+import yaml
 
 from vla_foundry.data.processor.robotics_processor import RoboticsProcessor
 from vla_foundry.data.robotics.normalization import RoboticsNormalizer
@@ -20,25 +21,52 @@ def dataset_stats_path():
 class TestRoboticsProcessorLoad:
     """Test the load() and from_pretrained() methods of RoboticsProcessor."""
 
+    @staticmethod
+    def _build_normalization_config(action_fields, proprio_fields, **overrides):
+        method = overrides.get("method", "std")
+        scope = overrides.get("scope", "global")
+        epsilon = overrides.get("epsilon", 1e-8)
+        enabled = overrides.get("enabled", True)
+        lowdim_past = overrides.get("lowdim_past_timesteps", 1)
+        lowdim_future = overrides.get("lowdim_future_timesteps", 14)
+
+        # Deduplicate fields while preserving order (Python 3.7+ idiom)
+        include_fields = list(dict.fromkeys(proprio_fields + action_fields))
+        field_configs = {
+            field: {
+                "method": method,
+                "scope": scope,
+                "epsilon": epsilon,
+                "enabled": enabled,
+            }
+            for field in include_fields
+        }
+
+        return {
+            "enabled": enabled,
+            "method": method,
+            "scope": scope,
+            "epsilon": epsilon,
+            "include_fields": include_fields,
+            "field_configs": field_configs,
+            "lowdim_past_timesteps": lowdim_past,
+            "lowdim_future_timesteps": lowdim_future,
+        }
+
     @pytest.fixture
     def sample_config_data(self, dataset_stats_path):
         """Create sample configuration data for testing."""
+        proprio_fields = [
+            "robot__actual__joint_position__right::panda",
+            "robot__actual__joint_velocity__right::panda",
+        ]
+        action_fields = ["robot__action__poses__right::panda__xyz"]
         return {
-            "type": "robotics",
             "dataset_statistics": [dataset_stats_path],
             "processor": "google/paligemma-3b-pt-224",
-            "proprioception_fields": [
-                "robot__actual__joint_position__right::panda",
-                "robot__actual__joint_velocity__right::panda",
-            ],
-            "action_fields": ["robot__action__poses__right::panda__xyz"],
-            "normalization": {
-                "enabled": True,
-                "method": "std",
-                "scope": "global",
-                "epsilon": 1e-8,
-                "field_configs": {},
-            },
+            "proprioception_fields": proprio_fields,
+            "action_fields": action_fields,
+            "normalization": self._build_normalization_config(action_fields, proprio_fields),
         }
 
     @pytest.fixture
@@ -58,23 +86,23 @@ class TestRoboticsProcessorLoad:
     @pytest.fixture
     def temp_config_file(self, dataset_stats_path):
         """Create a temporary config file for testing."""
+        proprio_fields = [
+            "robot__actual__joint_position__right::panda",
+            "robot__actual__joint_velocity__right::panda",
+        ]
+        action_fields = ["robot__actual__poses__right::panda__xyz"]
+        config_data = {
+            "dataset_statistics": [dataset_stats_path],
+            "processor": "google/paligemma-3b-pt-224",
+            "proprioception_fields": proprio_fields,
+            "action_fields": action_fields,
+            "normalization": self._build_normalization_config(action_fields, proprio_fields),
+            "lowdim_past_timesteps": 1,
+            "lowdim_future_timesteps": 14,
+        }
+
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            # Use draccus format for YAML
-            f.write("type: robotics\n")
-            f.write("dataset_statistics:\n")
-            f.write(f"  - {dataset_stats_path}\n")
-            f.write("processor: google/paligemma-3b-pt-224\n")
-            f.write("proprioception_fields:\n")
-            f.write("  - robot__actual__joint_position__right::panda\n")
-            f.write("  - robot__actual__joint_velocity__right::panda\n")
-            f.write("action_fields:\n")
-            f.write("  - robot__actual__poses__right::panda__xyz\n")
-            f.write("normalization:\n")
-            f.write("  enabled: true\n")
-            f.write("  method: std\n")
-            f.write("  scope: global\n")
-            f.write("  epsilon: 1.0e-08\n")
-            f.write("  field_configs: {}\n")
+            yaml.safe_dump(config_data, f)
             temp_path = f.name
 
         yield temp_path
@@ -101,28 +129,26 @@ class TestRoboticsProcessorLoad:
     def temp_experiment_dir(self, dataset_stats_path):
         """Create a temporary experiment directory with config and stats files."""
         with tempfile.TemporaryDirectory() as temp_dir:
+            proprio_fields = [
+                "robot__actual__joint_position__right::panda",
+                "robot__actual__joint_velocity__right::panda",
+            ]
+            action_fields = ["robot__actual__poses__right::panda__xyz"]
+            normalization_cfg = self._build_normalization_config(action_fields, proprio_fields)
+
             # Create config_processor.yaml
             config_path = os.path.join(temp_dir, "config_processor.yaml")
+            config_data = {
+                "lowdim_past_timesteps": 0,
+                "lowdim_future_timesteps": 8,
+                "dataset_statistics": [dataset_stats_path],
+                "processor": "google/paligemma-3b-pt-224",
+                "proprioception_fields": proprio_fields,
+                "action_fields": action_fields,
+                "normalization": normalization_cfg,
+            }
             with open(config_path, "w") as f:
-                f.write("type: robotics\n")
-                f.write("lowdim_past_timesteps: 0\n")
-                f.write("lowdim_future_timesteps: 8\n")
-                f.write("dataset_statistics:\n")
-                f.write(f"  - {dataset_stats_path}\n")
-                f.write("processor: google/paligemma-3b-pt-224\n")
-                f.write("proprioception_fields:\n")
-                f.write("  - robot__actual__joint_position__right::panda\n")
-                f.write("  - robot__actual__joint_velocity__right::panda\n")
-                f.write("action_fields:\n")
-                f.write("  - robot__actual__poses__right::panda__xyz\n")
-                f.write("normalization:\n")
-                f.write("  enabled: true\n")
-                f.write("  method: std\n")
-                f.write("  scope: global\n")
-                f.write("  epsilon: 1.0e-08\n")
-                f.write("  field_configs: {}\n")
-                f.write("  lowdim_past_timesteps: 1\n")
-                f.write("  lowdim_future_timesteps: 14\n")
+                yaml.safe_dump(config_data, f)
 
             yield temp_dir
 
@@ -219,7 +245,6 @@ class TestRoboticsProcessorLoad:
 
         # Create config with normalization disabled
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            f.write("type: robotics\n")
             f.write("dataset_statistics:\n")
             f.write(f"  - {dataset_stats_path}\n")
             f.write("processor: google/paligemma-3b-pt-224\n")
@@ -263,25 +288,26 @@ class TestRoboticsProcessorLoad:
         mock_get_processor.return_value = mock_processor
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            f.write("type: robotics\n")
-            f.write("dataset_statistics:\n")
-            f.write(f"  - {dataset_stats_path}\n")
-            f.write("processor: google/paligemma-3b-pt-224\n")
-            f.write("proprioception_fields:\n")
-            f.write("  - robot__actual__joint_position__right::panda\n")
-            f.write("  - robot__actual__joint_velocity__right::panda\n")
-            f.write("action_fields:\n")
-            f.write("  - robot__actual__poses__right::panda__xyz\n")
-            f.write("normalization:\n")
-            f.write("  enabled: true\n")
-            f.write("  method: std\n")
-            f.write("  scope: global\n")
-            f.write("  epsilon: 1.0e-08\n")
-            f.write("  field_configs:\n")
-            f.write("    robot__actual__joint_position__right::panda:\n")
-            f.write("      method: percentile_5_95\n")
-            f.write("      scope: per_timestep\n")
-            f.write("      epsilon: 1.0e-06\n")
+            proprio_fields = [
+                "robot__actual__joint_position__right::panda",
+                "robot__actual__joint_velocity__right::panda",
+            ]
+            action_fields = ["robot__actual__poses__right::panda__xyz"]
+            normalization_cfg = self._build_normalization_config(action_fields, proprio_fields)
+            normalization_cfg["field_configs"]["robot__actual__joint_position__right::panda"] = {
+                "method": "percentile_5_95",
+                "scope": "per_timestep",
+                "epsilon": 1e-6,
+                "enabled": True,
+            }
+            config_data = {
+                "dataset_statistics": [dataset_stats_path],
+                "processor": "google/paligemma-3b-pt-224",
+                "proprioception_fields": proprio_fields,
+                "action_fields": action_fields,
+                "normalization": normalization_cfg,
+            }
+            yaml.safe_dump(config_data, f)
             temp_config_path = f.name
 
         try:
@@ -343,11 +369,15 @@ class TestRoboticsNormalizerLoad:
     @pytest.fixture
     def sample_normalization_config_data(self):
         """Create sample normalization configuration data for testing."""
+        fields = ["robot__actual__joint_position__right::panda"]
         return {
             "enabled": True,
             "method": "std",
             "scope": "global",
             "epsilon": 1e-8,
+            "include_fields": fields,
+            "lowdim_past_timesteps": 1,
+            "lowdim_future_timesteps": 14,
             "field_configs": {
                 "robot__actual__joint_position__right::panda": {
                     "method": "percentile_5_95",

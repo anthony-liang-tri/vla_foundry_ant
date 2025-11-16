@@ -8,6 +8,7 @@ These tests verify that:
 """
 
 import os
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -37,6 +38,17 @@ def stats_path(dataset_dir):
 def processing_metadata_path(dataset_dir):
     """Get the path to the processing metadata."""
     return os.path.join(dataset_dir, "processing_metadata.json")
+
+
+def init_data_params_for_tests(data_params):
+    """Initialize shared attributes for RoboticsDataParams without a full training config."""
+    cfg = SimpleNamespace(
+        data=data_params,
+        hparams=SimpleNamespace(seed=42),
+        model=SimpleNamespace(),
+    )
+    data_params.init_shared_attributes(cfg)
+    return data_params
 
 
 class TestCropSequence:
@@ -167,7 +179,6 @@ class TestRoboticsProcessorWithCropping:
         """Test that the processor handles cropped sequences correctly."""
         # Create data params with cropping
         data_params = RoboticsDataParams(
-            type="robotics",
             dataset_statistics=[stats_path],
             processor="google/paligemma-3b-pt-224",
             action_fields=["robot__action__poses__right::panda__xyz"],
@@ -181,20 +192,23 @@ class TestRoboticsProcessorWithCropping:
                 enabled=True,
                 method="std",
                 scope="global",
+                lowdim_past_timesteps=1,
+                lowdim_future_timesteps=14,
             ),
         )
+        data_params = init_data_params_for_tests(data_params)
 
         # Verify that data_params has the correct settings
         assert data_params.lowdim_past_timesteps == 0
         assert data_params.lowdim_future_timesteps == 8
-        # Normalization should have the full preprocessing window
+        # Normalization should align with the source data window
         assert data_params.normalization.lowdim_past_timesteps == 1
         assert data_params.normalization.lowdim_future_timesteps == 14
 
         # Create processor
         processor = RoboticsProcessor(data_params)
 
-        # Verify normalizer has the full window
+        # Verify normalizer aligns with the cropped window
         assert processor.normalizer.lowdim_past_timesteps == 1
         assert processor.normalizer.lowdim_future_timesteps == 14
 
@@ -209,23 +223,27 @@ class TestRoboticsProcessorWithCropping:
 
         for past, future in crop_configs:
             data_params = RoboticsDataParams(
-                type="robotics",
                 dataset_statistics=[stats_path],
                 processor="google/paligemma-3b-pt-224",
                 action_fields=["robot__action__poses__right::panda__xyz"],
                 proprioception_fields=["robot__actual__joint_position__right::panda"],
                 lowdim_past_timesteps=past,
                 lowdim_future_timesteps=future,
-                normalization=NormalizationParams(enabled=True),
+                normalization=NormalizationParams(
+                    enabled=True,
+                    lowdim_past_timesteps=1,
+                    lowdim_future_timesteps=14,
+                ),
             )
+            data_params = init_data_params_for_tests(data_params)
 
             processor = RoboticsProcessor(data_params)
 
             # Verify settings
             assert data_params.lowdim_past_timesteps == past
             assert data_params.lowdim_future_timesteps == future
-            assert processor.normalizer.lowdim_past_timesteps == 1  # From preprocessing
-            assert processor.normalizer.lowdim_future_timesteps == 14  # From preprocessing
+            assert processor.normalizer.lowdim_past_timesteps == 1
+            assert processor.normalizer.lowdim_future_timesteps == 14
 
 
 class TestNormalizationWithCropping:
@@ -235,7 +253,6 @@ class TestNormalizationWithCropping:
         """Test that global normalization works correctly with cropped sequences."""
         # Create normalizer with global normalization
         data_params = RoboticsDataParams(
-            type="robotics",
             dataset_statistics=[stats_path],
             processor="google/paligemma-3b-pt-224",
             action_fields=["robot__action__poses__right::panda__xyz"],
@@ -245,8 +262,11 @@ class TestNormalizationWithCropping:
                 enabled=True,
                 method="std",
                 scope="global",
+                lowdim_past_timesteps=1,
+                lowdim_future_timesteps=14,
             ),
         )
+        data_params = init_data_params_for_tests(data_params)
 
         normalizer = RoboticsNormalizer(
             normalization_params=data_params.normalization,
@@ -265,7 +285,6 @@ class TestNormalizationWithCropping:
         """Test that per-timestep normalization aligns correctly with cropped sequences."""
         # Create normalizer with per-timestep normalization
         data_params = RoboticsDataParams(
-            type="robotics",
             dataset_statistics=[stats_path],
             processor="google/paligemma-3b-pt-224",
             action_fields=["robot__action__poses__right::panda__xyz"],
@@ -275,8 +294,11 @@ class TestNormalizationWithCropping:
                 enabled=True,
                 method="std",
                 scope="per_timestep",
+                lowdim_past_timesteps=1,
+                lowdim_future_timesteps=14,
             ),
         )
+        data_params = init_data_params_for_tests(data_params)
 
         normalizer = RoboticsNormalizer(
             normalization_params=data_params.normalization,
@@ -298,7 +320,6 @@ class TestNormalizationWithCropping:
         # works without errors. Detailed alignment testing is complex and covered by
         # integration tests.
         data_params = RoboticsDataParams(
-            type="robotics",
             dataset_statistics=[stats_path],
             processor="google/paligemma-3b-pt-224",
             action_fields=["robot__action__poses__right::panda__xyz"],
@@ -308,8 +329,11 @@ class TestNormalizationWithCropping:
                 enabled=True,
                 method="std",
                 scope="per_timestep",
+                lowdim_past_timesteps=1,
+                lowdim_future_timesteps=14,
             ),
         )
+        data_params = init_data_params_for_tests(data_params)
 
         normalizer = RoboticsNormalizer(
             normalization_params=data_params.normalization,
@@ -331,7 +355,6 @@ class TestNormalizationWithCropping:
     def test_different_anchor_positions(self, stats_path):
         """Test normalization with different anchor positions in cropped sequences."""
         data_params = RoboticsDataParams(
-            type="robotics",
             dataset_statistics=[stats_path],
             processor="google/paligemma-3b-pt-224",
             action_fields=["robot__action__poses__right::panda__xyz"],
@@ -341,8 +364,11 @@ class TestNormalizationWithCropping:
                 enabled=True,
                 method="std",
                 scope="per_timestep",
+                lowdim_past_timesteps=1,
+                lowdim_future_timesteps=14,
             ),
         )
+        data_params = init_data_params_for_tests(data_params)
 
         normalizer = RoboticsNormalizer(
             normalization_params=data_params.normalization,
@@ -387,7 +413,6 @@ class TestEndToEndWithRealData:
         """Test that processor correctly handles cropped sequences."""
         # Create data params with cropping
         data_params = RoboticsDataParams(
-            type="robotics",
             dataset_statistics=[stats_path],
             processor="google/paligemma-3b-pt-224",
             action_fields=[
@@ -404,8 +429,11 @@ class TestEndToEndWithRealData:
                 enabled=True,
                 method="std",
                 scope="global",
+                lowdim_past_timesteps=1,
+                lowdim_future_timesteps=14,
             ),
         )
+        data_params = init_data_params_for_tests(data_params)
 
         processor = RoboticsProcessor(data_params)
 
