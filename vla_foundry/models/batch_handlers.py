@@ -220,6 +220,11 @@ class DiffusionPolicyBatchHandler(BatchHandler):
             if "attention_mask" in batch and batch["attention_mask"] is not None
             else None
         )
+        attention_mask_images = (
+            batch["attention_mask_images"].to(device, non_blocking=True, dtype=torch.bool)
+            if "attention_mask_images" in batch and batch["attention_mask_images"] is not None
+            else None
+        )
         past_mask = batch["past_mask"].to(device, non_blocking=True, dtype=torch.bool)
         future_mask = batch["future_mask"].to(device, non_blocking=True, dtype=torch.bool)
         inputs = {
@@ -228,6 +233,7 @@ class DiffusionPolicyBatchHandler(BatchHandler):
             "actions": actions,
             "noise": noise,
             "attention_mask": attention_mask,
+            "attention_mask_images": attention_mask_images,
             "past_mask": past_mask,
             "future_mask": future_mask,
         }

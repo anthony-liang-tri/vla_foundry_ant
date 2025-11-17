@@ -40,7 +40,9 @@ class DiffusionPolicy(BaseModel):
         # Initialize output layer weights with Xavier initialization
         torch.nn.init.xavier_uniform_(self.output_layer.weight)
 
-    def forward(self, input_ids, pixel_values, attention_mask, actions, noise, past_mask, future_mask):
+    def forward(
+        self, input_ids, pixel_values, attention_mask, attention_mask_images, actions, noise, past_mask, future_mask
+    ):
         # Sample random timesteps
         timesteps = torch.randint(0, self.scheduler.num_timesteps, (actions.shape[0],)).to(actions.device)  # [bsz]
 
@@ -53,7 +55,12 @@ class DiffusionPolicy(BaseModel):
 
         # Create condition embeddings
         ## Image and text embeddings
-        out_clip = self.clip(input_ids=input_ids, pixel_values=pixel_values, attention_mask=attention_mask)
+        out_clip = self.clip(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            attention_mask=attention_mask,
+            attention_mask_images=attention_mask_images,
+        )
         text_embeddings = out_clip.text_embeds
         image_embeddings = out_clip.image_embeds
         ## Time embeddings (B, 1, D)
@@ -99,6 +106,7 @@ class DiffusionPolicy(BaseModel):
         pixel_values,
         actions,
         attention_mask=None,
+        attention_mask_images=None,
         num_inference_steps=None,
         past_mask=None,
     ):
@@ -110,6 +118,7 @@ class DiffusionPolicy(BaseModel):
             pixel_values: Input images/pixel values
             actions: Input actions (past timesteps are given in the same sequence, others can be noise)
             attention_mask: Optional attention mask for text
+            attention_mask_images: Optional attention mask for camera images
             num_inference_steps: Number of denoising steps (defaults to scheduler.num_timesteps)
             past_mask: Optional mask indicating which actions are from past (1) vs future (0)
 
@@ -123,7 +132,12 @@ class DiffusionPolicy(BaseModel):
         device = actions.device
 
         # Create condition embeddings (same as in forward)
-        out_clip = self.clip(input_ids=input_ids, pixel_values=pixel_values, attention_mask=attention_mask)
+        out_clip = self.clip(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            attention_mask=attention_mask,
+            attention_mask_images=attention_mask_images,
+        )
         text_embeddings = out_clip.text_embeds
         image_embeddings = out_clip.image_embeds
 

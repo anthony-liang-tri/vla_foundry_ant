@@ -2,6 +2,7 @@ import logging
 import os
 
 import draccus
+import numpy as np
 import torch
 
 from vla_foundry.data.processor import get_processor
@@ -97,7 +98,7 @@ class RoboticsProcessor:
             batch: Batch of samples to convert to tensors.
             image_names: Automatically generated from camera_names and image_indices in the data_params.
         """
-        batch_text, batch_images = [], []
+        batch_text, batch_images, batch_attention_mask_images = [], [], []
         for sample_images, instruction in zip(batch["images"], batch["language_instruction"], strict=False):
             if image_names is None or len(image_names) == 0:
                 image_names = list(sample_images.keys())
@@ -105,16 +106,37 @@ class RoboticsProcessor:
                     "WARNING: Using sample_images.keys() to detect camera names. No guarantee of consistent ordering."
                     f"Sample keys: {list(sample_images.keys())}"
                 )
-            sample_images = [sample_images[k] for k in image_names if k in sample_images]
+            if self.data_params.pad_missing_images:
+                # Zero-pad missing camera images and create mask to mask out later on.
+                sample_images = [sample_images.get(k, None) for k in image_names]
+                zero_image_size = None
+                for i in sample_images:
+                    if i is not None:
+                        zero_image_size = i.shape
+                        break
+                if self.data_params.mask_padded_images:
+                    attention_mask_images = [1 if i is not None else 0 for i in sample_images]
+                else:
+                    # LBM1.0 does not mask padded images
+                    attention_mask_images = [1 for i in sample_images]
+                sample_images = [i if i is not None else np.zeros(zero_image_size) for i in sample_images]
+            else:
+                sample_images = [sample_images[k] for k in image_names if k in sample_images]
+                attention_mask_images = [1 for i in sample_images]
+
             instruction = self.apply_chat_template(len(sample_images), instruction)
 
             batch_text.append(instruction)
             if len(sample_images) > 0:
                 batch_images.append(sample_images)
+                batch_attention_mask_images.append(attention_mask_images)
 
         # If no images, set batch_images to None
         if len(batch_images) == 0:
             batch_images = None
+            batch_attention_mask_images = None
+        else:
+            batch_attention_mask_images = torch.tensor(batch_attention_mask_images, dtype=torch.bool)  # [B, num_images]
 
         # Run processor on entire batch
         processed = self.vlm_processor(images=batch_images, text=batch_text, padding=True, return_tensors="pt")
@@ -122,6 +144,7 @@ class RoboticsProcessor:
         processed_batch = batch.copy()
         processed_batch["input_ids"] = processed["input_ids"]
         processed_batch["attention_mask"] = processed["attention_mask"]
+        processed_batch["attention_mask_images"] = batch_attention_mask_images
         if "pixel_values" in processed:
             c, h, w = processed["pixel_values"].shape[-3:]
             processed_batch["pixel_values"] = processed["pixel_values"].reshape(len(batch_images), -1, c, h, w)

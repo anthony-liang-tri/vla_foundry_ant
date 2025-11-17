@@ -43,6 +43,7 @@ class TestDiffusionPolicy:
         input_ids = torch.randint(0, 1000, (batch_size, seq_len))
         pixel_values = torch.randn(batch_size, 3, 224, 224)
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+        attention_mask_images = None
         actions = torch.randn(batch_size, seq_len, action_dim)
         noise = torch.randn(batch_size, seq_len, action_dim)
         past_mask = torch.zeros(batch_size, seq_len, dtype=torch.bool)
@@ -55,6 +56,7 @@ class TestDiffusionPolicy:
                 input_ids=input_ids,
                 pixel_values=pixel_values,
                 attention_mask=attention_mask,
+                attention_mask_images=attention_mask_images,
                 actions=actions,
                 noise=noise,
                 past_mask=past_mask,
@@ -73,6 +75,7 @@ class TestDiffusionPolicy:
         input_ids = torch.randint(0, 1000, (batch_size, seq_len))
         pixel_values = None
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+        attention_mask_images = None
         actions = torch.randn(batch_size, seq_len, action_dim)
         noise = torch.randn(batch_size, seq_len, action_dim)
         past_mask = torch.zeros(batch_size, seq_len, dtype=torch.bool)
@@ -85,6 +88,7 @@ class TestDiffusionPolicy:
                 input_ids=input_ids,
                 pixel_values=pixel_values,
                 attention_mask=attention_mask,
+                attention_mask_images=attention_mask_images,
                 actions=actions,
                 noise=noise,
                 past_mask=past_mask,
@@ -102,6 +106,7 @@ class TestDiffusionPolicy:
         input_ids = torch.randint(0, 1000, (batch_size, seq_len))
         pixel_values = torch.randn(batch_size, 3, 224, 224)
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+        attention_mask_images = None
         actions = torch.randn(batch_size, seq_len, action_dim)
         noise = torch.randn(batch_size, seq_len, action_dim)
         past_mask = torch.zeros(batch_size, seq_len, dtype=torch.bool)
@@ -114,6 +119,7 @@ class TestDiffusionPolicy:
                 input_ids=input_ids,
                 pixel_values=pixel_values,
                 attention_mask=attention_mask,
+                attention_mask_images=attention_mask_images,
                 actions=actions,
                 noise=noise,
                 past_mask=past_mask,
@@ -132,6 +138,7 @@ class TestDiffusionPolicy:
         input_ids = torch.randint(0, 1000, (batch_size, seq_len))
         pixel_values = torch.randn(batch_size, 3, 224, 224)
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+        attention_mask_images = None
         actions = torch.randn(batch_size, seq_len, action_dim)
         noise = torch.randn(batch_size, seq_len, action_dim)
         # First 5 timesteps are past (no noise), last 5 are future (with noise)
@@ -147,6 +154,7 @@ class TestDiffusionPolicy:
                 input_ids=input_ids,
                 pixel_values=pixel_values,
                 attention_mask=attention_mask,
+                attention_mask_images=attention_mask_images,
                 actions=actions,
                 noise=noise,
                 past_mask=past_mask,
@@ -165,6 +173,7 @@ class TestDiffusionPolicy:
         input_ids = torch.randint(0, 1000, (batch_size, seq_len))
         pixel_values = torch.randn(batch_size, 3, 224, 224)
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+        attention_mask_images = None
         actions = torch.randn(batch_size, seq_len, action_dim)
         # First half are past actions, second half will be generated
         past_mask = torch.cat(
@@ -181,6 +190,7 @@ class TestDiffusionPolicy:
             generated_actions = diffusion_policy.generate_actions(
                 input_ids=input_ids,
                 pixel_values=pixel_values,
+                attention_mask_images=attention_mask_images,
                 actions=actions,
                 attention_mask=attention_mask,
                 num_inference_steps=5,
@@ -203,6 +213,7 @@ class TestDiffusionPolicy:
         input_ids = torch.randint(0, 1000, (batch_size, seq_len))
         pixel_values = torch.randn(batch_size, 3, 224, 224)
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+        attention_mask_images = None
         actions = torch.randn(batch_size, seq_len, action_dim)
 
         # Mock the CLIP forward call
@@ -211,6 +222,7 @@ class TestDiffusionPolicy:
             generated_actions = diffusion_policy.generate_actions(
                 input_ids=input_ids,
                 pixel_values=pixel_values,
+                attention_mask_images=attention_mask_images,
                 actions=actions,
                 attention_mask=attention_mask,
                 num_inference_steps=3,
@@ -226,6 +238,7 @@ class TestDiffusionPolicy:
 
         input_ids = torch.randint(0, 1000, (batch_size, seq_len))
         pixel_values = None
+        attention_mask_images = None
         actions = torch.randn(batch_size, seq_len, action_dim)
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
         past_mask = torch.cat(
@@ -242,6 +255,7 @@ class TestDiffusionPolicy:
             generated_actions = diffusion_policy.generate_actions(
                 input_ids=input_ids,
                 pixel_values=pixel_values,
+                attention_mask_images=attention_mask_images,
                 actions=actions,
                 attention_mask=attention_mask,
                 num_inference_steps=3,
@@ -260,6 +274,7 @@ class TestDiffusionPolicy:
 
         input_ids = None
         pixel_values = torch.randn(batch_size, 3, 224, 224)
+        attention_mask_images = None
         actions = torch.randn(batch_size, seq_len, action_dim)
         attention_mask = None
         past_mask = torch.cat(
@@ -276,6 +291,7 @@ class TestDiffusionPolicy:
             generated_actions = diffusion_policy.generate_actions(
                 input_ids=input_ids,
                 pixel_values=pixel_values,
+                attention_mask_images=attention_mask_images,
                 actions=actions,
                 attention_mask=attention_mask,
                 num_inference_steps=3,
@@ -402,6 +418,7 @@ class TestDiffusionPolicy:
         input_ids = torch.randint(0, 1000, (batch_size, 1))
         pixel_values = torch.randn(batch_size, 3, 224, 224)
         attention_mask = torch.ones(batch_size, 1, dtype=torch.bool)
+        attention_mask_images = None
         actions = torch.randn(batch_size, 1, 7)
         noise = torch.randn(batch_size, 1, 7)
         past_mask = torch.zeros(batch_size, 1, dtype=torch.bool)
@@ -414,6 +431,7 @@ class TestDiffusionPolicy:
                 input_ids=input_ids,
                 pixel_values=pixel_values,
                 attention_mask=attention_mask,
+                attention_mask_images=attention_mask_images,
                 actions=actions,
                 noise=noise,
                 past_mask=past_mask,
@@ -430,6 +448,7 @@ class TestDiffusionPolicy:
         input_ids = torch.randint(0, 1000, (batch_size, seq_len))
         pixel_values = torch.randn(batch_size, 3, 224, 224)
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+        attention_mask_images = None
         actions = torch.randn(batch_size, seq_len, action_dim)
         noise = torch.randn(batch_size, seq_len, action_dim)
         past_mask = torch.zeros(batch_size, seq_len, dtype=torch.bool)
@@ -442,6 +461,7 @@ class TestDiffusionPolicy:
                 input_ids=input_ids,
                 pixel_values=pixel_values,
                 attention_mask=attention_mask,
+                attention_mask_images=attention_mask_images,
                 actions=actions,
                 noise=noise,
                 past_mask=past_mask,
@@ -460,6 +480,7 @@ class TestDiffusionPolicy:
         input_ids = torch.randint(0, 1000, (batch_size, seq_len))
         pixel_values = torch.randn(batch_size, 3, 224, 224)
         attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+        attention_mask_images = None
         actions = torch.randn(batch_size, seq_len, action_dim, requires_grad=True)
         noise = torch.randn(batch_size, seq_len, action_dim)
         past_mask = torch.zeros(batch_size, seq_len, dtype=torch.bool)
@@ -472,6 +493,7 @@ class TestDiffusionPolicy:
                 input_ids=input_ids,
                 pixel_values=pixel_values,
                 attention_mask=attention_mask,
+                attention_mask_images=attention_mask_images,
                 actions=actions,
                 noise=noise,
                 past_mask=past_mask,
@@ -486,3 +508,191 @@ class TestDiffusionPolicy:
             assert diffusion_policy.output_layer.weight.grad is not None
             assert diffusion_policy.action_encode.weight.grad is not None
             assert diffusion_policy.condition_encode.weight.grad is not None
+
+    def test_diffusion_policy_attention_mask_images_single_image(self, diffusion_policy):
+        """Test attention_mask_images with single image (4D pixel_values)"""
+        batch_size, seq_len = 2, 6
+        action_dim = diffusion_policy.model_params.action_dim
+
+        # Create input tensors with 4D pixel_values (single image per sample)
+        input_ids = torch.randint(0, 1000, (batch_size, seq_len))
+        pixel_values = torch.randn(batch_size, 3, 224, 224)
+        attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+        # attention_mask_images with shape [B, 1] for single image
+        attention_mask_images = torch.tensor([[True], [False]], dtype=torch.bool)
+        actions = torch.randn(batch_size, seq_len, action_dim)
+        noise = torch.randn(batch_size, seq_len, action_dim)
+        past_mask = torch.zeros(batch_size, seq_len, dtype=torch.bool)
+        future_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+
+        # Create a mock that properly handles attention_mask_images
+        def mock_clip_forward(input_ids, pixel_values, attention_mask, attention_mask_images):
+            mock_output = Mock()
+            mock_output.text_embeds = torch.randn(batch_size, 512)
+            # Simulate masking in image embeddings
+            image_embeds = torch.randn(batch_size, 512)
+            if attention_mask_images is not None:
+                # Zero out embeddings where mask is False
+                image_embeds = image_embeds * attention_mask_images.squeeze(-1).unsqueeze(-1)
+            mock_output.image_embeds = image_embeds
+            return mock_output
+
+        with patch.object(diffusion_policy.clip, "forward", side_effect=mock_clip_forward):
+            # Forward pass
+            output = diffusion_policy(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                attention_mask=attention_mask,
+                attention_mask_images=attention_mask_images,
+                actions=actions,
+                noise=noise,
+                past_mask=past_mask,
+                future_mask=future_mask,
+            )
+
+            # Check output shape
+            assert output.shape == (batch_size, seq_len, action_dim)
+            assert output.dtype == torch.float32
+
+    def test_diffusion_policy_attention_mask_images_multiple_images(self, diffusion_policy):
+        """Test attention_mask_images with multiple images per sample (5D pixel_values)"""
+        batch_size, seq_len = 2, 6
+        num_images = 3
+        action_dim = diffusion_policy.model_params.action_dim
+
+        # Create input tensors with 5D pixel_values (multiple images per sample)
+        input_ids = torch.randint(0, 1000, (batch_size, seq_len))
+        pixel_values = torch.randn(batch_size, num_images, 3, 224, 224)
+        attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+        # Mask out the second image in first sample, and first image in second sample
+        attention_mask_images = torch.tensor([[True, False, True], [False, True, True]], dtype=torch.bool)
+        actions = torch.randn(batch_size, seq_len, action_dim)
+        noise = torch.randn(batch_size, seq_len, action_dim)
+        past_mask = torch.zeros(batch_size, seq_len, dtype=torch.bool)
+        future_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+
+        # Create a mock that properly handles multiple images and attention_mask_images
+        def mock_clip_forward(input_ids, pixel_values, attention_mask, attention_mask_images):
+            mock_output = Mock()
+            mock_output.text_embeds = torch.randn(batch_size, 512)
+            # Simulate multiple image embeddings [B, N, D]
+            image_embeds = torch.randn(batch_size, num_images, 512)
+            if attention_mask_images is not None:
+                # Zero out embeddings where mask is False
+                image_embeds = image_embeds * attention_mask_images.unsqueeze(-1)
+            mock_output.image_embeds = image_embeds
+            return mock_output
+
+        with patch.object(diffusion_policy.clip, "forward", side_effect=mock_clip_forward):
+            # Forward pass
+            output = diffusion_policy(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                attention_mask=attention_mask,
+                attention_mask_images=attention_mask_images,
+                actions=actions,
+                noise=noise,
+                past_mask=past_mask,
+                future_mask=future_mask,
+            )
+
+            # Check output shape
+            assert output.shape == (batch_size, seq_len, action_dim)
+            assert output.dtype == torch.float32
+
+    def test_diffusion_policy_attention_mask_images_all_masked(self, diffusion_policy):
+        """Test attention_mask_images when all images are masked out"""
+        batch_size, seq_len = 2, 6
+        num_images = 2
+        action_dim = diffusion_policy.model_params.action_dim
+
+        # Create input tensors with all images masked
+        input_ids = torch.randint(0, 1000, (batch_size, seq_len))
+        pixel_values = torch.randn(batch_size, num_images, 3, 224, 224)
+        attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+        # Mask out all images
+        attention_mask_images = torch.zeros(batch_size, num_images, dtype=torch.bool)
+        actions = torch.randn(batch_size, seq_len, action_dim)
+        noise = torch.randn(batch_size, seq_len, action_dim)
+        past_mask = torch.zeros(batch_size, seq_len, dtype=torch.bool)
+        future_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+
+        # Create a mock that properly handles all masked images
+        def mock_clip_forward(input_ids, pixel_values, attention_mask, attention_mask_images):
+            mock_output = Mock()
+            mock_output.text_embeds = torch.randn(batch_size, 512)
+            # Simulate multiple image embeddings [B, N, D] - all zeros after masking
+            image_embeds = torch.randn(batch_size, num_images, 512)
+            if attention_mask_images is not None:
+                # Zero out embeddings where mask is False (all of them)
+                image_embeds = image_embeds * attention_mask_images.unsqueeze(-1)
+            mock_output.image_embeds = image_embeds
+            return mock_output
+
+        with patch.object(diffusion_policy.clip, "forward", side_effect=mock_clip_forward):
+            # Forward pass should work even when all images are masked
+            output = diffusion_policy(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                attention_mask=attention_mask,
+                attention_mask_images=attention_mask_images,
+                actions=actions,
+                noise=noise,
+                past_mask=past_mask,
+                future_mask=future_mask,
+            )
+
+            # Check output shape
+            assert output.shape == (batch_size, seq_len, action_dim)
+            assert output.dtype == torch.float32
+
+    def test_diffusion_policy_generate_actions_with_attention_mask_images(self, diffusion_policy):
+        """Test action generation with attention_mask_images"""
+        batch_size, seq_len = 2, 6
+        num_images = 2
+        action_dim = diffusion_policy.model_params.action_dim
+
+        # Create input tensors with multiple images and attention mask
+        input_ids = torch.randint(0, 1000, (batch_size, seq_len))
+        pixel_values = torch.randn(batch_size, num_images, 3, 224, 224)
+        attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+        # Only use first image in both samples
+        attention_mask_images = torch.tensor([[True, False], [True, False]], dtype=torch.bool)
+        actions = torch.randn(batch_size, seq_len, action_dim)
+        past_mask = torch.cat(
+            [
+                torch.ones(batch_size, seq_len // 2, dtype=torch.bool),
+                torch.zeros(batch_size, seq_len // 2, dtype=torch.bool),
+            ],
+            dim=1,
+        )
+
+        # Create a mock that properly handles multiple images and attention_mask_images
+        def mock_clip_forward(input_ids, pixel_values, attention_mask, attention_mask_images):
+            mock_output = Mock()
+            mock_output.text_embeds = torch.randn(batch_size, 512)
+            # Simulate multiple image embeddings [B, N, D]
+            image_embeds = torch.randn(batch_size, num_images, 512)
+            if attention_mask_images is not None:
+                # Zero out embeddings where mask is False
+                image_embeds = image_embeds * attention_mask_images.unsqueeze(-1)
+            mock_output.image_embeds = image_embeds
+            return mock_output
+
+        with patch.object(diffusion_policy.clip, "forward", side_effect=mock_clip_forward):
+            # Generate actions with attention_mask_images
+            generated_actions = diffusion_policy.generate_actions(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                attention_mask_images=attention_mask_images,
+                actions=actions,
+                attention_mask=attention_mask,
+                num_inference_steps=3,
+                past_mask=past_mask,
+            )
+
+            # Check output shape and that past actions are preserved
+            assert generated_actions.shape == (batch_size, seq_len, action_dim)
+            torch.testing.assert_close(
+                generated_actions[:, : seq_len // 2], actions[:, : seq_len // 2], rtol=1e-5, atol=1e-5
+            )

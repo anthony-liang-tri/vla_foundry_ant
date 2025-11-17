@@ -84,6 +84,8 @@ class RoboticsDataParams(DataParams):
     camera_names: list[str] = field(default_factory=list)
     image_indices: list[int] = field(default_factory=list)
     image_names: list[str] = field(default_factory=list)
+    pad_missing_images: bool = field(default=False)
+    mask_padded_images: bool = field(default=False)
     proprioception_fields: list[str] = field(default_factory=list)
     action_fields: list[str] = field(default_factory=list)
     intrinsics_fields: list[str] = field(default_factory=list)
@@ -97,6 +99,9 @@ class RoboticsDataParams(DataParams):
 
     def __post_init__(self):
         super().__post_init__()
+
+        if self.mask_padded_images and not self.pad_missing_images:
+            raise ValueError("mask_padded_images requires pad_missing_images to be True")
 
         # Validate language instruction types
         valid_types = {"original", "randomized", "verbose", "alternative"}
