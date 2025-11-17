@@ -23,6 +23,7 @@ VLA Foundry is a framework for training Vision-Language-Action models. We suppor
 - [Contributing Guidelines](#contributing-guidelines)
 - [Quickstart](#quickstart)
     - [Running on SageMaker](#running-on-sagemaker)
+- [Troubleshooting FAQ](#troubleshooting-faq)
 - [Deployment Examples](#deployment-examples)
 - [Repo Structure and Implementation](#repo-structure-and-implementation)
   <ol type="1">
@@ -49,6 +50,9 @@ Alternatively, to activate the virtual env you can then run `source .venv/bin/ac
 
 ## Contributing Guidelines
 Please see [CONTRIBUTING.md](CONTRIBUTING.md)
+
+## Troubleshooting FAQ
+For some common questions or errors, please check the [FAQ.md](FAQ.md) file for troubleshooting tips.
 
 ## Quickstart
 The main entrypoint is `vla_foundry/main.py`.
