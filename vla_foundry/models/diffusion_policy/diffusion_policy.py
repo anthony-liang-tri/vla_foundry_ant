@@ -29,6 +29,7 @@ class DiffusionPolicy(BaseModel):
         self.action_encode = torch.nn.Linear(model_params.action_dim, transformer.hidden_dim)
         self.condition_encode = torch.nn.Linear(clip.get_projection_dim(), transformer.hidden_dim)
         self.input_noise_std = model_params.input_noise_std
+        self.disable_text = model_params.disable_text
         self.initialize_weights()
 
     def initialize_weights(self):
@@ -68,7 +69,7 @@ class DiffusionPolicy(BaseModel):
         conditional_embeddings = [time_embeddings]
 
         # Create conditional embeddings sequence
-        if text_embeddings is not None:
+        if not self.disable_text and text_embeddings is not None:
             # (B, D) -> (B, 1, D)
             text_embeddings = text_embeddings.unsqueeze(1)
             conditional_embeddings.append(text_embeddings)
@@ -154,7 +155,7 @@ class DiffusionPolicy(BaseModel):
 
         # Iterative denoising - similar to flow VLM approach
         step_size = max(1, self.scheduler.num_timesteps // num_inference_steps)
-        if text_embeddings is not None:
+        if not self.disable_text and text_embeddings is not None:
             # (B, D) -> (B, 1, D)
             text_embeddings = text_embeddings.unsqueeze(1)
         if image_embeddings is not None and image_embeddings.ndim == 2:
@@ -166,7 +167,7 @@ class DiffusionPolicy(BaseModel):
             time_embeddings = self.time_encoding(timesteps).unsqueeze(1)
             conditional_embeddings = [time_embeddings]
 
-            if text_embeddings is not None:
+            if not self.disable_text and text_embeddings is not None:
                 conditional_embeddings.append(text_embeddings)
             if image_embeddings is not None:
                 conditional_embeddings.append(image_embeddings)

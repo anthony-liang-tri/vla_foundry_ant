@@ -22,8 +22,8 @@ class BaseEvalRunner:
 
         # Our model requires action inputs to be of shape (B, T, D) where T is the number of timesteps.
         # We use these parameters from data_params to properly construct the timestep dimension.
-        self.num_past_actions = self.normalizer.lowdim_past_timesteps
-        self.num_future_actions = self.normalizer.lowdim_future_timesteps
+        self.num_past_actions = self.processor.data_params.lowdim_past_timesteps
+        self.num_future_actions = self.processor.data_params.lowdim_future_timesteps
         self.num_past_image_timesteps = len(self.processor.data_params.image_indices) - 1
 
     def load_env(self):
@@ -67,10 +67,11 @@ class BaseEvalRunner:
     def update_image_buffer(self, images):
         # Updates the past_images with the current images.
         # We need this to properly construct the input tensors for the model's next inference step.
-        self.past_images = self.past_images + images
-        num_past_images = len(images) * self.num_past_image_timesteps
-        if len(self.past_images) > num_past_images:
-            self.past_images = self.past_images[-num_past_images:]
+        if self.num_past_image_timesteps > 0:
+            self.past_images = self.past_images + images
+            num_past_images = len(images) * self.num_past_image_timesteps
+            if len(self.past_images) > num_past_images:
+                self.past_images = self.past_images[-num_past_images:]
 
     def get_image_for_video(self):
         raise NotImplementedError("get_image_for_video method not implemented")

@@ -231,6 +231,7 @@ class DiffusionPolicyParams(ModelParams):
     use_diffusers_scheduler: bool = field(default=False)
     use_flow_matching_scheduler: bool = field(default=False)
     input_noise_std: float = field(default=0.0)
+    disable_text: bool = field(default=False)
 
     # Shared attributes. Overwritten in init_shared_attributes.
     action_dim: int = field(default=None)

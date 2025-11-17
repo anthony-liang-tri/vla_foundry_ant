@@ -24,7 +24,7 @@ def parse_args():
         ),
     )
     parser.add_argument("--action_window", type=int, default=8, help="Number of actions to take per generation step")
-    parser.add_argument("--image_names", type=str, nargs="+", help="Auto-detected if not specified")
+    parser.add_argument("--image_names", type=str, nargs="+", default="")
     return parser.parse_args()
 
 
