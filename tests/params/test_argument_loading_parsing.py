@@ -320,6 +320,16 @@ def test_load_params_from_yaml_with_localize():
             os.unlink(temp_yaml_path)
 
 
+def test_load_params_from_yaml_ignores_unknown_fields():
+    """Extra keys should be quietly ignored by lenient BaseParams decoding."""
+    params = load_params_from_yaml(
+        ModelParams, "tests/params/dummy_configs/dummy_transformer_config_extra.yaml", localize_params=False
+    )
+    assert params.type == "transformer"
+    assert params.hidden_dim == 128
+    assert not hasattr(params, "totally_unused_flag")
+
+
 def test_load_params_from_yaml_with_localize_complex():
     """Test loading params with nested s3 paths that need localization."""
     # Create a config with multiple s3 paths at different nesting levels

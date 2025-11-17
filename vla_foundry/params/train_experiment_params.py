@@ -4,11 +4,10 @@ import tempfile
 from dataclasses import dataclass, field
 from typing import Type
 
-import draccus
 import yaml
 
 from vla_foundry.data.utils import epochs_to_samples
-from vla_foundry.file_utils import copy_to_temp_file, localize_paths, yaml_load
+from vla_foundry.file_utils import localize_paths, yaml_load
 from vla_foundry.params.base_params import BaseParams
 from vla_foundry.params.data_params import DataParams  # not from base_data_params so it loads registered params
 from vla_foundry.params.distributed_params import DistributedParams
@@ -133,14 +132,8 @@ def load_params_from_yaml(params_class: Type[BaseParams], path: str, localize_pa
             yaml.dump(yaml_dict, f)
         path = temp_file_path
 
-    # Need to copy to temp file because draccus doesn't support loading from s3.
-    if path.startswith("s3"):
-        with copy_to_temp_file(path) as temp_path:
-            # Load the params
-            params = draccus.load(params_class, temp_path)
-    else:
-        # Load the params from the local file so it can support !include statements.
-        params = draccus.load(params_class, path)
+    # Use from_file method which handles unknown key stripping
+    params = params_class.from_file(path)
     return params
 
 
