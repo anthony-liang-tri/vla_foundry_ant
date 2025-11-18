@@ -8,6 +8,7 @@ logging functionality to Weights & Biases (wandb).
 from typing import Any
 
 import numpy as np
+import plotly.graph_objects as go
 
 import wandb
 
@@ -81,29 +82,66 @@ class WandbBackend:
 
     def log_points3d(self, path: str, points: np.ndarray, **kwargs) -> None:
         """
-        Log 3D points to the WandB backend.
+        Log 3D points to the WandB backend using Plotly.
 
         Parameters:
         - path: The hierarchical path for the 3D points.
         - points: The 3D points as a NumPy array of shape (N, 3).
         """
-        wandb.log({path: wandb.Object3D(points)})
+        fig = go.Figure(
+            data=[go.Scatter3d(x=points[:, 0], y=points[:, 1], z=points[:, 2], mode="markers", marker=dict(size=5))]
+        )
+        # Set consistent axis ranges based on data bounds
+        padding = 0.1 * max(points.max() - points.min(), 1.0)
+        fig.update_layout(
+            title=f"3D Points: {path}",
+            scene=dict(
+                aspectmode="cube",
+                xaxis=dict(title="X", range=[points[:, 0].min() - padding, points[:, 0].max() + padding]),
+                yaxis=dict(title="Y", range=[points[:, 1].min() - padding, points[:, 1].max() + padding]),
+                zaxis=dict(title="Z", range=[points[:, 2].min() - padding, points[:, 2].max() + padding]),
+            ),
+        )
+        wandb.log({path: fig})
 
     def log_line_strips3d(self, path: str, line_strips: np.ndarray, **kwargs) -> None:
         """
-        Log 3D line strips to the WandB backend.
+        Log 3D line strips to the WandB backend using Plotly.
 
         Parameters:
         - path: The hierarchical path for the line strips.
         - line_strips: The 3D line strips as a NumPy array of shape (N, 3).
         """
-        wandb.log({path: wandb.Object3D(line_strips)})
+        fig = go.Figure(
+            data=[
+                go.Scatter3d(
+                    x=line_strips[:, 0],
+                    y=line_strips[:, 1],
+                    z=line_strips[:, 2],
+                    mode="lines+markers",
+                    line=dict(width=4),
+                    marker=dict(size=3),
+                )
+            ]
+        )
+        # Set consistent axis ranges based on data bounds
+        padding = 0.1 * max(line_strips.max() - line_strips.min(), 1.0)
+        fig.update_layout(
+            title=f"3D Line Strip: {path}",
+            scene=dict(
+                aspectmode="cube",
+                xaxis=dict(title="X", range=[line_strips[:, 0].min() - padding, line_strips[:, 0].max() + padding]),
+                yaxis=dict(title="Y", range=[line_strips[:, 1].min() - padding, line_strips[:, 1].max() + padding]),
+                zaxis=dict(title="Z", range=[line_strips[:, 2].min() - padding, line_strips[:, 2].max() + padding]),
+            ),
+        )
+        wandb.log({path: fig})
 
     def log_pose(
         self, path: str, translation: np.ndarray, rotation: np.ndarray, axis_length: float = 1.0, **kwargs
     ) -> None:
         """
-        Log a generic pose to the WandB backend.
+        Log a generic pose to the WandB backend using Plotly 3D visualization.
 
         Parameters
         ----------
@@ -116,12 +154,103 @@ class WandbBackend:
         axis_length : float, optional
             Length of the axes for visualization, by default 1.0.
         """
-        # WandB does not have a direct pose primitive, so log translation and quaternion as separate fields
+        # Ensure translation is a 1D numpy array of shape (3,)
+        translation = np.asarray(translation)
+        if translation.shape != (3,):
+            raise ValueError(f"Translation must be shape (3,), got {translation.shape} and type {type(translation)}")
+        rotation = np.asarray(rotation)
+
+        # Convert quaternion to rotation matrix for axis visualization
+        # Note: rotation is [x, y, z, w] format from visualizer facade
+        from scipy.spatial.transform import Rotation
+
+        rot_matrix = Rotation.from_quat(rotation).as_matrix()
+
+        # Create coordinate frame axes
+        origin = translation
+        x_axis = origin + rot_matrix[:, 0] * axis_length  # First column = X axis
+        y_axis = origin + rot_matrix[:, 1] * axis_length  # Second column = Y axis
+        z_axis = origin + rot_matrix[:, 2] * axis_length  # Third column = Z axis
+
+        # Create Plotly figure with coordinate frame axes (like Rerun)
+        fig = go.Figure()
+
+        # Add X axis (red) - from origin to X direction
+        fig.add_trace(
+            go.Scatter3d(
+                x=[origin[0], x_axis[0]],
+                y=[origin[1], x_axis[1]],
+                z=[origin[2], x_axis[2]],
+                mode="lines",
+                line=dict(color="red", width=8),
+                name="X",
+                showlegend=False,
+            )
+        )
+
+        # Add Y axis (green) - from origin to Y direction
+        fig.add_trace(
+            go.Scatter3d(
+                x=[origin[0], y_axis[0]],
+                y=[origin[1], y_axis[1]],
+                z=[origin[2], y_axis[2]],
+                mode="lines",
+                line=dict(color="green", width=8),
+                name="Y",
+                showlegend=False,
+            )
+        )
+
+        # Add Z axis (blue) - from origin to Z direction
+        fig.add_trace(
+            go.Scatter3d(
+                x=[origin[0], z_axis[0]],
+                y=[origin[1], z_axis[1]],
+                z=[origin[2], z_axis[2]],
+                mode="lines",
+                line=dict(color="blue", width=8),
+                name="Z",
+                showlegend=False,
+            )
+        )
+
+        # Add small sphere at origin
+        fig.add_trace(
+            go.Scatter3d(
+                x=[origin[0]],
+                y=[origin[1]],
+                z=[origin[2]],
+                mode="markers",
+                marker=dict(size=6, color="black"),
+                name="Origin",
+                showlegend=False,
+            )
+        )
+
+        fig.update_layout(
+            title=f"Pose: {path}",
+            scene=dict(
+                aspectmode="cube",
+                xaxis=dict(title="X", range=[origin[0] - axis_length * 1.5, origin[0] + axis_length * 1.5]),
+                yaxis=dict(title="Y", range=[origin[1] - axis_length * 1.5, origin[1] + axis_length * 1.5]),
+                zaxis=dict(title="Z", range=[origin[2] - axis_length * 1.5, origin[2] + axis_length * 1.5]),
+                camera=dict(eye=dict(x=1.5, y=1.5, z=1.5)),
+            ),
+            showlegend=False,
+            margin=dict(l=0, r=0, b=0, t=30),
+        )
+        wandb.log({path: fig})
+
+        # Also log individual scalars for table visibility
         wandb.log(
             {
-                f"{path}/translation": translation.tolist(),
-                f"{path}/quaternion": rotation.tolist(),
-                f"{path}/axis_length": axis_length,
+                f"{path}/translation_x": float(translation[0]),
+                f"{path}/translation_y": float(translation[1]),
+                f"{path}/translation_z": float(translation[2]),
+                f"{path}/quaternion_x": float(rotation[0]),
+                f"{path}/quaternion_y": float(rotation[1]),
+                f"{path}/quaternion_z": float(rotation[2]),
+                f"{path}/quaternion_w": float(rotation[3]),
             }
         )
 
