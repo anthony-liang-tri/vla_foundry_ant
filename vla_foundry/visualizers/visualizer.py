@@ -26,7 +26,7 @@ from robot_gym.multiarm_spaces import MultiarmObservation, PosesAndGrippers
 
 # Optional imports (gate behind backend)
 _HAS_RERUN = importlib.util.find_spec("rerun") is not None
-_HAS_WANDB = importlib.util.find_spec("wandb") is not None  # Add this line
+_HAS_WANDB = importlib.util.find_spec("wandb") is not None
 
 # Optional Drake import for RigidTransform convenience
 try:
@@ -128,7 +128,7 @@ def _get_backend(name: str) -> Optional[Backend]:
         except ImportError as e:
             print(f"[visualizer] Rerun backend import failed: {e}")
             return None
-    if name == "wandb":  # Add this block
+    if name == "wandb":
         if not _HAS_WANDB:
             print("[visualizer] WandB package not available; using disabled.")
             return None
