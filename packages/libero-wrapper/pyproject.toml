@@ -1,0 +1,31 @@
+[project]
+name = "libero-wrapper"
+version = "0.1.0"
+description = "Wrapper package to properly install LIBERO"
+requires-python = ">=3.10"
+dependencies = [
+    "hydra-core==1.2.0",
+    "easydict==1.9",
+    "robomimic==0.2.0",
+    "thop==0.1.1.post2209072238",
+    "robosuite==1.4.0",
+    "bddl==1.0.1",
+    "future==0.18.2",
+    "cloudpickle>=2.1.0",
+    "gym==0.25.2",
+    "imageio",
+]
+
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["libero_wrapper"]
+
+[tool.setuptools.package-data]
+libero_wrapper = ["_libero_install/**/*"]
+
+[project.scripts]
+install-libero = "libero_wrapper.installer:install_libero"
+
