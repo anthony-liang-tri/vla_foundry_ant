@@ -8,6 +8,7 @@ import draccus
 import pytest
 import yaml
 
+from vla_foundry.data.preprocessing.robotics.preprocess_params import MMTPreprocessParams, PreprocessParams
 from vla_foundry.params.model_params import ModelParams
 from vla_foundry.params.train_experiment_params import (
     TrainExperimentParams,
@@ -374,3 +375,105 @@ def test_load_params_from_yaml_with_localize_complex():
             os.unlink(yaml_path)
         if os.path.exists(base_dir):
             os.rmdir(base_dir)
+
+
+def test_preprocess_params_spartan_decoding():
+    """Test that source_type='spartan' is decoded correctly without recursion."""
+    config_dict = {
+        "source_type": "spartan",
+        "source_episodes": ["s3://test/episode1/", "s3://test/episode2/"],
+        "output_dir": "s3://test/output/",
+        "past_lowdim_steps": 1,
+        "future_lowdim_steps": 14,
+        "samples_per_shard": 100,
+    }
+
+    # This should not raise RecursionError or DecodingError
+    result = draccus.decode(PreprocessParams, config_dict)
+
+    assert isinstance(result, PreprocessParams)
+    assert not isinstance(result, MMTPreprocessParams)  # Should be base class
+    assert result.source_type == "spartan"
+    assert result.source_episodes == ["s3://test/episode1/", "s3://test/episode2/"]
+    assert result.output_dir == "s3://test/output/"
+
+
+def test_preprocess_params_mmt_npz_decoding():
+    """Test that source_type='mmt_npz' is decoded correctly as MMTPreprocessParams."""
+    config_dict = {
+        "source_type": "mmt_npz",
+        "source_episodes": ["s3://test/mmt_episode1/", "s3://test/mmt_episode2/"],
+        "output_dir": "s3://test/mmt_output/",
+        "mmt_lowdim_flatten_indices_selection": {"key1": [1, 2, 3]},
+    }
+
+    result = draccus.decode(PreprocessParams, config_dict)
+
+    assert isinstance(result, MMTPreprocessParams)  # Should be MMT subclass
+    assert result.source_type == "mmt_npz"
+    assert result.mmt_lowdim_flatten_indices_selection == {"key1": [1, 2, 3]}
+
+
+@pytest.mark.parametrize("source_type", ["spartan", "unknown_type", None])
+def test_preprocess_params_no_infinite_recursion(source_type):
+    """Test that complex configurations don't cause infinite recursion."""
+    config_dict = {
+        "source_episodes": [
+            "s3://robotics-manip-lbm/efs/data/tasks/BimanualPutRedBellPepperInBin/riverway/sim/bc/teleop/2025-01-02T10-49-28-05-00/diffusion_spartan/",
+            "s3://robotics-manip-lbm/efs/data/tasks/BimanualPutRedBellPepperInBin/riverway/sim/bc/teleop/2025-01-02T14-21-19-05-00/diffusion_spartan/",
+        ],
+        "output_dir": "s3://tri-ml-datasets/vla_foundry_scratch/tmp/test/BimanualPutRedBellPepperInBin",
+        "past_lowdim_steps": 1,
+        "future_lowdim_steps": 14,
+        "image_indices": [-1, 0],
+        "stride": 1,
+        "max_padding_left": 3,
+        "max_padding_right": 15,
+        "padding_strategy": "copy",
+        "filter_still_samples": False,
+        "still_threshold": 0.05,
+        "jpeg_quality": 95,
+        "max_episodes_to_process": 1,
+        "fail_on_nan": True,
+        "skip_git_tagging": True,
+        "resize_images_size": [384, 384],
+        "data_discard_keys": [
+            "robot__desired__wrench__right::panda",
+            "robot__desired__joint_torque__right::panda",
+            "robot__desired__joint_torque__left::panda",
+        ],
+        "camera_names": ["scene_right_0", "scene_left_0", "wrist_left_plus", "wrist_right_minus"],
+        "language_annotations_path": "vla_foundry/config_presets/data/lbm/lbm_language_annotations.yaml",
+        "action_fields_config_path": "vla_foundry/config_presets/data/lbm/lbm_action_fields.yaml",
+        "samples_per_shard": 100,
+    }
+
+    if source_type is not None:
+        config_dict["source_type"] = source_type
+
+    # This should not raise RecursionError or DecodingError
+    result = draccus.decode(PreprocessParams, config_dict)
+
+    assert isinstance(result, PreprocessParams)
+    if source_type == "mmt_npz":
+        assert isinstance(result, MMTPreprocessParams)
+    else:
+        assert not isinstance(result, MMTPreprocessParams)  # Should be base class
+
+    assert len(result.source_episodes) == 2
+    assert result.resize_images_size == [384, 384]
+
+
+def test_preprocess_params_unknown_source_type():
+    """Test that unknown source_type falls back to base PreprocessParams."""
+    config_dict = {
+        "source_type": "unknown_type",
+        "source_episodes": ["s3://test/episode1/"],
+        "output_dir": "s3://test/output/",
+    }
+
+    result = draccus.decode(PreprocessParams, config_dict)
+
+    assert isinstance(result, PreprocessParams)
+    assert not isinstance(result, MMTPreprocessParams)  # Should be base class
+    assert result.source_type == "unknown_type"
