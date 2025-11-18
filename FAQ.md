@@ -2,6 +2,8 @@
 
 Common errors:
 - [OSError: You are trying to access a gated repo](#failing-pytest-tests-due-to-Hugging-Face-errors)
+- OSError: Too many open files
+    - Run `$ ulimit -n 65535  # or at least 4096`
 
 ## Failing pytest tests due to Hugging Face errors
 This error usually shows up as something like 
@@ -24,3 +26,26 @@ This is likely due to not having access to the [PaliGemma](google/paligemma-3b-p
 <picture>
   <img alt="Settings HF_TOKEN screenshot" src="assets/hf_key_screenshot.png" width="800">
 </picture>
+
+## Setting up AWS SSO
+
+Add the following to `.aws/config`, and run `$ aws sso login --profile {sagemaker|manip-cluster} --use-device-code`. If you want to avoid setting an environt variable of `AWS_PROFILE` every time you run, you can set it in `.bashrc` or `.zshrc`.
+
+```
+[sso-session sso]
+sso_region = us-east-1
+sso_start_url = https://tri-sso.awsapps.com/start/#
+sso_registration_scopes = sso:account:access
+output = json
+region = us-east-1
+
+[profile manip-cluster]
+sso_session = sso
+sso_account_id = 682769330988
+sso_role_name = Robotics-LBM-PowerUserAccess
+
+[profile sagemaker]
+sso_session = sso
+sso_account_id = 124224456861
+sso_role_name = Robotics-LBM-PowerUserAccess
+```
