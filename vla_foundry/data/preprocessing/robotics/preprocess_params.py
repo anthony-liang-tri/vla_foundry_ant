@@ -131,7 +131,9 @@ def _decode_preprocess_params(raw):
     Different from draccus ChoiceRegistry, this allows fallback to default
     class, i.e., PreprocessParams, if no type is specified.
     """
+    from draccus.parsers.decoding import decode_dataclass
+
     if raw.get("source_type") == "mmt_npz":
-        return draccus.decode(MMTPreprocessParams, raw)
-    # Fallback base behavior
-    return draccus.decode(PreprocessParams, raw)
+        return decode_dataclass(MMTPreprocessParams, raw, ())
+    # Fallback base behavior - use decode_dataclass directly to avoid recursion
+    return decode_dataclass(PreprocessParams, raw, ())
