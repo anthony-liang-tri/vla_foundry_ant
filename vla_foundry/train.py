@@ -8,6 +8,7 @@ import torch.distributed as dist
 import torch.nn as nn
 import torch.optim as optim
 from torch.distributed.distributed_c10d import ReduceOp
+from tqdm import tqdm
 
 from vla_foundry.distributed import is_master
 from vla_foundry.meters import Metrics
@@ -71,12 +72,17 @@ def train_one_checkpoint(
     end = time.time()
     data_iterator = iter(dataloader.dataloader)
 
+    # Progress bar setup - show step progress with proper starting value
+    total_steps = cfg.total_train_samples // cfg.hparams.global_batch_size
+    progress_bar = tqdm(
+        initial=step, total=total_steps, desc=f"Checkpoint {checkpoint_num}", disable=not is_master(cfg), unit="step"
+    )
+
     # Open-ended loop; we break on budget or data exhaustion.
     for i in itertools.count():
         scheduler(step)
 
         # Hard-stop when we reach the sample budget translated into steps.
-        total_steps = cfg.total_train_samples // cfg.hparams.global_batch_size
         if step >= total_steps:
             logging.warning(f"step: {step} has reached/exceeded total_steps: {total_steps}. ending training.")
             break
@@ -192,5 +198,13 @@ def train_one_checkpoint(
                     lr=optimizer.param_groups[0]["lr"],
                     checkpoint_num=checkpoint_num,
                 )
+
+            # Update progress bar
+            progress_bar.update(1)
+            progress_bar.set_postfix(
+                {"loss": f"{global_loss_tensor.item():.4f}", "lr": f"{optimizer.param_groups[0]['lr']:.6f}"}
+            )
+
+    progress_bar.close()
 
     return True, step

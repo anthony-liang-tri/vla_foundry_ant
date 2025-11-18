@@ -12,5 +12,9 @@ def get_eval_runner(eval_params):
         from vla_foundry.eval.runners.lbm_eval import LBMEval
 
         return LBMEval(eval_params)
+    elif eval_params.env == "robosuite":
+        from vla_foundry.eval.runners.robosuite import RoboSuiteEvalRunner
+
+        return RoboSuiteEvalRunner(eval_params)
     else:
         raise ValueError(f"Invalid environment name: {eval_params.env}")

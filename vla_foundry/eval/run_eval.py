@@ -24,7 +24,7 @@ def parse_args():
         ),
     )
     parser.add_argument("--action_window", type=int, default=8, help="Number of actions to take per generation step")
-    parser.add_argument("--image_names", type=str, nargs="+", help="Auto-detected if not specified")
+    parser.add_argument("--image_names", type=str, nargs="+", default="")
     return parser.parse_args()
 
 
@@ -53,7 +53,7 @@ def run_eval(args):
             actions = eval_runner.denormalize_actions(actions)
 
             # For each prediction step, we take action_window action steps.
-            for action_i in range(args.num_past_actions, args.num_past_actions + args.action_window):
+            for action_i in range(eval_runner.num_past_actions, eval_runner.num_past_actions + args.action_window):
                 obs = eval_runner.env_step(actions[action_i])
                 obs = eval_runner.get_obs_tensor(obs)
 

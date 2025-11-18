@@ -271,8 +271,8 @@ class PolicyDataAdapter:
 
     def get_model_input(self, observation) -> Dict[str, torch.Tensor]:
         logging.debug("Getting model input")
-        processor_input = self.get_processor_input()
         self.update_reference(observation)
+        processor_input = self.get_processor_input()
         processed = self.robotics_processor.process_inputs(processor_input, image_names=self.image_names)
         processed = self.robotics_processor.add_action_and_proprioception_fields(
             processed,
@@ -284,7 +284,6 @@ class PolicyDataAdapter:
 
     def update_action(self, observation, model_output: torch.Tensor):
         logging.debug("Updating action buffer with fresh predictions")
-        self.update_reference(observation)
         model_output = model_output.cpu()
         action_list = self.action_mapping.from_action_model(
             model_output,

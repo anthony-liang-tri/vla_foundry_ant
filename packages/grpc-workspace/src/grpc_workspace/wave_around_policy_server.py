@@ -63,10 +63,10 @@ class WaveAround(Policy):
         self._counter += 1
 
         # Log the entire MultiarmObservation to the visualizer
-        vz.log_multiarm_observation("WaveAround/observation", observation)
+        vz.log_robot_gym_multiarm_observation("WaveAround/observation", observation)
 
         # Log the arm poses to the visualizer
-        vz.log_arm_poses({"WaveAround": PosesAndGrippers(poses=poses, grippers=grippers)})
+        vz.log_robot_gym_poses_and_grippers("WaveAround/poses", PosesAndGrippers(poses=poses, grippers=grippers))
 
         return PosesAndGrippers(poses=poses, grippers=grippers)
 

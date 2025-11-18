@@ -10,7 +10,7 @@ from typing import Any, Dict, Optional, Tuple, Union
 import draccus
 import torch
 
-from vla_foundry.data.robotics.utils import crop_sequence
+from vla_foundry.data.robotics.utils import crop_sequence, merge_statistics
 from vla_foundry.file_utils import json_load
 from vla_foundry.params.robotics.normalization_params import FieldNormalizationParams, NormalizationParams
 
@@ -60,10 +60,9 @@ class RoboticsNormalizer:
 
         if isinstance(self.stats, list):
             if len(self.stats) > 1:
-                # TODO: Jean handle statistics merging
-                raise ValueError("Merging statistics is not supported yet")
-                # self.stats = merge_statistics(self.stats)
-            self.stats = self.stats[0]
+                self.stats = merge_statistics(self.stats)
+            else:
+                self.stats = self.stats[0]
 
         # Parse configuration from dataclass
         self.method = self.normalization_params.method
@@ -77,7 +76,7 @@ class RoboticsNormalizer:
     def save(self, experiment_path: str):
         with open(os.path.join(experiment_path, "config_normalizer.yaml"), "w") as f:
             draccus.dump(self.normalization_params, f)
-        with open(os.path.join(experiment_path, "stats_normalizer.json"), "w") as f:
+        with open(os.path.join(experiment_path, "stats.json"), "w") as f:
             json.dump(self.stats, f)
 
     @classmethod
@@ -88,7 +87,7 @@ class RoboticsNormalizer:
     def from_pretrained(cls, config_path: str):
         return cls(
             NormalizationParams.from_file(os.path.join(config_path, "config_normalizer.yaml")),
-            statistics_path=os.path.join(config_path, "stats_normalizer.json"),
+            statistics_path=os.path.join(config_path, "stats.json"),
         )
 
     def get_field_dimension(self, field_name: str) -> int:

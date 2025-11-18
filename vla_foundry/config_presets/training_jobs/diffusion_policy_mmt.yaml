@@ -12,26 +12,16 @@ model:
     <<: !include ../models/transformer_100m.yaml
     is_causal: True
 data:
-  <<: !include ../data/lbm/lbm_data_params.yaml
+  <<: !include ../data/mmt/mmt_data_params.yaml
   <<: !include ../data/diffusion_policy.yaml
   dataset_manifest: 
-    - s3://tri-ml-datasets-uw2/vla_foundry_datasets/stage3_singletask_sim/BimanualPutRedBellPepperInBin/shards/manifest.jsonl
+    - s3://tri-mmt-data/lpp_data/vla_foundry/20251028_paper_towel/shards/manifest.jsonl
   dataset_statistics: 
-    - s3://tri-ml-datasets-uw2/vla_foundry_datasets/stage3_singletask_sim/BimanualPutRedBellPepperInBin/shards/stats.json
+    - s3://tri-mmt-data/lpp_data/vla_foundry/20251028_paper_towel/shards/stats.json
   dataset_modality: 
     - robotics
   dataset_weighting: 
     - 1.0
-  camera_names:
-    - scene_right_0
-    - scene_left_0
-    - wrist_left_minus
-    - wrist_left_plus
-    - wrist_right_minus
-    - wrist_right_plus
-  image_indices:
-    - -1
-    - 0
 distributed:
   fsdp: True
 hparams:

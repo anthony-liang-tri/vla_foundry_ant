@@ -6,14 +6,12 @@ logging functionality to rerun.io.
 """
 
 import subprocess
-from typing import Dict, List
+from typing import Any
 
 import numpy as np
 import rerun as rr
-from pydrake.math import RigidTransform
 from rerun import Transform3D
 from rerun.datatypes import Quaternion
-from robot_gym.multiarm_spaces import MultiarmObservation, PosesAndGrippers  # Import from robot_gym.multiarm_spaces
 
 
 class RerunBackend:
@@ -61,25 +59,26 @@ class RerunBackend:
         except subprocess.CalledProcessError as e:
             print(f"[rerun_backend] Failed to disable analytics: {e.stderr or e}")
 
-    def log_image(self, path: str, image: np.ndarray, **kwargs) -> None:
+    def log_images(self, path: str, images: Any, **kwargs) -> None:
         """
-        Log an image to the Rerun backend.
+        Log images to the rerun backend. Supports both single images and dictionaries of images.
 
-        Parameters:
-        - path: The hierarchical path for the image.
-        - image: The image data as a NumPy array.
+        Parameters
+        ----------
+        path : str
+            Base path in the visualization hierarchy.
+        images : Any
+            Either a single NumPy array representing an image or a dictionary of images.
         """
-        rr.log(path, rr.Image(image))
-
-    def log_images(self, path: str, images: Dict[str, np.ndarray], **kwargs) -> None:
-        """
-        Log multiple images to the Rerun backend.
-
-        Parameters:
-        - images: A dictionary where keys are image paths and values are NumPy arrays representing the images.
-        """
-        for path, image in images.items():
-            self.log_image(path, image, **kwargs)
+        if isinstance(images, np.ndarray):
+            # Single image
+            rr.log(path, rr.Image(images))  # Updated to use rr.Image for logging
+        elif isinstance(images, dict):
+            # Dictionary of images
+            for sub_path, image in images.items():
+                rr.log(f"{path}/{sub_path}", rr.Image(image))  # Updated to use rr.Image for logging
+        else:
+            raise TypeError("Unsupported type for 'images'. Must be a NumPy array or a dictionary of NumPy arrays.")
 
     def log_scalar(self, path: str, value: float, **kwargs) -> None:
         """
@@ -112,119 +111,44 @@ class RerunBackend:
         rr.log(path, rr.LineStrips3D([trajectory]))
         rr.log(f"{path}/waypoints", rr.Points3D(trajectory))
 
-    def log_rigid_transform(self, path: str, transform: RigidTransform, axis_length: float = 1.0, **kwargs) -> None:
+    def log_pose(
+        self, path: str, translation: np.ndarray, rotation: np.ndarray, axis_length: float = 1.0, **kwargs
+    ) -> None:
         """
-        Log a rigid transform to the Rerun backend.
+        Log a generic pose to the Rerun backend.
 
         Parameters
         ----------
         path : str
             Path in the visualization hierarchy.
-        transform : RigidTransform
-            Rigid transform object.
+        translation : np.ndarray
+            Translation vector of shape (3,).
+        rotation : np.ndarray
+            Quaternion [x, y, z, w] of shape (4,).
         axis_length : float, optional
             Length of the axes for visualization, by default 1.0.
         """
-        translation = transform.translation()
-        rotation = transform.rotation().ToQuaternion()
-        quaternion = np.roll([rotation.w(), rotation.x(), rotation.y(), rotation.z()], -1)  # Drake to Rerun order
         rr.log(
             path,
             Transform3D(
                 translation=translation,
-                rotation=Quaternion(xyzw=quaternion),
+                rotation=Quaternion(xyzw=rotation),
                 axis_length=axis_length,
             ),
         )
-
-    def log_arm_poses(self, arm_poses: Dict[str, PosesAndGrippers], **kwargs) -> None:
-        """
-        Log arm poses to the Rerun backend.
-
-        Parameters
-        ----------
-        arm_poses : Dict[str, PosesAndGrippers]
-            A dictionary containing arm pose data.
-        """
-        for client_id, poses_and_grippers in arm_poses.items():
-            if not poses_and_grippers or not hasattr(poses_and_grippers, "poses"):
-                continue
-
-            for model_name, transform in poses_and_grippers.poses.items():
-                rotation = transform.rotation().ToQuaternion()
-                rr.log(
-                    f"clients/{client_id}/models/{model_name}/pose",
-                    Transform3D(
-                        translation=transform.translation(),
-                        rotation=Quaternion(xyzw=[rotation.x(), rotation.y(), rotation.z(), rotation.w()]),
-                        axis_length=0.25,
-                    ),
-                )
-
-            if hasattr(poses_and_grippers, "grippers") and poses_and_grippers.grippers:
-                for gripper_name, value in poses_and_grippers.grippers.items():
-                    rr.log(f"clients/{client_id}/grippers/{gripper_name}/grip", rr.Scalars(value))
-
-    def log_action_predictions(self, predictions: List[PosesAndGrippers], **kwargs) -> None:
-        """
-        Log action predictions to the Rerun backend.
-
-        Parameters
-        ----------
-        predictions : List[PosesAndGrippers]
-            A list of objects containing action prediction data.
-        """
-        traj = {}
-        for step in predictions:
-            poses = getattr(step, "poses", {})
-            for model_name, transform in poses.items():
-                if model_name not in traj:
-                    traj[model_name] = []
-                traj[model_name].append(transform.translation())
-
-        for model_name, points in traj.items():
-            if len(points) >= 2:
-                rr.log(f"predictions/{model_name}/trajectory", rr.LineStrips3D([np.array(points)]))
-                rr.log(f"predictions/{model_name}/waypoints", rr.Points3D(np.array(points)))
-            elif points:
-                rr.log(f"predictions/{model_name}/waypoints", rr.Points3D(np.array(points)))
 
     def log_line_strips3d(self, path: str, line_strips: np.ndarray, **kwargs) -> None:
         """
         Log 3D line strips to the Rerun backend.
 
-        Parameters:
-        - path: The hierarchical path for the line strips.
-        - line_strips: The 3D line strips as a NumPy array of shape (N, 3).
-        """
-        rr.log(path, rr.LineStrips3D([line_strips]))
-
-    def log_multiarm_observation(self, path: str, observation: MultiarmObservation, **kwargs) -> None:
-        """
-        Log a MultiarmObservation to the Rerun backend.
-
         Parameters
         ----------
         path : str
-            Base path in the visualization hierarchy.
-        observation : MultiarmObservation
-            The MultiarmObservation object to log.
+            The hierarchical path for the line strips.
+        line_strips : np.ndarray
+            The 3D line strips as a NumPy array of shape (N, 3).
         """
-        # Log robot poses
-        self.log_arm_poses({f"{path}/robot": observation.robot.actual}, **kwargs)
-
-        # Log camera images
-        for camera_id, image_set in observation.visuo.items():
-            if image_set.rgb:
-                self.log_image(f"{path}/cameras/{camera_id}/rgb", image_set.rgb.array, **kwargs)
-            if image_set.depth:
-                self.log_image(f"{path}/cameras/{camera_id}/depth", image_set.depth.array, **kwargs)
-            if image_set.label:
-                self.log_image(f"{path}/cameras/{camera_id}/label", image_set.label.array, **kwargs)
-
-        # Log language instruction if available
-        if observation.language_instruction:
-            self.log_scalar(f"{path}/language_instruction", observation.language_instruction, **kwargs)
+        rr.log(path, rr.LineStrips3D([line_strips]))
 
     def log_text(self, path: str, text: str, **kwargs) -> None:
         """

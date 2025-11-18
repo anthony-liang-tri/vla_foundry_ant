@@ -26,10 +26,10 @@ for step in range(10):
     # 1a. Log a random image
     print("Logging a random image...")
     image = np.random.randint(0, 256, (255, 255, 3), dtype=np.uint8)  # Random image
-    vz.log_image("single_image", image)
+    vz.log_images("single_image", image)  # Updated to use log_images for single image
 
     # 1b. Log a dict of images
-    print("Logging a random image...")
+    print("Logging a dictionary of images...")
     image_dict = {}
     for ii in range(5):
         image = np.random.randint(0, 256, (255, 255, 3), dtype=np.uint8)  # Random image
@@ -58,17 +58,33 @@ for step in range(10):
     )
     vz.log_rigid_transform("robot/pose", pose, axis_length=0.5)
 
-    # 6. Log robot arm poses with random configurations
-    print("Logging random robot arm poses...")
-    arm_poses = {
-        "client": PosesAndGrippers(
-            poses={
-                "arm_1": RigidTransform(RollPitchYaw(0, 0, 0), np.random.uniform(-1, 1, 3)),
-            },
-            grippers={"gripper_1": random.uniform(0, 1)},
-        )
-    }
-    vz.log_arm_poses(arm_poses)
+    # 5b. Log generic poses with different formats
+    print("Logging generic poses with different formats...")
+
+    # Example 1: Using quaternion [x, y, z, w]
+    translation = np.random.uniform(-2, 2, 3)
+    quaternion = np.array([0.0, 0.0, 0.0, 1.0])  # Identity quaternion
+    vz.log_pose("generic_poses/quaternion", translation, quaternion)
+
+    # Example 2: Using rotation matrix
+    rotation_matrix = np.eye(3)  # Identity rotation
+    translation = np.random.uniform(-2, 2, 3)
+    vz.log_pose("generic_poses/rotation_matrix", translation, rotation_matrix)
+
+    # Example 3: Using 4x4 transformation matrix
+    transform_matrix = np.eye(4)
+    transform_matrix[:3, 3] = np.random.uniform(-2, 2, 3)  # Random translation
+    vz.log_pose("generic_poses/transform_matrix", np.zeros(3), transform_matrix)  # translation ignored
+
+    # 6. Log robot poses and grippers with random configurations
+    print("Logging random robot poses and grippers...")
+    poses_and_grippers = PosesAndGrippers(
+        poses={
+            "arm_1": RigidTransform(RollPitchYaw(0, 0, 0), np.random.uniform(-1, 1, 3)),
+        },
+        grippers={"gripper_1": random.uniform(0, 1)},
+    )
+    vz.log_robot_gym_poses_and_grippers("robot_gym/poses_and_grippers", poses_and_grippers)
 
     # 7. Log model action predictions with random data
     print("Logging random model action predictions...")
@@ -81,7 +97,7 @@ for step in range(10):
         )
         for _ in range(2)
     ]
-    vz.log_action_predictions(action_predictions)
+    vz.log_robot_gym_action_predictions("robot_gym/action_predictions", action_predictions)
 
     # Simulate time delay between steps
     time.sleep(1)

@@ -1,11 +1,13 @@
 import logging
+import os
+import tempfile
 from dataclasses import dataclass, field
 from typing import Type
 
-import draccus
+import yaml
 
 from vla_foundry.data.utils import epochs_to_samples
-from vla_foundry.file_utils import copy_to_temp_file
+from vla_foundry.file_utils import localize_paths, yaml_load
 from vla_foundry.params.base_params import BaseParams
 from vla_foundry.params.data_params import DataParams  # not from base_data_params so it loads registered params
 from vla_foundry.params.distributed_params import DistributedParams
@@ -29,6 +31,7 @@ class TrainExperimentParams(BaseParams):
     wandb_project_name: str = field(default="vla_foundry")
     wandb_tags: list[str] = field(default_factory=list)
     log_every_n_steps: int = field(default=20)
+    log_level: str = field(default="INFO")
     # Optional path to S3 to which the experiment directory is synced.
     remote_sync: str = field(default=None)
 
@@ -103,7 +106,7 @@ class TrainExperimentParams(BaseParams):
         #     raise ValueError(f"--fsdp can only be specified in distributed mode.")
 
 
-def load_params_from_yaml(params_class: Type[BaseParams], path: str) -> BaseParams:
+def load_params_from_yaml(params_class: Type[BaseParams], path: str, localize_params: bool = False) -> BaseParams:
     """
     Load a draccus params object from a yaml file with support for s3 paths.
 
@@ -115,20 +118,28 @@ def load_params_from_yaml(params_class: Type[BaseParams], path: str) -> BasePara
     Args:
         params_class: dataclass type to load.
         path: local filesystem path or S3 URI to the YAML file.
+        localize_params: if True, first localize all paths in the config before loading.
     """
-    # Need to copy to temp file because draccus doesn't support loading from s3.
-    if path.startswith("s3"):
-        with copy_to_temp_file(path) as temp_path:
-            # Load the params
-            params = draccus.load(params_class, temp_path)
-    else:
-        # Load the params from the local file so it can support !include statements.
-        params = draccus.load(params_class, path)
+    if localize_params:
+        config_dict = yaml_load(path)
+        base_path, _ = os.path.split(path)
+        yaml_dict = localize_paths(config_dict, base_path)
+
+        # Create a temporary file
+        fd, temp_file_path = tempfile.mkstemp(suffix=".yaml", prefix="localized_config_")
+        os.close(fd)  # Close the file descriptor
+        with open(temp_file_path, "w") as f:
+            yaml.dump(yaml_dict, f)
+        path = temp_file_path
+
+    # Use from_file method which handles unknown key stripping
+    params = params_class.from_file(path)
     return params
 
 
-def load_experiment_params_from_yaml(path: str) -> TrainExperimentParams:
+def load_experiment_params_from_yaml(path: str, localize_params: bool = False) -> TrainExperimentParams:
     """
     Convenience wrapper to load `TrainExperimentParams` from YAML.
+    If `localize_params` is True, first localize all paths in the config before loading.
     """
-    return load_params_from_yaml(TrainExperimentParams, path)
+    return load_params_from_yaml(TrainExperimentParams, path, localize_params)

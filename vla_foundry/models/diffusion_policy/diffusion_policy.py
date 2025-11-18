@@ -29,6 +29,7 @@ class DiffusionPolicy(BaseModel):
         self.action_encode = torch.nn.Linear(model_params.action_dim, transformer.hidden_dim)
         self.condition_encode = torch.nn.Linear(clip.get_projection_dim(), transformer.hidden_dim)
         self.input_noise_std = model_params.input_noise_std
+        self.disable_text = model_params.disable_text
         self.initialize_weights()
 
     def initialize_weights(self):
@@ -40,7 +41,9 @@ class DiffusionPolicy(BaseModel):
         # Initialize output layer weights with Xavier initialization
         torch.nn.init.xavier_uniform_(self.output_layer.weight)
 
-    def forward(self, input_ids, pixel_values, attention_mask, actions, noise, past_mask, future_mask):
+    def forward(
+        self, input_ids, pixel_values, attention_mask, attention_mask_images, actions, noise, past_mask, future_mask
+    ):
         # Sample random timesteps
         timesteps = torch.randint(0, self.scheduler.num_timesteps, (actions.shape[0],)).to(actions.device)  # [bsz]
 
@@ -53,7 +56,12 @@ class DiffusionPolicy(BaseModel):
 
         # Create condition embeddings
         ## Image and text embeddings
-        out_clip = self.clip(input_ids=input_ids, pixel_values=pixel_values, attention_mask=attention_mask)
+        out_clip = self.clip(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            attention_mask=attention_mask,
+            attention_mask_images=attention_mask_images,
+        )
         text_embeddings = out_clip.text_embeds
         image_embeddings = out_clip.image_embeds
         ## Time embeddings (B, 1, D)
@@ -61,7 +69,7 @@ class DiffusionPolicy(BaseModel):
         conditional_embeddings = [time_embeddings]
 
         # Create conditional embeddings sequence
-        if text_embeddings is not None:
+        if not self.disable_text and text_embeddings is not None:
             # (B, D) -> (B, 1, D)
             text_embeddings = text_embeddings.unsqueeze(1)
             conditional_embeddings.append(text_embeddings)
@@ -99,6 +107,7 @@ class DiffusionPolicy(BaseModel):
         pixel_values,
         actions,
         attention_mask=None,
+        attention_mask_images=None,
         num_inference_steps=None,
         past_mask=None,
     ):
@@ -110,6 +119,7 @@ class DiffusionPolicy(BaseModel):
             pixel_values: Input images/pixel values
             actions: Input actions (past timesteps are given in the same sequence, others can be noise)
             attention_mask: Optional attention mask for text
+            attention_mask_images: Optional attention mask for camera images
             num_inference_steps: Number of denoising steps (defaults to scheduler.num_timesteps)
             past_mask: Optional mask indicating which actions are from past (1) vs future (0)
 
@@ -123,7 +133,12 @@ class DiffusionPolicy(BaseModel):
         device = actions.device
 
         # Create condition embeddings (same as in forward)
-        out_clip = self.clip(input_ids=input_ids, pixel_values=pixel_values, attention_mask=attention_mask)
+        out_clip = self.clip(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            attention_mask=attention_mask,
+            attention_mask_images=attention_mask_images,
+        )
         text_embeddings = out_clip.text_embeds
         image_embeddings = out_clip.image_embeds
 
@@ -140,7 +155,7 @@ class DiffusionPolicy(BaseModel):
 
         # Iterative denoising - similar to flow VLM approach
         step_size = max(1, self.scheduler.num_timesteps // num_inference_steps)
-        if text_embeddings is not None:
+        if not self.disable_text and text_embeddings is not None:
             # (B, D) -> (B, 1, D)
             text_embeddings = text_embeddings.unsqueeze(1)
         if image_embeddings is not None and image_embeddings.ndim == 2:
@@ -152,7 +167,7 @@ class DiffusionPolicy(BaseModel):
             time_embeddings = self.time_encoding(timesteps).unsqueeze(1)
             conditional_embeddings = [time_embeddings]
 
-            if text_embeddings is not None:
+            if not self.disable_text and text_embeddings is not None:
                 conditional_embeddings.append(text_embeddings)
             if image_embeddings is not None:
                 conditional_embeddings.append(image_embeddings)

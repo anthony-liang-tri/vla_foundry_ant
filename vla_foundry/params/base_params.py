@@ -1,10 +1,24 @@
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, fields
+from typing import Any, Type
+from typing import Sequence as SequenceType
 
 import draccus
+from draccus.parsers.decoding import (
+    decode as draccus_decode,
+)
+from draccus.parsers.decoding import (
+    decode_dataclass,
+)
 
 from vla_foundry.file_utils import copy_to_temp_file
+from vla_foundry.params.params_utils import (
+    _decode_choice_base_params,
+    _resolve_dataclass,
+    _strip_unknown_keys,
+    is_choice_type,
+)
 
 
 @dataclass(frozen=True)
@@ -49,42 +63,37 @@ class BaseParams:
 
     @classmethod
     def from_file(cls, file_path):
+        # Load the YAML using draccus's load_config (supports !include)
+        from draccus.cfgparsing import load_config
+
         if file_path.startswith("s3"):
-            with copy_to_temp_file(file_path) as temp_path:
-                cfg_new = draccus.load(cls, temp_path)
+            with copy_to_temp_file(file_path) as temp_path, open(temp_path, "r") as f:
+                data_dict = load_config(f, file=temp_path)
         else:
-            cfg_new = draccus.load(cls, file_path)
-        return cfg_new
+            with open(file_path, "r") as f:
+                data_dict = load_config(f, file=file_path)
+
+        # Use from_dict which handles unknown key stripping
+        return cls.from_dict(data_dict)
 
     @classmethod
     def from_dict(cls, dict_data):
-        # Recursively handle nested BaseParams objects
-        processed_dict = {}
-
-        for field_info in fields(cls):
-            field_name = field_info.name
-            field_type = field_info.type
-
-            if field_name in dict_data:
-                field_value = dict_data[field_name]
-
-                if isinstance(field_type, BaseParams) and isinstance(field_value, dict):
-                    # Recursively process nested BaseParams
-                    processed_dict[field_name] = field_type.from_dict(field_value)
-                else:
-                    # Use the value as-is
-                    processed_dict[field_name] = field_value
-            else:
-                # Field not in dict_data, will use default
-                pass
-
-        # Include any extra fields that aren't in the class definition
-        for key, value in dict_data.items():
-            if key not in processed_dict:
-                processed_dict[key] = value
-
-        cfg_new = draccus.decode(cls, processed_dict)
+        # Strip unknown keys before decoding
+        cleaned_dict = _strip_unknown_keys(dict_data, cls, ())
+        cfg_new = draccus.decode(cls, cleaned_dict)
         return cfg_new
+
+
+# Register a special decoder for BaseParams that handles unknown keys without failing
+@draccus_decode.register(BaseParams, include_subclasses=False)
+def _decode_base_params(cls: Type[BaseParams], raw_value: Any, path: SequenceType[str]):
+    target_cls = _resolve_dataclass(cls)
+    if target_cls is not None and is_choice_type(target_cls):
+        return _decode_choice_base_params(cls, raw_value, path)
+
+    if isinstance(raw_value, dict):
+        raw_value = _strip_unknown_keys(raw_value, cls, path)
+    return decode_dataclass(cls, raw_value, path)
 
 
 # Make classes that define to_dict method JSON-serializable

@@ -37,6 +37,32 @@ def dataset_path():
     return "tests/test_assets/small_lbm_dataset"
 
 
+def _prepare_normalization_config(config_dict):
+    """Ensure normalization config mirrors runtime defaults with explicit fields."""
+    norm_cfg = config_dict.setdefault("normalization", {})
+    method = norm_cfg.get("method", "std")
+    scope = norm_cfg.get("scope", "global")
+    epsilon = norm_cfg.get("epsilon", 1e-8)
+    enabled = norm_cfg.get("enabled", True)
+
+    fields = list(dict.fromkeys(config_dict.get("proprioception_fields", []) + config_dict.get("action_fields", [])))
+    norm_cfg["include_fields"] = fields
+    norm_cfg["lowdim_past_timesteps"] = norm_cfg.get("lowdim_past_timesteps", 1)
+    norm_cfg["lowdim_future_timesteps"] = norm_cfg.get("lowdim_future_timesteps", 14)
+
+    field_configs = norm_cfg.setdefault("field_configs", {})
+    for field_name in fields:
+        field_configs.setdefault(
+            field_name,
+            {
+                "method": method,
+                "scope": scope,
+                "epsilon": epsilon,
+                "enabled": enabled,
+            },
+        )
+
+
 @pytest.fixture
 def mock_config():
     """Create a mock configuration for testing based on lbm_data_params.yaml."""
@@ -50,6 +76,7 @@ def mock_config():
         config_path = "vla_foundry/config_presets/data/lbm/lbm_data_params.yaml"
         with open(config_path, "r") as f:
             config_dict = yaml.safe_load(f)
+        config_dict.pop("type", None)
 
         # Override test-specific settings
         config_dict.update(
@@ -68,6 +95,7 @@ def mock_config():
 
         # Override normalization settings
         config_dict["normalization"]["enabled"] = False  # Default to disabled for most tests
+        _prepare_normalization_config(config_dict)
 
         # Create RoboticsDataParams from the modified config
         data_params = RoboticsDataParams.from_dict(config_dict)
@@ -84,6 +112,7 @@ def mock_config():
 
         hparams = SimpleNamespace()
         hparams.global_batch_size = batch_size
+        hparams.seed = config_dict["seed"]
 
         # Create main config
         cfg = SimpleNamespace()
@@ -91,6 +120,9 @@ def mock_config():
         cfg.data = data_params
         cfg.vit = vit
         cfg.hparams = hparams
+        cfg.model = SimpleNamespace()
+
+        cfg.data.init_shared_attributes(cfg)
         return cfg
 
     return _create_config
@@ -498,6 +530,7 @@ def test_normalization(dataset_path, manifest_data, mock_config):
         config_path = "vla_foundry/config_presets/data/lbm/lbm_data_params.yaml"
         with open(config_path, "r") as f:
             config_dict = yaml.safe_load(f)
+            config_dict.pop("type", None)
 
         # Override test-specific settings for performance
         config_dict.update(
@@ -516,9 +549,7 @@ def test_normalization(dataset_path, manifest_data, mock_config):
 
         # Set normalization
         config_dict["normalization"]["enabled"] = enabled
-        config_dict["normalization"]["include_fields"] = (
-            config_dict["proprioception_fields"] + config_dict["action_fields"]
-        )
+        _prepare_normalization_config(config_dict)
 
         # Create RoboticsDataParams from the modified config
         data_params = RoboticsDataParams.from_dict(config_dict)
@@ -669,6 +700,7 @@ def test_normalization_consistency(dataset_path, manifest_data, mock_config):
 
     # Override normalization settings
     config_dict["normalization"]["enabled"] = True
+    _prepare_normalization_config(config_dict)
 
     # Create RoboticsDataParams from the modified config
     data_params = RoboticsDataParams.from_dict(config_dict)
@@ -754,6 +786,7 @@ def test_compare_dataloader_and_roboticsdataloader(dataset_path, manifest_data, 
             "dataset_modality": ["robotics"],
         }
     )
+    _prepare_normalization_config(config_dict)
     data_cfg = RoboticsDataParams.from_dict(config_dict)
 
     cfg = mock_config(dataset_path, batch_size=1, processor_name="google/paligemma-3b-pt-224")

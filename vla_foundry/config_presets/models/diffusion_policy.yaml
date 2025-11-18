@@ -5,7 +5,7 @@ transformer:
 clip:
   hf_pretrained: openai/clip-vit-base-patch32
 noise_scheduler:
-  num_timesteps: 1000
+  num_timesteps: 100
   beta_start: 0.0001
   beta_end: 0.02
   clamp_range: [-1.5, 1.5]

@@ -14,7 +14,7 @@ FILES_TO_DOWNLOAD=(
     "config.yaml"
     "config_normalizer.yaml"
     "config_processor.yaml"
-    "stats_normalizer.json"
+    "stats.json"
     "preprocessing_configs.yaml"
 )
 
@@ -26,6 +26,11 @@ echo "Downloading config file..."
 for file in "${FILES_TO_DOWNLOAD[@]}"; do
     aws s3 cp "$S3_BASE_PATH/$file" "experiments/$EXPERIMENT_NAME/$file" --profile sagemaker
 done
+
+#TODO Jean, These two downloads are there temporarily to handle old naming conventions. 
+# Remove them once we do not need to support old naming conventions.
+aws s3 cp "$S3_BASE_PATH/stats_normalizer.json" "experiments/$EXPERIMENT_NAME/stats.json" --profile sagemaker
+aws s3 cp "$S3_BASE_PATH/preprocessing_configs.yaml" "experiments/$EXPERIMENT_NAME/preprocessing_config.yaml" --profile sagemaker
 
 # If checkpoint number is provided, use it; otherwise find the highest
 if [ -n "$CHECKPOINT_NUMBER" ]; then

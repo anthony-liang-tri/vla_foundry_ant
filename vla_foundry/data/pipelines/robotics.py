@@ -195,7 +195,8 @@ class RoboticsPipeline(BaseWebDatasetPipeline):
     def save_configs(self, experiment_path: str):
         # Save normalizer config
         # Can be loaded with RoboticsNormalizer.load(config_path, statistics_path)
-        self.robotics_processor.normalizer.save(experiment_path)
+        if self.robotics_processor.normalizer is not None:
+            self.robotics_processor.normalizer.save(experiment_path)
 
         # Save processor config
         # Can be loaded with RoboticsProcessor.load(config_path)

@@ -29,7 +29,7 @@ class CLIP_OpenCLIP(BaseModel):
     def get_projection_dim(self):
         return self.model.visual.output_dim
 
-    def forward(self, input_ids, pixel_values, attention_mask):
+    def forward(self, input_ids, pixel_values, attention_mask, attention_mask_images):
         if pixel_values.ndim == 5:
             # Handle multiple images per sample
             # [B, N, C, H, W] -> [B*N, C, H, W]
@@ -38,10 +38,14 @@ class CLIP_OpenCLIP(BaseModel):
             image_features, text_features, _ = self.model(image=pixel_values, text=input_ids)
             image_features = image_features.view(input_ids.shape[0], num_images, -1, *image_features.shape[2:])
             text_features = text_features.view(input_ids.shape[0], -1, *text_features.shape[2:])
-            return CLIPOutput(image_embeds=image_features, text_embeds=text_features)
         else:
             image_features, text_features, _ = self.model(image=pixel_values, text=input_ids)
-            return CLIPOutput(image_embeds=image_features, text_embeds=text_features)
+
+        # Zero out embeddings where mask is False
+        if attention_mask_images is not None:
+            image_features = image_features * attention_mask_images.unsqueeze(-1)
+
+        return CLIPOutput(image_embeds=image_features, text_embeds=text_features)
 
     @torch.jit.ignore
     def set_grad_checkpointing(self, enable=True):
