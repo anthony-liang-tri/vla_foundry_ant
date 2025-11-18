@@ -3,6 +3,8 @@
 ggould's "useless policy" example to wave the robot arms.
 
 Originally from anzu/intuitive/lbm_eval_dev/lbm_eval_sandbox.ipynb
+
+To enable the rerun visualizer, add VISUALIZER=rerun as an environment variable.
 """
 
 import argparse
@@ -14,6 +16,7 @@ import numpy as np
 from robot_gym.multiarm_spaces import MultiarmObservation, PosesAndGrippers
 from robot_gym.policy import Policy, PolicyMetadata
 
+import vla_foundry.visualizers.visualizer as vz
 from grpc_workspace.git_util import (
     maybe_get_current_commit_sha,
     maybe_get_remote_url_from_active_branch,
@@ -58,6 +61,13 @@ class WaveAround(Policy):
             observed_xyz = self._initial_poses[robot_name].translation()
             poses[robot_name].set_translation(observed_xyz + offset)
         self._counter += 1
+
+        # Log the entire MultiarmObservation to the visualizer
+        vz.log_robot_gym_multiarm_observation("WaveAround/observation", observation)
+
+        # Log the arm poses to the visualizer
+        vz.log_robot_gym_poses_and_grippers("WaveAround/poses", PosesAndGrippers(poses=poses, grippers=grippers))
+
         return PosesAndGrippers(poses=poses, grippers=grippers)
 
 
@@ -104,8 +114,13 @@ def main():
     parser = argparse.ArgumentParser()
     LbmPolicyServerConfig.add_argparse_arguments(parser)
     args = parser.parse_args()
+    # Initialize the visualizer in main
+    vz.init(run_name="WaveAroundPolicy")
     policy = WaveAroundBatch()
-    run_policy_server(policy, args)
+    try:
+        run_policy_server(policy, args)
+    finally:
+        vz.shutdown()  # Ensure visualizer shutdown on exit
 
 
 if __name__ == "__main__":
