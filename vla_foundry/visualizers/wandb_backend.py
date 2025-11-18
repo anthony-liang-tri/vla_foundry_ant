@@ -5,10 +5,9 @@ This file contains the implementation for the WandbBackend class, which provides
 logging functionality to Weights & Biases (wandb).
 """
 
-from typing import Any, Dict, List
+from typing import Any
 
 import numpy as np
-from robot_gym.multiarm_spaces import MultiarmObservation, PosesAndGrippers
 
 import wandb
 
@@ -51,15 +50,24 @@ class WandbBackend:
             self._run = None
             self._initialized = False
 
-    def log_image(self, path: str, image: np.ndarray, **kwargs) -> None:
+    def log_images(self, path: str, images: Any, **kwargs) -> None:
         """
-        Log an image to the WandB backend.
+        Log images to the WandB backend. Supports both single images and dictionaries of images.
 
-        Parameters:
-        - path: The hierarchical path for the image.
-        - image: The image data as a NumPy array.
+        Parameters
+        ----------
+        path : str
+            Base path in the visualization hierarchy.
+        images : Any
+            Either a single NumPy array representing an image or a dictionary of images.
         """
-        wandb.log({path: wandb.Image(image)})
+        if isinstance(images, np.ndarray):
+            wandb.log({path: wandb.Image(images)})
+        elif isinstance(images, dict):
+            for sub_path, image in images.items():
+                wandb.log({f"{path}/{sub_path}": wandb.Image(image)})
+        else:
+            raise TypeError("Unsupported type for 'images'. Must be a NumPy array or a dictionary of NumPy arrays.")
 
     def log_scalar(self, path: str, value: float, **kwargs) -> None:
         """
@@ -91,89 +99,41 @@ class WandbBackend:
         """
         wandb.log({path: wandb.Object3D(line_strips)})
 
-    def log_rigid_transform(self, path: str, transform: Any, **kwargs) -> None:
+    def log_pose(
+        self, path: str, translation: np.ndarray, rotation: np.ndarray, axis_length: float = 1.0, **kwargs
+    ) -> None:
         """
-        Log a rigid transform to the WandB backend.
+        Log a generic pose to the WandB backend.
 
-        Parameters:
-        - path: The hierarchical path for the transform.
-        - transform: The rigid transform object.
+        Parameters
+        ----------
+        path : str
+            Path in the visualization hierarchy.
+        translation : np.ndarray
+            Translation vector of shape (3,).
+        rotation : np.ndarray
+            Quaternion [x, y, z, w] of shape (4,).
+        axis_length : float, optional
+            Length of the axes for visualization, by default 1.0.
         """
-        translation = transform.translation()
-        rotation = transform.rotation().ToQuaternion()
+        # WandB does not have a direct pose primitive, so log translation and quaternion as separate fields
         wandb.log(
             {
                 f"{path}/translation": translation.tolist(),
-                f"{path}/rotation": [rotation.w(), rotation.x(), rotation.y(), rotation.z()],
+                f"{path}/quaternion": rotation.tolist(),
+                f"{path}/axis_length": axis_length,
             }
         )
-
-    def log_arm_poses(self, arm_poses: Dict[str, PosesAndGrippers], **kwargs) -> None:
-        """
-        Log arm poses to the WandB backend.
-
-        Parameters:
-        - arm_poses: A dictionary containing arm pose data.
-        """
-        for client_id, poses_and_grippers in arm_poses.items():
-            if not poses_and_grippers or not hasattr(poses_and_grippers, "poses"):
-                continue
-
-            for model_name, transform in poses_and_grippers.poses.items():
-                self.log_rigid_transform(f"clients/{client_id}/models/{model_name}/pose", transform)
-
-            if hasattr(poses_and_grippers, "grippers") and poses_and_grippers.grippers:
-                for gripper_name, value in poses_and_grippers.grippers.items():
-                    self.log_scalar(f"clients/{client_id}/grippers/{gripper_name}/grip", value)
-
-    def log_action_predictions(self, predictions: List[PosesAndGrippers], **kwargs) -> None:
-        """
-        Log action predictions to the WandB backend.
-
-        Parameters:
-        - predictions: A list of objects containing action prediction data.
-        """
-        traj = {}
-        for step in predictions:
-            poses = getattr(step, "poses", {})
-            for model_name, transform in poses.items():
-                if model_name not in traj:
-                    traj[model_name] = []
-                traj[model_name].append(transform.translation().tolist())
-
-        for model_name, points in traj.items():
-            if len(points) >= 2:
-                self.log_line_strips3d(f"predictions/{model_name}/trajectory", np.array(points))
-            if points:
-                self.log_points3d(f"predictions/{model_name}/waypoints", np.array(points))
-
-    def log_multiarm_observation(self, path: str, observation: MultiarmObservation, **kwargs) -> None:
-        """
-        Log a MultiarmObservation to the WandB backend.
-
-        Parameters:
-        - path: The hierarchical path for the observation.
-        - observation: The MultiarmObservation object to log.
-        """
-        self.log_arm_poses({f"{path}/robot": observation.robot.actual}, **kwargs)
-
-        for camera_id, image_set in observation.visuo.items():
-            if image_set.rgb:
-                self.log_image(f"{path}/cameras/{camera_id}/rgb", image_set.rgb.array, **kwargs)
-            if image_set.depth:
-                self.log_image(f"{path}/cameras/{camera_id}/depth", image_set.depth.array, **kwargs)
-            if image_set.label:
-                self.log_image(f"{path}/cameras/{camera_id}/label", image_set.label.array, **kwargs)
-
-        if observation.language_instruction:
-            self.log_text(f"{path}/language_instruction", observation.language_instruction, **kwargs)
 
     def log_text(self, path: str, text: str, **kwargs) -> None:
         """
         Log a text value to the WandB backend.
 
-        Parameters:
-        - path: The hierarchical path for the text.
-        - text: The text value to log.
+        Parameters
+        ----------
+        path : str
+            Path in the visualization hierarchy.
+        text : str
+            Text value to log.
         """
         wandb.log({path: text})
