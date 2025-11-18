@@ -2,8 +2,9 @@
 
 Common errors:
 - [OSError: You are trying to access a gated repo](#failing-pytest-tests-due-to-Hugging-Face-errors)
-- OSError: Too many open files
+- OSError: Too many open files when training a policy locally with S3-hosted data
     - Run `$ ulimit -n 65535  # or at least 4096`
+- [Unable to locate credentials](#setting-up-aws-sso)
 
 ## Failing pytest tests due to Hugging Face errors
 This error usually shows up as something like 
