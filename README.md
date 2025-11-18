@@ -55,7 +55,7 @@ Please see [CONTRIBUTING.md](CONTRIBUTING.md)
 For some common questions or errors, please check the [FAQ.md](FAQ.md) file for troubleshooting tips.
 
 ## Quickstart
-The main entrypoint is `vla_foundry/main.py`.
+The main entrypoint is `vla_foundry/main.py`. Please see [the guide](FAQ.md#setting-up-aws-sso) to complete the AWS SSO configuration beforehand.
 
 An example command is something like this:
 ```bash
