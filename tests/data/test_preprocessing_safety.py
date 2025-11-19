@@ -10,13 +10,19 @@ class TestPreprocessRoboticsToTarSafety:
 
     @patch("vla_foundry.data.preprocessing.preprocess_robotics_to_tar.check_directory_has_files_with_substring")
     @patch("vla_foundry.data.preprocessing.preprocess_robotics_to_tar.draccus.parse")
-    def test_main_fails_with_existing_episode_files(self, mock_parse, mock_check_dir):
+    @patch("argparse.ArgumentParser.parse_known_args")
+    def test_main_fails_with_existing_episode_files(self, mock_parse_args, mock_draccus_parse, mock_check_dir):
         """Test that main() fails when output directory has existing episode files."""
+        # Mock argparse
+        mock_args = MagicMock()
+        mock_args.type = "lerobot"
+        mock_parse_args.return_value = (mock_args, [])
+
         # Mock the config
         mock_cfg = MagicMock()
         mock_cfg.source_episodes = "/some/source"
         mock_cfg.output_dir = "s3://bucket/output"
-        mock_parse.return_value = mock_cfg
+        mock_draccus_parse.return_value = mock_cfg
 
         # Mock existing files
         mock_check_dir.return_value = ["episode_001_frame_00000.tar", "episode_002_frame_00000.tar"]
@@ -34,17 +40,25 @@ class TestPreprocessRoboticsToTarSafety:
     @patch("vla_foundry.data.preprocessing.preprocess_robotics_to_tar.get_converter")
     @patch("vla_foundry.data.preprocessing.preprocess_robotics_to_tar.check_directory_has_files_with_substring")
     @patch("vla_foundry.data.preprocessing.preprocess_robotics_to_tar.draccus.parse")
+    @patch("argparse.ArgumentParser.parse_known_args")
     @patch("vla_foundry.data.preprocessing.preprocess_robotics_to_tar.ray.init")
-    def test_main_continues_with_empty_directory(self, mock_ray_init, mock_parse, mock_check_dir, mock_get_converter):
+    def test_main_continues_with_empty_directory(
+        self, mock_ray_init, mock_parse_args, mock_draccus_parse, mock_check_dir, mock_get_converter
+    ):
         """Test that main() continues when output directory is empty."""
+        # Mock argparse
+        mock_args = MagicMock()
+        mock_args.type = "lerobot"
+        mock_parse_args.return_value = (mock_args, [])
+
         # Mock the config
         mock_cfg = MagicMock()
         mock_cfg.source_episodes = "/some/source"
         mock_cfg.output_dir = "s3://bucket/output"
         mock_cfg.ray_address = None
         mock_cfg.ray_num_cpus = 4
-        mock_cfg.source_type = "lerobot"
-        mock_parse.return_value = mock_cfg
+        mock_cfg.type = "lerobot"
+        mock_draccus_parse.return_value = mock_cfg
 
         # Mock empty directory
         mock_check_dir.return_value = []

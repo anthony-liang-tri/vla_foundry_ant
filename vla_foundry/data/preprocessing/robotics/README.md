@@ -4,7 +4,7 @@ The following README specifially discusses the robotics data preprocessing file 
 Because we may want robotics data from different sources, we create a unified structure and a unified script to handle the preprocessing. This lets us avoid having to reimplement certain functionalities like ray parallelism. Instead, these functionalities are shared, and the dataset-specific processing logic is moved to the individual converters inside [robotics/converters](robotics/converters/).
 
 ## 1. Converters
-To select which dataset format to use, you can use the `--source_type` argument. This will route your script to the correct converter class for your dataset. 
+To select which dataset format to use, you can use the `--type` argument. This will route your script to the correct converter class for your dataset. You can then supply class-specific parameters directly.
 
 All converter classes inherit from the base class `BaseRoboticsConverter`. The [preprocess_robotics_to_tar.py](preprocess_robotics_to_tar.py) interfaces with converter objects by calling methods such as `discover_episodes` and `process_episode`. 
 
@@ -24,7 +24,9 @@ For examples on how to fill out these methods above, see [robotics/converters/sp
 
 
 ### 1.2 Preprocessing Parameters
-The `preprocess_robotics_to_tar.py` file reads parameters from the `PreprocessParams` class from [robotics/preprocess_params.py](robotics/preprocess_params.py). This inherits from the `BaseParams` class, and parsing is done with the `draccus` parser. These `PreprocessParams` is passed to the `BaseRoboticsConverter` initializer, and can be accessed by calling `self.cfg`. As such, the `PreprocessParams` class is shared between the different dataset formats (spartan, LeRobot, etc.) There might come a point in the future when we want to have subclasses that inherit from PreprocessParams, but currently the fields in that class are exhaustive enough to cover our datasets.
+The `preprocess_robotics_to_tar.py` file reads parameters from the `PreprocessParams` class from [robotics/preprocess_params.py](robotics/preprocess_params.py). This inherits from the `BaseParams` class, and parsing is done with the `draccus` parser. These `PreprocessParams` is passed to the `BaseRoboticsConverter` initializer, and can be accessed by calling `self.cfg`. 
+
+The `PreprocessParams` has multiple subclasses such as `SpartanPreprocessParams` or `LeRobotPreprocessParams`, each with their own class-specific attributes. Users can specify the appropriate class to use the `--type` flag.
 
 
 ## 2. Parallelism

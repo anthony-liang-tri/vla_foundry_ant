@@ -75,6 +75,7 @@ def discover_episodes_in_directory(diffusion_spartan_path: str, max_episodes: in
 def mock_config():
     """Create a mock config for SpartanConverter."""
     cfg = MagicMock()
+    cfg.type = "spartan"
     cfg.language_annotations_path = None
     cfg.action_fields_config_path = None
     cfg.data_discard_keys = []

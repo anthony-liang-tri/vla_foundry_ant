@@ -378,9 +378,9 @@ def test_load_params_from_yaml_with_localize_complex():
 
 
 def test_preprocess_params_spartan_decoding():
-    """Test that source_type='spartan' is decoded correctly without recursion."""
+    """Test that type='spartan' is decoded correctly without recursion."""
     config_dict = {
-        "source_type": "spartan",
+        "type": "spartan",
         "source_episodes": ["s3://test/episode1/", "s3://test/episode2/"],
         "output_dir": "s3://test/output/",
         "past_lowdim_steps": 1,
@@ -389,35 +389,36 @@ def test_preprocess_params_spartan_decoding():
     }
 
     # This should not raise RecursionError or DecodingError
-    result = draccus.decode(PreprocessParams, config_dict)
+    result = PreprocessParams.from_dict(config_dict)
 
     assert isinstance(result, PreprocessParams)
     assert not isinstance(result, MMTPreprocessParams)  # Should be base class
-    assert result.source_type == "spartan"
+    assert result.type == "spartan"
     assert result.source_episodes == ["s3://test/episode1/", "s3://test/episode2/"]
     assert result.output_dir == "s3://test/output/"
 
 
 def test_preprocess_params_mmt_npz_decoding():
-    """Test that source_type='mmt_npz' is decoded correctly as MMTPreprocessParams."""
+    """Test that type='mmt_npz' is decoded correctly as MMTPreprocessParams."""
     config_dict = {
-        "source_type": "mmt_npz",
+        "type": "mmt_npz",
         "source_episodes": ["s3://test/mmt_episode1/", "s3://test/mmt_episode2/"],
         "output_dir": "s3://test/mmt_output/",
         "mmt_lowdim_flatten_indices_selection": {"key1": [1, 2, 3]},
     }
 
-    result = draccus.decode(PreprocessParams, config_dict)
+    result = PreprocessParams.from_dict(config_dict)
 
     assert isinstance(result, MMTPreprocessParams)  # Should be MMT subclass
-    assert result.source_type == "mmt_npz"
+    assert result.type == "mmt_npz"
     assert result.mmt_lowdim_flatten_indices_selection == {"key1": [1, 2, 3]}
 
 
-@pytest.mark.parametrize("source_type", ["spartan", "unknown_type", None])
-def test_preprocess_params_no_infinite_recursion(source_type):
+@pytest.mark.parametrize("type", ["spartan", "lerobot"])
+def test_preprocess_params_no_infinite_recursion(type):
     """Test that complex configurations don't cause infinite recursion."""
     config_dict = {
+        "type": type,
         "source_episodes": [
             "s3://robotics-manip-lbm/efs/data/tasks/BimanualPutRedBellPepperInBin/riverway/sim/bc/teleop/2025-01-02T10-49-28-05-00/diffusion_spartan/",
             "s3://robotics-manip-lbm/efs/data/tasks/BimanualPutRedBellPepperInBin/riverway/sim/bc/teleop/2025-01-02T14-21-19-05-00/diffusion_spartan/",
@@ -448,32 +449,26 @@ def test_preprocess_params_no_infinite_recursion(source_type):
         "samples_per_shard": 100,
     }
 
-    if source_type is not None:
-        config_dict["source_type"] = source_type
-
     # This should not raise RecursionError or DecodingError
-    result = draccus.decode(PreprocessParams, config_dict)
+    result = PreprocessParams.from_dict(config_dict)
 
     assert isinstance(result, PreprocessParams)
-    if source_type == "mmt_npz":
-        assert isinstance(result, MMTPreprocessParams)
-    else:
-        assert not isinstance(result, MMTPreprocessParams)  # Should be base class
+    assert not isinstance(result, MMTPreprocessParams)  # Should be subclass based on type
 
     assert len(result.source_episodes) == 2
     assert result.resize_images_size == [384, 384]
 
 
 def test_preprocess_params_unknown_source_type():
-    """Test that unknown source_type falls back to base PreprocessParams."""
+    """Test that unknown source_type raises an error."""
+    from draccus.utils import DecodingError
+
     config_dict = {
-        "source_type": "unknown_type",
+        "type": "unknown_type",
         "source_episodes": ["s3://test/episode1/"],
         "output_dir": "s3://test/output/",
     }
 
-    result = draccus.decode(PreprocessParams, config_dict)
-
-    assert isinstance(result, PreprocessParams)
-    assert not isinstance(result, MMTPreprocessParams)  # Should be base class
-    assert result.source_type == "unknown_type"
+    # Unknown types should raise DecodingError
+    with pytest.raises((DecodingError, KeyError)):
+        PreprocessParams.from_dict(config_dict)

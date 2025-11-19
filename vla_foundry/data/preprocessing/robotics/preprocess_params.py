@@ -6,18 +6,33 @@ import draccus
 from vla_foundry.params.base_params import BaseParams
 
 
+def register_preprocess_params(key: str):
+    """
+    Registers a PreprocessParams subclass and sets its type attribute.
+    Use decorator wrapper because draccus's class selection with --preprocess_params.type doesn't
+    automatically populate the attribute cfg.preprocess_params.type
+    """
+
+    def decorator(cls):
+        registered_cls = PreprocessParams.register_subclass(key)(cls)
+        registered_cls._type = key
+        return registered_cls
+
+    return decorator
+
+
 @dataclass(frozen=True)
-class PreprocessParams(BaseParams):
-    """Dataclass for preprocessing configuration parsed by draccus."""
+class PreprocessParams(draccus.ChoiceRegistry, BaseParams):
+    type: str = field(default=None)
 
     # Core I/O
-    source_type: str = field(default=None)
     source_episodes: Optional[List[str]] = field(default=None)
     output_dir: Optional[str] = field(default=None)
 
     # Sampling/windowing
     past_lowdim_steps: int = field(default=1)
     future_lowdim_steps: int = field(default=14)
+    camera_names: Optional[List[str]] = field(default=None)
     image_indices: List[int] = field(default_factory=lambda: [-1, 0])
     stride: int = field(default=1)
     max_padding_left: int = field(default=1)
@@ -27,10 +42,6 @@ class PreprocessParams(BaseParams):
     # Filtering
     filter_still_samples: bool = field(default=False)
     still_threshold: float = field(default=0.01)
-
-    # Field names
-    camera_names: Optional[List[str]] = field(default=None)
-    data_discard_keys: Optional[List[str]] = field(default=None)
 
     # Sharding / parallelism
     samples_per_shard: int = field(default=128)
@@ -51,17 +62,6 @@ class PreprocessParams(BaseParams):
     resize_images_size: List[int] = field(default=None)
     jpeg_quality: int = field(default=95)
 
-    # Language annotations
-    language_annotations_path: str = field(
-        default="vla_foundry/config_presets/data/lbm/lbm_language_annotations.yaml",
-    )
-
-    action_fields_config_path: str = field(
-        default="vla_foundry/config_presets/data/lbm/lbm_action_fields.yaml",
-    )
-
-    validation_episodes_path: Optional[str] = field(default=None)
-
     # Ray configuration
     ray_address: str = field(default=None)  # Ray cluster address, default to auto-detect
     ray_num_cpus: int = field(default=None)  # Number of CPUs for Ray, default to auto-detect
@@ -69,9 +69,32 @@ class PreprocessParams(BaseParams):
     def __post_init__(self):
         super().__post_init__()
 
+        if self.type is None:
+            object.__setattr__(self, "type", getattr(self, "_type", None))
+
         # Validate required paths
         assert self.source_episodes is not None, "--source_episodes is required (or set in config_path)"
         assert self.output_dir is not None, "--output_dir is required (or set in config_path)"
+
+
+@register_preprocess_params("spartan")
+@dataclass(frozen=True)
+class SpartanPreprocessParams(PreprocessParams):
+    data_discard_keys: Optional[List[str]] = field(default=None)
+
+    language_annotations_path: str = field(
+        default="vla_foundry/config_presets/data/lbm/lbm_language_annotations.yaml",
+    )
+    action_fields_config_path: str = field(
+        default="vla_foundry/config_presets/data/lbm/lbm_action_fields.yaml",
+    )
+    validation_episodes_path: Optional[str] = field(default=None)
+
+
+@register_preprocess_params("lerobot")
+@dataclass(frozen=True)
+class LeRobotPreprocessParams(PreprocessParams):
+    pass
 
 
 @dataclass(frozen=True)
@@ -83,6 +106,7 @@ class RangeSpec:
     step: Optional[int] = field(default=None)
 
 
+@register_preprocess_params("mmt_npz")
 @dataclass(frozen=True)
 class MMTPreprocessParams(PreprocessParams):
     """Dataclass for MMT-specific preprocessing configuration parsed by draccus."""
@@ -124,16 +148,8 @@ class MMTPreprocessParams(PreprocessParams):
             object.__setattr__(self, "mmt_lowdim_flatten_indices_selection", selections)
 
 
-@draccus.decode.register(PreprocessParams)
-def _decode_preprocess_params(raw):
-    """
-    Allow YAML to choose the subclass with a 'type' selector.
-    Different from draccus ChoiceRegistry, this allows fallback to default
-    class, i.e., PreprocessParams, if no type is specified.
-    """
-    from draccus.parsers.decoding import decode_dataclass
-
-    if raw.get("source_type") == "mmt_npz":
-        return decode_dataclass(MMTPreprocessParams, raw, ())
-    # Fallback base behavior - use decode_dataclass directly to avoid recursion
-    return decode_dataclass(PreprocessParams, raw, ())
+TYPE_MAPPER = {
+    "spartan": SpartanPreprocessParams,
+    "lerobot": LeRobotPreprocessParams,
+    "mmt_npz": MMTPreprocessParams,
+}

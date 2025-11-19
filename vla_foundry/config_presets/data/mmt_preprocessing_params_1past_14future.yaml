@@ -1,4 +1,4 @@
-source_type: mmt_npz
+type: mmt_npz
 
 past_lowdim_steps:   1 
 future_lowdim_steps: 14 

@@ -1,3 +1,4 @@
+import argparse
 import datetime
 import os
 import random
@@ -7,7 +8,7 @@ import ray
 
 from vla_foundry.data.preprocessing.metadata_utils import create_processing_metadata
 from vla_foundry.data.preprocessing.robotics.converters import get_converter
-from vla_foundry.data.preprocessing.robotics.preprocess_params import PreprocessParams
+from vla_foundry.data.preprocessing.robotics.preprocess_params import TYPE_MAPPER
 from vla_foundry.data.preprocessing.robotics.preprocess_statistics import (
     LoggerActor,
     StreamingDatasetStatisticsRayActor,
@@ -22,7 +23,10 @@ def streaming_episode_worker(episode_path: str, converter, statistics_ray_actor,
 
 
 def main():
-    cfg = draccus.parse(config_class=PreprocessParams)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--type", type=str, required=True)
+    args, _ = parser.parse_known_args()
+    cfg = draccus.parse(config_class=TYPE_MAPPER[args.type])
 
     # Safety check: ensure output directory doesn't have existing preprocessing outputs
     episodes_dir = os.path.join(cfg.output_dir, "episodes")
@@ -56,7 +60,7 @@ def main():
         print(f"Started auto Ray cluster with num_cpus={cfg.ray_num_cpus}")
 
     # Create converter
-    converter = get_converter(cfg.source_type, cfg)
+    converter = get_converter(cfg)
 
     # Discover episodes
     print("🔍 Discovering episodes...")
