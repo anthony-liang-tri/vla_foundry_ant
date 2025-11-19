@@ -107,7 +107,7 @@ def get_wds_dataloader(
         batch_size=None,  # batching handled in the pipeline
         shuffle=False,  # mixing is handled by RandomMix
         num_workers=cfg.data.num_workers,
-        persistent_workers=False,
+        persistent_workers=cfg.data.num_workers > 0,
         generator=generator,
         worker_init_fn=worker_init_fn,
     )
