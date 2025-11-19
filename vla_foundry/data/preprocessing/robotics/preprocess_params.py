@@ -94,7 +94,8 @@ class SpartanPreprocessParams(PreprocessParams):
 @register_preprocess_params("lerobot")
 @dataclass(frozen=True)
 class LeRobotPreprocessParams(PreprocessParams):
-    pass
+    observation_keys: List[str] = field(default=None)
+    action_keys: List[str] = field(default=None)
 
 
 @dataclass(frozen=True)

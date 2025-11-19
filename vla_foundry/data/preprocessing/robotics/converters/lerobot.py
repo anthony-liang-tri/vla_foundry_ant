@@ -245,7 +245,7 @@ class LeRobotConverter(BaseRoboticsConverter):
         """
         Return a dictionary with lowdim keys as keys and lowdim data as values.
         """
-        lowdim_cols = ["state", "actions"]
+        lowdim_cols = self.cfg.observation_keys + self.cfg.action_keys
         lowdim_data = {}
         for col in lowdim_cols:
             lowdim_data[col] = np.stack(episode_data[col].to_numpy())
@@ -255,7 +255,7 @@ class LeRobotConverter(BaseRoboticsConverter):
         return None, None
 
     def extract_metadata_data(self, episode_data: Any):
-        exclude_keys = ["state", "actions"] + list(self.cfg.camera_names)
+        exclude_keys = self.cfg.observation_keys + self.cfg.action_keys + list(self.cfg.camera_names)
         metadata_data = {}
         for key, value in episode_data.items():
             if key not in exclude_keys:
