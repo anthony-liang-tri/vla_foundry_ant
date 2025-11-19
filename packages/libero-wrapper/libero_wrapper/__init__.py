@@ -1,6 +1,7 @@
 """
 LIBERO wrapper package that handles automatic installation of LIBERO.
 """
+
 import sys
 from pathlib import Path
 
@@ -23,4 +24,3 @@ except (ImportError, ModuleNotFoundError):
         sys.path.insert(0, str(_libero_install_dir))
 
 __all__ = ["install_libero"]
-
