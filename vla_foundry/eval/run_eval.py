@@ -69,11 +69,12 @@ def run_eval(args):
                 if video_writer is not None:
                     video_writer.append_data(eval_runner.get_image_for_video())
 
-                if eval_runner.check_success():
+                if eval_runner.check_success() or eval_runner.check_finished():
                     break
 
-            if eval_runner.check_success():
-                num_success_rollouts += 1
+            if eval_runner.check_success() or eval_runner.check_finished():
+                if eval_runner.check_success():
+                    num_success_rollouts += 1
                 break
 
     if args.video_path is not None:

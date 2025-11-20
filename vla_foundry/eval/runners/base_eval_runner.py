@@ -35,6 +35,7 @@ class BaseEvalRunner:
         self.past_images = None
         self.past_actions = None
         self.past_mask = None
+        self.done = False
         return obs
 
     def env_step(self, action):
@@ -81,6 +82,9 @@ class BaseEvalRunner:
 
     def check_success(self):
         raise NotImplementedError("check_success method not implemented")
+
+    def check_finished(self):
+        raise NotImplementedError("check_finished method not implemented")
 
     def load_model(self, model_path):
         cfg = load_experiment_params_from_yaml(
