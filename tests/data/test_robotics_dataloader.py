@@ -566,12 +566,17 @@ def test_normalization(dataset_path, manifest_data, mock_config):
         hparams = SimpleNamespace()
         hparams.global_batch_size = 1
 
+        hparams.seed = config_dict["seed"]
+
         # Create main config
         cfg = SimpleNamespace()
         cfg.distributed = distributed
         cfg.data = data_params
         cfg.vit = vit
         cfg.hparams = hparams
+
+        cfg.model = SimpleNamespace()
+        cfg.data.init_shared_attributes(cfg)
 
         return cfg
 
@@ -713,6 +718,8 @@ def test_normalization_consistency(dataset_path, manifest_data, mock_config):
     hparams = SimpleNamespace()
     hparams.global_batch_size = 1
 
+    hparams.seed = config_dict["seed"]
+
     # Create mock vit config
     vit = SimpleNamespace()
     vit.img_size = 128
@@ -724,6 +731,9 @@ def test_normalization_consistency(dataset_path, manifest_data, mock_config):
     cfg.data = data_params
     cfg.vit = vit
     cfg.hparams = hparams
+
+    cfg.model = SimpleNamespace()
+    cfg.data.init_shared_attributes(cfg)
 
     # Create two separate dataloaders with same config
     num_samples_per_dataset = [sum(entry["num_sequences"] for entry in test_shards)]

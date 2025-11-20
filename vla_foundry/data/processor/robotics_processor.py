@@ -57,11 +57,10 @@ class RoboticsProcessor:
 
         if proprioception_fields:
             proprioception_data = []
-            num_past_steps = batch.get("metadata", [{}])[0].get("anchor_relative_idx", 0)
-            if num_past_steps > 0:
-                for key in proprioception_fields:
-                    proprioception_data.append(batch["lowdim"][key][:, :num_past_steps])
-                batch["proprioception"] = torch.cat(proprioception_data, dim=-1)
+            num_past_steps = self.data_params.lowdim_past_timesteps or self.normalizer.lowdim_past_timesteps
+            for key in proprioception_fields:
+                proprioception_data.append(batch["lowdim"][key][:, : num_past_steps + 1])
+            batch["proprioception"] = torch.cat(proprioception_data, dim=-1)
 
         return batch
 

@@ -522,6 +522,9 @@ class RoboticsDataLoader:
                         batch["past_mask"][:, :, None].to(self.device, dtype=self.dtype) == 0
                     )
                     # actions = batch["actions"].to(self.device)
+                    proprioception = batch.get("proprioception")
+                    if proprioception is not None:
+                        proprioception = proprioception.to(self.device, dtype=self.dtype)
                     with torch.no_grad():
                         # Generate actions from model
                         predictions = model.generate_actions(
@@ -530,6 +533,7 @@ class RoboticsDataLoader:
                             actions.to(self.device, dtype=self.dtype),
                             batch["attention_mask"].to(self.device, dtype=torch.bool),
                             past_mask=batch["past_mask"].to(self.device, dtype=torch.bool),
+                            proprioception=proprioception,
                             num_inference_steps=num_inference_steps,
                         )
 

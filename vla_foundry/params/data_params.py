@@ -96,6 +96,7 @@ class RoboticsDataParams(DataParams):
     lowdim_past_timesteps: Optional[int] = field(default=None)
     lowdim_future_timesteps: Optional[int] = field(default=None)
     action_dim: int = field(default=None)
+    proprioception_dim: Optional[int] = field(default=None)
 
     def __post_init__(self):
         super().__post_init__()
@@ -178,6 +179,8 @@ class RoboticsDataParams(DataParams):
 
         action_dim = 0
         for field_name in self.action_fields:
+            if field_name not in normalizer.stats:
+                raise ValueError(f"Action field '{field_name}' missing from normalization statistics.")
             action_dim += len(normalizer.stats[field_name]["mean"])
         if self.action_dim is None:
             object.__setattr__(self, "action_dim", action_dim)
@@ -190,6 +193,21 @@ class RoboticsDataParams(DataParams):
             This could also be a discrepancy between the action fields and the normalization parameters."
             )
 
+        proprioception_dim = 0
+        for field_name in self.proprioception_fields:
+            if field_name not in normalizer.stats:
+                raise ValueError(f"Proprioception field '{field_name}' missing from normalization statistics.")
+            proprioception_dim += len(normalizer.stats[field_name]["mean"])
+        if self.proprioception_dim is None:
+            object.__setattr__(self, "proprioception_dim", proprioception_dim)
+        else:
+            assert self.proprioception_dim == proprioception_dim, (
+                f"Proprioception dimension mismatch, \
+            the user-provided proprioception dimension {self.proprioception_dim} does not match \
+            the computed proprioception dimension {proprioception_dim}. Please provide the correct proprioception \
+            dimension or set proprioception_dim to None to automatically compute it from the proprioception fields."
+            )
+
     def init_shared_attributes(self, cfg):
         super().init_shared_attributes(cfg)
         if cfg.data.processor:
@@ -197,3 +215,7 @@ class RoboticsDataParams(DataParams):
                 object.__setattr__(self, "processor", cfg.model.hf_pretrained)
             elif hasattr(cfg.model, "vlm_params") and hasattr(cfg.model.vlm_params, "hf_pretrained"):
                 object.__setattr__(self, "processor", cfg.model.vlm_params.hf_pretrained)
+        if self.lowdim_past_timesteps is None:
+            object.__setattr__(self, "lowdim_past_timesteps", self.normalization.lowdim_past_timesteps)
+        if self.lowdim_future_timesteps is None:
+            object.__setattr__(self, "lowdim_future_timesteps", self.normalization.lowdim_future_timesteps)

@@ -916,6 +916,87 @@ def test_get_model_input_structure(
     assert isinstance(model_input["lowdim"], dict)
 
 
+def test_policy_data_adapter_proprioception_integration(field_mapping_file, create_multiarm_observation):
+    """Verify proprioception buffers, metadata, and lowdim conversion."""
+
+    num_past = 2
+    num_future = 1
+    image_names = ["cam0_t-1", "cam0_t0"]
+    action_fields = [
+        "robot__action__poses__left::panda__xyz_relative",
+        "robot__action__poses__left::panda__rot_6d_relative",
+        "robot__action__grippers__left::panda_hand",
+    ]
+    proprioception_fields = [
+        "robot__actual__poses__left::panda__xyz",
+        "robot__actual__poses__left::panda__rot_6d",
+        "robot__actual__grippers__left::panda_hand",
+    ]
+    field_dims = {
+        **{
+            action_fields[0]: 3,
+            action_fields[1]: 6,
+            action_fields[2]: 1,
+        },
+        **{
+            proprioception_fields[0]: 3,
+            proprioception_fields[1]: 6,
+            proprioception_fields[2]: 1,
+        },
+    }
+
+    processor = FakeRoboticsProcessor(field_dims=field_dims, timestep_dim=num_past + 1 + num_future)
+    augmentation = SimpleNamespace(image=SimpleNamespace(random_crop=SimpleNamespace(shape=(112, 112))))
+    data_config = SimpleNamespace(
+        action_fields=action_fields,
+        image_names=image_names,
+        augmentation=augmentation,
+        proprioception_fields=proprioception_fields,
+    )
+
+    adapter = PolicyDataAdapter(
+        robotics_processor=processor,
+        data_config=data_config,
+        field_mapping_path=field_mapping_file,
+        image_names=image_names,
+        preprocessor_image_size=(128, 128),
+        num_past_timesteps=num_past,
+        num_future_timesteps=num_future,
+        image_indices=(-1, 0),
+    )
+
+    obs0 = create_multiarm_observation(step=0, camera_names=["cam0"])
+    obs1 = create_multiarm_observation(step=1, camera_names=["cam0"])
+
+    adapter.reset(obs0)
+    processor.process_inputs_calls.clear()
+    processor.normalizer.normalize_calls.clear()
+
+    adapter.step_observations(obs1)
+    model_input = adapter.get_model_input(obs1)
+
+    assert "proprioception" in model_input
+    proprioception_tensor = model_input["proprioception"]
+    proprioception_dim = sum(field_dims[f] for f in proprioception_fields)
+    assert proprioception_tensor.shape == (1, num_past + 1, proprioception_dim)
+
+    batch, _ = processor.process_inputs_calls[-1]
+    assert "metadata" in batch
+    assert batch["metadata"][0]["anchor_relative_idx"] == num_past
+
+    normalized_calls = {field: tensor for field, tensor in processor.normalizer.normalize_calls}
+    for field in proprioception_fields:
+        expected_stack = torch.tensor(
+            np.stack(
+                [entry[field] for entry in adapter.proprioception_buffer],
+                axis=0,
+            ).astype(np.float32)
+        )
+        if expected_stack.ndim == 1:
+            expected_stack = expected_stack[:, None]
+        torch.testing.assert_close(normalized_calls[field], expected_stack)
+
+
 def test_update_action_generates_valid_poses(
     mock_robotics_processor, mock_data_config, field_mapping_file, create_multiarm_observation
 ):

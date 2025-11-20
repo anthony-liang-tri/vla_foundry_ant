@@ -23,11 +23,15 @@ class DiffusionPolicy(BaseModel):
         self.clip = clip
         self.transformer = transformer
         self.scheduler = noise_scheduler
+        self.proprioception_dim = model_params.proprioception_dim
         self.time_encoding = torch.nn.Embedding(noise_scheduler.num_timesteps, clip.get_projection_dim())
         self.sinusoidal_position_embeddings = SinusoidalPositionEmbeddings(clip.get_projection_dim())
         self.output_layer = torch.nn.Linear(transformer.hidden_dim, model_params.action_dim)
         self.action_encode = torch.nn.Linear(model_params.action_dim, transformer.hidden_dim)
         self.condition_encode = torch.nn.Linear(clip.get_projection_dim(), transformer.hidden_dim)
+        self.proprioception_encode = (
+            torch.nn.Linear(self.proprioception_dim, transformer.hidden_dim) if self.proprioception_dim > 0 else None
+        )
         self.input_noise_std = model_params.input_noise_std
         self.disable_text = model_params.disable_text
         self.initialize_weights()
@@ -40,9 +44,20 @@ class DiffusionPolicy(BaseModel):
 
         # Initialize output layer weights with Xavier initialization
         torch.nn.init.xavier_uniform_(self.output_layer.weight)
+        if self.proprioception_encode is not None:
+            torch.nn.init.xavier_uniform_(self.proprioception_encode.weight)
 
     def forward(
-        self, input_ids, pixel_values, attention_mask, attention_mask_images, actions, noise, past_mask, future_mask
+        self,
+        input_ids,
+        pixel_values,
+        attention_mask,
+        attention_mask_images,
+        actions,
+        noise,
+        past_mask,
+        future_mask,
+        proprioception=None,
     ):
         # Sample random timesteps
         timesteps = torch.randint(0, self.scheduler.num_timesteps, (actions.shape[0],)).to(actions.device)  # [bsz]
@@ -84,7 +99,14 @@ class DiffusionPolicy(BaseModel):
         conditional_embeddings = self.condition_encode(conditional_embeddings)
 
         # Create transformer input (B, 1 + 1 + N + T, D)
-        transformer_input = torch.cat([conditional_embeddings, noisy_action], dim=1)
+        transformer_input_parts = [conditional_embeddings]
+        if self.proprioception_encode is not None and proprioception is not None:
+            proprio_embeddings = self.proprioception_encode(proprioception)
+            if self.input_noise_std > 0:
+                proprio_embeddings = proprio_embeddings + torch.randn_like(proprio_embeddings) * self.input_noise_std
+            transformer_input_parts.append(proprio_embeddings)
+        transformer_input_parts.append(noisy_action)
+        transformer_input = torch.cat(transformer_input_parts, dim=1)
 
         # Pass through transformer
         transformer_output = self.transformer(
@@ -110,6 +132,7 @@ class DiffusionPolicy(BaseModel):
         attention_mask_images=None,
         num_inference_steps=None,
         past_mask=None,
+        proprioception=None,
     ):
         """
         Generate actions using iterative denoising through the diffusion process.
@@ -161,6 +184,9 @@ class DiffusionPolicy(BaseModel):
         if image_embeddings is not None and image_embeddings.ndim == 2:
             # if multiple images per sample, (B, N, D) else (B, D) -> (B, 1, D)
             image_embeddings = image_embeddings.unsqueeze(1)
+        proprio_embeddings = None
+        if self.proprioception_encode is not None and proprioception is not None:
+            proprio_embeddings = self.proprioception_encode(proprioception)
         for step in range(self.scheduler.num_timesteps - 1, 0, -step_size):
             # Create time embeddings for current timestep (B, 1, D)
             timesteps = torch.tensor([step] * batch_size, device=device)
@@ -180,7 +206,11 @@ class DiffusionPolicy(BaseModel):
             action_encoding = self.action_encode(actions)
 
             # Create transformer input (B, 1 + 1 + N + T, D)
-            transformer_input = torch.cat([conditional_embeddings, action_encoding], dim=1)
+            transformer_input_parts = [conditional_embeddings]
+            if proprio_embeddings is not None:
+                transformer_input_parts.append(proprio_embeddings)
+            transformer_input_parts.append(action_encoding)
+            transformer_input = torch.cat(transformer_input_parts, dim=1)
 
             # Pass through transformer
             transformer_output = self.transformer(

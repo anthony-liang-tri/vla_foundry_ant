@@ -235,7 +235,9 @@ class DiffusionPolicyParams(ModelParams):
 
     # Shared attributes. Overwritten in init_shared_attributes.
     action_dim: int = field(default=None)
+    proprioception_dim: int = field(default=0)
 
     def init_shared_attributes(self, cfg):
         super().init_shared_attributes(cfg)
         object.__setattr__(self, "action_dim", cfg.data.action_dim)
+        object.__setattr__(self, "proprioception_dim", cfg.data.proprioception_dim)

@@ -706,7 +706,7 @@ class TestMergeStatisticsLargeScenarios:
         num_datasets = 8
         action_dim = 7
         obs_dim = 10
-        proprio_dim = 15
+        proprioception_dim = 15
         num_timesteps = 12
 
         stats = []
@@ -714,7 +714,11 @@ class TestMergeStatisticsLargeScenarios:
             dataset_stats = {}
 
             # Generate stats for each tensor type
-            for tensor_name, dim in [("action", action_dim), ("observation", obs_dim), ("proprioception", proprio_dim)]:
+            for tensor_name, dim in [
+                ("action", action_dim),
+                ("observation", obs_dim),
+                ("proprioception", proprioception_dim),
+            ]:
                 mean_per_timestep = np.random.randn(num_timesteps, dim) * (i + 1) * 0.3
                 std_per_timestep = np.abs(np.random.randn(num_timesteps, dim)) * 0.4 + 0.2
                 count = np.full(num_timesteps, 150.0 + i * 25.0)
@@ -745,7 +749,7 @@ class TestMergeStatisticsLargeScenarios:
         # Verify dimensions are correct
         assert len(result["action"]["mean"]) == action_dim
         assert len(result["observation"]["mean"]) == obs_dim
-        assert len(result["proprioception"]["mean"]) == proprio_dim
+        assert len(result["proprioception"]["mean"]) == proprioception_dim
 
         # Verify all have correct timesteps
         assert len(result["action"]["mean_per_timestep"]) == num_timesteps
@@ -920,7 +924,7 @@ class TestMergeStatisticsLargeScenarios:
         # Realistic robot dimensions
         action_dim = 7  # 7-DOF robot
         image_embedding_dim = 512  # CLIP embeddings
-        proprio_dim = 14  # Joint positions and velocities
+        proprioception_dim = 14  # Joint positions and velocities
         num_timesteps = 16
         num_datasets = 6  # Multiple robot tasks/environments
 
@@ -940,8 +944,8 @@ class TestMergeStatisticsLargeScenarios:
             )
 
             # Proprioception: joint angles and velocities
-            proprio_mean = np.random.uniform(-1, 1, (num_timesteps, proprio_dim))
-            proprio_std = np.random.uniform(0.1, 0.4, (num_timesteps, proprio_dim))
+            proprio_mean = np.random.uniform(-1, 1, (num_timesteps, proprioception_dim))
+            proprio_std = np.random.uniform(0.1, 0.4, (num_timesteps, proprioception_dim))
 
             count = np.full(num_timesteps, 100.0 + i * 50.0)
 
@@ -978,7 +982,7 @@ class TestMergeStatisticsLargeScenarios:
         # Verify dimensions
         assert len(result["action"]["mean"]) == action_dim
         assert len(result["image_embedding"]["mean"]) == image_embedding_dim
-        assert len(result["proprioception"]["mean"]) == proprio_dim
+        assert len(result["proprioception"]["mean"]) == proprioception_dim
 
         # Verify temporal structure
         for tensor_name in ["action", "image_embedding", "proprioception"]:

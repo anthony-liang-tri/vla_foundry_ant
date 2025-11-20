@@ -61,10 +61,9 @@ class PolicyDataAdapter:
         self.action_fields = list(data_config.action_fields)
         self.relative_action_fields = [field for field in self.action_fields if field.endswith("_relative")]  # noqa: E501
         self.proprioception_fields = list(data_config.proprioception_fields)
-        # TODO: Add proprioception support
-        # self.relative_proprioception_fields = [
-        #     field for field in self.proprioception_fields if field.endswith("_relative")
-        # ]
+        self.relative_proprioception_fields = [
+            field for field in self.proprioception_fields if field.endswith("_relative")
+        ]
         self.num_past_timesteps = num_past_timesteps
         self.num_future_timesteps = num_future_timesteps
         self.image_indices = image_indices
@@ -82,7 +81,7 @@ class PolicyDataAdapter:
         self.total_action_timesteps = self.num_past_timesteps + 1 + self.num_future_timesteps
 
         self.action_buffer = []
-        # self.proprioception_buffer = []
+        self.proprioception_buffer = []
         self.image_buffer = []
         self.reference = {}
         self.reference_initialized = False
@@ -103,13 +102,19 @@ class PolicyDataAdapter:
 
     def initialize_proprioception_buffer(self, observation) -> None:
         logging.debug("Initializing proprioception buffer")
+        if not self.proprioception_fields:
+            self.proprioception_buffer = []
+            return
+
         proprioception = {}
         for field in self.proprioception_fields:
             absolute_field = relative_to_absolute_map(field)
-            robot_data = self.field_mapping.get_field(observation, absolute_field)
-            proprioception[field] = robot_data
-        for _ in range(self.num_past_timesteps + 1):
-            self.proprioception_buffer.append(proprioception.copy())
+            actual_field = any_to_actual_map(absolute_field)
+            robot_data = self.field_mapping.get_field(observation, actual_field)
+            proprioception[absolute_field] = np.asarray(robot_data, dtype=np.float64)
+
+        buffer_size = self.num_past_timesteps + 1
+        self.proprioception_buffer = [copy.deepcopy(proprioception) for _ in range(buffer_size)]
 
     def initialize_image_buffer(self, observation) -> None:
         logging.debug("Initializing image buffer")
@@ -133,23 +138,28 @@ class PolicyDataAdapter:
     def reset(self, initial_observation):
         logging.debug("Resetting data adapter")
         self.action_buffer = []
-        # self.proprioception_buffer = []
+        self.proprioception_buffer = []
         self.image_buffer = []
         self.reference_initialized = False
         self.initialize_action_buffer(initial_observation)
-        # self.initialize_proprioception_buffer(initial_observation)
+        self.initialize_proprioception_buffer(initial_observation)
         self.initialize_image_buffer(initial_observation)
         self.update_reference(initial_observation)
         self.past_mask = torch.zeros(1, self.num_past_timesteps + 1 + self.num_future_timesteps, dtype=torch.bool)
 
     def step_proprioception(self, observation) -> None:
+        if not self.proprioception_fields:
+            return
+
         proprioception = {}
         for field in self.proprioception_fields:
             absolute_field = relative_to_absolute_map(field)
-            robot_data = self.field_mapping.get_field(observation, absolute_field)
-            proprioception[field] = robot_data
+            actual_field = any_to_actual_map(absolute_field)
+            robot_data = self.field_mapping.get_field(observation, actual_field)
+            proprioception[absolute_field] = np.asarray(robot_data, dtype=np.float64)
         self.proprioception_buffer.append(proprioception)
-        self.proprioception_buffer.pop(0)
+        if len(self.proprioception_buffer) > self.num_past_timesteps + 1:
+            self.proprioception_buffer.pop(0)
 
     def step_action(self):
         current_action_dict = copy.deepcopy(self.action_buffer[self.num_past_timesteps])
@@ -168,6 +178,10 @@ class PolicyDataAdapter:
         """
         logging.debug("Updating reference")
         for field in self.action_fields:
+            absolute_actual_field = relative_to_absolute_map(any_to_actual_map(field))
+            robot_data = self.field_mapping.get_field(observation, absolute_actual_field)
+            self.reference[absolute_actual_field] = np.asarray(robot_data, dtype=np.float64)
+        for field in self.proprioception_fields:
             absolute_actual_field = relative_to_absolute_map(any_to_actual_map(field))
             robot_data = self.field_mapping.get_field(observation, absolute_actual_field)
             self.reference[absolute_actual_field] = np.asarray(robot_data, dtype=np.float64)
@@ -208,7 +222,7 @@ class PolicyDataAdapter:
         self,
         observation,
     ):
-        # self.step_proprioception(observation)
+        self.step_proprioception(observation)
         self.step_image(observation)
         self.step_task(observation)
         self.step_past_mask()
@@ -228,24 +242,59 @@ class PolicyDataAdapter:
 
     def get_lowdim_for_processor(self) -> Dict[str, torch.Tensor]:
         logging.debug("Getting lowdim for processor")
-        lowdim: Dict[str, torch.Tensor] = {}
+        lowdim = self._stack_fields(
+            self.action_buffer,
+            self.action_fields,
+            self.relative_action_fields,
+        )
 
-        for field in self.action_fields:
-            field_values = []
-            for _, action_t in enumerate(self.action_buffer):
-                absolute_field = relative_to_absolute_map(field)
-                field_values.append(np.asarray(action_t[absolute_field], dtype=np.float64))
+        if self.proprioception_fields:
+            lowdim.update(
+                self._stack_fields(
+                    self.proprioception_buffer,
+                    self.proprioception_fields,
+                    self.relative_proprioception_fields,
+                )
+            )
 
-            stacked = np.stack(field_values, axis=0)
+        return lowdim
 
-            if field in self.relative_action_fields:
-                absolute_actual_field = any_to_actual_map(absolute_field)
-                reference = self.reference[absolute_actual_field]
+    def _stack_fields(
+        self,
+        buffer: list[dict],
+        fields: list[str],
+        relative_fields: list[str],
+        timesteps_slice: slice | None = None,
+    ) -> Dict[str, torch.Tensor]:
+        stacked_fields: Dict[str, torch.Tensor] = {}
+        if not buffer or not fields:
+            return stacked_fields
+
+        for field in fields:
+            values = []
+            absolute_field = relative_to_absolute_map(field)
+            for entry in buffer:
+                if absolute_field not in entry:
+                    raise KeyError(f"Field '{absolute_field}' missing from buffer entry")
+                values.append(np.asarray(entry[absolute_field], dtype=np.float64))
+
+            if timesteps_slice is not None:
+                values = values[timesteps_slice]
+
+            stacked = np.stack(values, axis=0)
+
+            if field in relative_fields:
+                actual_field = any_to_actual_map(absolute_field)
+                reference = self.reference.get(actual_field)
+                if reference is None:
+                    raise KeyError(f"Reference for '{actual_field}' not initialized")
 
                 if "rot_6d" in field:
                     stacked = rot_6d_to_relative(stacked, reference)
                 elif "xyz" in field or "gripper" in field:
                     stacked = xyz_to_relative(stacked, reference)
+                elif "joint_position" in field:
+                    stacked = self._wrap_to_pi(stacked - reference)
                 else:
                     raise ValueError(f"Unsupported relative field type for '{field}'")
 
@@ -257,15 +306,25 @@ class PolicyDataAdapter:
             tensor = torch.as_tensor(stacked, dtype=torch.float32)
             logging.debug(f"Stacked shape: {stacked.shape} {field}")
 
-            lowdim[field] = tensor
+            stacked_fields[field] = tensor
 
-        return lowdim
+        return stacked_fields
+
+    @staticmethod
+    def _wrap_to_pi(delta: np.ndarray) -> np.ndarray:
+        return (delta + np.pi) % (2 * np.pi) - np.pi
 
     def get_processor_input(self) -> Dict[str, Any]:
         logging.debug("Getting processor input")
         return {
             "images": [self.get_images_for_processor()],
             "lowdim": [self.get_lowdim_for_processor()],
+            "metadata": [
+                {
+                    "anchor_relative_idx": self.num_past_timesteps,
+                    "original_anchor_relative_idx": self.num_past_timesteps,
+                }
+            ],
             "language_instruction": [self.language_instruction],
         }
 

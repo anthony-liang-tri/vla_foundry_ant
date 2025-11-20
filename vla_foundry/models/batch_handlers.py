@@ -227,6 +227,9 @@ class DiffusionPolicyBatchHandler(BatchHandler):
         )
         past_mask = batch["past_mask"].to(device, non_blocking=True, dtype=torch.bool)
         future_mask = batch["future_mask"].to(device, non_blocking=True, dtype=torch.bool)
+        proprioception = batch.get("proprioception")
+        if proprioception is not None:
+            proprioception = proprioception.to(device, non_blocking=True, dtype=model_dtype)
         inputs = {
             "input_ids": input_ids,
             "pixel_values": pixel_values,
@@ -237,6 +240,8 @@ class DiffusionPolicyBatchHandler(BatchHandler):
             "past_mask": past_mask,
             "future_mask": future_mask,
         }
+        if proprioception is not None:
+            inputs["proprioception"] = proprioception
         return inputs
 
     def prepare_inputs_and_targets(self, batch, device, model_dtype, cfg):

@@ -146,6 +146,9 @@ class InferenceDiffusionPolicy(Policy):
             attention_mask = model_input["attention_mask"].to(self.device) if "attention_mask" in model_input else None
             pixel_values = model_input["pixel_values"].to(self.device) if "pixel_values" in model_input else None
             actions_tensor = model_input["actions"].to(self.device) if "actions" in model_input else None
+            proprioception = None
+            if "proprioception" in model_input and model_input["proprioception"] is not None:
+                proprioception = model_input["proprioception"].to(self.device)
             # Generate the next chunk of actions using the model
             with torch.no_grad():
                 # Use the model's generate_actions method (DiffusionPolicy interface)
@@ -156,6 +159,7 @@ class InferenceDiffusionPolicy(Policy):
                     attention_mask=attention_mask,
                     num_inference_steps=self.num_flow_steps,
                     past_mask=model_input["past_mask"].to(self.device),
+                    proprioception=proprioception,
                 )
 
                 # The model outputs need to be interpreted in context to have denormalized absolute actions

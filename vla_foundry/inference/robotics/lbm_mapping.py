@@ -179,7 +179,6 @@ class ActionMapping:
         mapping_path: str,
         action_fields: List[str],
         robotics_processor,
-        clamp_std: float = 1.0,
         num_past_timesteps: int = None,
     ):
         with fsspec.open(mapping_path, "r") as handle:
@@ -192,7 +191,6 @@ class ActionMapping:
         }
         self.action_dim = sum(self.field_dims.values())
         self.normalizer = robotics_processor.normalizer
-        self.clamp_std = clamp_std
         self.num_past_timesteps = num_past_timesteps
 
     def get_field_std(self, field: str, scope: str = "per_timestep") -> np.ndarray:
@@ -216,9 +214,6 @@ class ActionMapping:
     ) -> dict:
         """
         Convert the action from the action model output format to the buffer action format.
-
-        Uses the action buffer as reference by default, but clips it to be within self.clamp_std std
-        of the actual observation reference to prevent drift.
 
         Args:
             action_from_model: The action from the action model output format. (B, T, D)

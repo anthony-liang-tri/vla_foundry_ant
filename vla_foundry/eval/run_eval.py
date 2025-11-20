@@ -42,12 +42,14 @@ def run_eval(args):
         obs = eval_runner.env_reset()
         for _step_i in tqdm(range(args.num_steps)):
             obs_extracted = eval_runner.extract_from_obs(obs)
+            proprioception = obs_extracted.get("proprioception")
             actions = eval_runner.model.generate_actions(
                 input_ids=obs_extracted["input_ids"],
                 pixel_values=obs_extracted["pixel_values"],
                 actions=obs_extracted["actions"],
                 attention_mask=obs_extracted["attention_mask"],
                 past_mask=obs_extracted["past_mask"],
+                proprioception=proprioception,
             )
 
             actions = eval_runner.denormalize_actions(actions)
