@@ -118,6 +118,10 @@ class LBMEval(BaseEvalRunner):
         results = self.gather_stats()
         return results.is_success
 
+    def check_finished(self):
+        results = self.gather_stats()
+        return results.is_success
+
     def gather_stats(self):
         # return more informative information on the roll out
         total_time = self.recorder.last_time_step.info["time"]

@@ -83,6 +83,7 @@ class LiberoRunner(BaseEvalRunner):
         return actions.numpy()
 
     def get_obs_tensor(self, obs):
+        self.obs = obs
         obs_tensor, reward, done, info = obs
         return obs_tensor
 
@@ -94,4 +95,9 @@ class LiberoRunner(BaseEvalRunner):
         return [self.obs[0]["agentview_image"], self.obs[0]["robot0_eye_in_hand_image"]]
 
     def check_success(self):
+        # Observation is a tuple (obs, reward, done, info).
+        # In LIBERO, success is indicated by reward 1.0
+        return self.obs[1] > 0.5  # (obs, reward, done, info)
+
+    def check_finished(self):
         return self.obs[2]  # (obs, reward, done, info)

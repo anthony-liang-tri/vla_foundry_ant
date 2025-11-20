@@ -66,6 +66,7 @@ class RoboCasaEvalRunner(BaseEvalRunner):
 
     def get_obs_tensor(self, obs):
         obs_tensor, reward, done, info = obs
+        self.done = done
         return obs_tensor
 
     def get_current_images(self):
@@ -79,3 +80,6 @@ class RoboCasaEvalRunner(BaseEvalRunner):
 
     def check_success(self):
         return self.env._check_success()
+
+    def check_finished(self):
+        return self.done
