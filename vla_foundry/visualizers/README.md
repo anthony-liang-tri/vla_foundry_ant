@@ -14,6 +14,7 @@ This directory contains the visualization tools for the VLA Foundry project. The
      - Supports multiple backends (`rerun` or `disabled`).
      - Automatically disables visualization if no backend is selected. Defaults to `disabled`.
 
+
 ### 2. **Rerun Visualizer**
    - **File**: `rerun_backend.py`
    - **Purpose**: Logs data to the [Rerun.io](https://rerun.io/) visualization platform.
@@ -25,6 +26,18 @@ This directory contains the visualization tools for the VLA Foundry project. The
    - **Key Features**:
      - Supports hierarchical logging paths.
      - Provides decorators for logging images and robot arm poses.
+
+### 3. **WandB Visualizer**
+   - **File**: `wandb_backend.py`
+   - **Purpose**: Logs data to the [Weights & Biases (wandb)](https://wandb.ai/) experiment tracking platform.
+   - **Use Cases**:
+     - Logging scalar metrics, images, and 3D data for experiment tracking.
+     - Visualizing training progress and results in the WandB dashboard.
+     - Sharing experiment results and visualizations with collaborators.
+   - **Key Features**:
+     - Supports logging images, scalars, 3D points, line strips, poses, and text.
+     - Integrates with the unified visualizer facade and can be selected via `VISUALIZER=wandb`.
+     - Automatically creates a new run in the `vla_foundry` project on WandB.
 
 ---
 
@@ -107,13 +120,17 @@ vz.shutdown()
 - **Setup**: Install the `rerun` Python package.
 - **Environment Variable**: `VISUALIZER=rerun`
 
+### WandB Backend
+- **Best For**: Experiment tracking, logging scalar metrics, and visualizing 3D data.
+- **Setup**: Install the `wandb` Python package.
+- **Environment Variable**: `VISUALIZER=wandb`
+
 ### Disabled
 - **Best For**: Running without visualization (e.g., in production or testing environments).
 - **Setup**: No additional setup required.
 - **Environment Variable**: `VISUALIZER=disabled`
 
 ## Planned Backends:
-- **wandb**: Integration with Weights & Biases for experiment tracking.
 - **gradio**: Interactive web-based visualizations.
 
 ---
@@ -208,6 +225,10 @@ To see an example of how to use the interface, you can run
 ```
 VISUALIZER=rerun uv run example_usage.py
 ```
+or
+```
+VISUALIZER=wandb uv run example_usage.py
+```
 
 If you run simply
 ```
@@ -220,4 +241,4 @@ visualization will default to `disabled` if no backend is selected.
 ## Notes
 - The `visualizer.py` facade automatically disables visualization if no backend is selected.
 - Use the `VISUALIZER` environment variable to control the backend selection.
-- For more advanced use cases, refer to the backend-specific files (`rerun_backend.py`, etc.).
+- For more advanced use cases, refer to the backend-specific files (`rerun_backend.py`, `wandb_backend.py`, etc.).

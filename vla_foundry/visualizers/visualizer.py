@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import atexit
 import importlib.util  # Add this import
+import logging
 import os
 from dataclasses import dataclass
 from functools import wraps
@@ -26,6 +27,10 @@ from robot_gym.multiarm_spaces import MultiarmObservation, PosesAndGrippers
 
 # Optional imports (gate behind backend)
 _HAS_RERUN = importlib.util.find_spec("rerun") is not None
+_HAS_WANDB = importlib.util.find_spec("wandb") is not None
+
+logger = logging.getLogger(__name__)
+_VISUALIZER_LOG_PREFIX = "[Visualizer] "
 
 # Optional Drake import for RigidTransform convenience
 try:
@@ -101,13 +106,13 @@ def _detect_rank_prefix() -> str:
 def _choose_backend_from_env() -> str:
     # VISUALIZER values:
     #   disabled|off|0 -> disabled
-    #   rerun (default to disabled if no env variable is set)
+    #   rerun | wandb (default to disabled if no env variable is set)
     val = (os.environ.get("VISUALIZER") or "").strip().lower()
     if not val:
         return "disabled"  # Default to disabled if no VISUALIZER is set
     if val in {"disabled", "off", "0", "none"}:
         return "disabled"
-    if val in {"rerun"}:
+    if val in {"rerun", "wandb"}:
         return val
     # Auto
     return "disabled"
@@ -118,18 +123,29 @@ def _get_backend(name: str) -> Optional[Backend]:
         return None
     if name == "rerun":
         if not _HAS_RERUN:
-            print("[visualizer] Rerun package not available; using disabled.")
+            logger.warning(f"{_VISUALIZER_LOG_PREFIX} Rerun package not available; using disabled.")
             return None
         try:
             from vla_foundry.visualizers.rerun_backend import RerunBackend  # Import only when needed
 
             register_backend(RerunBackend())
         except ImportError as e:
-            print(f"[visualizer] Rerun backend import failed: {e}")
+            logger.warning(f"{_VISUALIZER_LOG_PREFIX} Rerun backend import failed: {e}")
+            return None
+    if name == "wandb":
+        if not _HAS_WANDB:
+            logger.warning(f"{_VISUALIZER_LOG_PREFIX} WandB package not available; using disabled.")
+            return None
+        try:
+            from vla_foundry.visualizers.wandb_backend import WandbBackend  # Import only when needed
+
+            register_backend(WandbBackend())
+        except ImportError as e:
+            logger.warning(f"{_VISUALIZER_LOG_PREFIX} WandB backend import failed: {e}")
             return None
     b = _BACKENDS.get(name)
     if b is None:
-        print(f"[visualizer] Backend '{name}' not registered; using disabled.")
+        logger.warning(f"{_VISUALIZER_LOG_PREFIX} Backend '{name}' not registered; using disabled.")
     return b
 
 
@@ -174,7 +190,7 @@ def init(
     if be is None:
         _STATE.enabled = allow_disabled is False  # typically False
         _STATE.initialized = True
-        print("[visualizer] disabled (no backend).")
+        logger.info(f"{_VISUALIZER_LOG_PREFIX} Visualizer disabled (no backend).")
         return
 
     # Backend init
@@ -397,7 +413,7 @@ class Visualizer:
             if _STATE.backend is not None:
                 # Only print if a backend was initialized
                 if _STATE.backend_name != "disabled":
-                    print(f"[visualizer] Shutting down backend: {_STATE.backend_name}")
+                    logger.info(f"{_VISUALIZER_LOG_PREFIX} Shutting down backend: {_STATE.backend_name}")
                 _STATE.backend.shutdown()  # type: ignore[union-attr]
         finally:
             _STATE.enabled = False
