@@ -34,7 +34,7 @@ def run_eval(args):
     eval_runner.load_model(args.model_path)
 
     video_writer = None
-    if args.video_path is not None:
+    if args.video_path is not None and args.video_path.lower() != "none":
         video_writer = imageio.get_writer(args.video_path, fps=20)
 
     num_success_rollouts = 0
@@ -77,7 +77,7 @@ def run_eval(args):
                     num_success_rollouts += 1
                 break
 
-    if args.video_path is not None:
+    if video_writer is not None:
         video_writer.close()
         print(f"Saved video of rollouts to {args.video_path}")
 

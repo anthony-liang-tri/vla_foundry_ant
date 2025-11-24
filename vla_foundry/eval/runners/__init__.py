@@ -12,6 +12,11 @@ def get_eval_runner(eval_params):
         from vla_foundry.eval.runners.lbm_eval import LBMEval
 
         return LBMEval(eval_params)
+    elif eval_params.env == "calvin":
+        from vla_foundry.eval.runners.calvin import CalvinRunner
+
+        return CalvinRunner(eval_params)
+
     elif eval_params.env == "robosuite":
         from vla_foundry.eval.runners.robosuite import RoboSuiteEvalRunner
 
