@@ -46,6 +46,10 @@ class TrainExperimentParams(BaseParams):
     num_checkpoints: int = field(default=5)
     max_checkpoint_limit: int = field(default=None)
 
+    # --Validation
+    total_val_samples: int = field(default=None)
+    val_every_n_checkpoints: int = field(default=1)
+
     # --Params Subclasses
     data: DataParams = field(default_factory=DataParams)
     distributed: DistributedParams = field(default_factory=DistributedParams)

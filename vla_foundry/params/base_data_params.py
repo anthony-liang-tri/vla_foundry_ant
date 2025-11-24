@@ -13,6 +13,8 @@ class DataParams(draccus.ChoiceRegistry, BaseParams):
     dataset_manifest: List[str] = field(default_factory=list)
     dataset_weighting: List[float] = field(default_factory=list)
     dataset_modality: List[str] = field(default_factory=list)
+    val_dataset_manifest: List[str] = field(default_factory=list)
+    val_dataset_weighting: List[float] = field(default_factory=list)
     allow_multiple_epochs: bool = False
     num_workers: Optional[int] = field(default=None)  # Auto-calculated per-GPU if None
     seq_len: int = field(default=2048)

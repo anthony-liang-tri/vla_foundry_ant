@@ -97,10 +97,10 @@ class Metrics:
                 wandb.log(
                     {
                         name: val,
-                        "step": step,
                         "tokens": self.state["tokens"],
                         "samples": self.state["samples"],
-                    }
+                    },
+                    step=step,
                 )
 
         self.reset()

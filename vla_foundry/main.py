@@ -36,6 +36,7 @@ from vla_foundry.params.train_experiment_params import TrainExperimentParams
 from vla_foundry.scheduler import create_scheduler
 from vla_foundry.train import train_one_checkpoint
 from vla_foundry.utils import get_experiment_name, set_random_seed, summarize_datastrings
+from vla_foundry.validate import validate_one_checkpoint
 
 
 def main():
@@ -179,6 +180,21 @@ def main():
         # Also restore which shards were consumed and how many samples were seen.
         curr_shard_idx_per_dataset, samples_seen = load_data_chunks(cfg.model.resume_from_checkpoint)
 
+    # Load validation dataloader once here to reuse across checkpoints.
+    do_validation = cfg.total_val_samples is not None
+    if do_validation:
+        val_datastrings, val_num_samples_per_dataset, _, _ = get_datastring_input(
+            num_samples=cfg.total_val_samples,
+            curr_shard_idx_per_dataset=[0 for _ in cfg.data.val_dataset_manifest],
+            shard_shuffle_seed_per_dataset=[cfg.hparams.seed for _ in cfg.data.val_dataset_manifest],
+            manifest_paths=cfg.data.val_dataset_manifest,
+            dataset_weighting=cfg.data.val_dataset_weighting,
+            allow_multiple_epochs=True,
+            num_workers_per_gpu=cfg.data.num_workers,
+            world_size=cfg.distributed.world_size,
+        )
+        val_dataloader = get_wds_dataloader(val_datastrings, val_num_samples_per_dataset, 0, cfg)
+
     # Main training loop
     while not done_training:
         if is_master(cfg):
@@ -215,7 +231,8 @@ def main():
 
         dataloader = get_wds_dataloader(datastrings, num_samples_per_dataset, checkpoint_num, cfg)
         if is_master(cfg):
-            dataloader.save_configs(experiment_path)  # Save any necessary dataloader/pipeline configs.
+            # Save any necessary dataloader/pipeline configs.
+            dataloader.save_configs(experiment_path)
             if cfg.remote_sync:
                 remote_sync(experiment_path, os.path.join(cfg.remote_sync, experiment_name))
 
@@ -256,6 +273,18 @@ def main():
             global_step,
             shard_shuffle_seed_per_dataset,
         )
+
+        # Validate checkpoint.
+        if do_validation and checkpoint_num % cfg.val_every_n_checkpoints == 0:
+            if cfg.distributed.use_distributed:
+                torch.distributed.barrier()
+            avg_val_loss = validate_one_checkpoint(
+                model, val_dataloader, loss, 0, global_step, cfg
+            )  # checkpoint_num=0 for val for consistent data and seeding
+            if is_master(cfg):
+                logging.info(f"Validation after checkpoint {checkpoint_num}: avg_loss={avg_val_loss:.6f}")
+            if cfg.distributed.use_distributed:
+                torch.distributed.barrier()
 
         # Optionally push artifacts to remote storage after each checkpoint.
         if is_master(cfg) and cfg.remote_sync:

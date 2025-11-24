@@ -74,6 +74,7 @@ class RoboticsDataParams(DataParams):
     """
 
     dataset_statistics: list[str] = field(default_factory=list)
+    val_dataset_statistics: list[str] = field(default_factory=list)
     processor: str = field(default=None)
     img_num_tokens: int = field(default=256)
     image_size: int = field(default=224)
