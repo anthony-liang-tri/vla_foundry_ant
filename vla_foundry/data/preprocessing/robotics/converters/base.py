@@ -120,6 +120,7 @@ class BaseRoboticsConverter:
         - sample_lowdim: a dictionary with lowdim keys as keys and lowdim data as values.
         - sample_metadata: a dictionary or a SampleMetadata object (some fields can be blank).
         - language_instructions: a dictionary with keys "original", etc. and language instructions as values.
+        - sample_point_clouds (optional): point cloud array (T, N, 6) with [x,y,z,r,g,b] or None
         IMPORTANT: Make sure to also update statistics data in this function, as well as the sample counts.
         You can use the statistics_ray_actor and the logger_actor to update the statistics and sample counts.
         """
@@ -183,8 +184,9 @@ class BaseRoboticsConverter:
                         result = done_future.result()  # Raise any exceptions
                         results.append(result)
 
-                    # Create sample_images, sample_lowdim, sample_metadata, language_instructions
-                    sample_images, sample_lowdim, sample_metadata, language_instructions = self.extract_sample_data(
+                    # Create sample_images, sample_lowdim, sample_metadata, language_instructions,
+                    # and optionally point_clouds
+                    result = self.extract_sample_data(
                         anchor_timestep,
                         episode_path,
                         episode_length,
@@ -196,6 +198,11 @@ class BaseRoboticsConverter:
                         statistics_ray_actor,
                         logger_actor,
                     )
+
+                    # Handle both 4-tuple and 5-tuple returns
+                    sample_images, sample_lowdim, sample_metadata, language_instructions, *extra = result
+                    sample_point_clouds = extra[0] if extra else None
+
                     if sample_images is None and sample_lowdim is None:
                         # Filtered out either by max_padding or still_samples
                         continue
@@ -206,6 +213,10 @@ class BaseRoboticsConverter:
                         "metadata": sample_metadata,
                         "language_instructions": language_instructions,
                     }
+
+                    # Add point clouds to sample data if provided
+                    if sample_point_clouds is not None:
+                        sample_data["point_clouds"] = sample_point_clouds
 
                     # Submit upload task
                     future = executor.submit(

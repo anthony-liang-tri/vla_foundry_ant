@@ -11,7 +11,7 @@ import yaml
 
 from vla_foundry.data.preprocessing.robotics.converters.base import BaseRoboticsConverter
 from vla_foundry.data.preprocessing.robotics.preprocess_masks import create_past_and_future_masks
-from vla_foundry.data.preprocessing.utils import is_still_sample
+from vla_foundry.data.preprocessing.utils import depth_images_to_point_cloud, is_still_sample
 from vla_foundry.data.robotics.utils import any_to_actual_key, load_action_field_config
 
 
@@ -359,7 +359,7 @@ class SpartanConverter(BaseRoboticsConverter):
         return episode_length
 
     def extract_camera_data(self, episode_data: Dict[str, Any]) -> Dict[str, np.ndarray]:
-        """Extract camera data with filtering."""
+        """Extract camera data with filtering, including depth images."""
         camera_mapping = episode_data["metadata"].get("camera_id_to_semantic_name", {})
 
         if self.cfg.camera_names:
@@ -378,7 +378,20 @@ class SpartanConverter(BaseRoboticsConverter):
                 cid: sname for cid, sname in camera_mapping.items() if cid in episode_data["observations"]
             }
 
-        return {sname: episode_data["observations"][cid] for cid, sname in filtered_mapping.items()}
+        # Extract RGB and depth images for each camera
+        result = {}
+        for cid, sname in filtered_mapping.items():
+            # Add RGB image
+            if cid in episode_data["observations"]:
+                result[sname] = episode_data["observations"][cid]
+
+            # Add depth image if present and use_depth_data is enabled
+            if self.cfg.use_depth_data:
+                depth_key = f"{cid}_depth"
+                if depth_key in episode_data["observations"]:
+                    result[f"{sname}_depth"] = episode_data["observations"][depth_key]
+
+        return result
 
     def extract_lowdim_data(self, episode_data: Dict[str, Any]):
         result = {}
@@ -434,8 +447,8 @@ class SpartanConverter(BaseRoboticsConverter):
         intrinsics_data: Dict[str, np.ndarray],
         extrinsics_data: Dict[str, np.ndarray],
         metadata_data: Dict[str, Any],
-        statistics_ray_actor: None,
-        logger_actor: None,
+        statistics_ray_actor,
+        logger_actor,
     ):
         logger_actor.increment_total_potential_samples.remote()
 
@@ -504,6 +517,89 @@ class SpartanConverter(BaseRoboticsConverter):
             future_padding,
         )
 
+        # Generate point clouds from depth and RGB images (T, N, 6) format
+        sample_point_clouds = None
+        if self.cfg.use_depth_data and self.cfg.point_cloud_num_points > 0:
+            point_clouds_list = []
+
+            for idx, img_offset in enumerate(self.cfg.image_indices):
+                img_timestep = actual_image_timesteps[idx]
+
+                # Collect depth and RGB images for this timestep directly from camera_data
+                depth_images = {}
+                rgb_images = {}
+                for camera_name in camera_data:
+                    if "_depth" in camera_name:
+                        # Extract camera base name (remove "_depth" suffix)
+                        base_name = camera_name.replace("_depth", "")
+                        depth_images[base_name] = camera_data[camera_name][img_timestep]
+                    else:
+                        # RGB image
+                        rgb_images[camera_name] = camera_data[camera_name][img_timestep]
+
+                # Get intrinsics and extrinsics for this timestep
+                intrinsics = {}
+                extrinsics = {}
+                for camera_name in depth_images:
+                    if camera_name in sample_intrinsics:
+                        # sample_intrinsics has shape (T, 3, 3)
+                        # Map img_offset to sequence index
+                        seq_idx = self.cfg.past_lowdim_steps + img_offset
+                        if 0 <= seq_idx < len(sample_intrinsics[camera_name]):
+                            intrinsics[camera_name] = sample_intrinsics[camera_name][seq_idx]
+
+                    if camera_name in sample_extrinsics:
+                        # sample_extrinsics has shape (T, 4, 4)
+                        seq_idx = self.cfg.past_lowdim_steps + img_offset
+                        if 0 <= seq_idx < len(sample_extrinsics[camera_name]):
+                            extrinsics[camera_name] = sample_extrinsics[camera_name][seq_idx]
+
+                # Generate point cloud for this timestep
+                if depth_images and rgb_images and intrinsics and extrinsics:
+                    point_cloud = depth_images_to_point_cloud(
+                        depth_images=depth_images,
+                        rgb_images=rgb_images,
+                        intrinsics=intrinsics,
+                        extrinsics=extrinsics,
+                        num_points=self.cfg.point_cloud_num_points,
+                        filter_ground_plane=True,
+                    )
+
+                    if point_cloud is None:
+                        raise ValueError(
+                            f"Point cloud generation failed for timestep {img_timestep} (offset={img_offset}) "
+                            f"in episode {episode_path}. No valid points available after filtering. "
+                            f"This could be due to: (1) all depth values being invalid/out of range, "
+                            f"(2) ground plane filtering removing all points, or (3) insufficient points "
+                            f"after downsampling. Consider adjusting max_depth_mm, filter_ground_plane, "
+                            f"or voxel_size parameters."
+                        )
+
+                    point_clouds_list.append(point_cloud)
+                else:
+                    # Raise error if required data is missing for point cloud generation
+                    missing_data = []
+                    if not depth_images:
+                        missing_data.append("depth_images")
+                    if not intrinsics:
+                        missing_data.append("intrinsics")
+                    if not extrinsics:
+                        missing_data.append("extrinsics")
+
+                    raise ValueError(
+                        f"Point cloud generation enabled (use_depth_data=True) but required data is missing "
+                        f"for timestep {img_timestep} (offset={img_offset}) in episode {episode_path}. "
+                        f"Missing: {', '.join(missing_data)}. "
+                        f"Available cameras in depth: {list(depth_images.keys())}, "
+                        f"intrinsics: {list(intrinsics.keys())}, "
+                        f"extrinsics: {list(extrinsics.keys())}. "
+                        f"Either ensure depth data is available or set use_depth_data=False."
+                    )
+
+            # Stack into (T, N, 6) array
+            if point_clouds_list:
+                sample_point_clouds = np.stack(point_clouds_list, axis=0)  # (T, N, 6)
+
         # Create metadata
         episode_id = self.get_episode_id(episode_path)
         sample_metadata = SampleMetadata(
@@ -523,15 +619,16 @@ class SpartanConverter(BaseRoboticsConverter):
         )
 
         if statistics_ray_actor is not None:
-            statistics_ray_actor.merge_from_samples.remote(
-                [
-                    {
-                        "lowdim": sample_lowdim,
-                        "past_mask": past_mask,
-                        "future_mask": future_mask,
-                    }
-                ]
-            )
+            stats_sample = {
+                "lowdim": sample_lowdim,
+                "past_mask": past_mask,
+                "future_mask": future_mask,
+            }
+            # Add point clouds to statistics if available (no past/future masks needed)
+            if sample_point_clouds is not None:
+                stats_sample["point_clouds"] = sample_point_clouds
+
+            statistics_ray_actor.merge_from_samples.remote([stats_sample])
 
         # Add intrinsics, extrinsics, past_mask, future_mask to lowdim (after merging statistics)
         for key, value in sample_intrinsics.items():
@@ -543,4 +640,4 @@ class SpartanConverter(BaseRoboticsConverter):
 
         language_instructions = self.get_language_instructions(episode_path)
 
-        return sample_images, sample_lowdim, sample_metadata, language_instructions
+        return sample_images, sample_lowdim, sample_metadata, language_instructions, sample_point_clouds

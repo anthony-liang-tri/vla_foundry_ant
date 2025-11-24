@@ -60,6 +60,7 @@ output_directory/
 ├── (unique_id_1).camera_name_{1,2,...n}.jpg
 ├── (unique_id_1).language_instructions.json
 ├── (unique_id_1).metadata.json
+├── (unique_id_1).point_clouds.npz (Optional)
 └── ...
 ```
 - `lowdim.npz` is a dict. 
@@ -69,6 +70,7 @@ output_directory/
     - It will also contain the keys that will be used to construct the actions, proprioceptions, intrinsics, and extrinsics. 
 - `language_instructions.json` should be a dict with keys in set ["original", "randomized", "verbose", "alternative"]
 - The key names in the `lowdim.npz` dict should also exist as keys in `stats.json`
+- (Optional) `point_clouds.npz` is a dictionary that stores fused point cloud data for all observation steps under the data key.
 
 
 We don't have any restrictions on the input format. As long as the converter classes can handle the preprocessing for its corresponding data sources, then any input format is fine.

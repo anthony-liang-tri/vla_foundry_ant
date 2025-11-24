@@ -20,6 +20,7 @@ dataset_directory_in_s3/
 ├── (unique_id_1).camera_name_{1,2,...n}.jpg
 ├── (unique_id_1).language_instructions.json
 ├── (unique_id_1).metadata.json
+├── (unique_id_1).point_clouds.npz (Optional)
 └── ...
 ```
 - `lowdim.npz` is a dict. 
@@ -30,6 +31,7 @@ dataset_directory_in_s3/
 - `language_instructions.json` should be a dict with keys in set ["original", "randomized", "verbose", "alternative"]
 - The names of keys you wish to normalize in the `lowdim.npz` dict should also exist as keys in `stats.json`. 
     - Not all the keys in `lowdim.npz` will get normalized. During training time, you will need to supply flags like `--data.action_fields` and `--data.proprioception_fields` (can be empty),which should exist as fields in `lowdim.npz`. The normalizer will only normalize the keys in these two fields.
+- (Optional) `point_clouds.npz` is a dictionary that stores fused point cloud data for all observation steps under the data key.
 
 **Sample yaml config**
 

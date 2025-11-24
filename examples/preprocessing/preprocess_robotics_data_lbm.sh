@@ -11,4 +11,4 @@ source .venv/bin/activate && python vla_foundry/data/preprocessing/preprocess_ro
 --action_fields_config_path "vla_foundry/config_presets/data/lbm/lbm_action_fields.yaml" \
 --data_discard_keys "include vla_foundry/config_presets/data/lbm/lbm_data_discard_key.yaml" \
 --samples_per_shard 100 \
---config_path "vla_foundry/config_presets/data/robotics_preprocessing_params_1past_14future.yaml" \
+--config_path "vla_foundry/config_presets/data/robotics_preprocessing_params_1past_14future.yaml"

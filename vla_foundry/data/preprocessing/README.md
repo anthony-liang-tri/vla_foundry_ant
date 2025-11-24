@@ -3,7 +3,7 @@ The scripts in this folder use certain preprocessing-specific dependencies, whic
 
 To run these scripts locally, use
 ```
-uv sync --groups=preprocessing
+uv sync --group=preprocessing
 ```
 
 # Using Ray
@@ -98,8 +98,10 @@ python vla_foundry/data/preprocessing/preprocess_robotics_to_tar.py \
 --action_fields_config_path vla_foundry/config_presets/data/lbm/lbm_action_fields.yaml \
 --data_discard_keys "include vla_foundry/config_presets/data/lbm/lbm_data_discard_key.yaml" \
 --samples_per_shard 100 \
---config_path "vla_foundry/config_presets/data/robotics_preprocessing_params_1past_14future.yaml" \
+--config_path "vla_foundry/config_presets/data/robotics_preprocessing_params_1past_14future.yaml"
 ```
+
+You can set `--use_depth_data true` if you also want to extract depth and point cloud data whenever depth information is available.
 
 # Converting MMT NPZ data to tar shards
 Data ripped from MMT robots is stored as npz files, named as `ep\d{4}_t\d{4}\.npz`. Each npz file store all data from one time step.

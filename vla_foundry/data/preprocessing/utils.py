@@ -12,7 +12,7 @@ import ray
 from botocore.config import Config
 from PIL import Image
 
-from vla_foundry.data.preprocessing.image_utils import image_to_bytes
+from vla_foundry.data.preprocessing.image_utils import depth_image_to_bytes, image_to_bytes
 
 
 def upload_sample_to_s3(
@@ -33,13 +33,24 @@ def upload_sample_to_s3(
 
     with tarfile.open(fileobj=tar_buffer, mode="w") as tar:
         original_image_sizes = {}
-        # Use image_to_bytes to convert numpy arrays to JPEG bytes
+        # Convert images to bytes (JPEG for RGB, PNG for depth)
         for img_key, img_data in sample_data["images"].items():
+            # Check if this is a depth image
+            is_depth = "_depth" in img_key
+
             if not isinstance(img_data, bytes):
-                jpeg_bytes, original_image_size = image_to_bytes(img_data, jpeg_quality, resize_images_size)
+                if is_depth:
+                    # Depth images: PNG with uint16
+                    image_bytes, original_image_size = depth_image_to_bytes(img_data, resize_images_size)
+                    file_extension = "png"
+                else:
+                    # RGB images: JPEG
+                    image_bytes, original_image_size = image_to_bytes(img_data, jpeg_quality, resize_images_size)
+                    file_extension = "jpg"
             else:
-                jpeg_bytes = img_data
+                image_bytes = img_data
                 original_image_size = Image.open(io.BytesIO(img_data)).size
+                file_extension = "jpg"  # Assume pre-encoded bytes are JPEG
 
             # Log original image sizes
             camera_name_without_timestep = img_key.rsplit("_t", 1)[0]
@@ -49,9 +60,9 @@ def upload_sample_to_s3(
                 assert camera_name_without_timestep in sample_data["metadata"].camera_names
             original_image_sizes[camera_name_without_timestep] = original_image_size
 
-            tarinfo = tarfile.TarInfo(name=f"{uuid_prefix}.{img_key}.jpg")
-            tarinfo.size = len(jpeg_bytes)
-            tar.addfile(tarinfo, io.BytesIO(jpeg_bytes))
+            tarinfo = tarfile.TarInfo(name=f"{uuid_prefix}.{img_key}.{file_extension}")
+            tarinfo.size = len(image_bytes)
+            tar.addfile(tarinfo, io.BytesIO(image_bytes))
 
         if isinstance(sample_data["metadata"], dict):
             sample_data["metadata"]["original_image_sizes"] = original_image_sizes
@@ -193,3 +204,199 @@ def is_still_sample(lowdim_data: Dict[str, np.ndarray], start_idx: int, end_idx:
             if movement > still_threshold:
                 return False
     return True
+
+
+def transform_points_to_world(points: np.ndarray, extrinsics: np.ndarray) -> np.ndarray:
+    """
+    Transform points from camera space to world space.
+
+    Args:
+        points: Camera-space points (N, 3) in meters
+        extrinsics: Camera extrinsic matrix (4, 4) - camera-to-world transform (translation in meters)
+
+    Returns:
+        world_points: World-space points (N, 3) in meters
+    """
+    # Convert to homogeneous coordinates
+    ones = np.ones((points.shape[0], 1), dtype=np.float32)
+    points_homog = np.concatenate([points, ones], axis=-1)  # (N, 4)
+
+    # Apply transformation
+    world_points_homog = points_homog @ extrinsics.T  # (N, 4)
+    world_points = world_points_homog[:, :3]  # (N, 3)
+
+    return world_points
+
+
+def voxel_downsample(points: np.ndarray, voxel_size: float, return_indices: bool = False):
+    """
+    Downsample point cloud using voxel grid filtering.
+    Much faster than FPS for initial downsampling.
+
+    Args:
+        points: Point cloud (N, 3)
+        voxel_size: Size of voxel grid in meters
+        return_indices: If True, return (downsampled_points, indices) instead of just points
+
+    Returns:
+        downsampled_points: Downsampled point cloud (M, 3) where M <= N
+        indices: (optional) Indices of kept points in original array
+    """
+    if len(points) == 0:
+        return (points, np.array([], dtype=np.int32)) if return_indices else points
+
+    # Compute voxel indices for each point
+    voxel_indices = np.floor(points / voxel_size).astype(np.int32)
+
+    # Shift to avoid negative indices
+    min_indices = voxel_indices.min(axis=0)
+    voxel_indices = voxel_indices - min_indices
+
+    # Use lexsort + unique trick (much faster than dict for large arrays)
+    # Sort by z, then y, then x
+    sorted_indices = np.lexsort((voxel_indices[:, 2], voxel_indices[:, 1], voxel_indices[:, 0]))
+    sorted_voxels = voxel_indices[sorted_indices]
+
+    # Find unique consecutive voxels (much faster than full unique)
+    unique_mask = np.ones(len(sorted_voxels), dtype=bool)
+    unique_mask[1:] = np.any(sorted_voxels[1:] != sorted_voxels[:-1], axis=1)
+
+    unique_indices = sorted_indices[unique_mask]
+
+    if return_indices:
+        return points[unique_indices], unique_indices
+    return points[unique_indices]
+
+
+def depth_images_to_point_cloud(
+    depth_images: dict,
+    rgb_images: dict,
+    intrinsics: dict,
+    extrinsics: dict,
+    num_points: int = 50000,
+    voxel_size: float = 0.0025,
+    depth_scale: float = 1000.0,
+    filter_ground_plane: bool = False,
+    depth_subsample_factor: int = 2,
+    normalize_colors: bool = True,
+) -> np.ndarray | None:
+    """
+    Convert multi-view depth images to a single downsampled colored point cloud.
+
+    Args:
+        depth_images: Dict of depth images {camera_name: (H, W) array in units specified by depth_scale}
+        rgb_images: Dict of RGB images {camera_name: (H, W, 3) uint8 array}
+        intrinsics: Dict of intrinsic matrices {camera_name: (3, 3) array}
+        extrinsics: Dict of extrinsic matrices {camera_name: (4, 4) array}
+        num_points: Number of points to downsample to
+        voxel_size: Voxel size in meters for initial downsampling (default: 2.5mm)
+        depth_scale: Scale factor to convert depth values to meters (default: 1000.0 for mm→m).
+                     Similar to Open3D's depth_scale parameter.
+        filter_ground_plane: Whether to filter out points below z=0 (default: False).
+                             Set to True for datasets where z=0 represents ground plane.
+        depth_subsample_factor: Subsample depth images by this factor before processing (default: 2).
+                               Higher values = faster but lower quality. Set to 1 to disable.
+
+    Returns:
+        point_cloud: Downsampled world-space colored point cloud (num_points, 6) with [x,y,z,r,g,b],
+                     or None if no valid points are available
+    """
+    all_points = []
+    all_colors = []
+
+    # Process each camera view
+    for camera_name, depth_img in depth_images.items():
+        K = intrinsics[camera_name]
+        Rt = extrinsics[camera_name]
+        rgb_img = rgb_images[camera_name]
+
+        # Estimate max possible points after subsampling
+        h, w = depth_img.shape
+        estimated_points_per_cam = (h * w) // (depth_subsample_factor**2) // 4  # Rough estimate after filtering
+
+        # Only subsample if we'll still have enough points
+        should_subsample = (
+            depth_subsample_factor > 1 and (estimated_points_per_cam * len(depth_images)) > num_points * 2
+        )
+
+        if should_subsample:
+            depth_img = depth_img[::depth_subsample_factor, ::depth_subsample_factor]
+            rgb_img = rgb_img[::depth_subsample_factor, ::depth_subsample_factor]
+            # Adjust intrinsics for subsampled image
+            K = K.copy()
+            K[0, 0] /= depth_subsample_factor  # fx
+            K[1, 1] /= depth_subsample_factor  # fy
+            K[0, 2] /= depth_subsample_factor  # cx
+            K[1, 2] /= depth_subsample_factor  # cy
+
+        # Generate points efficiently
+        h, w = depth_img.shape
+        depth_flat = depth_img.flatten()
+
+        # Generate all points
+        y, x = np.meshgrid(np.arange(h), np.arange(w), indexing="ij")
+        y = y.flatten()
+        x = x.flatten()
+        depths = depth_flat.astype(np.float32) / depth_scale
+
+        colors = rgb_img.reshape(-1, 3).astype(np.float32)
+        if normalize_colors:
+            colors = colors / 255.0
+
+        # Generate 3D points from depth
+        ones = np.ones_like(x, dtype=np.float32)
+        pixels = np.stack([x, y, ones], axis=-1)
+
+        # Apply inverse intrinsics (compute once per camera)
+        K_inv = np.linalg.inv(K)
+        cam_coords = pixels @ K_inv.T
+
+        # Scale by depth
+        cam_points = cam_coords * depths[:, None]
+        cam_colors = colors
+
+        if len(cam_points) == 0:
+            continue
+
+        # Transform to world space
+        world_points = transform_points_to_world(cam_points, Rt)
+
+        # Aggressive per-camera voxel downsampling (reduces data before concatenation)
+        # This is the main bottleneck reduction - voxel per camera instead of after concatenation
+        world_points, voxel_indices = voxel_downsample(world_points, voxel_size, return_indices=True)
+        cam_colors = cam_colors[voxel_indices]
+
+        all_points.append(world_points)
+        all_colors.append(cam_colors)
+
+    if len(all_points) == 0:
+        # No valid points available
+        return None
+
+    # Combine all views
+    combined_points = np.concatenate(all_points, axis=0)
+    combined_colors = np.concatenate(all_colors, axis=0) if all_colors else None
+
+    # Filter out points below ground plane (z < 0) if requested
+    if filter_ground_plane:
+        valid_z_mask = combined_points[:, 2] >= 0
+        combined_points = combined_points[valid_z_mask]
+        if combined_colors is not None:
+            combined_colors = combined_colors[valid_z_mask]
+
+    # Check if we have enough points
+    if len(combined_points) < num_points:
+        # Not enough valid points
+        return None
+
+    # Random downsampling to exact num_points
+    # Use simpler random permutation + slicing (faster than np.random.choice without replacement)
+    # Skip final voxel pass since we already voxeled per-camera
+    random_indices = np.random.permutation(len(combined_points))[:num_points]
+    point_cloud_xyz = combined_points[random_indices]
+    point_cloud_rgb = combined_colors[random_indices] if combined_colors is not None else None
+
+    # Concatenate XYZ and RGB into single array (N, 6)
+    point_cloud = np.concatenate([point_cloud_xyz, point_cloud_rgb], axis=1)  # (N, 6)
+
+    return point_cloud.astype(np.float16)

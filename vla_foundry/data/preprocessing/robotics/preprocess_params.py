@@ -62,6 +62,10 @@ class PreprocessParams(draccus.ChoiceRegistry, BaseParams):
     resize_images_size: List[int] = field(default=None)
     jpeg_quality: int = field(default=95)
 
+    # Depth and point cloud control
+    use_depth_data: bool = field(default=False)  # Whether to use depth data (depth images + point clouds)
+    point_cloud_num_points: int = field(default=50000)  # Number of points for downsampling
+
     # Ray configuration
     ray_address: str = field(default=None)  # Ray cluster address, default to auto-detect
     ray_num_cpus: int = field(default=None)  # Number of CPUs for Ray, default to auto-detect

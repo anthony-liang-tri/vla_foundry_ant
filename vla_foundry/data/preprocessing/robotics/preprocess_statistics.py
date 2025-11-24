@@ -126,6 +126,10 @@ class StreamingDatasetStatistics:
                 self.maxs[key] = np.maximum(self.maxs[key], np.max(data_max, axis=0))
 
             # Collect samples for percentile computation (with memory limit, using reservoir sampling)
+            # Skip percentile computation for point clouds (too memory intensive)
+            if key == "point_clouds":
+                continue
+
             n_new = np.sum(mask, axis=0)
             if np.all(n_new == 0):
                 continue
@@ -174,6 +178,8 @@ class StreamingDatasetStatistics:
 
         # Process samples in batch for better performance, first concatenate all the samples in a single dict
         sample_lowdim = {}
+        sample_point_clouds = {}
+
         for sample in samples_batch:
             for key, data in sample["lowdim"].items():
                 if key not in sample_lowdim:
@@ -186,8 +192,34 @@ class StreamingDatasetStatistics:
                     sample_lowdim["mask"] = mask[None, ...]
                 else:
                     sample_lowdim["mask"] = np.concatenate([sample_lowdim["mask"], mask[None, ...]], axis=0)
-        # Then update the statistics with the concatenated samples
+
+            # Process point clouds separately (no masks needed as they're already sliced by image_indices)
+            if "point_clouds" in sample:
+                pc_data = sample["point_clouds"]  # Shape: (T, N, 6)
+                if "point_clouds" not in sample_point_clouds:
+                    sample_point_clouds["point_clouds"] = pc_data[None, ...]  # (1, T, N, 6)
+                else:
+                    sample_point_clouds["point_clouds"] = np.concatenate(
+                        [sample_point_clouds["point_clouds"], pc_data[None, ...]], axis=0
+                    )
+
+        # Update statistics for lowdim data (with masks)
         self.update(sample_lowdim)
+
+        # Update statistics for point clouds (without masks)
+        # Point clouds have shape (B, T, N, 6) - reshape to (B*N, T, 6) to get stats per timestep
+        if sample_point_clouds:
+            pc_stats = {}
+            for key, pc_data in sample_point_clouds.items():
+                # Reshape: (B, T, N, 6) -> (B*N, T, 6)
+                # Treat N (num_points) as part of batch dimension to compute stats of shape (T, 6)
+                B, T, N, C = pc_data.shape
+                pc_reshaped = pc_data.transpose(0, 2, 1, 3).reshape(B * N, T, C)
+                pc_stats[key] = pc_reshaped
+                # Create all-True mask for point clouds (no filtering)
+                # Shape: (B*N, T)
+                pc_stats["mask"] = np.ones((B * N, T), dtype=bool)
+            self.update(pc_stats)
 
     def get_statistics(self) -> Dict[str, Any]:
         """Get final statistics (thread-safe)."""
@@ -220,7 +252,9 @@ class StreamingDatasetStatistics:
                 overall_std = 0.0
 
             # Compute percentiles if we have enough samples
-            percentile_5, percentile_95 = None, None
+            percentile_1 = percentile_5 = percentile_95 = percentile_99 = None
+            percentile_1_per_timestep = percentile_5_per_timestep = None
+            percentile_95_per_timestep = percentile_99_per_timestep = None
             if key in self.samples_for_percentiles and len(self.samples_for_percentiles[key]) > 0:
                 samples_array = np.array(self.samples_for_percentiles[key], dtype=float)
                 samples_array[~np.array(self.sample_mask_for_percentiles[key])[..., 0]] = np.nan
@@ -254,7 +288,11 @@ class StreamingDatasetStatistics:
                 "percentile_95_per_timestep": percentile_95_per_timestep,
                 "percentile_99_per_timestep": percentile_99_per_timestep,
                 "count": self.counts[key][..., 0].tolist(),
-                "percentile_sample_count": np.sum(self.sample_mask_for_percentiles[key], axis=0)[..., 0].tolist(),
+                "percentile_sample_count": (
+                    np.sum(self.sample_mask_for_percentiles[key], axis=0)[..., 0].tolist()
+                    if len(self.sample_mask_for_percentiles[key]) > 0
+                    else 0
+                ),
             }
 
         return stats

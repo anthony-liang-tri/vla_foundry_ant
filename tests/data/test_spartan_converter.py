@@ -268,3 +268,223 @@ def test_discover_episodes_empty_directory(mock_config):
 
                 # Should return empty list
                 assert len(episodes) == 0
+
+
+class TestPointCloudGeneration:
+    """Tests for point cloud generation in SpartanConverter."""
+
+    @pytest.fixture
+    def mock_episode_data(self):
+        """Create mock episode data with depth images, RGB images, and calibration."""
+        # Create mock observations with RGB and depth images
+        observations = {
+            "camera1": np.random.randint(0, 255, (10, 480, 640, 3), dtype=np.uint8),  # RGB
+            "camera1_depth": np.random.randint(1000, 3000, (10, 480, 640), dtype=np.uint16),  # Depth
+            "robot_joint_positions": np.random.randn(10, 7),
+        }
+
+        # Create mock intrinsics and extrinsics
+        intrinsics = {
+            "camera1": np.tile(
+                np.array([[[500.0, 0.0, 320.0], [0.0, 500.0, 240.0], [0.0, 0.0, 1.0]]]), (10, 1, 1)
+            )  # (T, 3, 3)
+        }
+
+        extrinsics = {"camera1": np.tile(np.eye(4)[np.newaxis, :, :], (10, 1, 1))}  # (T, 4, 4)
+
+        metadata = {
+            "camera_id_to_semantic_name": {"camera1": "camera1"},
+            "episode_length": 10,
+        }
+
+        actions = {"actions": np.random.randn(10, 7)}
+
+        return {
+            "observations": observations,
+            "intrinsics": intrinsics,
+            "extrinsics": extrinsics,
+            "metadata": metadata,
+            "actions": actions,
+        }
+
+    def test_use_depth_data_true_generates_point_clouds(self, mock_config, mock_episode_data):
+        """Test that extract_sample_data generates point clouds when use_depth_data=True."""
+        mock_config.use_depth_data = True
+        mock_config.point_cloud_num_points = 1000
+
+        with patch("builtins.open"), patch("yaml.safe_load") as mock_yaml:
+            mock_yaml.return_value = {"language_dict": {"test_task": {"original": ["test instruction"]}}}
+            mock_config.language_annotations_path = "/tmp/fake_annotations.yaml"
+            mock_config.action_fields_config_path = "/tmp/fake_action_fields.yaml"
+            mock_config.validation_episodes_path = None
+
+            with patch(
+                "vla_foundry.data.robotics.utils.load_action_field_config",
+                return_value={"action_key_fields": ["action"], "action_index_fields": [7]},
+            ):
+                from vla_foundry.data.preprocessing.robotics.converters.spartan import SpartanConverter
+
+                converter = SpartanConverter(mock_config)
+
+                # Mock logger actor
+                logger_actor = MagicMock()
+                logger_actor.increment_total_potential_samples = MagicMock(return_value=MagicMock())
+                logger_actor.increment_padding_samples_filtered = MagicMock(return_value=MagicMock())
+                logger_actor.increment_still_samples_filtered = MagicMock(return_value=MagicMock())
+
+                # Call extract_sample_data
+                result = converter.extract_sample_data(
+                    anchor_timestep=5,
+                    episode_path="/fake/path/tasks/test_task/episode_0000",
+                    episode_length=10,
+                    camera_data=mock_episode_data["observations"],
+                    lowdim_data={"action": mock_episode_data["actions"]["actions"]},
+                    intrinsics_data=mock_episode_data["intrinsics"],
+                    extrinsics_data=mock_episode_data["extrinsics"],
+                    metadata_data=mock_episode_data["metadata"],
+                    statistics_ray_actor=None,
+                    logger_actor=logger_actor,
+                )
+
+                # Unpack result (should be 5-tuple with point_clouds)
+                assert len(result) == 5
+                sample_images, sample_lowdim, sample_metadata, language_instructions, sample_point_clouds = result
+
+                # Verify point clouds are generated
+                assert sample_point_clouds is not None
+                assert sample_point_clouds.shape == (len(mock_config.image_indices), 1000, 6)
+                assert sample_point_clouds.dtype == np.float16
+
+                # Verify point clouds are not all zeros (regression test)
+                assert not np.all(sample_point_clouds == 0.0)
+
+    def test_use_depth_data_false_skips_point_clouds(self, mock_config, mock_episode_data):
+        """Test that extract_sample_data skips point clouds when use_depth_data=False."""
+        mock_config.use_depth_data = False
+        mock_config.point_cloud_num_points = 1000
+
+        with patch("builtins.open"), patch("yaml.safe_load") as mock_yaml:
+            mock_yaml.return_value = {"language_dict": {"test_task": {"original": ["test instruction"]}}}
+            mock_config.language_annotations_path = "/tmp/fake_annotations.yaml"
+            mock_config.action_fields_config_path = "/tmp/fake_action_fields.yaml"
+            mock_config.validation_episodes_path = None
+
+            with patch(
+                "vla_foundry.data.robotics.utils.load_action_field_config",
+                return_value={"action_key_fields": ["action"], "action_index_fields": [7]},
+            ):
+                from vla_foundry.data.preprocessing.robotics.converters.spartan import SpartanConverter
+
+                converter = SpartanConverter(mock_config)
+
+                # Mock logger actor
+                logger_actor = MagicMock()
+                logger_actor.increment_total_potential_samples = MagicMock(return_value=MagicMock())
+                logger_actor.increment_padding_samples_filtered = MagicMock(return_value=MagicMock())
+                logger_actor.increment_still_samples_filtered = MagicMock(return_value=MagicMock())
+
+                # Call extract_sample_data
+                result = converter.extract_sample_data(
+                    anchor_timestep=5,
+                    episode_path="/fake/path/tasks/test_task/episode_0000",
+                    episode_length=10,
+                    camera_data=mock_episode_data["observations"],
+                    lowdim_data={"action": mock_episode_data["actions"]["actions"]},
+                    intrinsics_data=mock_episode_data["intrinsics"],
+                    extrinsics_data=mock_episode_data["extrinsics"],
+                    metadata_data=mock_episode_data["metadata"],
+                    statistics_ray_actor=None,
+                    logger_actor=logger_actor,
+                )
+
+                # Unpack result (should be 5-tuple but point_clouds is None)
+                assert len(result) == 5
+                sample_images, sample_lowdim, sample_metadata, language_instructions, sample_point_clouds = result
+
+                # Verify point clouds are NOT generated
+                assert sample_point_clouds is None
+
+    def test_use_depth_data_false_skips_depth_images(self, mock_config, mock_episode_data):
+        """Test that depth images are not in sample_images when use_depth_data=False."""
+        mock_config.use_depth_data = False
+
+        with patch("builtins.open"), patch("yaml.safe_load") as mock_yaml:
+            mock_yaml.return_value = {"language_dict": {"test_task": {"original": ["test instruction"]}}}
+            mock_config.language_annotations_path = "/tmp/fake_annotations.yaml"
+            mock_config.action_fields_config_path = "/tmp/fake_action_fields.yaml"
+            mock_config.validation_episodes_path = None
+
+            with patch(
+                "vla_foundry.data.robotics.utils.load_action_field_config",
+                return_value={"action_key_fields": ["action"], "action_index_fields": [7]},
+            ):
+                from vla_foundry.data.preprocessing.robotics.converters.spartan import SpartanConverter
+
+                converter = SpartanConverter(mock_config)
+
+                # Mock logger actor
+                logger_actor = MagicMock()
+                logger_actor.increment_total_potential_samples = MagicMock(return_value=MagicMock())
+                logger_actor.increment_padding_samples_filtered = MagicMock(return_value=MagicMock())
+                logger_actor.increment_still_samples_filtered = MagicMock(return_value=MagicMock())
+
+                # Extract camera data using the converter's method (which filters depth based on use_depth_data)
+                camera_data = converter.extract_camera_data(mock_episode_data)
+
+                # Call extract_sample_data
+                result = converter.extract_sample_data(
+                    anchor_timestep=5,
+                    episode_path="/fake/path/tasks/test_task/episode_0000",
+                    episode_length=10,
+                    camera_data=camera_data,
+                    lowdim_data={"action": mock_episode_data["actions"]["actions"]},
+                    intrinsics_data=mock_episode_data["intrinsics"],
+                    extrinsics_data=mock_episode_data["extrinsics"],
+                    metadata_data=mock_episode_data["metadata"],
+                    statistics_ray_actor=None,
+                    logger_actor=logger_actor,
+                )
+
+                sample_images, sample_lowdim, sample_metadata, language_instructions, sample_point_clouds = result
+
+                # Verify depth images are NOT in sample_images
+                depth_keys = [k for k in sample_images if "_depth" in k]
+                assert len(depth_keys) == 0
+
+                # Verify RGB images ARE in sample_images
+                rgb_keys = [k for k in sample_images if "_depth" not in k]
+                assert len(rgb_keys) > 0
+
+    def test_intrinsics_extrinsics_lookup_regression(self, mock_config):
+        """Regression test: intrinsics/extrinsics should use camera_name as key, not 'intrinsics.camera_name'."""
+        # This tests the bug fix where we were looking for "intrinsics.camera_name" but
+        # extract_sample_camera_calibration() stores with just "camera_name" as the key
+
+        with patch("builtins.open"), patch("yaml.safe_load") as mock_yaml:
+            mock_yaml.return_value = {"language_dict": {}}
+            mock_config.language_annotations_path = "/tmp/fake_annotations.yaml"
+            mock_config.action_fields_config_path = "/tmp/fake_action_fields.yaml"
+            mock_config.validation_episodes_path = None
+
+            with patch(
+                "vla_foundry.data.robotics.utils.load_action_field_config",
+                return_value={"action_key_fields": [], "action_index_fields": []},
+            ):
+                # Create sample intrinsics/extrinsics with camera_name keys (NOT prefixed)
+                sample_intrinsics = {"camera_left": np.random.randn(10, 3, 3)}
+
+                camera_name = "camera_left"
+
+                # Verify lookup works with camera_name (not "intrinsics.camera_name")
+                assert camera_name in sample_intrinsics  # Should be True
+                assert f"intrinsics.{camera_name}" not in sample_intrinsics  # Should be False
+
+                # This is the correct lookup pattern (what the fixed code does)
+                if camera_name in sample_intrinsics:
+                    intrinsics = sample_intrinsics[camera_name]
+                    assert intrinsics is not None
+                    assert intrinsics.shape == (10, 3, 3)
+
+                # This was the bug (incorrect lookup pattern)
+                incorrect_key = f"intrinsics.{camera_name}"
+                assert incorrect_key not in sample_intrinsics

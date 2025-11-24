@@ -41,6 +41,24 @@ def resize_image(image: Union[np.ndarray, Image.Image], target_size: tuple = (22
     return pil_image if is_pil else np.array(pil_image)
 
 
+def depth_image_to_bytes(image: np.ndarray, target_size: tuple = (224, 224)) -> Tuple[bytes, Tuple[int, int]]:
+    """Convert depth image to PNG with uint16 format (millimeters)."""
+    # Ensure uint16 format for depth (mm units)
+    assert image.dtype == np.uint16, "depth images must use np.uint16"
+
+    # Convert to PIL
+    pil_image = Image.fromarray(image, mode="I;16")
+    original_image_size = pil_image.size
+
+    # Resize if needed
+    if target_size and pil_image.size != target_size:
+        pil_image = resize_image(pil_image, target_size)
+
+    buf = io.BytesIO()
+    pil_image.save(buf, format="PNG")
+    return buf.getvalue(), original_image_size
+
+
 def image_to_bytes(
     image: np.ndarray, quality: int = None, target_size: tuple = (224, 224)
 ) -> Tuple[bytes, Tuple[int, int]]:
