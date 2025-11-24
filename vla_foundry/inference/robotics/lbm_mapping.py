@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Sequence
+from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple
 
 import fsspec
 import numpy as np
@@ -168,6 +168,17 @@ class ObservationMapping:
                 images[camera_name] = observation.visuo[camera_name].rgb.array.copy()
         return images
 
+    def create_pose_and_gripper(
+        self,
+        data_dict: dict,
+    ) -> PosesAndGrippers:
+        return create_pose_and_grippers(
+            field_paths=self._field_paths,
+            fields=list(data_dict.keys()),
+            value_getter=lambda _field, absolute_field: data_dict[absolute_field],
+            source_label="data",
+        )
+
 
 class ActionMapping:
     """
@@ -265,33 +276,12 @@ class ActionMapping:
         self,
         action: dict,
     ) -> PosesAndGrippers:
-        grippers = {}
-        poses = {}
-        for field in self.action_fields:
-            absolute_field = relative_to_absolute_map(field)
-            mapping_fields = self._field_paths[absolute_field]
-            if len(mapping_fields) == 1:
-                grippers[mapping_fields[0]] = action[absolute_field]
-            elif len(mapping_fields) == 2:
-                action_field = action[absolute_field]
-                if action_field.shape[0] == 3:
-                    field_name = "p"
-                else:
-                    assert action_field.shape[0] == 6
-                    rot_matrix = rot_6d_to_matrix(action_field)
-                    action_field = RotationMatrix(rot_matrix)
-                    field_name = "R"
-                if mapping_fields[0] in poses:
-                    poses[mapping_fields[0]][field_name] = action_field
-                    poses[mapping_fields[0]] = RigidTransform(
-                        R=RotationMatrix(poses[mapping_fields[0]]["R"]), p=poses[mapping_fields[0]]["p"]
-                    )
-                else:
-                    poses[mapping_fields[0]] = {field_name: action_field}
-            else:
-                raise ValueError(f"Unknown action field: {field}")
-
-        return PosesAndGrippers(poses=poses, grippers=grippers)
+        return create_pose_and_grippers(
+            field_paths=self._field_paths,
+            fields=self.action_fields,
+            value_getter=lambda _field, absolute_field: action[absolute_field],
+            source_label="action",
+        )
 
     def from_sim(self, action_from_sim: PosesAndGrippers) -> dict:
         action = {}
@@ -313,3 +303,46 @@ class ActionMapping:
             else:
                 raise ValueError(f"Unknown action field: {field}")
         return action
+
+
+def resolve_pose_component(component: np.ndarray) -> Tuple[str, Any]:
+    if component.shape[0] == 3:
+        return "p", component
+    if component.shape[0] == 6:
+        rot_matrix = rot_6d_to_matrix(component)
+        return "R", RotationMatrix(rot_matrix)
+    raise ValueError(f"Unknown pose component dimensionality: {component.shape}")
+
+
+def create_pose_and_grippers(
+    field_paths: Dict[str, Sequence[str]],
+    fields: Iterable[str],
+    value_getter: Callable[[str, str], np.ndarray],
+    source_label: str,
+) -> PosesAndGrippers:
+    grippers: Dict[str, Any] = {}
+    poses: Dict[str, Any] = {}
+    for field in fields:
+        absolute_field = relative_to_absolute_map(field)
+        mapping_fields = field_paths[absolute_field]
+        data_field = value_getter(field, absolute_field)
+        if len(mapping_fields) == 1:
+            grippers[mapping_fields[0]] = data_field
+            continue
+        if len(mapping_fields) != 2:
+            raise ValueError(f"Unknown {source_label} field: {field}")
+        pose_name = mapping_fields[0]
+        field_name, processed_field = resolve_pose_component(data_field)
+        current_pose = poses.get(pose_name)
+        if current_pose is None:
+            poses[pose_name] = {field_name: processed_field}
+            continue
+        if isinstance(current_pose, dict):
+            current_pose[field_name] = processed_field
+            if "p" in current_pose and "R" in current_pose:
+                poses[pose_name] = RigidTransform(R=RotationMatrix(current_pose["R"]), p=current_pose["p"])
+            else:
+                poses[pose_name] = current_pose
+            continue
+        raise ValueError(f"Pose '{pose_name}' already constructed for field '{field}'")
+    return PosesAndGrippers(poses=poses, grippers=grippers)

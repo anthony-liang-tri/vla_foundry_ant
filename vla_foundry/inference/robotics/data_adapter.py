@@ -15,6 +15,7 @@ import numpy as np
 import torch
 from PIL import Image
 
+import vla_foundry.visualizers.visualizer as vz
 from vla_foundry.data.preprocessing.image_utils import resize_image
 from vla_foundry.data.robotics.utils import (
     rot_6d_to_relative,
@@ -26,6 +27,8 @@ from vla_foundry.inference.robotics.utils import (
     center_crop,
     relative_to_absolute_map,
 )
+
+vz.init(run_name="PolicyDataAdapter", add_rank_to_run=True)
 
 
 class PolicyDataAdapter:
@@ -167,7 +170,9 @@ class PolicyDataAdapter:
         self.action_buffer.pop(0)
         self.action_buffer.append(last_action)
 
-        return self.action_mapping.create_pose_and_gripper(current_action_dict)
+        output = self.action_mapping.create_pose_and_gripper(current_action_dict)
+        vz.log_robot_gym_poses_and_grippers("current_action_arm_poses", output)
+        return output
 
     def update_reference(self, observation):
         """
@@ -181,10 +186,16 @@ class PolicyDataAdapter:
             absolute_actual_field = relative_to_absolute_map(any_to_actual_map(field))
             robot_data = self.field_mapping.get_field(observation, absolute_actual_field)
             self.reference[absolute_actual_field] = np.asarray(robot_data, dtype=np.float64)
+        vz.log_robot_gym_poses_and_grippers(
+            "reference_arm_poses", self.field_mapping.create_pose_and_gripper(self.reference)
+        )
         for field in self.proprioception_fields:
             absolute_actual_field = relative_to_absolute_map(any_to_actual_map(field))
             robot_data = self.field_mapping.get_field(observation, absolute_actual_field)
             self.reference[absolute_actual_field] = np.asarray(robot_data, dtype=np.float64)
+        vz.log_robot_gym_poses_and_grippers(
+            "reference_proprioception", self.field_mapping.create_pose_and_gripper(self.reference)
+        )
 
     def preprocess_images(self, images: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
         logging.debug(f"Preprocessing images resize {self.preprocessor_image_size} crop {self.image_crop_size}")
@@ -200,6 +211,7 @@ class PolicyDataAdapter:
     def step_image(self, observation) -> None:
         logging.debug("Stepping image")
         images = self.field_mapping.get_all_images(observation)
+        vz.log_images("observation_images", images)
         processed_images = self.preprocess_images(images)
         self.image_buffer.append(processed_images)
         self.image_buffer.pop(0)
@@ -207,6 +219,7 @@ class PolicyDataAdapter:
     def step_task(self, observation) -> None:
         logging.debug(f"Stepping task to instruction {observation.language_instruction}")
         self.language_instruction = observation.language_instruction
+        vz.log_text("language_instruction", self.language_instruction)
 
     def step_past_mask(self) -> None:
         logging.debug("Stepping past mask")
@@ -226,6 +239,7 @@ class PolicyDataAdapter:
         self.step_image(observation)
         self.step_task(observation)
         self.step_past_mask()
+        vz.log_robot_gym_poses_and_grippers("current_pose", observation.robot.actual)
 
     def get_images_for_processor(self) -> Dict[str, np.ndarray]:
         logging.debug("Getting images for processor")
@@ -238,6 +252,17 @@ class PolicyDataAdapter:
             logging.debug(f"Getting image {camera_name} at timestep {timestep} of buffer for {image_name}")
             if camera_name in buffer_t:
                 images[image_name] = buffer_t[camera_name]
+        processed_images = {}
+        for name, image in images.items():
+            image = np.asarray(image, dtype=np.float32)
+            image_min = image.min()
+            image_max = image.max()
+            if image_max == image_min:
+                processed_images[name] = np.zeros_like(image, dtype=np.uint8)
+                continue
+            scaled = (image - image_min) / (image_max - image_min)
+            processed_images[name] = np.clip(scaled * 255.0, 0, 255).astype(np.uint8)
+        vz.log_images("processed_images", processed_images)
         return images
 
     def get_lowdim_for_processor(self) -> Dict[str, torch.Tensor]:
@@ -351,3 +376,6 @@ class PolicyDataAdapter:
         )
         # Update the action buffer with the new actions from the model
         self.action_buffer = [copy.deepcopy(action) for action in action_list]
+        vz.log_robot_gym_action_predictions(
+            "action_predictions", [self.action_mapping.create_pose_and_gripper(action) for action in self.action_buffer]
+        )
