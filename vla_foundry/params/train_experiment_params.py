@@ -2,7 +2,7 @@ import logging
 import os
 import tempfile
 from dataclasses import dataclass, field
-from typing import Type
+from typing import Optional, Type
 
 import yaml
 
@@ -25,6 +25,12 @@ class TrainExperimentParams(BaseParams):
     # Optional explicit experiment name.
     # If `None`, a name will be generated at runtime (see `vla_foundry.utils.get_experiment_name`).
     name: str = field(default=None)
+
+    # If resolve_configs is True, main.py will print the resolved config and stop.
+    # The optional resolve_configs_path field will dump that printed output to {path}/resolved_config.yaml.
+    resolve_configs: bool = field(default=False)
+    resolve_configs_path: Optional[str] = field(default=None)
+
     # Optional base directory where the experiment folder is created. If `None`, defaults to `experiments/`.
     save_path: str = field(default=None)
     wandb: bool = field(default=True)

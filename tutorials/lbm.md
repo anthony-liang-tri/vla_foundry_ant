@@ -41,6 +41,18 @@ The training script below is taken from `examples/training/diffusion_policy.sh`.
 --total_train_samples 100000
 ```
 
+You can use the flags `--resolve_configs=True` and `--resolve_configs_path` to first view the resolved configs before proceeding with the run. Setting `--resolve_configs=True` will print to stdout, while `--resolve_configs_path` is optional and setting it will save the configs to `{resolve_configs_path}/resolved_config.yaml`. An example command is below:
+
+```bash
+.venv/bin/torchrun --nproc_per_node=2 --nnodes=1 vla_foundry/main.py \
+--config_path vla_foundry/config_presets/training_jobs/diffusion_policy_bellpepper.yaml \
+--resolve_configs s3://tri-ml-datasets-uw2/lbm2_vla/model_checkpoints/diffusion_policy \
+--num_checkpoints 5 \
+--total_train_samples 100000 \
+--resolve_configs True \
+--resolve_configs_path ./
+```
+
 For training with SageMaker, we train with [sagemaker/launch_training.py](/sagemaker/launch_training.py). The argument parser of this script is a wrapper around the argument parser of [vla_foundry/main.py](/vla_foundry/main.py), so we can reuse the same arguments. The SageMaker-specific arguments can be supplied with the `sagemaker.` prefix, as shown below:
 ```bash
 uv run --group=sagemaker sagemaker/launch_training.py \

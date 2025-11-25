@@ -57,6 +57,20 @@ def main():
     """
     # Parse config.
     cfg = draccus.parse(config_class=TrainExperimentParams)
+    if cfg.resolve_configs:
+        # Resolve configs for debugging. Program stops here if the flag is received.
+        if is_master(cfg):
+            print("Resolved config: ", cfg)
+            if cfg.resolve_configs_path is not None:
+                with open(os.path.join(cfg.resolve_configs_path, "resolved_config.yaml"), "w") as f:
+                    draccus.dump(cfg, f)
+                print(f"The resolved config was saved to {cfg.resolve_configs_path.rstrip('/')}/resolved_config.yaml")
+            print(
+                "=" * 50 + "\nThe flag --resolve_configs was received, stopping here. "
+                "If the configuration is the one you want to launch, re-run without that flag."
+            )
+        return
+
     device = cfg.distributed.device
     # Seed rank-0 before any object creation for reproducibility.
     set_random_seed(cfg.hparams.seed, 0)
