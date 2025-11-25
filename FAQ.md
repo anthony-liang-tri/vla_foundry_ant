@@ -4,6 +4,8 @@ Common errors:
 - [OSError: You are trying to access a gated repo](#failing-pytest-tests-due-to-Hugging-Face-errors)
 - OSError: Too many open files when training a policy locally with S3-hosted data
     - Run `$ ulimit -n 65535  # or at least 4096`
+- `raise ReadError("empty file") from None` during training
+    - This likely means the number of workers is too high. Reduce `--data.num_workers`. 
 - [Unable to locate AWS credentials](#setting-up-aws-sso)
 
 ## Failing pytest tests due to Hugging Face errors
