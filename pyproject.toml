@@ -34,7 +34,7 @@ dependencies = [
 # Add `--group sagemaker` to sync the env with sagemaker
 # or run a script with sagemaker installed.
 sagemaker = [
-    "sagemaker>=2.251.0",
+    "sagemaker>=2.251.0,<3.0.0",  # v3.0 has breaking changes (aws_batch removed)
 ]
 
 # Add `--group preprocessing` to install preprocessing deps.
