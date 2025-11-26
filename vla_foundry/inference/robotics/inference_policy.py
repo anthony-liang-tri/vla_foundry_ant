@@ -26,7 +26,7 @@ from robot_gym.multiarm_spaces import MultiarmObservation, PosesAndGrippers
 from robot_gym.policy import Policy, PolicyMetadata
 
 from vla_foundry.data.processor.robotics_processor import RoboticsProcessor
-from vla_foundry.file_utils import load_model_checkpoint, yaml_load
+from vla_foundry.file_utils import get_latest_checkpoint, load_model_checkpoint, yaml_load
 from vla_foundry.inference.robotics.data_adapter import PolicyDataAdapter
 from vla_foundry.logger import setup_logging
 from vla_foundry.models import create_model
@@ -44,12 +44,6 @@ def _get_policy_metadata():
     )
 
 
-def get_highest_checkpoint(checkpoint_directory: str) -> str:
-    checkpoints = os.listdir(os.path.join(checkpoint_directory, "checkpoints"))
-    checkpoints.sort(key=lambda x: int(x.split("_")[1].split(".")[0]))
-    return checkpoints[-1]
-
-
 class InferenceDiffusionPolicy(Policy):
     """A policy that uses DiffusionPolicy model for language-conditioned robot manipulation."""
 
@@ -63,7 +57,7 @@ class InferenceDiffusionPolicy(Policy):
     ):
         self.model_config_path = os.path.join(checkpoint_directory, "config.yaml")
         if checkpoint_name is None or checkpoint_name == "":
-            checkpoint_name = get_highest_checkpoint(checkpoint_directory)
+            checkpoint_name = get_latest_checkpoint(checkpoint_directory)
         if not checkpoint_name.endswith(".pt"):
             checkpoint_name = f"{checkpoint_name}.pt"
         self.checkpoint_path = os.path.join(checkpoint_directory, "checkpoints", f"{checkpoint_name}")
