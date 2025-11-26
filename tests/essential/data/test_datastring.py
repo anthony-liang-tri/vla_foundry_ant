@@ -10,7 +10,7 @@ def test_get_datastring_input_basic():
             num_samples=500_000,
             curr_shard_idx_per_dataset=[0],
             shard_shuffle_seed_per_dataset=[123],
-            manifest_paths=["tests/shared/dummy_manifest_large.jsonl"],
+            manifest_paths=["tests/essential/shared/dummy_manifest_large.jsonl"],
             dataset_weighting=None,
             allow_multiple_epochs=False,
             num_workers_per_gpu=4,
@@ -18,7 +18,7 @@ def test_get_datastring_input_basic():
         )
     )
     EXPECTED_OUTPUT = (
-        "tests/shared/{"
+        "tests/essential/shared/{"
         "00000056,00000043,00000134,00000106,00000186,00000053,00000016,00000069,"
         "00000077,00000151,00000018,00000091,00000195,00000065,00000090,00000031,"
         "00000141,00000189,00000002,00000081,00000054,00000160,00000198,00000168,"
@@ -37,7 +37,7 @@ def test_get_datastring_input_smalldata_multiple_epochs():
             num_samples=100_000,
             curr_shard_idx_per_dataset=[0],
             shard_shuffle_seed_per_dataset=[42],
-            manifest_paths=["tests/shared/dummy_manifest_small.jsonl"],
+            manifest_paths=["tests/essential/shared/dummy_manifest_small.jsonl"],
             dataset_weighting=None,
             allow_multiple_epochs=True,
             num_workers_per_gpu=4,
@@ -66,7 +66,7 @@ def test_get_datastring_input_smalldata_multiple_epochs():
             num_samples=120_000,
             curr_shard_idx_per_dataset=[0],
             shard_shuffle_seed_per_dataset=[42],
-            manifest_paths=["tests/shared/dummy_manifest_small.jsonl"],
+            manifest_paths=["tests/essential/shared/dummy_manifest_small.jsonl"],
             dataset_weighting=None,
             allow_multiple_epochs=True,
             num_workers_per_gpu=4,
@@ -96,7 +96,7 @@ def test_get_datastring_input_smalldata_multiple_epochs():
             num_samples=150_000,
             curr_shard_idx_per_dataset=curr_shard_idx_per_dataset,
             shard_shuffle_seed_per_dataset=shard_shuffle_seed_per_dataset,
-            manifest_paths=["tests/shared/dummy_manifest_small.jsonl"],
+            manifest_paths=["tests/essential/shared/dummy_manifest_small.jsonl"],
             dataset_weighting=None,
             allow_multiple_epochs=True,
             num_workers_per_gpu=1,
@@ -131,8 +131,8 @@ def test_get_datastring_input_smalldata_multiple_epochs():
 @pytest.mark.parametrize(
     "num_samples,world_size,param_config_path",
     [
-        (50_000, 4, "tests/params/dummy_configs/dummy_vlm_config.yaml"),
-        (50_000, 4, "tests/params/dummy_configs/dummy_text_untokenized_config.yaml"),
+        (50_000, 4, "tests/essential/params/dummy_configs/dummy_vlm_config.yaml"),
+        (50_000, 4, "tests/essential/params/dummy_configs/dummy_text_untokenized_config.yaml"),
     ],
 )
 def test_datastring_text_untokenized_scaling(num_samples, world_size, param_config_path):

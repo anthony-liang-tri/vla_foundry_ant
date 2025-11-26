@@ -39,7 +39,7 @@ class ModalityProjector(nn.Module):
             f"seq_root % self.scale_factor = {seq_root % self.scale_factor}, self.scale_factor = {self.scale_factor}"
         )  # Sequence root must be divisible by scale factor
 
-        # Verified equivalent to original_pixel_shuffle implementation (see tests/models/test_pixelshuffle.py)
+        # Verified equivalent to original_pixel_shuffle implementation (see tests/essential/models/test_pixelshuffle.py)
         if cams == 0:
             x = rearrange(
                 x,

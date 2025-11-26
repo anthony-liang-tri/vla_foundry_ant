@@ -75,9 +75,9 @@ def get_args_vlm_from_load_path(**kwargs):
         "--model.type",
         "vlm",
         "--model.transformer",
-        "include tests/params/dummy_configs/dummy_transformer_config.yaml",
+        "include tests/essential/params/dummy_configs/dummy_transformer_config.yaml",
         "--model.vit",
-        "include tests/params/dummy_configs/dummy_vit_config.yaml",
+        "include tests/essential/params/dummy_configs/dummy_vit_config.yaml",
         "--model.vit.hidden_dim",
         str(kwargs.get("hidden_dim", 999)),
         "--distributed.fsdp",
@@ -162,7 +162,7 @@ def test_load_path_flag():
     assert args.model.vit.projector_pixel_shuffle_factor == 2
 
 
-@pytest.mark.parametrize("params_yaml", ["tests/params/dummy_configs/dummy_vlm_config.yaml"])
+@pytest.mark.parametrize("params_yaml", ["tests/essential/params/dummy_configs/dummy_vlm_config.yaml"])
 def test_load_experiment_params_from_yaml(params_yaml):
     params = load_experiment_params_from_yaml(params_yaml)
     assert params.model.vit.hidden_dim == 128
@@ -171,8 +171,8 @@ def test_load_experiment_params_from_yaml(params_yaml):
 @pytest.mark.parametrize(
     "params_yaml",
     [
-        "tests/params/dummy_configs/dummy_vlm_config_include_vit.yaml",
-        "tests/params/dummy_configs/dummy_vlm_config_include_model.yaml",
+        "tests/essential/params/dummy_configs/dummy_vlm_config_include_vit.yaml",
+        "tests/essential/params/dummy_configs/dummy_vlm_config_include_model.yaml",
     ],
 )
 def test_load_experiment_params_from_yaml_include(params_yaml):
@@ -183,8 +183,8 @@ def test_load_experiment_params_from_yaml_include(params_yaml):
 @pytest.mark.parametrize(
     "params_yaml, hidden_dim",
     [
-        ("tests/params/dummy_configs/dummy_vlm_config_include_vit.yaml", 900),
-        ("tests/params/dummy_configs/dummy_vlm_config_include_model.yaml", 1000),
+        ("tests/essential/params/dummy_configs/dummy_vlm_config_include_vit.yaml", 900),
+        ("tests/essential/params/dummy_configs/dummy_vlm_config_include_model.yaml", 1000),
     ],
 )
 def get_args_vlm_from_load_path_modify(params_yaml, hidden_dim):
@@ -283,7 +283,7 @@ def test_localize_paths_mixed_list_and_dict():
 def test_load_params_from_yaml_without_localize():
     """Test loading params from yaml without localization."""
     params = load_params_from_yaml(
-        ModelParams, "tests/params/dummy_configs/dummy_transformer_config.yaml", localize_params=False
+        ModelParams, "tests/essential/params/dummy_configs/dummy_transformer_config.yaml", localize_params=False
     )
     assert params.type == "transformer"
     assert params.hidden_dim == 128
@@ -324,7 +324,7 @@ def test_load_params_from_yaml_with_localize():
 def test_load_params_from_yaml_ignores_unknown_fields():
     """Extra keys should be quietly ignored by lenient BaseParams decoding."""
     params = load_params_from_yaml(
-        ModelParams, "tests/params/dummy_configs/dummy_transformer_config_extra.yaml", localize_params=False
+        ModelParams, "tests/essential/params/dummy_configs/dummy_transformer_config_extra.yaml", localize_params=False
     )
     assert params.type == "transformer"
     assert params.hidden_dim == 128

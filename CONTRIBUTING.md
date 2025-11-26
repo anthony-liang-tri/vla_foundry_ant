@@ -105,7 +105,7 @@ features (e.g., [`@pytest.mark.parametrize`](https://docs.pytest.org/en/stable/h
 To run tests locally:
 ```bash
 # Run all the tests:
-uv run pytest tests
+uv run pytest tests/essential
 
 # Run a specific test:
 uv run pytest /path/to/my/test.py -s -k partial_string_in_test_name

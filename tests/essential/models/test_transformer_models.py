@@ -11,7 +11,9 @@ from vla_foundry.params.train_experiment_params import load_params_from_yaml
 class TestTransformer:
     @pytest.fixture
     def transformer_config(self):
-        return load_params_from_yaml(TransformerParams, "tests/params/dummy_configs/dummy_transformer_config.yaml")
+        return load_params_from_yaml(
+            TransformerParams, "tests/essential/params/dummy_configs/dummy_transformer_config.yaml"
+        )
 
     @pytest.fixture
     def transformer(self, transformer_config):

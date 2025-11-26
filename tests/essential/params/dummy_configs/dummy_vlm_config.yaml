@@ -1,7 +1,7 @@
 data:
   allow_multiple_epochs: false
   dataset_manifest:
-  - tests/shared/tiny_dataset/image_caption/manifest.json
+  - tests/essential/shared/tiny_dataset/image_caption/manifest.jsonl
   dataset_modality:
   - image_caption
   dataset_weighting:
@@ -51,11 +51,45 @@ hparams:
   z_loss_coefficient: 0.0
 log_every_n_steps: 20
 model:
+  image_token_id: 257152
   resume_from_checkpoint: null
   resume_weights_only: false
-  type: vlm_hf
-  hf_pretrained: "microsoft/git-base"
-name: 2025_07_14-22_28_54-model_vlm_hf-lr_0.0001-bsz_128
+  transformer:
+    attn_name: torch_attn
+    ffn_type: swiglu
+    hidden_dim: 128
+    max_seq_len: 16
+    n_heads: 2
+    n_layers: 2
+    norm_eps: 1.0e-05
+    norm_type: default_layer_norm
+    positional_embedding_type: rotary
+    post_embed_norm: false
+    qk_norm: false
+    resume_from_checkpoint: null
+    resume_weights_only: false
+    type: transformer
+    vocab_size: 1000
+    weight_tying: false
+  type: vlm
+  vit:
+    projector_pixel_shuffle_factor: 1
+    resume_from_checkpoint: null
+    resume_weights_only: false
+    type: vit
+    cls_flag: false
+    dropout: 0.0
+    freeze: false
+    hidden_dim: 128
+    img_size: 224
+    inter_dim: 4304
+    interpolation_mode: bicubic
+    ln_eps: 1.0e-06
+    n_heads: 16
+    n_layers: 27
+    patch_size: 14
+    pretrained: null
+name: 2025_07_14-22_28_54-model_vlm-lr_0.0001-bsz_128
 num_checkpoints: 5
 num_epochs: null
 remote_sync: s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/vlm_paligemma_3b

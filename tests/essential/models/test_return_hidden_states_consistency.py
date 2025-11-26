@@ -12,11 +12,15 @@ class TestReturnHiddenStatesConsistency:
 
     @pytest.fixture
     def transformer_config(self):
-        return load_params_from_yaml(TransformerParams, "tests/params/dummy_configs/dummy_transformer_config.yaml")
+        return load_params_from_yaml(
+            TransformerParams, "tests/essential/params/dummy_configs/dummy_transformer_config.yaml"
+        )
 
     @pytest.fixture
     def vlm_config(self):
-        model_params = load_params_from_yaml(ModelParams, "tests/params/dummy_configs/dummy_vlm_model_config.yaml")
+        model_params = load_params_from_yaml(
+            ModelParams, "tests/essential/params/dummy_configs/dummy_vlm_model_config.yaml"
+        )
         object.__setattr__(model_params, "image_token_id", 999)
         return model_params
 

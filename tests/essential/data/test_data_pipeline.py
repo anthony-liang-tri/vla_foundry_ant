@@ -157,7 +157,7 @@ class TestTextPipeline:
 
         assert pipeline.batch_size == batch_size
 
-    @pytest.mark.parametrize("param_config_path", ["tests/params/dummy_configs/dummy_text_config.yaml"])
+    @pytest.mark.parametrize("param_config_path", ["tests/essential/params/dummy_configs/dummy_text_config.yaml"])
     def test_text_dataloader_actual_datastring_with_mixing(self, param_config_path):
         params = load_experiment_params_from_yaml(param_config_path)
         datastrings, num_samples_per_dataset, _, _ = get_datastring_input(
@@ -203,7 +203,7 @@ class TestTextPipeline:
 
     def test_text_batch_consistency_and_shuffle(self):
         """Test that text batches maintain consistency across dataloader instances."""
-        params = load_experiment_params_from_yaml("tests/params/dummy_configs/dummy_text_config.yaml")
+        params = load_experiment_params_from_yaml("tests/essential/params/dummy_configs/dummy_text_config.yaml")
 
         # Create two identical dataloaders with same seed
         datastrings, num_samples_per_dataset, _, _ = get_datastring_input(
@@ -392,7 +392,9 @@ class TestTextUntokenizedPipeline:
             assert torch.equal(result["input_ids"], mock_input_ids)
             assert torch.equal(result["attention_mask"], mock_attention_mask)
 
-    @pytest.mark.parametrize("param_config_path", ["tests/params/dummy_configs/dummy_text_untokenized_config.yaml"])
+    @pytest.mark.parametrize(
+        "param_config_path", ["tests/essential/params/dummy_configs/dummy_text_untokenized_config.yaml"]
+    )
     def test_text_untokenized_dataloader_actual_datastring(self, param_config_path):
         params = load_experiment_params_from_yaml(param_config_path)
         datastrings, num_samples_per_dataset, _, _ = get_datastring_input(
@@ -444,7 +446,9 @@ class TestTextUntokenizedPipeline:
 
     def test_text_untokenized_batch_consistency_and_shuffle(self):
         """Test that text_untokenized batches maintain consistency across dataloader instances."""
-        params = load_experiment_params_from_yaml("tests/params/dummy_configs/dummy_text_untokenized_config.yaml")
+        params = load_experiment_params_from_yaml(
+            "tests/essential/params/dummy_configs/dummy_text_untokenized_config.yaml"
+        )
 
         # Create two identical dataloaders with same seed
         datastrings, num_samples_per_dataset, _, _ = get_datastring_input(
@@ -549,7 +553,7 @@ class TestImageCaptionPipeline:
         sample = {"txt": "A description", image_format: b"image_data"}
         assert filter_no_caption_or_no_image(sample)
 
-    @pytest.mark.parametrize("param_config_path", ["tests/params/dummy_configs/dummy_vlm_config.yaml"])
+    @pytest.mark.parametrize("param_config_path", ["tests/essential/params/dummy_configs/dummy_vlm_config.yaml"])
     def test_vlm_dataloader_actual_datastring(self, param_config_path):
         params = load_experiment_params_from_yaml(param_config_path)
         datastrings, num_samples_per_dataset, _, _ = get_datastring_input(
@@ -612,7 +616,7 @@ class TestImageCaptionPipeline:
         assert batch_count > 0, "No batches were produced by the VLM dataloader"
 
     def test_vlm_batch_consistency_and_shuffle(self):
-        params = load_experiment_params_from_yaml("tests/params/dummy_configs/dummy_vlm_config.yaml")
+        params = load_experiment_params_from_yaml("tests/essential/params/dummy_configs/dummy_vlm_config.yaml")
 
         # Create two identical dataloaders
         datastrings, num_samples_per_dataset, _, _ = get_datastring_input(
@@ -745,7 +749,7 @@ class TestIntegrationWithRealConfig:
     def test_image_caption_pipeline_with_real_config(self):
         """Test ImageCaptionPipeline with real VLM config."""
         try:
-            params = load_experiment_params_from_yaml("tests/params/dummy_configs/dummy_vlm_config.yaml")
+            params = load_experiment_params_from_yaml("tests/essential/params/dummy_configs/dummy_vlm_config.yaml")
 
             with patch("vla_foundry.data.pipelines.image_caption.get_processor") as mock_get_processor:
                 mock_processor = Mock()

@@ -9,12 +9,12 @@ from vla_foundry.params.train_experiment_params import load_params_from_yaml
 
 
 def test_model_loading():
-    model_params = load_params_from_yaml(ModelParams, "tests/shared/tiny_model/config_model.yaml")
+    model_params = load_params_from_yaml(ModelParams, "tests/essential/shared/tiny_model/config_model.yaml")
     model = create_model(model_params)
     initial_keys = set(model.state_dict().keys())
     initial_state_dict = deepcopy(model.state_dict())
 
-    ckpt = "tests/shared/tiny_model/checkpoint.pt"
+    ckpt = "tests/essential/shared/tiny_model/checkpoint.pt"
     load_model_checkpoint(model, ckpt)
     loaded_keys = set(model.state_dict().keys())
     loaded_state_dict = model.state_dict()
@@ -38,7 +38,7 @@ def test_model_loading():
 
 def test_model_same_seed_same_initialization():
     """Test that model initializes same parameters with same seed."""
-    model_params = load_params_from_yaml(ModelParams, "tests/shared/tiny_model/config_model.yaml")
+    model_params = load_params_from_yaml(ModelParams, "tests/essential/shared/tiny_model/config_model.yaml")
 
     # Set seed and create model
     torch.manual_seed(42)
@@ -55,7 +55,7 @@ def test_model_same_seed_same_initialization():
 
 def test_model_deterministic_loading():
     """Test that model loads deterministically regardless of seed."""
-    model_params = load_params_from_yaml(ModelParams, "tests/shared/tiny_model/config_model.yaml")
+    model_params = load_params_from_yaml(ModelParams, "tests/essential/shared/tiny_model/config_model.yaml")
 
     # Set seed and create model
     torch.manual_seed(42)
@@ -65,7 +65,7 @@ def test_model_deterministic_loading():
     torch.manual_seed(43)
     model2 = create_model(model_params)
 
-    ckpt = "tests/shared/tiny_model/checkpoint.pt"
+    ckpt = "tests/essential/shared/tiny_model/checkpoint.pt"
     load_model_checkpoint(model1, ckpt)
     load_model_checkpoint(model2, ckpt)
 

@@ -28,11 +28,46 @@ jobs:
 
     - name: Create virtual environment and install dependencies
       run: |
-        # Use `--frozen` to avoid updating the lockfile at all.
         uv sync --frozen
 
-    - name: Run tests
+    - name: Run general tests
       run: |
-        uv run pytest --verbose tests/
+        uv run pytest --verbose tests/essential
       env:
         HF_TOKEN: ${{ secrets.HF_TOKEN }}
+
+  test-dependency-groups:
+    runs-on: ubuntu-latest
+    needs: test
+    strategy:
+      matrix:
+        group: [inference, sagemaker]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Checkout PR code (always run)
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+
+    - name: Install the latest version of uv
+      uses: astral-sh/setup-uv@v6
+      with:
+        version: "latest"
+        enable-cache: true
+
+    - name: Create virtual environment and install dependencies
+      run: |
+        uv sync --frozen
+
+    - name: Sync ${{ matrix.group }} group
+      run: |
+        uv sync --frozen --group ${{ matrix.group }}
+
+    - name: Run tests for ${{ matrix.group }} group
+      run: |
+        uv run pytest --verbose tests/dependencies/${{ matrix.group }}
+      env:
+        HF_TOKEN: ${{ secrets.HF_TOKEN }}s

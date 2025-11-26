@@ -53,23 +53,23 @@ uv run ruff format .
 ### 2. Testing (3 categories)
 ```bash
 # Fast local tests (~20 seconds, NO internet required)
-uv run pytest tests/models/ tests/params/ -v
+uv run pytest tests/essential/models/ tests/essential/params/ -v
 
 # Data pipeline tests (~30 seconds, some may need internet)
-uv run pytest tests/data/ -v
+uv run pytest tests/essential/data/ -v
 
 # Full test suite (~60 seconds, may have internet failures)
-uv run pytest tests/ --verbose
+uv run pytest tests/essential/ --verbose
 ```
 
 **Test Notes:**
 - Tests requiring HuggingFace/internet access may fail in sandboxed environments
-- Use `tests/shared/tiny_dataset/` for data tests requiring datasets
-- Test structure mirrors main code: `tests/data/`, `tests/models/`, etc.
+- Use `tests/essential/shared/tiny_dataset/` for data tests requiring datasets
+- Test structure mirrors main code: `tests/essential/data/`, `tests/essential/models/`, etc.
 
 ### 3. GitHub Workflows
 - **Lint workflow**: Runs `uvx ruff check .`
-- **Test workflow**: Runs `uv sync --frozen && uv run pytest --verbose tests/`
+- **Test workflow**: Runs `uv sync --frozen && uv run pytest --verbose tests/essential`
 - Both require Python 3.10 and use uv
 
 ## Key Architecture & File Locations
@@ -130,7 +130,7 @@ uv run python vla_foundry/main.py \
 
 ### Common Failures
 1. **HuggingFace Connection Errors**: Tests may fail if internet/HF access blocked
-   - **Solution**: Run offline tests: `uv run pytest tests/models/ tests/params/`
+   - **Solution**: Run offline tests: `uv run pytest tests/essential/models/ tests/essential/params/`
 
 2. **Memory Issues**: Large model tests may fail on limited hardware
    - **Solution**: Use smaller configs from `config_presets/models/transformer_tiny.yaml`
@@ -155,7 +155,7 @@ uv run ruff check . && uv run ruff format --check .
 
 2. **Core functionality tests**:
 ```bash
-uv run pytest tests/models/ tests/params/ -x --tb=short
+uv run pytest tests/essential/models/ tests/essential/params/ -x --tb=short
 ```
 
 3. **Import verification**:
@@ -178,7 +178,7 @@ uv run python vla_foundry/main.py --help | head -5
 ## Critical Notes
 - **ALWAYS use `uv run` prefix** for Python commands to ensure proper environment
 - **Configuration is immutable** by design - use `object.__setattr__` if modification needed
-- **Test data**: Use `tests/shared/tiny_dataset/` for tests requiring data files
+- **Test data**: Use `tests/essential/shared/tiny_dataset/` for tests requiring data files
 - **Distributed training**: Use FSDP (`--distributed.fsdp True`) for multi-GPU
 - **Command precedence**: CLI args > YAML presets > defaults
 

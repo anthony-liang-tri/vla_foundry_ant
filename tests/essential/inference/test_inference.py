@@ -7,9 +7,9 @@ EXPECTED_OUTPUT_TEXT = ["hi[PAD][PAD][PAD]....................", "This is a batc
 
 
 def test_inference_text():
-    model_params = load_params_from_yaml(ModelParams, "tests/shared/tiny_model/config_model.yaml")
+    model_params = load_params_from_yaml(ModelParams, "tests/essential/shared/tiny_model/config_model.yaml")
     model = create_model(model_params)
-    ckpt = "tests/shared/tiny_model/checkpoint.pt"
+    ckpt = "tests/essential/shared/tiny_model/checkpoint.pt"
     load_model_checkpoint(model, ckpt)
 
     from transformers import AutoTokenizer

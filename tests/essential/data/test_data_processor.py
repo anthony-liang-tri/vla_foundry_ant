@@ -7,12 +7,12 @@ from vla_foundry.params.train_experiment_params import load_experiment_params_fr
 
 class TestProcessorPaliGemma:
     def test_processor_paligemma(self):
-        params = load_experiment_params_from_yaml("tests/params/dummy_configs/dummy_vlm_config.yaml")
+        params = load_experiment_params_from_yaml("tests/essential/params/dummy_configs/dummy_vlm_config.yaml")
         object.__setattr__(params.data, "processor", "google/paligemma-3b-pt-224")
         paligemma_processor = get_processor(params.data)
 
         # Create a dummy image
-        image = Image.open("tests/shared/chonky_cat.png")
+        image = Image.open("tests/essential/shared/chonky_cat.png")
         if image.mode == "RGBA":
             image = image.convert("RGB")
 

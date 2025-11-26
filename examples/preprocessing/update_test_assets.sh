@@ -31,7 +31,7 @@ files_to_download=(
     $output_dir/shards/preprocessing_config.yaml
 )
 
-test_assets_dir=tests/test_assets/small_lbm_dataset
+test_assets_dir=tests/essential/test_assets/small_lbm_dataset
 
 for file in ${files_to_download[@]}; do
     aws s3 cp $file $test_assets_dir

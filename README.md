@@ -318,21 +318,28 @@ uv run ruff check --fix
 ```
 
 ### 8. Tests
-Tests are implemented with [pytest](https://docs.pytest.org/en/stable/). To run tests, you can call
+Tests are implemented with [pytest](https://docs.pytest.org/en/stable/). The main tests are in the `tests/essential` folder. To run these tests, you can call
 ```
-uv run pytest tests
+uv run pytest tests/essential
 ```
 To run more verbose tests, you can add `-v` for detailed per-test breakdowns and `-s` to display print statement outputs.
 
+In addition, there are tests for dependencies in `tests/dependencies`. To run these, you will first need to use `uv` to switch over to that dependency group. Below is an example:
+
+```
+uv sync --group=inference
+uv run pytest tests/dependencies/inference
+```
+
 Please add tests for things you implement. To make it clearer on where to add new tests, we organize the `tests` folder in similar structure to the main `vla_foundry` folder (with subfolders `data`, `models`, etc.) You can run tests in a specific folder by calling something like
 ```
-uv run pytest tests/data
+uv run pytest tests/essential/data
 ```
 
 #### 8.1 Credentials and Tiny Datasets
 API keys and secrets are stored in Github secrets and can be accessed like `${{ secrets.HF_TOKEN }}`. This is already set up properly for Hugging Face, so HF tokenizers and models can now be loaded on tests with no issue.
 
-For AWS S3, this is currently not set up and is generally not recommended (we want tests to be as simple and self-contained as possible, and this adds unnecessary complexity.) For tests that require loading data, we recommend creating tiny WebDataset shards in [tests/shared/tiny_dataset](tests/shared/tiny_dataset). More examples can be found in that folder.
+For AWS S3, this is currently not set up and is generally not recommended (we want tests to be as simple and self-contained as possible, and this adds unnecessary complexity.) For tests that require loading data, we recommend creating tiny WebDataset shards in [tests/essential/shared/tiny_dataset](tests/essential/shared/tiny_dataset). More examples can be found in that folder.
 
 #### 8.2 Credentials on Forks
 The `HF_TOKEN` is set up already on upstream. However, this may not be set up on individual forks. To add your own `HF_TOKEN` to individual forks, you can add it in "Settings". See [CONTRIBUTING.md](CONTRIBUTING.md) for more details.

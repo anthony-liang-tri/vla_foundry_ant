@@ -17,7 +17,7 @@ from vla_foundry.params.train_experiment_params import load_params_from_yaml
 class TestModalityProjector:
     @pytest.fixture
     def vit_configs(self):
-        return load_params_from_yaml(ViTParams, "tests/params/dummy_configs/dummy_vit_config.yaml")
+        return load_params_from_yaml(ViTParams, "tests/essential/params/dummy_configs/dummy_vit_config.yaml")
 
     @pytest.fixture
     def projector(self, vit_configs):
@@ -58,7 +58,7 @@ class TestModalityProjector:
     def test_modality_projector_pixel_shuffle_error_not_divisible(self):
         """Test pixel shuffle error when sequence root not divisible by scale factor"""
         # Create a config with scale factor 3 (not divisible by 4)
-        vit_cfg = load_params_from_yaml(ViTParams, "tests/params/dummy_configs/dummy_vit_config.yaml")
+        vit_cfg = load_params_from_yaml(ViTParams, "tests/essential/params/dummy_configs/dummy_vit_config.yaml")
         object.__setattr__(vit_cfg, "projector_pixel_shuffle_factor", 3)
         output_dim = vit_cfg.hidden_dim * (vit_cfg.projector_pixel_shuffle_factor**2)
         projector = ModalityProjector(vit_cfg, output_dim)
@@ -73,7 +73,7 @@ class TestModalityProjector:
 class TestVLM:
     @pytest.fixture
     def vlm_config(self):
-        return load_params_from_yaml(ModelParams, "tests/params/dummy_configs/dummy_vlm_model_config.yaml")
+        return load_params_from_yaml(ModelParams, "tests/essential/params/dummy_configs/dummy_vlm_model_config.yaml")
 
     @pytest.fixture
     def vlm(self, vlm_config):
@@ -179,7 +179,7 @@ class TestVLM:
 class TestVLMHF:
     @pytest.fixture
     def vlm_hf_config(self):
-        return load_params_from_yaml(ModelParams, "tests/params/dummy_configs/dummy_vlm_model_hf_config.yaml")
+        return load_params_from_yaml(ModelParams, "tests/essential/params/dummy_configs/dummy_vlm_model_hf_config.yaml")
 
     @patch("vla_foundry.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
     def test_vlm_hf_forward_basic(self, mock_from_pretrained, vlm_hf_config):
@@ -411,7 +411,7 @@ class TestVLMInheritance:
 
     @pytest.fixture
     def vlm_config(self):
-        return load_params_from_yaml(ModelParams, "tests/params/dummy_configs/dummy_vlm_model_config.yaml")
+        return load_params_from_yaml(ModelParams, "tests/essential/params/dummy_configs/dummy_vlm_model_config.yaml")
 
     @pytest.fixture
     def vlm(self, vlm_config):
@@ -444,7 +444,7 @@ class TestVLMGradientCheckpointing:
 
     @pytest.fixture
     def vlm_config(self):
-        return load_params_from_yaml(ModelParams, "tests/params/dummy_configs/dummy_vlm_model_config.yaml")
+        return load_params_from_yaml(ModelParams, "tests/essential/params/dummy_configs/dummy_vlm_model_config.yaml")
 
     @pytest.fixture
     def vlm(self, vlm_config):
@@ -480,7 +480,7 @@ class TestVLMHFInheritance:
 
     @pytest.fixture
     def vlm_hf_config(self):
-        return load_params_from_yaml(ModelParams, "tests/params/dummy_configs/dummy_vlm_model_hf_config.yaml")
+        return load_params_from_yaml(ModelParams, "tests/essential/params/dummy_configs/dummy_vlm_model_hf_config.yaml")
 
     @patch("vla_foundry.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
     def test_vlm_hf_inherits_from_transformer_base(self, mock_from_pretrained, vlm_hf_config):
@@ -524,7 +524,7 @@ class TestVLMHFVocabularyExtension:
 
     @pytest.fixture
     def vlm_hf_config(self):
-        return load_params_from_yaml(ModelParams, "tests/params/dummy_configs/dummy_vlm_model_hf_config.yaml")
+        return load_params_from_yaml(ModelParams, "tests/essential/params/dummy_configs/dummy_vlm_model_hf_config.yaml")
 
     @patch("vla_foundry.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
     def test_vlm_hf_resize_token_embeddings_with_token_id(self, mock_from_pretrained, vlm_hf_config):

@@ -4,19 +4,19 @@ Pytest tests for validating processed robotics shards.
 
 Usage:
     # Run unit tests only
-    pytest tests/test_validate_robotics_shards.py -v
+    pytest tests/essential/test_validate_robotics_shards.py -v
 
     # Run integration tests (requires S3 access)
-    pytest tests/test_validate_robotics_shards.py -v -m integration
+    pytest tests/essential/test_validate_robotics_shards.py -v -m integration
 
     # Run integration tests with custom dataset path
-    pytest tests/test_validate_robotics_shards.py -v -m integration --dataset-path /path/to/dataset
+    pytest tests/essential/test_validate_robotics_shards.py -v -m integration --dataset-path /path/to/dataset
 
     # Run with custom number of samples to validate
-    pytest tests/test_validate_robotics_shards.py -v -m integration --dataset-path /path/to/dataset --num-samples 9
+    pytest tests/essential/test_validate_robotics_shards.py -v -m integration --dataset-path /path --num-samples 9
 
     # Run all tests
-    pytest tests/test_validate_robotics_shards.py -v
+    pytest tests/essential/test_validate_robotics_shards.py -v
 """
 
 import os
@@ -381,7 +381,7 @@ if __name__ == "__main__":
     import sys
 
     if len(sys.argv) > 1 and "--help" not in sys.argv:
-        print("To run tests, use: pytest tests/test_validate_robotics_shards.py")
+        print("To run tests, use: pytest tests/essential/test_validate_robotics_shards.py")
         print("For integration tests, add: --dataset-path /path/to/dataset")
     else:
         pytest.main([__file__] + sys.argv[1:])

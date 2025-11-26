@@ -34,7 +34,7 @@ def cleanup_resources():
 @pytest.fixture
 def dataset_path():
     """Path to the test dataset."""
-    return "tests/test_assets/small_lbm_dataset"
+    return "tests/essential/test_assets/small_lbm_dataset"
 
 
 def _prepare_normalization_config(config_dict):

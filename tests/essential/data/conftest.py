@@ -15,7 +15,7 @@ def pytest_addoption(parser):
     parser.addoption(
         "--dataset-path",
         action="store",
-        default="tests/test_assets/small_lbm_dataset/",
+        default="tests/essential/test_assets/small_lbm_dataset/",
         help="Path to the dataset to validate (local path or S3 URL)",
     )
     parser.addoption(

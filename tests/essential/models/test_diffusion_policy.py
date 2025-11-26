@@ -12,7 +12,7 @@ class TestDiffusionPolicy:
     @pytest.fixture
     def diffusion_policy_config(self):
         return load_params_from_yaml(
-            DiffusionPolicyParams, "tests/params/dummy_configs/dummy_diffusion_policy_config.yaml"
+            DiffusionPolicyParams, "tests/essential/params/dummy_configs/dummy_diffusion_policy_config.yaml"
         )
 
     @pytest.fixture

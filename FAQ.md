@@ -11,7 +11,7 @@ Common errors:
 ## Failing pytest tests due to Hugging Face errors
 This error usually shows up as something like 
 ```
-FAILED tests/data/test_robotics_dataloader.py::test_batch_size[2] - OSError: You are trying to access a gated repo.
+FAILED tests/essential/data/test_robotics_dataloader.py::test_batch_size[2] - OSError: You are trying to access a gated repo.
 ```
 
 This is likely due to not having access to the [PaliGemma](google/paligemma-3b-pt-224) model that is being used in the test cases. The following are useful to check:
