@@ -19,11 +19,13 @@ NAME = "vla_foundry"
 INSTANCE_MAPPER = {
     "p4de": "ml.p4de.24xlarge",
     "p5": "ml.p5.48xlarge",
+    "p5en": "ml.p5en.48xlarge",
     "p6": "ml.p6-b200.48xlarge",
 }
 QUEUE_MAPPER = {
     "us-west-2": {
         "ml.p5.48xlarge": "fss-ml-p5-48xlarge-us-west-2",
+        "ml.p5en.48xlarge": "fss-ml-p5en-48xlarge-us-west-2",
         "ml.p4de.24xlarge": "fss-ml-p4de-24xlarge-us-west-2",
         "ml.p4d.24xlarge": "fss-ml-p4d-24xlarge-us-west-2",
         "ml.p6-b200.48xlarge": "fss-ml-p6-b200-48xlarge-us-west-2",
