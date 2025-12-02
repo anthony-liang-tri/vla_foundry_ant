@@ -214,7 +214,7 @@ class StableDiffusionParams(ModelParams):
     # CFG params
     do_classifier_free_guidance: bool = field(default=False)
     guidance_scale: float = field(default=4.0)  # Standard CFG scale
-    dropout_percent: float = field(default=0.2)  # 20% dropout for unconditional training
+    dropout_percent: float = field(default=0.2)  # 20%% dropout for unconditional training
 
     @property
     def image_size(self):
