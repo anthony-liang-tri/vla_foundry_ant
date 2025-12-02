@@ -43,11 +43,11 @@ def main():
         raise RuntimeError(error_msg)
 
     # Initialize Ray
-    runtime_env = {
-        "env_vars": {
-            "AWS_PROFILE": os.environ.get("AWS_PROFILE"),
-        }
-    }
+    runtime_env = {"env_vars": {}}
+    aws_profile = os.environ.get("AWS_PROFILE")
+    if aws_profile:
+        runtime_env["env_vars"]["AWS_PROFILE"] = aws_profile
+
     if cfg.ray_address:
         ray.init(address=cfg.ray_address, runtime_env=runtime_env)
         print(f"Connected to Ray cluster at {cfg.ray_address}")

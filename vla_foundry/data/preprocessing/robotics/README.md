@@ -9,7 +9,7 @@ To select which dataset format to use, you can use the `--type` argument. This w
 All converter classes inherit from the base class `BaseRoboticsConverter`. The [preprocess_robotics_to_tar.py](preprocess_robotics_to_tar.py) interfaces with converter objects by calling methods such as `discover_episodes` and `process_episode`. 
 
 ### 1.1 Adding a New Dataset Source
-To support a new dataset source, create a new class inside `converters`, register your class in `converters/__init__.py`, then define the following methods (`converters/base.py` also provides some docstring guides for how to populate these methods).
+To support a new dataset source, create a new class inside `converters`, register your class in `converters/__init__.py`, add a custom `PreprocessParams` (see [1.2 Preprocessing Parameters](#preprocessing-parameters)), then define the following methods (`converters/base.py` also provides some docstring guides for how to populate these methods).
 - `discover_episodes`: Given a list of paths, return a list of full paths for each episode.
 - `process_episode`: This is pre-filled in `base.py` with the logic to extract the necessary fields, as well as the parallelism for uploading. The functioning of this method depends on the other methods listed below. For most cases, you probably will not need to touch this specific function, and it should work properly once all the other methods are defined. 
 - `load_episode_data`: Takes in `episode_path` and reads it, then extracts and returns `episode_data`. This `episode_data` is what is passed to the other functions to extract from, so this `episode_data` return format can be any format you wish.
