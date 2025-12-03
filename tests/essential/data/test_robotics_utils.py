@@ -11,8 +11,10 @@ from vla_foundry.data.robotics.utils import (
     rot_6d_from_relative,
     rot_6d_to_matrix,
     rot_6d_to_relative,
+    rpy_to_R,
     xyz_from_relative,
     xyz_to_relative,
+    xyzrpy_to_T,
 )
 
 
@@ -37,6 +39,82 @@ def test_normalize_batch_of_vectors():
     normalized = normalize(batch)
     expected = np.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
     np.testing.assert_allclose(normalized, expected)
+
+
+def test_rpy_to_R_identity():
+    # Zero roll, pitch, yaw should yield identity matrix
+    R = rpy_to_R(0.0, 0.0, 0.0)
+    np.testing.assert_allclose(R, np.eye(3), atol=1e-7)
+
+
+def test_rpy_to_R_90deg_rotations():
+    # 90 deg roll
+    R_roll = rpy_to_R(np.pi / 2, 0, 0)
+    expected_roll = np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]])
+    np.testing.assert_allclose(R_roll, expected_roll, atol=1e-7)
+
+    # 90 deg pitch
+    R_pitch = rpy_to_R(0, np.pi / 2, 0)
+    expected_pitch = np.array([[0, 0, 1], [0, 1, 0], [-1, 0, 0]])
+    np.testing.assert_allclose(R_pitch, expected_pitch, atol=1e-7)
+
+    # 90 deg yaw
+    R_yaw = rpy_to_R(0, 0, np.pi / 2)
+    expected_yaw = np.array([[0, -1, 0], [1, 0, 0], [0, 0, 1]])
+    np.testing.assert_allclose(R_yaw, expected_yaw, atol=1e-7)
+
+
+def test_rpy_to_R_is_valid_rotation_matrix():
+    # A random set of angles
+    r, p, y = 0.3, -0.7, 1.2
+    R = rpy_to_R(r, p, y)
+    # Orthonormal and right-handed (determinant +1)
+    np.testing.assert_allclose(R.T @ R, np.eye(3), atol=1e-7)
+    np.testing.assert_allclose(np.linalg.det(R), 1.0, atol=1e-7)
+
+
+def test_xyzrpy_to_T_single_pose():
+    # [x, y, z, roll, pitch, yaw] all zeros
+    pose = [1.0, 2.0, 3.0, 0.0, 0.0, 0.0]
+    T = xyzrpy_to_T(pose)
+    assert T.shape == (1, 4, 4)
+    np.testing.assert_allclose(T[0, :3, :3], np.eye(3), atol=1e-7)
+    np.testing.assert_allclose(T[0, :3, 3], np.array([1.0, 2.0, 3.0]), atol=1e-7)
+    np.testing.assert_allclose(T[0, 3], np.array([0.0, 0.0, 0.0, 1.0]), atol=1e-7)
+
+
+def test_xyzrpy_to_T_batch():
+    poses = np.array(
+        [
+            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # identity
+            [1.0, 2.0, 3.0, 0.0, 0.0, np.pi / 2],  # yaw 90
+        ]
+    )
+    T = xyzrpy_to_T(poses)
+    assert T.shape == (2, 4, 4)
+
+    # First transform is identity
+    np.testing.assert_allclose(T[0], np.eye(4), atol=1e-7)
+
+    # Second transform translation
+    np.testing.assert_allclose(T[1, :3, 3], np.array([1.0, 2.0, 3.0]), atol=1e-7)
+
+    # Second transform rotation equals Rz(90°)
+    Rz_expected = np.array([[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+    np.testing.assert_allclose(T[1, :3, :3], Rz_expected, atol=1e-7)
+
+
+def test_xyzrpy_to_T_invalid_length():
+    # Should raise ValueError for wrong length
+    with pytest.raises(ValueError):
+        xyzrpy_to_T([1, 2, 3, 4, 5])
+
+
+def test_xyzrpy_to_T_invalid_shape():
+    # Should raise ValueError for wrong shape
+    arr = np.ones((2, 5))
+    with pytest.raises(ValueError):
+        xyzrpy_to_T(arr)
 
 
 def test_load_action_field_config_reads_yaml(tmp_path):

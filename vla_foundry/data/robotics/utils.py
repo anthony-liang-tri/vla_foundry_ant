@@ -5,7 +5,7 @@ This module provides helper functions for working with robotics data,
 including extraction of proprioception and action data based on configuration.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Union
 
 import numpy as np
 import yaml
@@ -184,6 +184,53 @@ def rot_6d_from_relative(relative_rot_6d_sequence: np.ndarray, reference_rot_6d:
     absolute_rot_6d_flat = np.stack([matrix_to_rot_6d(rot) for rot in absolute_matrices], axis=0)
 
     return absolute_rot_6d_flat.reshape(original_shape)
+
+
+def rpy_to_R(roll: float, pitch: float, yaw: float) -> np.ndarray:
+    """
+    Convert roll, pitch, yaw angles into a 3×3 rotation matrix.
+
+    Args:
+        roll: Rotation about the x-axis in radians.
+        pitch: Rotation about the y-axis in radians.
+        yaw: Rotation about the z-axis in radians.
+
+    Returns:
+        A (3, 3) array representing the rotation matrix R = Rz(yaw) @ Ry(pitch) @ Rx(roll).
+    """
+    Rx = np.array([[1, 0, 0], [0, np.cos(roll), -np.sin(roll)], [0, np.sin(roll), np.cos(roll)]])
+    Ry = np.array([[np.cos(pitch), 0, np.sin(pitch)], [0, 1, 0], [-np.sin(pitch), 0, np.cos(pitch)]])
+    Rz = np.array([[np.cos(yaw), -np.sin(yaw), 0], [np.sin(yaw), np.cos(yaw), 0], [0, 0, 1]])
+    return Rz @ (Ry @ Rx)
+
+
+def xyzrpy_to_T(pose: Union[np.ndarray, List[float]]) -> np.ndarray:
+    """
+    Convert [x, y, z, roll, pitch, yaw] vector(s) into homogeneous transform(s).
+
+    Args:
+        pose: Either a length-6 vector [x, y, z, roll, pitch, yaw] (angles in radians),
+            or an array of shape (N, 6) where each row is one pose.
+
+    Returns:
+        An array of shape (N, 4, 4) with homogeneous transforms. If a single pose is provided,
+        N = 1.
+    """
+    arr = np.asarray(pose, dtype=float)
+    if arr.ndim == 1:
+        if arr.shape[0] != 6:
+            raise ValueError("Pose must be length 6 (x, y, z, roll, pitch, yaw)")
+        arr = arr[None, :]
+    elif arr.ndim != 2 or arr.shape[1] != 6:
+        raise ValueError("Pose must have shape (n, 6)")
+
+    Ts: List[np.ndarray] = []
+    for x, y, z, r, p, y_ in arr:
+        T = np.eye(4)
+        T[:3, :3] = rpy_to_R(r, p, y_)
+        T[:3, 3] = [x, y, z]
+        Ts.append(T)
+    return np.stack(Ts, axis=0)
 
 
 # Example usage:

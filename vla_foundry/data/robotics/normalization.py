@@ -67,6 +67,7 @@ class RoboticsNormalizer:
         # Parse configuration from dataclass
         self.method = self.normalization_params.method
         self.scope = self.normalization_params.scope
+        self.epsilon = self.normalization_params.epsilon
         self.field_configs = self.normalization_params.field_configs
         self.include_fields = self.normalization_params.include_fields
         self.centered_norm = self.normalization_params.centered_norm

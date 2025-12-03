@@ -90,15 +90,19 @@ class RerunBackend:
         """
         rr.log(path, rr.Scalars(value))
 
-    def log_points3d(self, path: str, points: np.ndarray, **kwargs) -> None:
+    def log_points3d(
+        self, path: str, points: np.ndarray, radii: np.ndarray = None, colors: np.ndarray = None, **kwargs
+    ) -> None:
         """
         Log 3D points to the Rerun backend.
 
         Parameters:
         - path: The hierarchical path for the 3D points.
         - points: The 3D points as a NumPy array of shape (N, 3).
+        - radii: Optional array of point radii.
+        - colors: Optional array of point colors.
         """
-        rr.log(path, rr.Points3D(points))
+        rr.log(path, rr.Points3D(points, radii=radii, colors=colors))
 
     def log_trajectory(self, path: str, trajectory: np.ndarray, **kwargs) -> None:
         """
