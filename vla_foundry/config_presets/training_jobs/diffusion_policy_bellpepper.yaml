@@ -15,9 +15,9 @@ data:
   <<: !include ../data/lbm/lbm_data_params.yaml
   <<: !include ../data/diffusion_policy.yaml
   dataset_manifest: 
-    - s3://tri-ml-datasets-uw2/vla_foundry_datasets/stage3_singletask_sim/BimanualPutRedBellPepperInBin/shards/manifest.jsonl
+    - s3://tri-ml-datasets-uw2/vla_foundry_datasets/stage3_singletask_sim_lbm1trainset_replication/BimanualPutRedBellPepperInBin/shards/manifest.jsonl
   dataset_statistics: 
-    - s3://tri-ml-datasets-uw2/vla_foundry_datasets/stage3_singletask_sim/BimanualPutRedBellPepperInBin/shards/stats.json
+    - s3://tri-ml-datasets-uw2/vla_foundry_datasets/stage3_singletask_sim_lbm1trainset_replication/BimanualPutRedBellPepperInBin/shards/stats.json
   dataset_modality: 
     - robotics
   dataset_weighting: 

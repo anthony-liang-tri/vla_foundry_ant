@@ -8,6 +8,7 @@ import torch.distributed as dist
 import torch.nn as nn
 import torch.optim as optim
 from torch.distributed.distributed_c10d import ReduceOp
+from torch.distributed.fsdp import FSDPModule
 from tqdm import tqdm
 
 from vla_foundry.distributed import is_master
@@ -111,7 +112,8 @@ def train_one_checkpoint(
         total_lm_loss = 0
         for ii in range(cfg.hparams.accum_freq):
             # Don't sync gradients until the final microbatch for FSDP.
-            if cfg.distributed.fsdp:
+            # Check if model is actually wrapped with FSDP (not just if FSDP is enabled in config)
+            if isinstance(model, FSDPModule):
                 is_final_accum = ii == cfg.hparams.accum_freq - 1
                 model.set_requires_gradient_sync(is_final_accum)
                 model.set_requires_all_reduce(is_final_accum)
