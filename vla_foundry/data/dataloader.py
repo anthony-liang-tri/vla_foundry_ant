@@ -101,13 +101,16 @@ def get_wds_dataloader(
         generator = None
         worker_init_fn = None
 
-    # WebDataset's DataLoader replacement; yields already-batched samples.
+    prefetch_factor = cfg.data.prefetch_factor if cfg.data.num_workers > 0 else None
+
     dataloader = wds.WebLoader(
         dataset,
         batch_size=None,  # batching handled in the pipeline
         shuffle=False,  # mixing is handled by RandomMix
         num_workers=cfg.data.num_workers,
         persistent_workers=cfg.data.num_workers > 0,
+        pin_memory=True,
+        prefetch_factor=prefetch_factor,
         generator=generator,
         worker_init_fn=worker_init_fn,
     )

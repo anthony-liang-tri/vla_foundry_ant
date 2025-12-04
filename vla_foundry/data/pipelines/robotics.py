@@ -5,6 +5,7 @@ import numpy as np
 import webdataset as wds
 
 from vla_foundry.data.augmentations.base import Augmentations
+from vla_foundry.data.fast_decode import fast_image_decoder
 from vla_foundry.data.pipelines.base import BaseWebDatasetPipeline
 from vla_foundry.data.processor.robotics_processor import RoboticsProcessor
 from vla_foundry.data.robotics.utils import crop_sequence
@@ -151,7 +152,7 @@ class RoboticsPipeline(BaseWebDatasetPipeline):
             wds.split_by_node,
             wds.split_by_worker,
             wds.tarfile_to_samples(handler=log_and_continue),
-            wds.decode("pilrgb", handler=log_and_continue),
+            wds.decode(fast_image_decoder, handler=log_and_continue),
             wds.select(filter_robotics_sample),
             wds.map(
                 lambda sample: self.augmentations.apply_transforms(sample),

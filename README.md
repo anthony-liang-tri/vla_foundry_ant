@@ -60,8 +60,7 @@ The main entrypoint is `vla_foundry/main.py`. Please see [the guide](FAQ.md#sett
 An example command is something like this:
 ```bash
 .venv/bin/torchrun --nproc_per_node=8 --nnodes=1 vla_foundry/main.py \
---model.type vlm \
---model.transformer "include vla_foundry/config_presets/models/vlm_3b.yaml" \
+--model "include vla_foundry/config_presets/models/vlm_3b.yaml" \
 --model.vit "include vla_foundry/config_presets/models/vit_paligemma.yaml" \
 --data.type image_caption \
 --data.processor google/paligemma-3b-pt-224 \
@@ -73,7 +72,7 @@ An example command is something like this:
 --num_checkpoints 5 \
 --hparams.per_gpu_batch_size 2 \
 --hparams.global_batch_size 64 \
---remote_sync s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/vlm_paligemma_3b
+--remote_sync s3://tri-ml-datasets/vla_foundry_scratch/vlm_paligemma_3b
 ```
 
 See `./examples` for more examples. [llm_11m.sh](examples/training/llm_11m.sh) is a good place to start for the basic training loop, and [diffusion_policy.sh](examples/training/diffusion_policy.sh) is a good place to start for robotics training. We also have end-to-end examples in [tutorials](tutorials).

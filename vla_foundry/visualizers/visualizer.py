@@ -20,7 +20,7 @@ import logging
 import os
 from dataclasses import dataclass
 from functools import wraps
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 from robot_gym.multiarm_spaces import MultiarmObservation, PosesAndGrippers
@@ -398,6 +398,72 @@ class Visualizer:
         # Backend expects quaternion [x, y, z, w] and translation vector
         _STATE.backend.log_pose(_prefix(path), final_translation, quaternion, **kwargs)  # type: ignore[union-attr]
 
+    @ensure_initialized_and_enabled
+    def log_point_cloud(
+        self,
+        path: str,
+        raw_depth: np.ndarray,
+        depth_scale: Union[float, np.ndarray],
+        color_image: Optional[np.ndarray],
+        intrinsics_rgb: np.ndarray,
+        original_image_size: Tuple[int, int],
+    ) -> None:
+        """
+        Log a 3D point cloud reconstructed from a depth map and camera intrinsics.
+
+        Parameters
+        ----------
+        path : str
+            Destination path in the visualization hierarchy (e.g., "sensors/depth/point_cloud").
+        raw_depth : np.ndarray
+            Depth image of shape (H, W). Values are in units that must be converted to meters
+            using `depth_scale`.
+        depth_scale : float or np.ndarray
+            Factor converting `raw_depth` to meters: `Z_m = raw_depth / depth_scale`.
+            If an array is provided, only its first element is used.
+        color_image : Optional[np.ndarray]
+            Optional RGB image aligned with `raw_depth`, of shape (H, W, 3).
+            If provided, per-point colors are attached to the logged points.
+        intrinsics_rgb : np.ndarray
+            Camera intrinsics containing (fx, fy, cx, cy). This function expects to unpack them as
+            `fx, fy, cx, cy = intrinsics_rgb`.
+        original_image_size : Tuple[int, int]
+            Original image size as (width, height) before any resizing. Used to rescale the intrinsics
+            so they match the current depth/image resolution.
+
+        Notes
+        -----
+        - Pixels with zero depth are discarded.
+        - Back-projection uses the pinhole model:
+        X = (x - cx) / fx * Z, Y = (y - cy) / fy * Z, Z = depth (meters).
+        - The resulting points (and optional colors) are forwarded to `self.log_points3d`.
+
+        Returns
+        -------
+        None
+        """
+        scaled_depth = raw_depth.astype(np.float32) / float(np.asarray(depth_scale).reshape(-1)[0])
+        fx, fy, cx, cy = intrinsics_rgb
+
+        H, W = scaled_depth.shape
+        W0, H0 = original_image_size
+        sx, sy = W / W0, H / H0
+        fx1, fy1, cx1, cy1 = fx * sx, fy * sy, cx * sx, cy * sy
+
+        Z = scaled_depth.astype(np.float32)
+        ys, xs = np.mgrid[0:H, 0:W]
+        X = (xs - cx1) / fx1 * Z
+        Y = (ys - cy1) / fy1 * Z
+        pts_cam = np.stack([X, Y, Z], axis=-1).reshape(-1, 3)
+        valid = Z.reshape(-1) > 0
+        pts = pts_cam[valid]
+
+        colors = None
+        if color_image is not None:
+            colors = color_image.reshape(-1, 3)[valid]
+
+        self.log_points3d(path, pts, colors=colors)
+
     def flush(self) -> None:
         if not enabled():
             return
@@ -545,6 +611,7 @@ log_trajectory = _default_visualizer.log_trajectory
 log_line_strips3d = _default_visualizer.log_line_strips3d
 log_text = _default_visualizer.log_text
 log_pose = _default_visualizer.log_pose
+log_point_cloud = _default_visualizer.log_point_cloud
 flush = _default_visualizer.flush
 shutdown = _default_visualizer.shutdown
 

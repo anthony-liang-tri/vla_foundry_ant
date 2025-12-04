@@ -3,7 +3,7 @@
 --model.hf_pretrained Qwen/Qwen2.5-0.5B \
 --distributed.fsdp True \
 --data.type text_untokenized \
---data.dataset_manifest ["s3://tri-ml-datasets/scratch/sedrick.keh/synthetic-untokenized/manifest.jsonl"] \
+--data.dataset_manifest ["s3://tri-ml-datasets/vla_foundry_scratch/datasets/synthetic-untokenized/manifest.jsonl"] \
 --data.dataset_modality ["text_untokenized"] \
 --data.dataset_weighting [1.0] \
 --data.tokenizer Qwen/Qwen2.5-0.5B \
@@ -13,4 +13,4 @@
 --num_checkpoints 5 \
 --hparams.per_gpu_batch_size 8 \
 --hparams.global_batch_size 512 \
---remote_sync s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/llm_hf_untokenized 
+--remote_sync s3://tri-ml-datasets/vla_foundry_scratch/models/llm_hf_untokenized 

@@ -1,6 +1,5 @@
 .venv/bin/torchrun --nproc_per_node=8 --nnodes=1 vla_foundry/main.py \
---model.type vlm \
---model.transformer "include vla_foundry/config_presets/models/vlm_3b.yaml" \
+--model "include vla_foundry/config_presets/models/vlm_3b.yaml" \
 --model.vit.type vit_hf \
 --model.vit.hf_pretrained vit_base_patch16_siglip_224 \
 --distributed.fsdp True \
@@ -17,5 +16,5 @@
 --hparams.global_batch_size 64 \
 --model.vit.hidden_dim 768 \
 --model.vit.projector_pixel_shuffle_factor 1 \
---remote_sync s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/vlm_siglip_paligemma_3b \
+--remote_sync s3://tri-ml-datasets/vla_foundry_scratch/models/vlm_siglip_paligemma_3b \
 --wandb True 

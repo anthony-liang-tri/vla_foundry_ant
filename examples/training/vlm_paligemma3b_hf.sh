@@ -13,4 +13,4 @@
 --num_checkpoints 5 \
 --hparams.per_gpu_batch_size 2 \
 --hparams.global_batch_size 64 \
---remote_sync s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/vlm_paligemma_3b_hf
+--remote_sync s3://tri-ml-datasets/vla_foundry_scratch/models/vlm_paligemma_3b_hf

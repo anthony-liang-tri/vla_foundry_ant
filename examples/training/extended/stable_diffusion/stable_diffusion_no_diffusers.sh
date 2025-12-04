@@ -18,5 +18,5 @@
 --hparams.lr_cooldown_end 1e-6 \
 --total_train_samples 50_000_000 \
 --num_checkpoints 10 \
---remote_sync s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/stable_diffusion \
+--remote_sync s3://tri-ml-datasets/vla_foundry_scratch/models/stable_diffusion \
 --wandb True 

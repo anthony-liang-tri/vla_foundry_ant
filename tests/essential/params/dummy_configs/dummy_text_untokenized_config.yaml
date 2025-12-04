@@ -56,7 +56,7 @@ model:
 name: 2025_07_14-23_26_47-model_transformer_hf-lr_0.0001-bsz_512
 num_checkpoints: 5
 num_epochs: null
-remote_sync: s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/llm_hf_untokenized
+remote_sync: s3://tri-ml-datasets/vla_foundry_scratch/models/llm_hf_untokenized
 save_path: null
 total_train_samples: 14000000
 wandb: true

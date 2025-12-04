@@ -17,6 +17,7 @@ class DataParams(draccus.ChoiceRegistry, BaseParams):
     val_dataset_weighting: List[float] = field(default_factory=list)
     allow_multiple_epochs: bool = False
     num_workers: Optional[int] = field(default=None)  # Auto-calculated per-GPU if None
+    prefetch_factor: int = field(default=4)  # Number of batches to prefetch per worker (PyTorch DataLoader)
     seq_len: int = field(default=2048)
     shuffle: bool = field(default=True)
     shuffle_buffer_size: int = field(default=2000)

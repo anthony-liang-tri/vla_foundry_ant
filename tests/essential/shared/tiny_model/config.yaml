@@ -67,7 +67,7 @@ model:
 name: 2025_07_15-00_31_10-model_transformer-lr_0.0001-bsz_2048
 num_checkpoints: 5
 num_epochs: null
-remote_sync: s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/llm_tiny
+remote_sync: s3://tri-ml-datasets/vla_foundry_scratch/models/llm_tiny
 save_path: null
 total_train_samples: 1000000
 wandb: true
