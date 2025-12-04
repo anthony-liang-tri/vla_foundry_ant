@@ -60,8 +60,7 @@ The main entrypoint is `vla_foundry/main.py`. Please see [the guide](FAQ.md#sett
 An example command is something like this:
 ```bash
 .venv/bin/torchrun --nproc_per_node=8 --nnodes=1 vla_foundry/main.py \
---model.type vlm \
---model.transformer "include vla_foundry/config_presets/models/vlm_3b.yaml" \
+--model "include vla_foundry/config_presets/models/vlm_3b.yaml" \
 --model.vit "include vla_foundry/config_presets/models/vit_paligemma.yaml" \
 --data.type image_caption \
 --data.processor google/paligemma-3b-pt-224 \
