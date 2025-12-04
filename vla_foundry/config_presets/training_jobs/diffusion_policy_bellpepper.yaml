@@ -32,9 +32,10 @@ data:
   image_indices:
     - -1
     - 0
+  pad_missing_images: True
 distributed:
   fsdp: True
 hparams:
   <<: !include ../hparams/diffusion_policy.yaml
   per_gpu_batch_size: 16
-  global_batch_size: 128
+  global_batch_size: 32
