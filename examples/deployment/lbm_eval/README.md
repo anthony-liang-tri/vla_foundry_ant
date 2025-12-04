@@ -4,6 +4,41 @@ This directory provides lightweight scripts for evaluating LBM robotics policies
 against a gRPC client. Each script is ready to run with `uv` so that you can
 reuse the repository's managed environment.
 
+### (Optional) Set up Anzu using Docker
+Since Anzu’s `lbm_eval_0_5` branch only supports Ubuntu 22.04, you need to run it in Docker when using Ubuntu 24.04. Note that you can run the inference policy outside of Docker.
+
+1. Log in to Docker with your ECR credentials
+
+```bash
+aws ecr get-login-password --region us-east-1 --profile manip-cluster | docker login \
+  --username AWS \
+  --password-stdin 682769330988.dkr.ecr.us-east-1.amazonaws.com
+```
+
+2. Pull the Anzu image from ECR
+
+```bash
+docker pull 682769330988.dkr.ecr.us-east-1.amazonaws.com/anzu-vla-foundry-4:stage3
+```
+
+3. Run the Anzu image on Docker
+
+```bash
+docker run --rm -it \
+    --runtime=nvidia \
+    --gpus all \
+    --device /dev/dri \
+    --group-add video \
+    --group-add $(stat -c '%g' /dev/dri/renderD128) \
+    -e NVIDIA_DRIVER_CAPABILITIES=all \
+    -e SKIP_BUILD=1 \
+    -v $SSH_AUTH_SOCK:/ssh-agent \
+    -e SSH_AUTH_SOCK=/ssh-agent \
+    -v ${HOME}/.aws:/home/anzu/.aws \
+    682769330988.dkr.ecr.us-east-1.amazonaws.com/anzu-vla-foundry-4:stage3 \
+    bash /opt/anzu/launch_sim.sh BimanualPutRedBellPepperInBin
+```
+
 ### Contents
 - `launch_wave_policy.sh` – launches a dummy gRPC policy server that waves the
   robot end-effectors in a simple sinusoidal pattern. Helpful for verifying the
