@@ -16,5 +16,5 @@
 --hparams.global_batch_size 64 \
 --model.vit.hidden_dim 768 \
 --model.vit.projector_pixel_shuffle_factor 1 \
---remote_sync s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/vlm_siglip_paligemma_3b \
+--remote_sync s3://tri-ml-datasets/vla_foundry_scratch/models/vlm_siglip_paligemma_3b \
 --wandb True 

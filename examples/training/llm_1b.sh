@@ -1,4 +1,4 @@
-.venv/bin/torchrun --nproc_per_node=2 --nnodes=1 vla_foundry/main.py \
+.venv/bin/torchrun --nproc_per_node=8 --nnodes=1 vla_foundry/main.py \
 --model.type transformer \
 --model "include vla_foundry/config_presets/models/transformer_1b.yaml" \
 --model.cast_output_to_float32 True \
@@ -10,6 +10,6 @@
 --data.seq_len 2048 \
 --total_train_samples 14_000_000 \
 --num_checkpoints 5 \
---hparams.per_gpu_batch_size 4 \
---hparams.global_batch_size 8 \
+--hparams.per_gpu_batch_size 8 \
+--hparams.global_batch_size 512 \
 --wandb True

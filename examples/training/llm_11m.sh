@@ -12,4 +12,6 @@
 --num_checkpoints 5 \
 --hparams.per_gpu_batch_size 32 \
 --hparams.global_batch_size 96 \
---remote_sync s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/llm_11m
+--remote_sync s3://tri-ml-datasets/vla_foundry_scratch/models/llm_11m \
+--resolve_configs True \
+--resolve_configs_path ./

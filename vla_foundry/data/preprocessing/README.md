@@ -60,7 +60,7 @@ We use [img2dataset](https://github.com/rom1504/img2dataset) to handle image dow
 This assumes that the HF dataset is already downloaded to S3 (see above section).
 
 ```bash
-python vla_foundry/data/preprocessing/preprocess_captionshf_to_tar.py --cluster ray --input_path s3://tri-ml-datasets/scratch/sedrick.keh/downloads/ --output_path s3://tri-ml-datasets/scratch/sedrick.keh/downloads2/ --url_col images --caption_col texts --save_additional_columns metadata
+python vla_foundry/data/preprocessing/preprocess_captionshf_to_tar.py --cluster ray --input_path s3://tri-ml-datasets/vla_foundry_scratch/downloads/ --output_path s3://tri-ml-datasets/vla_foundry_scratch/downloads2/ --url_col images --caption_col texts --save_additional_columns metadata
 ```
 
 # Converting a text Hugging Face dataset to tar shards
@@ -75,7 +75,7 @@ This assumes that the HF dataset is already downloaded to S3.
 source .venv/bin/activate && python vla_foundry/data/preprocessing/preprocess_robotics_to_tar.py \
 --type "lerobot" \
 --source_episodes "['s3://tri-ml-datasets/hf_datasets/pi_libero/']" \
---output_dir s3://tri-ml-datasets/scratch/sedrick.keh/tmp/lerobotdata/pi_libero/ \
+--output_dir s3://tri-ml-datasets/vla_foundry_scratch/lerobotdata/pi_libero/ \
 --camera_names "['image', 'wrist_image']" \
 --samples_per_shard 100 \
 --config_path "vla_foundry/config_presets/data/robotics_preprocessing_params_1past_14future.yaml" \
@@ -92,7 +92,7 @@ python vla_foundry/data/preprocessing/preprocess_robotics_to_tar.py \
     's3://robotics-manip-lbm/efs/data/tasks/BimanualPutRedBellPepperInBin/riverway/sim/bc/teleop/2025-01-02T14-21-19-05-00/diffusion_spartan/',
     's3://robotics-manip-lbm/efs/data/tasks/BimanualPutRedBellPepperInBin/riverway/sim/bc/teleop/2025-01-06T08-58-31-05-00/diffusion_spartan/',
     ]" \
---output_dir s3://tri-ml-datasets/scratch/sedrick.keh/tmp/lbmdata/bimanualputredbellpepperinbin3/ \
+--output_dir s3://tri-ml-datasets/vla_foundry_scratch/spartan_datasets/bimanualputredbellpepperinbin3/ \
 --camera_names "include vla_foundry/config_presets/data/lbm/lbm_data_camera_names_4cameras.yaml" \
 --language_annotations_path vla_foundry/config_presets/data/lbm/lbm_language_annotations.yaml \
 --action_fields_config_path vla_foundry/config_presets/data/lbm/lbm_action_fields.yaml \

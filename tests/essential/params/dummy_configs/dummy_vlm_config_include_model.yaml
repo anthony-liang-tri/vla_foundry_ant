@@ -52,7 +52,7 @@ model:
 name: 2025_07_14-22_28_54-model_vlm-lr_0.0001-bsz_128
 num_checkpoints: 5
 num_epochs: null
-remote_sync: s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/vlm_paligemma_3b
+remote_sync: s3://tri-ml-datasets/vla_foundry_scratch/models/vlm_paligemma_3b
 save_path: null
 total_train_samples: 14000000
 wandb: true

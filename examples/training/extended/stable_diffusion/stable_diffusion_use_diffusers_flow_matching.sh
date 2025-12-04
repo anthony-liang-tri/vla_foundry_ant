@@ -1,7 +1,7 @@
 .venv/bin/torchrun --nproc_per_node=8 --nnodes=1 vla_foundry/main.py \
 --model.type stable_diffusion \
 --model.use_diffusers_unet True \
---model.use_diffusers_scheduler True \
+--model.use_flow_matching_scheduler True \
 --model.unet.image_size 128 \
 --distributed.fsdp True \
 --data.type image_caption \
@@ -17,5 +17,5 @@
 --hparams.lr_cooldown_end 1e-6 \
 --total_train_samples 50_000_000 \
 --num_checkpoints 10 \
---remote_sync s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/stable_diffusion \
+--remote_sync s3://tri-ml-datasets/vla_foundry_scratch/models/stable_diffusion \
 --wandb True 
