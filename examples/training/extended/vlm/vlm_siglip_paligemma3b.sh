@@ -17,4 +17,5 @@
 --model.vit.hidden_dim 768 \
 --model.vit.projector_pixel_shuffle_factor 1 \
 --remote_sync s3://tri-ml-datasets/vla_foundry_scratch/models/vlm_siglip_paligemma_3b \
---wandb True 
+--wandb True \
+"$@"

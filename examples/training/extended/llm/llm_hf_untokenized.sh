@@ -13,4 +13,5 @@
 --num_checkpoints 5 \
 --hparams.per_gpu_batch_size 8 \
 --hparams.global_batch_size 512 \
---remote_sync s3://tri-ml-datasets/vla_foundry_scratch/models/llm_hf_untokenized 
+--remote_sync s3://tri-ml-datasets/vla_foundry_scratch/models/llm_hf_untokenized \
+"$@"

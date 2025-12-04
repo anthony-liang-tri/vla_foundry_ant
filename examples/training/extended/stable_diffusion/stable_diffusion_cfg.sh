@@ -23,4 +23,5 @@
 --total_train_samples 50_000_000 \
 --num_checkpoints 10 \
 --remote_sync s3://tri-ml-datasets/vla_foundry_scratch/models/stable_diffusion_cfg \
---wandb True 
+--wandb True \
+"$@"

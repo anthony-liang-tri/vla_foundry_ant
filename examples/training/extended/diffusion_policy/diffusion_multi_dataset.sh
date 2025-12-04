@@ -17,3 +17,4 @@
 --data.image_indices "[-1, 0]" \
 --data.pad_missing_images True \
 --data.mask_padded_images True \
+"$@"

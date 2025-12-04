@@ -33,3 +33,4 @@
   --wandb True \
   --wandb_project_name diffusion-policy-mmt-cube \
   --data.normalization.enabled False \
+  "$@"
