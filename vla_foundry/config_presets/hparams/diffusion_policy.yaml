@@ -1,6 +1,5 @@
 precision: "amp_bf16"
 loss_function: "mse"
 grad_clip_norm: 1.0
-lr: 1e-4
-lr_cooldown_end: 1e-4
-lr_scheduler: "const"
+lr: 5e-4
+lr_cooldown_end: 1e-5

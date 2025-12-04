@@ -161,7 +161,7 @@ class UNetParams(ModelParams):
 @register_model_params("noise_scheduler")
 @dataclass(frozen=True)
 class NoiseSchedulerParams(ModelParams):
-    num_timesteps: int = field(default=100)
+    num_timesteps: int = field(default=1000)
     beta_start: float = field(default=0.0001)
     beta_end: float = field(default=0.02)
     clamp_range: Tuple[float, float] = field(default=None)

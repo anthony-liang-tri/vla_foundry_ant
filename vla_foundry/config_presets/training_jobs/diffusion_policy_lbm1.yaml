@@ -11,13 +11,16 @@ model:
   transformer:
     <<: !include ../models/transformer_100m.yaml
     is_causal: True
+  noise_scheduler:
+    num_timesteps: 100
+    clamp_range: [-1.5, 1.5]
 data:
   <<: !include ../data/lbm/lbm_data_params.yaml
   <<: !include ../data/diffusion_policy.yaml
   dataset_manifest: 
-    - s3://tri-ml-datasets-uw2/vla_foundry_datasets/stage3_singletask_sim/BimanualPutRedBellPepperInBin/shards/manifest.jsonl
+    - s3://tri-ml-datasets-uw2/vla_foundry_datasets/stage3_singletask_sim_lbm1trainset_replication/BimanualPutRedBellPepperInBin/shards/manifest.jsonl
   dataset_statistics: 
-    - s3://tri-ml-datasets-uw2/vla_foundry_datasets/stage3_singletask_sim/BimanualPutRedBellPepperInBin/shards/stats.json
+    - s3://tri-ml-datasets-uw2/vla_foundry_datasets/stage3_singletask_sim_lbm1trainset_replication/BimanualPutRedBellPepperInBin/shards/stats.json
   dataset_modality: 
     - robotics
   dataset_weighting: 
@@ -32,9 +35,13 @@ data:
   image_indices:
     - -1
     - 0
+  pad_missing_images: True
 distributed:
   fsdp: True
 hparams:
   <<: !include ../hparams/diffusion_policy.yaml
   per_gpu_batch_size: 16
-  global_batch_size: 128
+  global_batch_size: 32
+  lr: 1e-4
+  lr_cooldown_end: 1e-4
+  lr_scheduler: "const"
