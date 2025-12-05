@@ -25,4 +25,5 @@
   --hparams.lr_cooldown_end 1e-5 \
   --remote_sync s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy \
   --total_train_samples 100000 \
-  --wandb True
+  --wandb True \
+  "$@"

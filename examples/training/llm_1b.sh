@@ -12,4 +12,5 @@
 --num_checkpoints 5 \
 --hparams.per_gpu_batch_size 8 \
 --hparams.global_batch_size 512 \
---wandb True
+--wandb True \
+"$@"

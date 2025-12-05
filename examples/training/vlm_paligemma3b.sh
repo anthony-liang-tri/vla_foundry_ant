@@ -13,4 +13,5 @@ export TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS=1
 --num_checkpoints 5 \
 --hparams.per_gpu_batch_size 1 \
 --hparams.global_batch_size 3 \
---remote_sync s3://tri-ml-datasets/vla_foundry_scratch/models/vlm_paligemma_3b
+--remote_sync s3://tri-ml-datasets/vla_foundry_scratch/models/vlm_paligemma_3b \
+"$@"
