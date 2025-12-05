@@ -10,8 +10,8 @@ from types import SimpleNamespace
 
 import pytest
 import torch
-import yaml
 
+from draccus.cfgparsing import load_config
 from vla_foundry.data.dataloader import get_wds_dataloader
 from vla_foundry.data.robotics.gradio_dataloader import RoboticsDataLoader
 from vla_foundry.params.data_params import RoboticsDataParams
@@ -72,10 +72,10 @@ def mock_config():
         batch_size: int = 2,
         processor_name: str = "google/paligemma-3b-pt-224",
     ):
-        # Load the base config from YAML
+        # Load the base config from YAML using draccus (supports !include)
         config_path = "vla_foundry/config_presets/data/lbm/lbm_data_params.yaml"
         with open(config_path, "r") as f:
-            config_dict = yaml.safe_load(f)
+            config_dict = load_config(f, file=config_path)
         config_dict.pop("type", None)
 
         # Override test-specific settings
@@ -526,10 +526,10 @@ def test_normalization(dataset_path, manifest_data, mock_config):
 
     def _create_config_with_norm(enabled):
         """Helper to create config with normalization enabled/disabled."""
-        # Load the base config from YAML
+        # Load the base config from YAML using draccus (supports !include)
         config_path = "vla_foundry/config_presets/data/lbm/lbm_data_params.yaml"
         with open(config_path, "r") as f:
-            config_dict = yaml.safe_load(f)
+            config_dict = load_config(f, file=config_path)
             config_dict.pop("type", None)
 
         # Override test-specific settings for performance
@@ -684,10 +684,10 @@ def test_normalization_consistency(dataset_path, manifest_data, mock_config):
     test_shards = manifest_data[:1]
     datastring = create_datastring(dataset_path, test_shards)
 
-    # Load the base config from YAML
+    # Load the base config from YAML using draccus (supports !include)
     config_path = "vla_foundry/config_presets/data/lbm/lbm_data_params.yaml"
     with open(config_path, "r") as f:
-        config_dict = yaml.safe_load(f)
+        config_dict = load_config(f, file=config_path)
 
     # Override test-specific settings
     config_dict.update(
@@ -777,12 +777,10 @@ def test_normalization_consistency(dataset_path, manifest_data, mock_config):
 
 def test_compare_dataloader_and_roboticsdataloader(dataset_path, manifest_data, mock_config):
     """Test that get_wds_dataloader and RoboticsDataLoader produce matching lowdim data for all sample_ids."""
-    import yaml
-
-    # Load config
+    # Load config using draccus (supports !include)
     config_path = "vla_foundry/config_presets/data/lbm/lbm_data_params.yaml"
     with open(config_path, "r") as f:
-        config_dict = yaml.safe_load(f)
+        config_dict = load_config(f, file=config_path)
     config_dict.update(
         {
             "num_workers": 1,
