@@ -119,6 +119,7 @@ class MMTPreprocessParams(PreprocessParams):
     mmt_lowdim_flatten_indices_selection: Optional[Dict[str, Union[int, List[int], List[RangeSpec]]]] = field(
         default_factory=dict
     )
+    depth_resizing_mask_threshold: float = field(default=0.99)
 
     def __post_init__(self):
         super().__post_init__()

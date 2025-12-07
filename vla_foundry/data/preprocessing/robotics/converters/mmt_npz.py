@@ -2,6 +2,7 @@ import os
 import re
 from typing import Dict, List, Tuple
 
+import cv2
 import fsspec
 import numpy as np
 
@@ -9,6 +10,19 @@ from vla_foundry.data.preprocessing.robotics.converters.base import BaseRobotics
 from vla_foundry.data.preprocessing.robotics.preprocess_masks import create_past_and_future_masks
 from vla_foundry.data.preprocessing.robotics.preprocess_params import MMTPreprocessParams
 from vla_foundry.data.preprocessing.utils import is_still_sample
+
+
+def downsample_with_valid_depths(depth_image: np.ndarray, target_size: Tuple[int, int], mask_threshold: float):
+    """Downsample depth image while preserving valid depth pixels. Assumptions:
+    1. Invalid depth pixels are represented as 0.
+    2.  Target size is smaller than original size and follows (width, height) format."""
+    if depth_image.shape[1] == target_size[0] and depth_image.shape[0] == target_size[1]:
+        return depth_image
+    mask = (depth_image > 0).astype(np.float32)
+    resized_depth = cv2.resize(depth_image, target_size, interpolation=cv2.INTER_NEAREST)
+    resized_mask = cv2.resize(mask, target_size, interpolation=cv2.INTER_LINEAR)
+    resized_depth[resized_mask < mask_threshold] = 0
+    return resized_depth
 
 
 class MMTNPZConverter(BaseRoboticsConverter):
@@ -104,6 +118,11 @@ class MMTNPZConverter(BaseRoboticsConverter):
             camera_data[camera_name] = []
             for t in sorted(episode_data.keys()):
                 frame = episode_data[t][camera_name]
+                if "depth" in camera_name:
+                    # Resize depth here to preserve valid depths only
+                    frame = downsample_with_valid_depths(
+                        frame, self.resize_images_size, self.cfg.depth_resizing_mask_threshold
+                    )
                 camera_data[camera_name].append(frame)
             camera_data[camera_name] = np.stack(camera_data[camera_name])
 

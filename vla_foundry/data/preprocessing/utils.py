@@ -36,7 +36,7 @@ def upload_sample_to_s3(
         # Convert images to bytes (JPEG for RGB, PNG for depth)
         for img_key, img_data in sample_data["images"].items():
             # Check if this is a depth image
-            is_depth = "_depth" in img_key
+            is_depth = "depth" in img_key
 
             if not isinstance(img_data, bytes):
                 if is_depth:
