@@ -58,6 +58,7 @@ class RoboticsNormalizer:
             self.stats = None
             return
 
+        self._norm_param_cache = {}
         if isinstance(self.stats, list):
             if len(self.stats) > 1:
                 self.stats = merge_statistics(self.stats)
@@ -150,6 +151,7 @@ class RoboticsNormalizer:
     def _get_normalization_params(self, field_name: str) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Get normalization parameters (center, scale) for a field.
+        Use a cache for efficiency.
 
         Args:
             field_name: Name of the field
@@ -157,6 +159,13 @@ class RoboticsNormalizer:
         Returns:
             Tuple of (center, scale) tensors
         """
+        if field_name in self._norm_param_cache:
+            return self._norm_param_cache[field_name]
+        center, scale = self._compute_normalization_params(field_name)
+        self._norm_param_cache[field_name] = (center, scale)
+        return center, scale
+
+    def _compute_normalization_params(self, field_name: str) -> Tuple[torch.Tensor, torch.Tensor]:
         field_stats = self.stats[field_name]
         field_config = self._get_field_config(field_name)
 
