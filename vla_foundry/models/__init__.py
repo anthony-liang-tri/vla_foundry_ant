@@ -29,33 +29,39 @@ def create_noise_scheduler(model_params: ModelParams):
     return noise_scheduler
 
 
-def create_model(model_params: ModelParams):
+def create_model(model_params: ModelParams, load_pretrained: bool = True):
+    """Create a model from parameters.
+
+    Args:
+        model_params: Model configuration parameters
+        load_pretrained: If True, download pretrained weights
+    """
     if model_params.type == "transformer":
         model = Transformer(model_params)
     elif model_params.type == "transformer_hf":
-        model = TransformerHF(model_params)
+        model = TransformerHF(model_params, load_pretrained=load_pretrained)
     elif model_params.type == "vlm":
         transformer = (
             Transformer(model_params.transformer)
             if model_params.transformer.type == "transformer"
-            else TransformerHF(model_params.transformer)
+            else TransformerHF(model_params.transformer, load_pretrained=load_pretrained)
         )
         vit = ViT(model_params.vit) if model_params.vit.type == "vit" else ViTHF(model_params.vit)
         model = VLM(model_params, transformer, vit)
     elif model_params.type == "vlm_hf":
-        model = VLMHF(model_params)
+        model = VLMHF(model_params, load_pretrained=load_pretrained)
     elif model_params.type == "stable_diffusion":
-        clip = create_model(model_params.clip) if model_params.clip.hf_pretrained is not None else None
+        clip = create_model(model_params.clip, load_pretrained) if model_params.clip.hf_pretrained is not None else None
         unet = UNetDiffusers(model_params.unet) if model_params.use_diffusers_unet else UNet(model_params.unet)
         noise_scheduler = create_noise_scheduler(model_params)
         model = StableDiffusion(model_params, clip, unet, noise_scheduler)
     elif model_params.type == "clip_openclip":
         model = CLIP_OpenCLIP(model_params)
     elif model_params.type == "clip_hf":
-        model = CLIPHF(model_params)
+        model = CLIPHF(model_params, load_pretrained=load_pretrained)
     elif model_params.type == "diffusion_policy":
-        clip = create_model(model_params.clip)
-        transformer = create_model(model_params.transformer)
+        clip = create_model(model_params.clip, load_pretrained)
+        transformer = create_model(model_params.transformer, load_pretrained)
         noise_scheduler = create_noise_scheduler(model_params)
         model = DiffusionPolicy(model_params, clip, transformer, noise_scheduler)
     else:

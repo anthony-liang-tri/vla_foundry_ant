@@ -70,7 +70,8 @@ class InferenceDiffusionPolicy(Policy):
         self.cfg = load_experiment_params_from_yaml(
             self.model_config_path, localize_params=not self.model_config_path.startswith("s3://")
         )
-        self.model = create_model(self.cfg.model)
+        # Use load_pretrained=False to skip downloading pretrained weights (they'll be loaded from checkpoint)
+        self.model = create_model(self.cfg.model, load_pretrained=False)
 
         # Create RoboticsProcessor for all data processing (text, images, normalization)
         self.robotics_processor = RoboticsProcessor.from_pretrained(checkpoint_directory)

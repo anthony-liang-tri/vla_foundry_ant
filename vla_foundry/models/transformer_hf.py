@@ -1,5 +1,5 @@
 import torch
-from transformers import AutoModelForCausalLM
+from transformers import AutoConfig, AutoModelForCausalLM
 
 from vla_foundry.models.transformer_base import TransformerBase
 from vla_foundry.models.utils import get_hidden_dim_hf, get_num_hidden_layers_hf
@@ -7,10 +7,14 @@ from vla_foundry.params.model_params import TransformerHFParams
 
 
 class TransformerHF(TransformerBase):
-    def __init__(self, model_params: TransformerHFParams):
+    def __init__(self, model_params: TransformerHFParams, load_pretrained: bool = True):
         super().__init__(model_params)
         self.model_name = model_params.hf_pretrained
-        self.model = AutoModelForCausalLM.from_pretrained(self.model_name)
+        if load_pretrained:
+            self.model = AutoModelForCausalLM.from_pretrained(self.model_name)
+        else:
+            config = AutoConfig.from_pretrained(self.model_name)
+            self.model = AutoModelForCausalLM.from_config(config)
 
     def forward(self, *args, **kwargs):
         out = self.model(*args, **kwargs)

@@ -1,6 +1,6 @@
 import torch
 import torch.nn.functional as F
-from transformers import CLIPModel
+from transformers import CLIPConfig, CLIPModel
 
 from vla_foundry.models.base_model import BaseModel
 from vla_foundry.models.model_outputs.clip_output import CLIPOutput
@@ -8,10 +8,20 @@ from vla_foundry.params.model_params import CLIPHFParams
 
 
 class CLIPHF(BaseModel):
-    def __init__(self, model_params: CLIPHFParams):
+    def __init__(self, model_params: CLIPHFParams, load_pretrained: bool = True):
+        """Initialize CLIP model.
+
+        Args:
+            model_params: CLIP configuration parameters
+            load_pretrained: If True, download pretrained weights
+        """
         super().__init__(model_params)
         self.model_name = model_params.hf_pretrained
-        self.model = CLIPModel.from_pretrained(self.model_name)
+        if load_pretrained:
+            self.model = CLIPModel.from_pretrained(self.model_name)
+        else:
+            config = CLIPConfig.from_pretrained(self.model_name)
+            self.model = CLIPModel(config)
 
     def _post_init(self):
         super()._post_init()

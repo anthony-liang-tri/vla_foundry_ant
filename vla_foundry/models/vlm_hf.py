@@ -1,5 +1,5 @@
 import torch
-from transformers import AutoModelForVision2Seq
+from transformers import AutoConfig, AutoModelForVision2Seq
 
 from vla_foundry.models.transformer_base import TransformerBase
 from vla_foundry.models.utils import get_hidden_dim_hf, get_num_hidden_layers_hf
@@ -7,10 +7,14 @@ from vla_foundry.params.model_params import VLMHFParams
 
 
 class VLMHF(TransformerBase):
-    def __init__(self, model_params: VLMHFParams):
+    def __init__(self, model_params: VLMHFParams, load_pretrained: bool = True):
         super().__init__(model_params)
         self.model_name = model_params.hf_pretrained
-        self.model = AutoModelForVision2Seq.from_pretrained(self.model_name)
+        if load_pretrained:
+            self.model = AutoModelForVision2Seq.from_pretrained(self.model_name)
+        else:
+            config = AutoConfig.from_pretrained(self.model_name)
+            self.model = AutoModelForVision2Seq.from_config(config)
         self._limit_hidden_states_to_last_n = None
 
     def forward(self, input_ids, pixel_values, attention_mask=None, output_hidden_states=False, **kwargs):
