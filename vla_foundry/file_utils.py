@@ -311,10 +311,6 @@ def save_checkpoint(
     global_step,
     shard_shuffle_seed_per_dataset,
 ):
-    # Only rank 0 should save and clean up to avoid race conditions in distributed training
-    if cfg.distributed.rank > 0:
-        return None
-
     if cfg.distributed.fsdp:
         # FSDP get model state dict (load all params to CPU)
         cpu_state = {}
@@ -351,6 +347,10 @@ def save_checkpoint(
         # Use unwrapped model state dict to avoid module prefix
         unwrapped_model = get_unwrapped_model(model)
         model_state_dict = unwrapped_model.state_dict()
+
+    # Only rank 0 should save and clean up to avoid race conditions in distributed training
+    if cfg.distributed.rank > 0:
+        return None
 
     checkpoint_dict = {
         "checkpoint_num": checkpoint_num,
