@@ -34,6 +34,7 @@ class TrainExperimentParams(BaseParams):
     # Optional base directory where the experiment folder is created. If `None`, defaults to `experiments/`.
     save_path: str = field(default=None)
     wandb: bool = field(default=True)
+    wandb_entity: str = field(default=os.getenv("WANDB_ENTITY"))
     wandb_project_name: str = field(default="vla_foundry")
     wandb_tags: list[str] = field(default_factory=list)
     log_every_n_steps: int = field(default=20)

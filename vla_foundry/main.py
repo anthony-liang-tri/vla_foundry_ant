@@ -174,6 +174,7 @@ def main():
 
         logging.debug("Starting wandb.")
         wandb.init(
+            entity=cfg.wandb_entity,
             project=cfg.wandb_project_name,
             name=experiment_name,
             tags=cfg.wandb_tags,
