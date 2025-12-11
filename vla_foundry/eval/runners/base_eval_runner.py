@@ -1,6 +1,7 @@
 import os
 
 import numpy as np
+import torch
 
 from vla_foundry.data.processor.robotics_processor import RoboticsProcessor
 from vla_foundry.file_utils import get_latest_checkpoint, load_model_checkpoint
@@ -92,6 +93,7 @@ class BaseEvalRunner:
         )
         model = create_model(cfg.model)
         load_model_checkpoint(model, get_latest_checkpoint(model_path))
-        model = model.to("cuda")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model = model.to(device).eval()
         self.model = model
         return model
