@@ -26,7 +26,7 @@ def set_random_seed(seed: int = 42, rank: int = 0) -> None:
 def get_experiment_name(cfg):
     if cfg.name is not None:
         name = cfg.name
-    elif cfg.model.resume_from_checkpoint is not None:
+    elif cfg.model.resume_from_checkpoint is not None and not cfg.model.resume_weights_only:
         # Save in the same directory as the existing checkpoint
         name = cfg.model.resume_from_checkpoint.split("/checkpoints/")[0].split("/")[-1]
     else:
