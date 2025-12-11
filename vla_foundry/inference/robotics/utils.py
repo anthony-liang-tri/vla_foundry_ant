@@ -17,14 +17,6 @@ def any_to_actual_map(field: str) -> str:
     return field.replace("__action__", "__actual__")
 
 
-def get_actual_xyz(pose) -> np.ndarray:
-    return np.array(pose.translation(), dtype=np.float64)
-
-
-def get_actual_rot_6d(pose) -> np.ndarray:
-    return np.array(pose.rotation().matrix()[:, :2].flatten("F"), dtype=np.float64)
-
-
 def center_crop(img: Any, target_h: int, target_w: int) -> Any:
     if isinstance(img, np.ndarray):
         pil = Image.fromarray(img)

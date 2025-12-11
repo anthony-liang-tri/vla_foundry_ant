@@ -694,7 +694,7 @@ def test_policy_data_adapter_end_to_end_flow(field_mapping_file):
     action_reference_rot = adapter.action_buffer[reference_index][absolute_rot_field]
     actual_reference_rot = adapter.reference[absolute_actual_rot_field]
     np.testing.assert_allclose(action_reference_rot, stacked_rot6d[reference_index], atol=1e-6)
-    rotation1_6d = rotation1.matrix()[:, :2].flatten("F")
+    rotation1_6d = rotation1.matrix()[:2, :].flatten()
     np.testing.assert_allclose(actual_reference_rot, rotation1_6d, atol=1e-6)
     relative_rot = _denormalize_ref(model_output[0, num_past, rot_slice])
     expected_rot6d = rot_6d_from_relative(relative_rot.cpu().numpy(), actual_reference_rot)

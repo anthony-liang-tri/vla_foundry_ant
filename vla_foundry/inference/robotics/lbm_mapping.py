@@ -8,6 +8,8 @@ from pydrake.math import RigidTransform, RotationMatrix
 from robot_gym.multiarm_spaces import MultiarmObservation, PosesAndGrippers
 
 from vla_foundry.data.robotics.utils import (
+    get_rot_6d,
+    get_xyz,
     rot_6d_from_relative,
     rot_6d_to_matrix,
     xyz_from_relative,
@@ -114,9 +116,9 @@ class ObservationMapping:
         else:
             robot_data = robot_data.poses
             if "xyz" in component:
-                return robot_data[path[0]].translation()
+                return get_xyz(robot_data[path[0]])
             elif "rot_6d" in component:
-                return robot_data[path[0]].rotation().matrix()[:, :2].flatten("F")
+                return get_rot_6d(robot_data[path[0]])
             else:
                 raise ValueError(f"Invalid component: {component} for pose")
 
@@ -293,11 +295,9 @@ class ActionMapping:
                 action[absolute_field] = action_from_sim.grippers[mapping_fields[0]]
             elif len(mapping_fields) == 2:
                 if "xyz" in field:
-                    action[absolute_field] = action_from_sim.poses[mapping_fields[0]].translation()
+                    action[absolute_field] = get_xyz(action_from_sim.poses[mapping_fields[0]])
                 elif "rot" in field:
-                    action[absolute_field] = (
-                        action_from_sim.poses[mapping_fields[0]].rotation().matrix()[:, :2].flatten("F")
-                    )
+                    action[absolute_field] = get_rot_6d(action_from_sim.poses[mapping_fields[0]])
                 else:
                     raise ValueError(f"Unknown field: {field}")
             else:

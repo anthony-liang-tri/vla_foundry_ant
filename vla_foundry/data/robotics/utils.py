@@ -68,6 +68,14 @@ def rot_6d_to_matrix(rot_6d: np.ndarray) -> np.ndarray:
         return rot_matrices.reshape(original_shape[:-1] + (3, 3))
 
 
+def get_xyz(pose) -> np.ndarray:
+    return np.array(pose.translation(), dtype=np.float64)
+
+
+def get_rot_6d(pose) -> np.ndarray:
+    return np.array(pose.rotation().matrix()[:2, :].flatten(), dtype=np.float64)
+
+
 def matrix_to_rot_6d(rotation_matrix: np.ndarray) -> np.ndarray:
     """
     Convert rotation matrix to 6D rotation representation.
