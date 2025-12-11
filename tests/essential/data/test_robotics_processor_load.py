@@ -18,6 +18,12 @@ def dataset_stats_path():
     return os.path.join(os.path.dirname(__file__), "..", "test_assets", "small_lbm_dataset", "stats.json")
 
 
+@pytest.fixture
+def dataset_manifest_path():
+    """Get the path to the dataset manifest file."""
+    return os.path.join(os.path.dirname(__file__), "..", "test_assets", "small_lbm_dataset", "manifest.jsonl")
+
+
 class TestRoboticsProcessorLoad:
     """Test the load() and from_pretrained() methods of RoboticsProcessor."""
 
@@ -54,7 +60,7 @@ class TestRoboticsProcessorLoad:
         }
 
     @pytest.fixture
-    def sample_config_data(self, dataset_stats_path):
+    def sample_config_data(self, dataset_stats_path, dataset_manifest_path):
         """Create sample configuration data for testing."""
         proprio_fields = [
             "robot__actual__joint_position__right::panda",
@@ -63,6 +69,7 @@ class TestRoboticsProcessorLoad:
         action_fields = ["robot__action__poses__right::panda__xyz"]
         return {
             "dataset_statistics": [dataset_stats_path],
+            "dataset_manifest": [dataset_manifest_path],
             "processor": "google/paligemma-3b-pt-224",
             "proprioception_fields": proprio_fields,
             "action_fields": action_fields,
@@ -84,7 +91,7 @@ class TestRoboticsProcessorLoad:
         }
 
     @pytest.fixture
-    def temp_config_file(self, dataset_stats_path):
+    def temp_config_file(self, dataset_stats_path, dataset_manifest_path):
         """Create a temporary config file for testing."""
         proprio_fields = [
             "robot__actual__joint_position__right::panda",
@@ -93,6 +100,7 @@ class TestRoboticsProcessorLoad:
         action_fields = ["robot__actual__poses__right::panda__xyz"]
         config_data = {
             "dataset_statistics": [dataset_stats_path],
+            "dataset_manifest": [dataset_manifest_path],
             "processor": "google/paligemma-3b-pt-224",
             "proprioception_fields": proprio_fields,
             "action_fields": action_fields,
@@ -126,7 +134,7 @@ class TestRoboticsProcessorLoad:
             yield stats_path
 
     @pytest.fixture
-    def temp_experiment_dir(self, dataset_stats_path):
+    def temp_experiment_dir(self, dataset_stats_path, dataset_manifest_path):
         """Create a temporary experiment directory with config and stats files."""
         with tempfile.TemporaryDirectory() as temp_dir:
             proprio_fields = [
@@ -142,6 +150,7 @@ class TestRoboticsProcessorLoad:
                 "lowdim_past_timesteps": 0,
                 "lowdim_future_timesteps": 8,
                 "dataset_statistics": [dataset_stats_path],
+                "dataset_manifest": [dataset_manifest_path],
                 "processor": "google/paligemma-3b-pt-224",
                 "proprioception_fields": proprio_fields,
                 "action_fields": action_fields,
@@ -237,7 +246,9 @@ class TestRoboticsProcessorLoad:
             assert field in processor.normalizer.stats, f"Field {field} not found in statistics"
 
     @patch("vla_foundry.data.processor.robotics_processor.get_processor")
-    def test_robotics_processor_load_with_normalization_disabled(self, mock_get_processor, dataset_stats_path):
+    def test_robotics_processor_load_with_normalization_disabled(
+        self, mock_get_processor, dataset_stats_path, dataset_manifest_path
+    ):
         """Test RoboticsProcessor.load() with normalization disabled."""
         # Setup mocks
         mock_processor = Mock()
@@ -247,6 +258,8 @@ class TestRoboticsProcessorLoad:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write("dataset_statistics:\n")
             f.write(f"  - {dataset_stats_path}\n")
+            f.write("dataset_manifest:\n")
+            f.write(f"  - {dataset_manifest_path}\n")
             f.write("processor: google/paligemma-3b-pt-224\n")
             f.write("proprioception_fields: []\n")
             f.write("action_fields: []\n")
@@ -281,7 +294,9 @@ class TestRoboticsProcessorLoad:
             RoboticsProcessor.from_pretrained("/nonexistent/dir")
 
     @patch("vla_foundry.data.processor.robotics_processor.get_processor")
-    def test_robotics_processor_with_actual_dataset_statistics(self, mock_get_processor, dataset_stats_path):
+    def test_robotics_processor_with_actual_dataset_statistics(
+        self, mock_get_processor, dataset_stats_path, dataset_manifest_path
+    ):
         """Test RoboticsProcessor with actual dataset statistics structure."""
         # Setup mock
         mock_processor = Mock()
@@ -302,6 +317,7 @@ class TestRoboticsProcessorLoad:
             }
             config_data = {
                 "dataset_statistics": [dataset_stats_path],
+                "dataset_manifest": [dataset_manifest_path],
                 "processor": "google/paligemma-3b-pt-224",
                 "proprioception_fields": proprio_fields,
                 "action_fields": action_fields,

@@ -18,6 +18,12 @@ def dataset_stats_path():
 
 
 @pytest.fixture
+def dataset_manifest_path():
+    """Get the path to the dataset manifest file."""
+    return os.path.join(os.path.dirname(__file__), "..", "test_assets", "small_lbm_dataset", "manifest.jsonl")
+
+
+@pytest.fixture
 def sample_batch():
     """Create a sample batch with multiple images from different cameras."""
     return {
@@ -42,7 +48,9 @@ def sample_batch():
 
 
 @patch("vla_foundry.data.processor.robotics_processor.get_processor")
-def test_camera_names_discovered_from_preprocessing_config(mock_get_processor, dataset_stats_path):
+def test_camera_names_discovered_from_preprocessing_config(
+    mock_get_processor, dataset_stats_path, dataset_manifest_path
+):
     """Test that camera names are discovered from preprocessing config when not specified."""
     # Setup mocks
     mock_vlm_processor = Mock()
@@ -63,6 +71,7 @@ def test_camera_names_discovered_from_preprocessing_config(mock_get_processor, d
     # Create RoboticsDataParams WITHOUT camera_names, image_indices, or image_names
     data_params = RoboticsDataParams(
         dataset_statistics=[dataset_stats_path],
+        dataset_manifest=[dataset_manifest_path],
         processor="google/paligemma-3b-pt-224",
         image_indices=[],
         camera_names=[],
@@ -123,7 +132,7 @@ def test_camera_names_not_overwritten_when_specified(mock_get_processor, dataset
 
 
 @patch("vla_foundry.data.processor.robotics_processor.get_processor")
-def test_camera_names_ordering_preserved(mock_get_processor, dataset_stats_path):
+def test_camera_names_ordering_preserved(mock_get_processor, dataset_stats_path, dataset_manifest_path):
     """Test that discovered camera names maintain consistent ordering across batches."""
     # Setup mocks
     mock_vlm_processor = Mock()
@@ -138,6 +147,7 @@ def test_camera_names_ordering_preserved(mock_get_processor, dataset_stats_path)
     # Create RoboticsDataParams WITHOUT camera_names
     data_params = RoboticsDataParams(
         dataset_statistics=[dataset_stats_path],
+        dataset_manifest=[dataset_manifest_path],
         processor="google/paligemma-3b-pt-224",
         image_indices=[0],
         camera_names=[],

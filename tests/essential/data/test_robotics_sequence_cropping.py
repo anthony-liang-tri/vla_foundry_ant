@@ -35,6 +35,12 @@ def stats_path(dataset_dir):
 
 
 @pytest.fixture
+def manifest_path(dataset_dir):
+    """Get the path to the dataset manifest."""
+    return os.path.join(dataset_dir, "manifest.jsonl")
+
+
+@pytest.fixture
 def processing_metadata_path(dataset_dir):
     """Get the path to the processing metadata."""
     return os.path.join(dataset_dir, "processing_metadata.json")
@@ -175,11 +181,12 @@ class TestExtractRoboticsFieldsWithCropping:
 class TestRoboticsProcessorWithCropping:
     """Test RoboticsProcessor with sequence cropping."""
 
-    def test_processor_with_cropped_sequences(self, stats_path):
+    def test_processor_with_cropped_sequences(self, stats_path, manifest_path):
         """Test that the processor handles cropped sequences correctly."""
         # Create data params with cropping
         data_params = RoboticsDataParams(
             dataset_statistics=[stats_path],
+            dataset_manifest=[manifest_path],
             processor="google/paligemma-3b-pt-224",
             action_fields=["robot__action__poses__right::panda__xyz"],
             proprioception_fields=[
@@ -212,7 +219,7 @@ class TestRoboticsProcessorWithCropping:
         assert processor.normalizer.lowdim_past_timesteps == 1
         assert processor.normalizer.lowdim_future_timesteps == 14
 
-    def test_processor_with_different_crop_sizes(self, stats_path):
+    def test_processor_with_different_crop_sizes(self, stats_path, manifest_path):
         """Test processor with various crop sizes."""
         crop_configs = [
             (0, 4),  # Very small future window
@@ -224,6 +231,7 @@ class TestRoboticsProcessorWithCropping:
         for past, future in crop_configs:
             data_params = RoboticsDataParams(
                 dataset_statistics=[stats_path],
+                dataset_manifest=[manifest_path],
                 processor="google/paligemma-3b-pt-224",
                 action_fields=["robot__action__poses__right::panda__xyz"],
                 proprioception_fields=["robot__actual__joint_position__right::panda"],
@@ -249,11 +257,12 @@ class TestRoboticsProcessorWithCropping:
 class TestNormalizationWithCropping:
     """Test normalization alignment with cropped sequences."""
 
-    def test_global_normalization_with_cropping(self, stats_path):
+    def test_global_normalization_with_cropping(self, stats_path, manifest_path):
         """Test that global normalization works correctly with cropped sequences."""
         # Create normalizer with global normalization
         data_params = RoboticsDataParams(
             dataset_statistics=[stats_path],
+            dataset_manifest=[manifest_path],
             processor="google/paligemma-3b-pt-224",
             action_fields=["robot__action__poses__right::panda__xyz"],
             lowdim_past_timesteps=0,
@@ -281,11 +290,12 @@ class TestNormalizationWithCropping:
 
         assert normalized.shape == (2, 9, 3)
 
-    def test_per_timestep_normalization_with_cropping(self, stats_path):
+    def test_per_timestep_normalization_with_cropping(self, stats_path, manifest_path):
         """Test that per-timestep normalization aligns correctly with cropped sequences."""
         # Create normalizer with per-timestep normalization
         data_params = RoboticsDataParams(
             dataset_statistics=[stats_path],
+            dataset_manifest=[manifest_path],
             processor="google/paligemma-3b-pt-224",
             action_fields=["robot__action__poses__right::panda__xyz"],
             lowdim_past_timesteps=0,
@@ -314,13 +324,14 @@ class TestNormalizationWithCropping:
 
         assert normalized.shape == (2, 9, 3)
 
-    def test_normalization_alignment_correctness(self, stats_path):
+    def test_normalization_alignment_correctness(self, stats_path, manifest_path):
         """Test that normalization uses the correct statistics for each timestep."""
         # This test just verifies that per-timestep normalization with cropped sequences
         # works without errors. Detailed alignment testing is complex and covered by
         # integration tests.
         data_params = RoboticsDataParams(
             dataset_statistics=[stats_path],
+            dataset_manifest=[manifest_path],
             processor="google/paligemma-3b-pt-224",
             action_fields=["robot__action__poses__right::panda__xyz"],
             lowdim_past_timesteps=0,
@@ -352,10 +363,11 @@ class TestNormalizationWithCropping:
         assert normalized.shape == tensor.shape
         assert torch.isfinite(normalized).all()
 
-    def test_different_anchor_positions(self, stats_path):
+    def test_different_anchor_positions(self, stats_path, manifest_path):
         """Test normalization with different anchor positions in cropped sequences."""
         data_params = RoboticsDataParams(
             dataset_statistics=[stats_path],
+            dataset_manifest=[manifest_path],
             processor="google/paligemma-3b-pt-224",
             action_fields=["robot__action__poses__right::panda__xyz"],
             lowdim_past_timesteps=1,
@@ -409,11 +421,12 @@ class TestEndToEndWithRealData:
         assert result["lowdim"]["robot__desired__poses__right::panda__xyz"].shape[0] == 9
         assert result["lowdim"]["robot__actual__poses__right::panda__xyz"].shape[0] == 9
 
-    def test_process_batch_with_real_data(self, dataset_dir, stats_path):
+    def test_process_batch_with_real_data(self, dataset_dir, stats_path, manifest_path):
         """Test that processor correctly handles cropped sequences."""
         # Create data params with cropping
         data_params = RoboticsDataParams(
             dataset_statistics=[stats_path],
+            dataset_manifest=[manifest_path],
             processor="google/paligemma-3b-pt-224",
             action_fields=[
                 "robot__desired__poses__right::panda__xyz",

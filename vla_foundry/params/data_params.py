@@ -111,7 +111,7 @@ class RoboticsDataParams(DataParams):
         if invalid_types:
             raise ValueError(f"Invalid language instruction types: {invalid_types}. Valid types are: {valid_types}")
 
-        # Get processing configs from statistics path
+        # Get processing configs from manifest path
         if any(
             x is None or len(x) == 0
             for x in [
@@ -121,8 +121,8 @@ class RoboticsDataParams(DataParams):
             ]
         ):
             processing_configs = []
-            for stats_path in self.dataset_statistics:
-                path = os.path.dirname(stats_path)
+            for manifest_path in self.dataset_manifest:
+                path = os.path.dirname(manifest_path)
                 processing_config = yaml_load(os.path.join(path, "preprocessing_config.yaml"))
                 processing_configs.append(processing_config)
         else:
