@@ -12,6 +12,7 @@ from torch.distributed.fsdp import FSDPModule
 from tqdm import tqdm
 
 from vla_foundry.distributed import is_master
+from vla_foundry.file_utils import get_unwrapped_model
 from vla_foundry.meters import Metrics
 from vla_foundry.models.batch_handlers import create_batch_handler
 from vla_foundry.params.train_experiment_params import TrainExperimentParams
@@ -27,6 +28,7 @@ def train_one_checkpoint(
     optimizer: optim.Optimizer,
     scheduler: Callable[[int], None],
     cfg: TrainExperimentParams,
+    ema_model: Optional[nn.Module] = None,
 ) -> tuple[bool, int]:
     """
     Trains model for one checkpoint on the provided data.
@@ -49,6 +51,7 @@ def train_one_checkpoint(
         optimizer: torch.optim.Optimizer instance.
         scheduler: Callable taking `step` and adjusting LR, etc.
         cfg: Training config.
+        ema_model: Optional EMA model for maintaining exponential moving average of weights.
 
     Returns:
         success (bool): Whether training completed successfully
@@ -160,6 +163,11 @@ def train_one_checkpoint(
             torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.hparams.grad_clip_norm, norm_type=2.0)
         optimizer.step()
         metrics.stats["optim_step_time"].update(time.time() - optim_step_start)
+
+        # Update EMA model after optimizer step
+        if ema_model is not None:
+            unwrapped_model = get_unwrapped_model(model)
+            ema_model.step(unwrapped_model)
 
         # For logging: clone a tensor copy of the loss and average across ranks.
         global_loss_tensor = total_loss.detach().clone()

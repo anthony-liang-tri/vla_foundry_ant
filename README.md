@@ -142,6 +142,7 @@ We have five high-level param class types:
 - `DataParams`: Each modality has its own `DataParams` class, which inherits from the base `DataParams` object. 
 - `ModelParams`: Each model type has its own `ModelParams` class, which inherits from the base `ModelParams` object. The logic for model selection is done in the `create_model` function in [models/\_\_init\_\_.py](/vla_foundry/models/__init__.py). This param class is saved to `(output_path)/model_config.yaml` during training and can be used to load the yaml during inference time.
 - `HyperParams`: This handles things like learning rate and optimizers.
+- `EMAParams`: This handles EMA parameters.
 - `DistributedParams`: This handles things like FSDP parameters. This is automatically initialized with `init_distributed_device()`, which is called in the `post_init()` function of `DistributedParams`. The `init_distributed_device()` function automatically sets things like `rank` and `world_size`, so you do not need to set these parameters. It is explicitly indicated in [distributed_params.py](/vla_foundry/params/distributed_params.py) which ones do not need to be set.
 - `TrainExperimentParams`: This is the main params class that [main.py](/vla_foundry/main.py) reads. It contains the other 4 param classes as attributes, and it handles global variables like save paths. This param class is saved to `(output_path)/config.yaml` during training and can be used during inference time.
 

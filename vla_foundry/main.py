@@ -24,6 +24,7 @@ from vla_foundry.distributed import get_model_precision, is_master, wrap_fsdp_dd
 from vla_foundry.file_utils import (
     collect_preprocessing_configs,
     collect_processing_metadata,
+    load_ema_checkpoint,
     load_model_checkpoint,
     remote_sync,
     save_checkpoint,
@@ -31,6 +32,7 @@ from vla_foundry.file_utils import (
 from vla_foundry.logger import setup_logging
 from vla_foundry.losses import get_loss_function
 from vla_foundry.models import create_model
+from vla_foundry.models.ema import create_ema_model
 from vla_foundry.optimizer import create_optimizer, load_optimizer
 from vla_foundry.params.train_experiment_params import TrainExperimentParams
 from vla_foundry.scheduler import create_scheduler
@@ -126,6 +128,35 @@ def main():
     if cfg.hparams.grad_checkpointing:
         model.set_grad_checkpointing()
 
+    # Create EMA model if enabled (BEFORE FSDP wrapping to avoid deepcopy issues)
+    ema_model = None
+    if cfg.ema.enabled:
+        # Prepare kwargs based on EMA type
+        if cfg.ema.type == "vanilla":
+            ema_kwargs = {"alpha": cfg.ema.alpha}
+        else:  # "ema" (adaptive)
+            ema_kwargs = {
+                "update_after_step": cfg.ema.update_after_step,
+                "inv_gamma": cfg.ema.inv_gamma,
+                "power": cfg.ema.power,
+                "min_value": cfg.ema.min_value,
+                "max_value": cfg.ema.max_value,
+            }
+
+        ema_model = create_ema_model(model, ema_type=cfg.ema.type, **ema_kwargs)
+
+        # Move EMA model to device in FP32 (BF16 causes precision issues with high decay values)
+        # EMA needs FP32 because decay values like 0.9999 round to 1.0 in BF16, stopping all updates
+        ema_model = ema_model.to(device, dtype=torch.float32)
+
+        if cfg.ema.type == "vanilla":
+            logging.info(f"Created Vanilla EMA model with alpha={cfg.ema.alpha}")
+        else:
+            logging.info(
+                f"Created Adaptive EMA model with power={cfg.ema.power}, inv_gamma={cfg.ema.inv_gamma}, "
+                f"max_value={cfg.ema.max_value}"
+            )
+
     # Wrap for distributed or move to device with the configured precision.
     if cfg.distributed.use_distributed:
         model = wrap_fsdp_ddp(model, device, cfg)
@@ -163,6 +194,16 @@ def main():
     # This needs to be after torchcompile.
     if cfg.model.resume_from_checkpoint is not None and not cfg.model.resume_weights_only:
         load_optimizer(optimizer, checkpoint_path=cfg.model.resume_from_checkpoint, use_fsdp=cfg.distributed.fsdp)
+
+        # Load EMA checkpoint if EMA is enabled and checkpoint exists
+        if ema_model is not None:
+            # Construct EMA checkpoint path from model checkpoint path
+            checkpoint_dir = os.path.dirname(cfg.model.resume_from_checkpoint)
+            checkpoint_file = os.path.basename(cfg.model.resume_from_checkpoint)
+            # Replace "checkpoint_" with "ema_" to get EMA checkpoint path
+            ema_checkpoint_file = checkpoint_file.replace("checkpoint_", "ema_")
+            ema_checkpoint_path = os.path.join(checkpoint_dir, ema_checkpoint_file)
+            load_ema_checkpoint(ema_model, ema_checkpoint_path)
 
     # Create LR scheduler, loss function.
     scheduler = create_scheduler(cfg.hparams, optimizer, cfg.total_train_samples)
@@ -265,6 +306,7 @@ def main():
             optimizer,
             scheduler,
             cfg,
+            ema_model=ema_model,
         )
         if cfg.distributed.use_distributed:
             torch.distributed.barrier()
@@ -287,6 +329,7 @@ def main():
             samples_seen,
             global_step,
             shard_shuffle_seed_per_dataset,
+            ema_model=ema_model,
         )
 
         # Validate checkpoint.

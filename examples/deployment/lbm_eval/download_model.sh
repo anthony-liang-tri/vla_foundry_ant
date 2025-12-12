@@ -52,5 +52,6 @@ fi
 # Download the selected checkpoint
 echo "Downloading checkpoint_$SELECTED_CHECKPOINT.pt..."
 aws s3 sync "$S3_BASE_PATH/checkpoints" "experiments/$EXPERIMENT_NAME/checkpoints" --exclude "*" --include "checkpoint_$SELECTED_CHECKPOINT.pt" --profile sagemaker
+aws s3 sync "$S3_BASE_PATH/checkpoints" "experiments/$EXPERIMENT_NAME/checkpoints" --exclude "*" --include "ema_$SELECTED_CHECKPOINT.pt" --profile sagemaker
 
 echo "Download complete!"

@@ -26,7 +26,12 @@ from robot_gym.multiarm_spaces import MultiarmObservation, PosesAndGrippers
 from robot_gym.policy import Policy, PolicyMetadata
 
 from vla_foundry.data.processor.robotics_processor import RoboticsProcessor
-from vla_foundry.file_utils import get_latest_checkpoint, load_model_checkpoint, yaml_load
+from vla_foundry.file_utils import (
+    get_latest_checkpoint,
+    load_ema_checkpoint,
+    load_model_checkpoint,
+    yaml_load,
+)
 from vla_foundry.inference.robotics.data_adapter import PolicyDataAdapter
 from vla_foundry.logger import setup_logging
 from vla_foundry.models import create_model
@@ -56,10 +61,30 @@ class InferenceDiffusionPolicy(Policy):
         num_flow_steps: int = 10,
     ):
         self.model_config_path = os.path.join(checkpoint_directory, "config.yaml")
+
+        # Load model configuration first to get EMA enabled setting
+        self.cfg = load_experiment_params_from_yaml(
+            self.model_config_path, localize_params=not self.model_config_path.startswith("s3://")
+        )
+
+        self.ema_enabled = self.cfg.ema.enabled
+
         if checkpoint_name is None or checkpoint_name == "":
             checkpoint_name = get_latest_checkpoint(checkpoint_directory)
+            # get_latest_checkpoint returns full path, extract just the filename
+            if checkpoint_name:
+                checkpoint_name = os.path.basename(checkpoint_name)
         if not checkpoint_name.endswith(".pt"):
             checkpoint_name = f"{checkpoint_name}.pt"
+
+        # Use EMA checkpoint if enabled in config
+        if self.ema_enabled:
+            # Replace "checkpoint_" with "ema_" to get EMA checkpoint path
+            checkpoint_name = checkpoint_name.replace("checkpoint_", "ema_")
+            if not checkpoint_name.startswith("ema_"):
+                # If checkpoint name doesn't start with "checkpoint_", prepend "ema_"
+                checkpoint_name = f"ema_{checkpoint_name}"
+
         self.checkpoint_path = os.path.join(checkpoint_directory, "checkpoints", f"{checkpoint_name}")
         self.device = torch.device(device if torch.cuda.is_available() else "cpu")
         self.open_loop_steps = open_loop_steps
@@ -76,8 +101,12 @@ class InferenceDiffusionPolicy(Policy):
         # Create RoboticsProcessor for all data processing (text, images, normalization)
         self.robotics_processor = RoboticsProcessor.from_pretrained(checkpoint_directory)
 
-        # Load checkpoint
-        load_model_checkpoint(self.model, self.checkpoint_path)
+        # Load checkpoint (EMA or regular)
+        if self.ema_enabled:
+            load_ema_checkpoint(self.model, self.checkpoint_path)
+        else:
+            load_model_checkpoint(self.model, self.checkpoint_path)
+
         self.model.to(self.device)
         self.model.eval()
         # DiffusionPolicy uses CLIP instead of VLM, so no need for VLM-specific dtype setting
@@ -237,7 +266,7 @@ def main():
     log_level = logging.DEBUG if os.environ.get("DEBUG") == "1" else logging.INFO
     setup_logging(log_file=None, level=log_level)
 
-    # Create the policy
+    # Create the policy (use_ema is loaded from config.yaml automatically)
     policy = InferenceDiffusionPolicy(
         checkpoint_directory=args.checkpoint_directory,
         checkpoint_name=args.checkpoint_name,

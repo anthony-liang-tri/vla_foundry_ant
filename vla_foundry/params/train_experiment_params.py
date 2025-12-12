@@ -11,6 +11,7 @@ from vla_foundry.file_utils import localize_paths, yaml_load
 from vla_foundry.params.base_params import BaseParams
 from vla_foundry.params.data_params import DataParams  # not from base_data_params so it loads registered params
 from vla_foundry.params.distributed_params import DistributedParams
+from vla_foundry.params.ema_params import EMAParams
 from vla_foundry.params.hyper_params import HyperParams
 from vla_foundry.params.model_params import ModelParams
 
@@ -60,6 +61,7 @@ class TrainExperimentParams(BaseParams):
     # --Params Subclasses
     data: DataParams = field(default_factory=DataParams)
     distributed: DistributedParams = field(default_factory=DistributedParams)
+    ema: EMAParams = field(default_factory=EMAParams)
     hparams: HyperParams = field(default_factory=HyperParams)
     model: ModelParams = field(default_factory=ModelParams)
 

@@ -310,6 +310,7 @@ def save_checkpoint(
     samples_seen,
     global_step,
     shard_shuffle_seed_per_dataset,
+    ema_model=None,
 ):
     if cfg.distributed.fsdp:
         # FSDP get model state dict (load all params to CPU)
@@ -365,10 +366,26 @@ def save_checkpoint(
         "checkpoint_num": checkpoint_num,
         "optimizer": optim_state if cfg.distributed.fsdp else optimizer.state_dict(),
     }
-    prefixes = {
-        "checkpoint_": checkpoint_dict,
-        "optimizer_": optimizer_dict,
-    }
+
+    # Save EMA state if present
+    if ema_model is not None:
+        ema_dict = {
+            "checkpoint_num": checkpoint_num,
+            "ema_state_dict": ema_model.model.state_dict(),
+            "ema_optimization_step": ema_model.optimization_step.item()
+            if hasattr(ema_model, "optimization_step")
+            else 0,
+        }
+        prefixes = {
+            "checkpoint_": checkpoint_dict,
+            "optimizer_": optimizer_dict,
+            "ema_": ema_dict,
+        }
+    else:
+        prefixes = {
+            "checkpoint_": checkpoint_dict,
+            "optimizer_": optimizer_dict,
+        }
 
     for prefix in prefixes:
         path = os.path.join(checkpoint_path, f"{prefix}{checkpoint_num}.pt")
@@ -442,6 +459,53 @@ def load_model_checkpoint(model, resume_from_checkpoint):
         model.load_state_dict(sd)
     logging.info(f"=> resuming checkpoint '{resume_from_checkpoint}' (checkpoint {start_checkpoint_num})")
     return start_checkpoint_num, global_step, shard_shuffle_seed_per_dataset
+
+
+def load_ema_checkpoint(model_or_ema, resume_from_checkpoint):
+    """
+    Load EMA model state from checkpoint.
+
+    This function handles both training (with EMA wrapper) and inference (raw model) scenarios:
+    - If given an EMA wrapper (has .model attribute), loads into the wrapper
+    - If given a raw model, loads directly into it
+
+    Args:
+        model_or_ema: Either an EMA model wrapper (for training) or a raw model (for inference).
+        resume_from_checkpoint: Path to the EMA checkpoint file (ema_{checkpoint_num}.pt).
+
+    Returns:
+        checkpoint_num: The checkpoint number that was loaded.
+
+    Raises:
+        FileNotFoundError: If checkpoint doesn't exist.
+        ValueError: If checkpoint doesn't contain ema_state_dict.
+    """
+    if not os.path.exists(resume_from_checkpoint):
+        raise FileNotFoundError(
+            f"EMA checkpoint not found at '{resume_from_checkpoint}'. Make sure the model was trained with EMA enabled."
+        )
+
+    checkpoint = pt_load(resume_from_checkpoint, map_location="cpu")
+
+    if "ema_state_dict" not in checkpoint:
+        raise ValueError(f"EMA checkpoint {resume_from_checkpoint} does not contain 'ema_state_dict' key")
+
+    checkpoint_num = checkpoint["checkpoint_num"]
+    ema_state_dict = checkpoint["ema_state_dict"]
+
+    # Detect if we have an EMA wrapper or a raw model
+    # Training: EMA wrapper with .model attribute | Inference: raw model
+    target_model = model_or_ema.model if hasattr(model_or_ema, "model") else model_or_ema
+
+    # Load EMA weights
+    target_model.load_state_dict(ema_state_dict)
+
+    # Load optimization step if present (for adaptive EMA wrappers)
+    if "ema_optimization_step" in checkpoint and hasattr(model_or_ema, "optimization_step"):
+        model_or_ema.optimization_step.copy_(torch.tensor(checkpoint["ema_optimization_step"]))
+
+    logging.info(f"=> loaded EMA checkpoint '{resume_from_checkpoint}' (checkpoint {checkpoint_num})")
+    return checkpoint_num
 
 
 def natural_key(string_):
