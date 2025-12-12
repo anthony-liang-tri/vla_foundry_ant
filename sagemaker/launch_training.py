@@ -1,3 +1,4 @@
+import logging
 import os
 import subprocess
 import time
@@ -39,6 +40,9 @@ class SageMakerRunParams(BaseParams):
     user: str = field(default=None)
     name_prefix: str = field(default=None)
 
+    # Volume size in GB
+    volume_size: int = field(default=30)
+
     # AWS profile args
     region: str = field(default="us-west-2")
     profile: str = field(default="default")
@@ -59,7 +63,12 @@ class SageMakerParams(TrainExperimentParams):
     sagemaker: SageMakerRunParams = field(default_factory=SageMakerRunParams)
 
     def __post_init__(self):
-        pass
+        if self.save_path is not None:
+            logging.warning(
+                "Save path is not None, but SageMaker will override it to /tmp"
+                " because Sagemaker has its own volume mounted at /tmp."
+            )
+        object.__setattr__(self, "save_path", "/tmp")
 
 
 def run_command(command):
@@ -236,6 +245,7 @@ def main():
             {"Key": "tri.project", "Value": "MM:PJ-0077"},
             {"Key": "tri.owner.email", "Value": f"{args.user}@tri.global"},
         ],
+        volume_size=args.volume_size,
     )
 
     queue = Queue(
