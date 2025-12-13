@@ -42,6 +42,7 @@ class TrainExperimentParams(BaseParams):
     log_level: str = field(default="INFO")
     # Optional path to S3 to which the experiment directory is synced.
     remote_sync: str = field(default=None)
+    remote_sync_fixed_path: str = field(default="s3://tri-ml-datasets-uw2/vla_foundry_models_fixed/")
 
     # --Training
     # total number of samples to train on. Mutually exclusive with `num_epochs`.

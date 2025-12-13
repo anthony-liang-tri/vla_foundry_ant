@@ -2,6 +2,7 @@ import argparse
 import datetime
 import os
 import random
+import uuid
 
 import draccus
 import ray
@@ -13,7 +14,7 @@ from vla_foundry.data.preprocessing.robotics.preprocess_statistics import (
     LoggerActor,
     StreamingDatasetStatisticsRayActor,
 )
-from vla_foundry.data.preprocessing.utils import create_shard, upload_config_to_s3, upload_dict_to_s3
+from vla_foundry.data.preprocessing.utils import create_shard, recursive_s3_copy, upload_config_to_s3, upload_dict_to_s3
 from vla_foundry.file_utils import check_directory_has_files_with_substring
 
 
@@ -117,6 +118,10 @@ def main():
     print("Sample counts:", metadata["processing"]["sample_counts"])
     upload_dict_to_s3(metadata, f"{cfg.output_dir.rstrip('/')}/shards", "processing_metadata.json")
     upload_config_to_s3(cfg, f"{cfg.output_dir.rstrip('/')}/shards", "preprocessing_config.yaml")
+
+    # Make a copy of the ouput directory
+    dataset_uuid = str(uuid.uuid4())
+    recursive_s3_copy(cfg.output_dir, f"{cfg.output_dir_fixed_path.rstrip('/')}/{dataset_uuid}")
 
     ray.shutdown()
     print("🎉 Complete! All samples uploaded and sharded.")

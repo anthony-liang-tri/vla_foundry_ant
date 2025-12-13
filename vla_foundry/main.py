@@ -13,6 +13,7 @@ delegated to subpackages (data, models, opt, train, etc.).
 import json
 import logging
 import os
+import uuid
 
 import draccus
 import torch
@@ -79,6 +80,8 @@ def main():
 
     # Set path for experiment, log, checkpoints.
     experiment_name = get_experiment_name(cfg)
+    experiment_uuid = str(uuid.uuid4())
+
     if cfg.save_path is None:
         experiment_path = os.path.join("experiments", experiment_name)
     else:
@@ -111,6 +114,7 @@ def main():
         # Initial sync to check that remote_sync works.
         if cfg.remote_sync:
             remote_sync(experiment_path, os.path.join(cfg.remote_sync, experiment_name))
+            remote_sync(experiment_path, os.path.join(cfg.remote_sync_fixed_path, experiment_uuid))
 
     if cfg.distributed.use_distributed:
         logging.info(
@@ -291,6 +295,7 @@ def main():
             dataloader.save_configs(experiment_path)
             if cfg.remote_sync:
                 remote_sync(experiment_path, os.path.join(cfg.remote_sync, experiment_name))
+                remote_sync(experiment_path, os.path.join(cfg.remote_sync_fixed_path, experiment_uuid))
 
         prev_step = global_step
 
@@ -347,6 +352,7 @@ def main():
         # Optionally push artifacts to remote storage after each checkpoint.
         if is_master(cfg) and cfg.remote_sync:
             remote_sync(experiment_path, os.path.join(cfg.remote_sync, experiment_name))
+            remote_sync(experiment_path, os.path.join(cfg.remote_sync_fixed_path, experiment_uuid))
 
         if cfg.distributed.use_distributed:
             torch.distributed.barrier()

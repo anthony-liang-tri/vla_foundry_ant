@@ -28,6 +28,7 @@ class PreprocessParams(draccus.ChoiceRegistry, BaseParams):
     # Core I/O
     source_episodes: Optional[List[str]] = field(default=None)
     output_dir: Optional[str] = field(default=None)
+    output_dir_fixed_path: Optional[str] = field(default="s3://tri-ml-datasets-uw2/vla_foundry_datasets_fixed/")
 
     # Sampling/windowing
     past_lowdim_steps: int = field(default=1)

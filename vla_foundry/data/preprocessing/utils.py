@@ -268,6 +268,49 @@ def voxel_downsample(points: np.ndarray, voxel_size: float, return_indices: bool
     return points[unique_indices]
 
 
+@ray.remote
+def copy_s3_object(source_bucket: str, source_key: str, dest_bucket: str, dest_key: str) -> str:
+    """Copy a single S3 object from source to destination."""
+    s3_client = boto3.client("s3")
+    copy_source = {"Bucket": source_bucket, "Key": source_key}
+    s3_client.copy_object(CopySource=copy_source, Bucket=dest_bucket, Key=dest_key)
+    return dest_key
+
+
+def recursive_s3_copy(path1: str, path2: str) -> None:
+    """
+    Recursively copy all objects from path1 to path2 using Ray for parallelization.
+    """
+    from vla_foundry.file_utils import list_s3_directory_recursive, parse_s3_path
+
+    # Parse source and destination paths
+    source_bucket, source_prefix = parse_s3_path(path1)
+    dest_bucket, dest_prefix = parse_s3_path(path2)
+    if source_prefix and not source_prefix.endswith("/"):
+        source_prefix += "/"
+    if dest_prefix and not dest_prefix.endswith("/"):
+        dest_prefix += "/"
+
+    relative_paths = list(list_s3_directory_recursive(path1))
+    print(f"Found {len(relative_paths)} objects to copy")
+    print(f"Starting parallel copy from {path1} to {path2}")
+
+    # Build copy tasks: (source_bucket, source_key, dest_bucket, dest_key)
+    copy_tasks = []
+    for relative_path in relative_paths:
+        source_key = source_prefix + relative_path
+        dest_key = dest_prefix + relative_path
+        copy_tasks.append((source_bucket, source_key, dest_bucket, dest_key))
+
+    # Launch Ray tasks in parallel for copying
+    futures = [
+        copy_s3_object.remote(src_bucket, src_key, dst_bucket, dst_key)
+        for src_bucket, src_key, dst_bucket, dst_key in copy_tasks
+    ]
+    copied_keys = ray.get(futures)
+    print(f"✅ Successfully copied {len(copied_keys)} objects from {path1} to {path2}")
+
+
 def depth_images_to_point_cloud(
     depth_images: dict,
     rgb_images: dict,
