@@ -167,6 +167,10 @@ def list_s3_directory_recursive(dir_path):
     assert dir_path.startswith("s3"), "Only S3 paths are supported for now"
     s3_client = boto3.client("s3")
     bucket, prefix = parse_s3_path(dir_path)
+
+    if prefix and not prefix.endswith("/"):
+        prefix += "/"
+
     paginator = s3_client.get_paginator("list_objects_v2")
     objects = set()
 
