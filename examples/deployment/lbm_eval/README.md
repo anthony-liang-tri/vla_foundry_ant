@@ -18,13 +18,13 @@ aws ecr get-login-password --region us-east-1 --profile manip-cluster | docker l
 2. Pull the Anzu image from ECR
 
 ```bash
-docker pull 682769330988.dkr.ecr.us-east-1.amazonaws.com/anzu-vla-foundry-4:stage3
+docker pull 682769330988.dkr.ecr.us-east-1.amazonaws.com/anzu-vla-foundry:latest
 ```
 
 3. Run the Anzu image on Docker
 
 ```bash
-docker run --rm -it \
+docker run --rm -it --network host \
     --runtime=nvidia \
     --gpus all \
     --device /dev/dri \
@@ -35,7 +35,7 @@ docker run --rm -it \
     -v $SSH_AUTH_SOCK:/ssh-agent \
     -e SSH_AUTH_SOCK=/ssh-agent \
     -v ${HOME}/.aws:/home/anzu/.aws \
-    682769330988.dkr.ecr.us-east-1.amazonaws.com/anzu-vla-foundry-4:stage3 \
+    682769330988.dkr.ecr.us-east-1.amazonaws.com/anzu-vla-foundry:latest \
     bash /opt/anzu/launch_sim.sh BimanualPutRedBellPepperInBin
 ```
 
