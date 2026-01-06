@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 
+from vla_foundry.data.preprocessing.robotics.preprocess_statistics import StreamingDatasetStatistics
 from vla_foundry.data.robotics.utils import merge_statistics, merge_statistics_single_field
 
 
@@ -12,6 +13,8 @@ class TestMergeStatisticsSingleField:
         """Create simple tensor statistics for 2 datasets with 3 timesteps and 2 dimensions."""
         # Dataset 1: mean=1.0, std=0.5, counts=10 per timestep
         # Dataset 2: mean=2.0, std=1.0, counts=20 per timestep
+        # Note: Percentile fields are not included here as percentile merging requires
+        # tdigest states which are tested in test_tdigest_merge.py
         return {
             "mean_per_timestep": np.array(
                 [
@@ -41,30 +44,6 @@ class TestMergeStatisticsSingleField:
                 [
                     [10.0, 10.0, 10.0],  # Dataset 1
                     [20.0, 20.0, 20.0],  # Dataset 2
-                ]
-            ),
-            "percentile_5": np.array(
-                [
-                    [0.2, 0.2],  # Dataset 1
-                    [0.8, 0.8],  # Dataset 2
-                ]
-            ),
-            "percentile_95": np.array(
-                [
-                    [1.8, 1.8],  # Dataset 1
-                    [3.2, 3.2],  # Dataset 2
-                ]
-            ),
-            "percentile_1_per_timestep": np.array(
-                [
-                    [[0.1, 0.1], [0.1, 0.1], [0.1, 0.1]],  # Dataset 1
-                    [[0.6, 0.6], [0.6, 0.6], [0.6, 0.6]],  # Dataset 2
-                ]
-            ),
-            "percentile_99_per_timestep": np.array(
-                [
-                    [[1.9, 1.9], [1.9, 1.9], [1.9, 1.9]],  # Dataset 1
-                    [[3.4, 3.4], [3.4, 3.4], [3.4, 3.4]],  # Dataset 2
                 ]
             ),
         }
@@ -154,28 +133,6 @@ class TestMergeStatisticsSingleField:
         assert result.shape == (3,)
         np.testing.assert_array_equal(result, expected)
 
-    def test_merge_percentile_weighted_average(self, simple_tensor_stats):
-        """Test merging percentiles using weighted average."""
-        result = merge_statistics_single_field(simple_tensor_stats, "percentile_5")
-
-        # Weights based on mean counts: [10, 20] -> [1/3, 2/3]
-        # Expected: 0.2 * (1/3) + 0.8 * (2/3) = 0.0667 + 0.5333 = 0.6
-        expected = np.array([0.6, 0.6])
-
-        assert result.shape == (2,)
-        np.testing.assert_allclose(result, expected, rtol=1e-5)
-
-    def test_merge_percentile_per_timestep(self, simple_tensor_stats):
-        """Test merging per-timestep percentiles using weighted average."""
-        result = merge_statistics_single_field(simple_tensor_stats, "percentile_1_per_timestep")
-
-        # Weights based on mean counts: [10, 20] -> [1/3, 2/3]
-        # Expected: 0.1 * (1/3) + 0.6 * (2/3) = 0.0333 + 0.4 = 0.4333
-        expected = np.array([[0.433333, 0.433333], [0.433333, 0.433333], [0.433333, 0.433333]])
-
-        assert result.shape == (3, 2)
-        np.testing.assert_allclose(result, expected, rtol=1e-5)
-
     def test_invalid_stat_name(self, simple_tensor_stats):
         """Test that invalid stat name raises ValueError."""
         with pytest.raises(ValueError, match="Invalid stat name"):
@@ -187,7 +144,11 @@ class TestMergeStatistics:
 
     @pytest.fixture
     def two_dataset_statistics(self):
-        """Create statistics for 2 datasets with 2 tensors."""
+        """Create statistics for 2 datasets with 2 tensors.
+
+        Note: Percentile fields are not included here as percentile merging requires
+        tdigest states which are tested in test_tdigest_merge.py
+        """
         return [
             # Dataset 1
             {
@@ -201,9 +162,6 @@ class TestMergeStatistics:
                     "min_per_timestep": [[0.0, 0.5], [0.0, 0.5], [0.0, 0.5]],
                     "max_per_timestep": [[2.0, 3.5], [2.0, 3.5], [2.0, 3.5]],
                     "count": [100.0, 100.0, 100.0],
-                    "percentile_5": [0.2, 0.8],
-                    "percentile_95": [1.8, 3.2],
-                    "percentile_sample_count": [100, 100],
                 },
                 "obs": {
                     "mean": [0.5, 0.5],
@@ -215,9 +173,6 @@ class TestMergeStatistics:
                     "min_per_timestep": [[-1.0, -1.0], [-1.0, -1.0]],
                     "max_per_timestep": [[2.0, 2.0], [2.0, 2.0]],
                     "count": [50.0, 50.0],
-                    "percentile_5": [-0.5, -0.5],
-                    "percentile_95": [1.5, 1.5],
-                    "percentile_sample_count": [50, 50],
                 },
             },
             # Dataset 2
@@ -232,9 +187,6 @@ class TestMergeStatistics:
                     "min_per_timestep": [[0.5, 1.0], [0.5, 1.0], [0.5, 1.0]],
                     "max_per_timestep": [[4.0, 5.0], [4.0, 5.0], [4.0, 5.0]],
                     "count": [200.0, 200.0, 200.0],
-                    "percentile_5": [0.8, 1.5],
-                    "percentile_95": [3.2, 4.5],
-                    "percentile_sample_count": [200, 200],
                 },
                 "obs": {
                     "mean": [1.0, 1.0],
@@ -246,9 +198,6 @@ class TestMergeStatistics:
                     "min_per_timestep": [[-0.5, -0.5], [-0.5, -0.5]],
                     "max_per_timestep": [[2.5, 2.5], [2.5, 2.5]],
                     "count": [100.0, 100.0],
-                    "percentile_5": [0.0, 0.0],
-                    "percentile_95": [2.0, 2.0],
-                    "percentile_sample_count": [100, 100],
                 },
             },
         ]
@@ -306,16 +255,6 @@ class TestMergeStatistics:
         assert result["obs"]["count"][0] == 150.0
         assert result["obs"]["count"][1] == 150.0
 
-    def test_merge_percentiles_weighted(self, two_dataset_statistics):
-        """Test that percentiles are weighted by counts."""
-        result = merge_statistics(two_dataset_statistics)
-
-        # For action tensor: weights are [100/300, 200/300] = [1/3, 2/3]
-        # percentile_5 dim 0: 0.2 * (1/3) + 0.8 * (2/3) = 0.0667 + 0.5333 = 0.6
-        expected_p5_dim0 = 0.2 * (1 / 3) + 0.8 * (2 / 3)
-
-        np.testing.assert_allclose(result["action"]["percentile_5"][0], expected_p5_dim0, rtol=1e-5)
-
     def test_merge_per_timestep_stats(self, two_dataset_statistics):
         """Test that per-timestep statistics are merged correctly."""
         result = merge_statistics(two_dataset_statistics)
@@ -343,8 +282,6 @@ class TestMergeStatistics:
                     "min_per_timestep": [[0.0], [0.0]],
                     "max_per_timestep": [[2.0], [2.0]],
                     "count": [100.0, 100.0],
-                    "percentile_5": [0.2],
-                    "percentile_95": [1.8],
                 },
                 "tensor_4d": {
                     "mean": [1.0, 2.0, 3.0, 4.0],
@@ -356,8 +293,6 @@ class TestMergeStatistics:
                     "min_per_timestep": [[0.0, 0.5, 1.0, 1.5]],
                     "max_per_timestep": [[2.0, 3.5, 5.0, 6.5]],
                     "count": [50.0],
-                    "percentile_5": [0.2, 0.8, 1.4, 2.0],
-                    "percentile_95": [1.8, 3.2, 4.6, 6.0],
                 },
             },
             {
@@ -371,8 +306,6 @@ class TestMergeStatistics:
                     "min_per_timestep": [[0.5], [0.5]],
                     "max_per_timestep": [[4.0], [4.0]],
                     "count": [200.0, 200.0],
-                    "percentile_5": [0.8],
-                    "percentile_95": [3.2],
                 },
                 "tensor_4d": {
                     "mean": [2.0, 3.0, 4.0, 5.0],
@@ -384,8 +317,6 @@ class TestMergeStatistics:
                     "min_per_timestep": [[0.5, 1.0, 1.5, 2.0]],
                     "max_per_timestep": [[4.0, 5.0, 6.5, 8.0]],
                     "count": [100.0],
-                    "percentile_5": [0.8, 1.4, 2.0, 2.6],
-                    "percentile_95": [3.2, 4.6, 6.0, 7.4],
                 },
             },
         ]
@@ -414,8 +345,6 @@ class TestMergeStatistics:
                     "min_per_timestep": [[0.0, 0.5]],
                     "max_per_timestep": [[2.0, 3.5]],
                     "count": [100.0],
-                    "percentile_5": [0.2, 0.8],
-                    "percentile_95": [1.8, 3.2],
                 },
             }
         ]
@@ -449,14 +378,12 @@ class TestMergeStatistics:
             "min_per_timestep",
             "max_per_timestep",
             "count",
-            "percentile_5",
-            "percentile_95",
         }
 
         for tensor_name in result:
             stat_names = set(result[tensor_name].keys())
-            # Check that most expected stats are present (percentile_sample_count is optional)
-            assert expected_stat_names.issubset(stat_names) or "mean" in stat_names
+            # Check that all expected stats are present
+            assert expected_stat_names.issubset(stat_names)
 
 
 class TestMergeStatisticsEdgeCases:
@@ -476,8 +403,6 @@ class TestMergeStatisticsEdgeCases:
                     "min_per_timestep": [[0.0, 0.5], [0.0, 0.0]],
                     "max_per_timestep": [[2.0, 3.5], [0.0, 0.0]],
                     "count": [100.0, 0.0],  # Second timestep has zero count
-                    "percentile_5": [0.2, 0.8],
-                    "percentile_95": [1.8, 3.2],
                 },
             },
             {
@@ -491,8 +416,6 @@ class TestMergeStatisticsEdgeCases:
                     "min_per_timestep": [[0.5, 1.0], [0.5, 1.0]],
                     "max_per_timestep": [[4.0, 5.0], [4.0, 5.0]],
                     "count": [200.0, 200.0],
-                    "percentile_5": [0.8, 1.5],
-                    "percentile_95": [3.2, 4.5],
                 },
             },
         ]
@@ -519,8 +442,6 @@ class TestMergeStatisticsEdgeCases:
                     "min_per_timestep": [[0.0, 0.5]],
                     "max_per_timestep": [[2.0, 3.5]],
                     "count": [100.0],
-                    "percentile_5": [0.2, 0.8],
-                    "percentile_95": [1.8, 3.2],
                 },
             },
             {
@@ -534,8 +455,6 @@ class TestMergeStatisticsEdgeCases:
                     "min_per_timestep": [[0.5, 1.0], [0.5, 1.0], [0.5, 1.0]],
                     "max_per_timestep": [[4.0, 5.0], [4.0, 5.0], [4.0, 5.0]],
                     "count": [200.0, 200.0, 200.0],
-                    "percentile_5": [0.8, 1.5],
-                    "percentile_95": [3.2, 4.5],
                 },
             },
         ]
@@ -561,8 +480,6 @@ class TestMergeStatisticsEdgeCases:
                     "min_per_timestep": [[1e9, 1e-11]],
                     "max_per_timestep": [[1e11, 1e-9]],
                     "count": [100.0],
-                    "percentile_5": [1e9, 1e-11],
-                    "percentile_95": [1e11, 1e-9],
                 },
             },
             {
@@ -576,8 +493,6 @@ class TestMergeStatisticsEdgeCases:
                     "min_per_timestep": [[1.5e9, 0.5e-11]],
                     "max_per_timestep": [[2e11, 2e-9]],
                     "count": [100.0],
-                    "percentile_5": [1.5e9, 0.5e-11],
-                    "percentile_95": [2e11, 2e-9],
                 },
             },
         ]
@@ -626,10 +541,6 @@ class TestMergeStatisticsLargeScenarios:
                     "min_per_timestep": min_per_timestep.tolist(),
                     "max_per_timestep": max_per_timestep.tolist(),
                     "count": count.tolist(),
-                    "percentile_5": (mean_per_timestep.mean(axis=0) - 1.645 * std_per_timestep.mean(axis=0)).tolist(),
-                    "percentile_95": (mean_per_timestep.mean(axis=0) + 1.645 * std_per_timestep.mean(axis=0)).tolist(),
-                    "percentile_1_per_timestep": (mean_per_timestep - 2.326 * std_per_timestep).tolist(),
-                    "percentile_99_per_timestep": (mean_per_timestep + 2.326 * std_per_timestep).tolist(),
                 }
             }
             stats.append(dataset_stats)
@@ -680,8 +591,6 @@ class TestMergeStatisticsLargeScenarios:
                     "min_per_timestep": (mean_per_timestep - 2 * std_per_timestep).tolist(),
                     "max_per_timestep": (mean_per_timestep + 2 * std_per_timestep).tolist(),
                     "count": [200.0] * num_timesteps,
-                    "percentile_5": (mean_per_timestep.mean(axis=0) - 1.645 * std_per_timestep.mean(axis=0)).tolist(),
-                    "percentile_95": (mean_per_timestep.mean(axis=0) + 1.645 * std_per_timestep.mean(axis=0)).tolist(),
                 }
             }
             stats.append(dataset_stats)
@@ -733,8 +642,6 @@ class TestMergeStatisticsLargeScenarios:
                     "min_per_timestep": (mean_per_timestep - 3 * std_per_timestep).tolist(),
                     "max_per_timestep": (mean_per_timestep + 3 * std_per_timestep).tolist(),
                     "count": count.tolist(),
-                    "percentile_5": (mean_per_timestep.mean(axis=0) - 1.645 * std_per_timestep.mean(axis=0)).tolist(),
-                    "percentile_95": (mean_per_timestep.mean(axis=0) + 1.645 * std_per_timestep.mean(axis=0)).tolist(),
                 }
 
             stats.append(dataset_stats)
@@ -779,10 +686,6 @@ class TestMergeStatisticsLargeScenarios:
             max_per_timestep = raw_data.max(axis=0)
             count = np.full(num_timesteps, float(num_samples))
 
-            # Compute percentiles
-            percentile_5 = np.percentile(raw_data, 5, axis=(0, 1))
-            percentile_95 = np.percentile(raw_data, 95, axis=(0, 1))
-
             dataset_stats = {
                 "action": {
                     "mean": mean_per_timestep.mean(axis=0).tolist(),
@@ -794,8 +697,6 @@ class TestMergeStatisticsLargeScenarios:
                     "min_per_timestep": min_per_timestep.tolist(),
                     "max_per_timestep": max_per_timestep.tolist(),
                     "count": count.tolist(),
-                    "percentile_5": percentile_5.tolist(),
-                    "percentile_95": percentile_95.tolist(),
                 }
             }
             stats.append(dataset_stats)
@@ -847,8 +748,6 @@ class TestMergeStatisticsLargeScenarios:
                     "min_per_timestep": (mean_per_timestep - 2 * std_per_timestep).tolist(),
                     "max_per_timestep": (mean_per_timestep + 2 * std_per_timestep).tolist(),
                     "count": [float(count)] * num_timesteps,
-                    "percentile_5": (mean_per_timestep.mean(axis=0) - 1.645 * std_per_timestep.mean(axis=0)).tolist(),
-                    "percentile_95": (mean_per_timestep.mean(axis=0) + 1.645 * std_per_timestep.mean(axis=0)).tolist(),
                 }
             }
             stats.append(dataset_stats)
@@ -898,8 +797,6 @@ class TestMergeStatisticsLargeScenarios:
                     "min_per_timestep": (mean_per_timestep - 2 * std_per_timestep).tolist(),
                     "max_per_timestep": (mean_per_timestep + 2 * std_per_timestep).tolist(),
                     "count": count.tolist(),
-                    "percentile_5": (mean_per_timestep.mean(axis=0) - 1.645 * std_per_timestep.mean(axis=0)).tolist(),
-                    "percentile_95": (mean_per_timestep.mean(axis=0) + 1.645 * std_per_timestep.mean(axis=0)).tolist(),
                 }
             }
             stats.append(dataset_stats)
@@ -964,10 +861,6 @@ class TestMergeStatisticsLargeScenarios:
                     "min_per_timestep": (mean_per_timestep - 3 * std_per_timestep).tolist(),
                     "max_per_timestep": (mean_per_timestep + 3 * std_per_timestep).tolist(),
                     "count": count.tolist(),
-                    "percentile_5": (mean_per_timestep.mean(axis=0) - 1.645 * std_per_timestep.mean(axis=0)).tolist(),
-                    "percentile_95": (mean_per_timestep.mean(axis=0) + 1.645 * std_per_timestep.mean(axis=0)).tolist(),
-                    "percentile_1_per_timestep": (mean_per_timestep - 2.326 * std_per_timestep).tolist(),
-                    "percentile_99_per_timestep": (mean_per_timestep + 2.326 * std_per_timestep).tolist(),
                 }
 
             stats.append(dataset_stats)
@@ -1237,3 +1130,81 @@ class TestMergeStatisticsVaryingTimesteps:
         assert result.shape == (2,)
         assert np.all(np.isfinite(result))
         assert np.all(result >= 0)
+
+
+class TestTDigestMerge:
+    """Test merging statistics using t-digest for accurate percentile computation."""
+
+    def test_tdigest_merge_accuracy(self):
+        """
+        Test that merging statistics using t-digest states is accurate
+        even for very different distributions where weighted average fails.
+        """
+        np.random.seed(42)
+        # Dataset 1: Normal(0, 1)
+        data1 = np.random.normal(loc=0.0, scale=1.0, size=(1000, 1, 1)).astype(np.float32)
+        mask1 = np.ones((1000, 1), dtype=bool)
+
+        # Dataset 2: Normal(10, 2)
+        data2 = np.random.normal(loc=10.0, scale=2.0, size=(2000, 1, 1)).astype(np.float32)
+        mask2 = np.ones((2000, 1), dtype=bool)
+
+        # Compute stats for each
+        stats_obj1 = StreamingDatasetStatistics()
+        stats_obj2 = StreamingDatasetStatistics()
+
+        stats_obj1.update({"test_tensor": data1, "mask": mask1})
+        stats_obj2.update({"test_tensor": data2, "mask": mask2})
+
+        stats1 = stats_obj1.get_statistics()
+        stats2 = stats_obj2.get_statistics()
+
+        # Verify that tdigest_state is present
+        assert "tdigest_state" in stats1["test_tensor"]
+        assert "tdigest_state" in stats2["test_tensor"]
+
+        # Merge statistics
+        merged = merge_statistics([stats1, stats2])
+
+        # Compute ground truth combined percentiles
+        combined_data = np.concatenate([data1.flatten(), data2.flatten()])
+        target_ps = [1, 5, 95, 99]
+        expected = np.percentile(combined_data, target_ps)
+
+        # Check accuracy
+        for i, p in enumerate(target_ps):
+            val_merged = merged["test_tensor"][f"percentile_{p}"][0]
+            error = abs(val_merged - expected[i])
+
+            # T-Digest merge is extremely accurate.
+            # error should be < 0.1.
+            assert error < 0.1, (
+                f"T-Digest merge error for p={p} is too high: {error} (expected ~{expected[i]}, got {val_merged})"
+            )
+
+    def test_tdigest_merge_per_timestep(self):
+        """Test merging of per-timestep percentiles using t-digest states."""
+        np.random.seed(42)
+        T, C = 5, 2
+        data1 = np.random.normal(loc=0.0, scale=1.0, size=(2000, T, C)).astype(np.float32)
+        data2 = np.random.normal(loc=5.0, scale=1.0, size=(2000, T, C)).astype(np.float32)
+
+        stats_obj1 = StreamingDatasetStatistics()
+        stats_obj2 = StreamingDatasetStatistics()
+
+        stats_obj1.update({"test_tensor": data1, "mask": np.ones((2000, T), dtype=bool)})
+        stats_obj2.update({"test_tensor": data2, "mask": np.ones((2000, T), dtype=bool)})
+
+        stats1 = stats_obj1.get_statistics()
+        stats2 = stats_obj2.get_statistics()
+
+        merged = merge_statistics([stats1, stats2])
+
+        # Check accuracy for one timestep and one channel
+        combined_data = np.concatenate([data1[:, 0, 0], data2[:, 0, 0]])
+        expected_p99 = np.percentile(combined_data, 99)
+
+        val_merged = merged["test_tensor"]["percentile_99_per_timestep"][0][0]
+        error = abs(val_merged - expected_p99)
+
+        assert error < 0.1, f"Per-timestep T-Digest merge error is too high: {error}"

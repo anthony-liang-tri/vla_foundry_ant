@@ -4716,6 +4716,20 @@ wheels = [
 ]
 
 [[package]]
+name = "tdigest-rs"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b3/e2/12b15d07cf431673f52356a46d1279839cfccf10d897f99b5ac1cdfd9d07/tdigest_rs-0.1.0-cp37-abi3-macosx_10_12_x86_64.whl", hash = "sha256:417d452ac5f86a8eb37c1671b99780b7186830588f17d675bca5f254880c5ed0", size = 291942, upload-time = "2024-03-21T11:44:11.257Z" },
+    { url = "https://files.pythonhosted.org/packages/78/8b/3275dabf1d16409eaa2dc98ef4c9e8eda00a7df2e8e3adc8f612815d2ffb/tdigest_rs-0.1.0-cp37-abi3-macosx_11_0_arm64.whl", hash = "sha256:c4ca4f538c3fa204da2580f21f4258f53a16914e7877d6a07d81d809c74529a9", size = 287323, upload-time = "2024-03-21T11:44:12.907Z" },
+    { url = "https://files.pythonhosted.org/packages/0f/7c/5e48f9b60eca4f2888b4826f365d6af31ca9846f5e7875ec05ca1051bc5e/tdigest_rs-0.1.0-cp37-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:b4174b74aecc1d791e4f0007bcc043c75d7ec46f43bf8fbc6f4a4340e46a8028", size = 1059609, upload-time = "2024-03-21T11:44:13.95Z" },
+    { url = "https://files.pythonhosted.org/packages/89/3b/faabc31e51eeae07efe1ad55d1e92daa495a6dddea99371a6896b644e93a/tdigest_rs-0.1.0-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:62ee8d5a01226d020a2ab11a956292c38beab3f34d2d9fa7a8fca22c3e5d4bbf", size = 1074427, upload-time = "2024-03-21T11:44:15.664Z" },
+    { url = "https://files.pythonhosted.org/packages/d2/b8/751dc806f20388c0ff28de7283b3a810d6d606269c47864b9d244d8079a8/tdigest_rs-0.1.0-cp37-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:3fff29326b67cec8e35130e1d8dbab104eea677492ca3e954e9a0676e21db214", size = 1233212, upload-time = "2024-03-21T11:44:16.825Z" },
+    { url = "https://files.pythonhosted.org/packages/66/f0/06d468b1d518de252d10824c52c16c7cce7621db80323a2624b5338715fa/tdigest_rs-0.1.0-cp37-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:aee1c3f1fa2b6969494b7b11d41b3c6b94240748e541be88746d87eff54e8256", size = 1242516, upload-time = "2024-03-21T11:44:18.086Z" },
+    { url = "https://files.pythonhosted.org/packages/ab/e3/b889f648baebb9ee7d1129709a8c70059ec3a47a2a80ac5a404c4f1b4e45/tdigest_rs-0.1.0-cp37-abi3-win_amd64.whl", hash = "sha256:7c47fec4aa8f479318e13f25ecfa8f89f2c20cb3700697d87fcc4633ff704694", size = 175530, upload-time = "2024-03-21T11:44:19.758Z" },
+]
+
+[[package]]
 name = "tensorboard"
 version = "2.20.0"
 source = { registry = "https://pypi.org/simple" }
@@ -5149,6 +5163,7 @@ dependencies = [
     { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scipy", version = "1.16.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "sentencepiece" },
+    { name = "tdigest-rs" },
     { name = "timm" },
     { name = "torch" },
     { name = "torchvision" },
@@ -5205,6 +5220,7 @@ requires-dist = [
     { name = "s3fs", specifier = ">=2025.7.0" },
     { name = "scipy", specifier = ">=1.15.3" },
     { name = "sentencepiece", specifier = "==0.2.0" },
+    { name = "tdigest-rs", specifier = ">=0.1.0" },
     { name = "timm", specifier = "==1.0.15" },
     { name = "torch", specifier = "==2.7.0" },
     { name = "torchvision", specifier = "==0.22.0" },

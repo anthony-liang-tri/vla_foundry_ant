@@ -53,12 +53,19 @@ def main():
         ray.init(address=cfg.ray_address, runtime_env=runtime_env)
         print(f"Connected to Ray cluster at {cfg.ray_address}")
     else:
-        ray.init(
-            address="auto",
-            num_cpus=cfg.ray_num_cpus,
-            runtime_env=runtime_env | {"excludes": [".git", "*.pt", "*.pyc", "__pycache__", ".pytest_cache"]},
-        )
-        print(f"Started auto Ray cluster with num_cpus={cfg.ray_num_cpus}")
+        try:
+            ray.init(
+                address="auto",
+                num_cpus=cfg.ray_num_cpus,
+                runtime_env=runtime_env | {"excludes": [".git", "*.pt", "*.pyc", "__pycache__", ".pytest_cache"]},
+            )
+            print("Connected to existing Ray cluster (address='auto')")
+        except ConnectionError:
+            ray.init(
+                num_cpus=cfg.ray_num_cpus,
+                runtime_env=runtime_env | {"excludes": [".git", "*.pt", "*.pyc", "__pycache__", ".pytest_cache"]},
+            )
+            print(f"Started new local Ray cluster with num_cpus={cfg.ray_num_cpus}")
 
     # Create converter
     converter = get_converter(cfg)

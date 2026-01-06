@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Union
 
 import numpy as np
 import yaml
+from tdigest_rs import TDigest
 
 
 def any_to_actual_key(field: str) -> str:
@@ -304,6 +305,83 @@ def crop_sequence(
     return data[start_idx:end_idx]
 
 
+def merge_percentiles_from_tdigest(states_list: List[Dict[str, Any]], target_p: float) -> np.ndarray:
+    """
+    Merge percentiles by merging t-digest states and querying the merged digest.
+
+    T-digest supports native merging of centroids, which provides accurate
+    percentile estimates especially for tail quantiles.
+    """
+    valid_states = [s for s in states_list if s is not None and "digests" in s]
+    if not valid_states:
+        return None
+
+    # Get shape from first valid state
+    example_shape = tuple(valid_states[0].get("shape", []))
+    if not example_shape:
+        return None
+
+    result = np.zeros(example_shape)
+
+    # For each index position, merge all t-digests and query the percentile
+    for idx in np.ndindex(example_shape):
+        idx_str = str(idx)
+        idx_list = list(idx)
+        digests_to_merge = []
+        buffer_samples = []
+
+        for state in valid_states:
+            # Handle compact serialization format
+            if "indices" in state["digests"]:
+                indices = state["digests"]["indices"]
+                if idx_list in indices:
+                    pos = indices.index(idx_list)
+                    means = np.array(state["digests"]["means"][pos], dtype=np.float32)
+                    weights = np.array(state["digests"]["weights"][pos], dtype=np.uint32)
+                    compression = state.get("compression", 100)
+                    digests_to_merge.append(TDigest.from_means_weights(means, weights, compression))
+                elif "buffers" in state and isinstance(state["buffers"], dict) and "indices" in state["buffers"]:
+                    # New sparse buffer format
+                    b_indices = state["buffers"]["indices"]
+                    if idx_list in b_indices:
+                        pos = b_indices.index(idx_list)
+                        buffer_samples.extend(state["buffers"]["data"][pos])
+            else:
+                # Legacy format handling (stringified tuples)
+                if state.get("digests") and idx_str in state["digests"]:
+                    digest_data = state["digests"][idx_str]
+                    means = np.array(digest_data["means"], dtype=np.float32)
+                    weights = np.array(digest_data["weights"], dtype=np.uint32)
+                    compression = state.get("compression", 100)
+                    digests_to_merge.append(TDigest.from_means_weights(means, weights, compression))
+                elif state.get("buffer") is not None:
+                    # Old monolithic buffer format
+                    buffer = np.array(state["buffer"], dtype=np.float32)
+                    counts = np.array(state["counts"], dtype=int)
+                    cnt = counts[idx]
+                    if cnt > 0:
+                        selector = (slice(0, cnt),) + idx
+                        buffer_samples.extend(buffer[selector].tolist())
+                elif state.get("buffers") and idx_str in state["buffers"]:
+                    # Intermediate sparse buffer format (Dict[str, List])
+                    buffer_samples.extend(state["buffers"][idx_str])
+
+        # Create t-digest from buffer samples if any
+        if buffer_samples:
+            compression = valid_states[0].get("compression", 100)
+            buffer_digest = TDigest.from_array(np.array(buffer_samples, dtype=np.float32), compression)
+            digests_to_merge.append(buffer_digest)
+
+        if digests_to_merge:
+            # Merge all digests
+            merged = digests_to_merge[0]
+            for d in digests_to_merge[1:]:
+                merged = merged.merge(d)
+            result[idx] = merged.quantile(target_p)
+
+    return result
+
+
 def merge_statistics_single_field(tensor_stats: Dict[str, List[Any]], stat_name: str) -> np.ndarray:
     """
     tensor_stats: {mean: [m1, m2, ... mn], std: [s1, s2, ... sn], ...}
@@ -354,22 +432,30 @@ def merge_statistics_single_field(tensor_stats: Dict[str, List[Any]], stat_name:
     elif stat_name in ["count"]:
         return np.sum(tensor_stats["count"], axis=0)
     elif stat_name in [
+        "percentile_1",
+        "percentile_2",
         "percentile_5",
         "percentile_95",
-        "percentile_1",
+        "percentile_98",
         "percentile_99",
         "percentile_1_per_timestep",
+        "percentile_2_per_timestep",
         "percentile_5_per_timestep",
         "percentile_95_per_timestep",
+        "percentile_98_per_timestep",
         "percentile_99_per_timestep",
     ]:
-        mean_counts = np.mean(tensor_stats["count"], axis=1, keepdims=True)
-        weights = mean_counts / np.sum(mean_counts, axis=0, keepdims=True)
-        if len(tensor_stats[stat_name].shape) == 3:
-            weights = np.expand_dims(weights, axis=2)
-        return np.sum(tensor_stats[stat_name] * weights, axis=0)
-    elif stat_name in ["percentile_sample_count"]:
-        return None  # We don't really use this.
+        p_val_str_raw = stat_name.split("_")[1]
+        p_val = float(p_val_str_raw) / 100.0
+        is_per_timestep = "per_timestep" in stat_name
+
+        state_key = "tdigest_state_per_timestep" if is_per_timestep else "tdigest_state"
+
+        states = tensor_stats[state_key]
+        return merge_percentiles_from_tdigest(states, p_val)
+
+    elif stat_name in ["percentile_sample_count", "tdigest_state", "tdigest_state_per_timestep"]:
+        return None  # We don't merge these directly; tdigest states are used for percentiles.
     else:
         raise ValueError(f"Invalid stat name: {stat_name}")
 
@@ -401,8 +487,13 @@ def merge_statistics(statistics: List[Dict[str, Any]]) -> Dict[str, Any]:
     for tensor_name in tensor_names:
         for stat_name in stat_names:
             for dataset_statistics in statistics:
-                batched_stats[tensor_name][stat_name].append(dataset_statistics[tensor_name][stat_name])
-            batched_stats[tensor_name][stat_name] = np.array(batched_stats[tensor_name][stat_name])
+                val = dataset_statistics[tensor_name].get(stat_name)
+                batched_stats[tensor_name][stat_name].append(val)
+
+            if stat_name in ["psquared_state", "psquared_state_per_timestep"]:
+                batched_stats[tensor_name][stat_name] = np.array(batched_stats[tensor_name][stat_name], dtype=object)
+            else:
+                batched_stats[tensor_name][stat_name] = np.array(batched_stats[tensor_name][stat_name])
 
     merged_stats = {}
     for tensor_name in batched_stats:

@@ -7,9 +7,9 @@ from vla_foundry.data.preprocessing.robotics.preprocess_statistics import Stream
 @pytest.mark.parametrize(
     "mean,std,num_samples,shape",
     [
-        (-3.0, 0.5, 5000, (1, 3, 2)),
-        (0.0, 1.0, 1000, (4, 10, 3)),
-        (5.0, 2.0, 500, (2, 5, 6)),
+        (-3.0, 0.5, 500, (1, 3, 2)),
+        (0.0, 1.0, 1001, (4, 10, 3)),
+        (5.0, 2.0, 3001, (2, 5, 6)),
     ],
 )
 def test_streaming_dataset_statistics_basic(mean, std, num_samples, shape):
