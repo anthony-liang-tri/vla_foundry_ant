@@ -2,13 +2,15 @@
 
 # Check if experiment name is provided
 if [ $# -eq 0 ]; then
-    echo "Usage: $0 <experiment_name> [checkpoint_number]"
+    echo "Usage: $0 <experiment_name> [checkpoint_number] [destination_directory]"
     echo "If checkpoint_number is not provided, the highest checkpoint will be downloaded"
+    echo "If destination_directory is not provided, defaults to current directory"
     exit 1
 fi
 
 EXPERIMENT_NAME=$1
 CHECKPOINT_NUMBER=$2
+DESTINATION_DIR=${3:-"."}
 S3_BASE_PATH="s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/$EXPERIMENT_NAME"
 FILES_TO_DOWNLOAD=(
     "config.yaml"
@@ -19,18 +21,18 @@ FILES_TO_DOWNLOAD=(
 )
 
 # Create local directories
-mkdir -p "experiments/$EXPERIMENT_NAME/checkpoints"
+mkdir -p "$DESTINATION_DIR/experiments/$EXPERIMENT_NAME/checkpoints"
 
 # Download config file
 echo "Downloading config file..."
 for file in "${FILES_TO_DOWNLOAD[@]}"; do
-    aws s3 cp "$S3_BASE_PATH/$file" "experiments/$EXPERIMENT_NAME/$file" --profile sagemaker
+    aws s3 cp "$S3_BASE_PATH/$file" "$DESTINATION_DIR/experiments/$EXPERIMENT_NAME/$file" --profile sagemaker
 done
 
 #TODO Jean, These two downloads are there temporarily to handle old naming conventions. 
 # Remove them once we do not need to support old naming conventions.
-aws s3 cp "$S3_BASE_PATH/stats_normalizer.json" "experiments/$EXPERIMENT_NAME/stats.json" --profile sagemaker
-aws s3 cp "$S3_BASE_PATH/preprocessing_configs.yaml" "experiments/$EXPERIMENT_NAME/preprocessing_config.yaml" --profile sagemaker
+aws s3 cp "$S3_BASE_PATH/stats_normalizer.json" "$DESTINATION_DIR/experiments/$EXPERIMENT_NAME/stats.json" --profile sagemaker
+aws s3 cp "$S3_BASE_PATH/preprocessing_configs.yaml" "$DESTINATION_DIR/experiments/$EXPERIMENT_NAME/preprocessing_config.yaml" --profile sagemaker
 
 # If checkpoint number is provided, use it; otherwise find the highest
 if [ -n "$CHECKPOINT_NUMBER" ]; then
@@ -51,7 +53,7 @@ fi
 
 # Download the selected checkpoint
 echo "Downloading checkpoint_$SELECTED_CHECKPOINT.pt..."
-aws s3 sync "$S3_BASE_PATH/checkpoints" "experiments/$EXPERIMENT_NAME/checkpoints" --exclude "*" --include "checkpoint_$SELECTED_CHECKPOINT.pt" --profile sagemaker
-aws s3 sync "$S3_BASE_PATH/checkpoints" "experiments/$EXPERIMENT_NAME/checkpoints" --exclude "*" --include "ema_$SELECTED_CHECKPOINT.pt" --profile sagemaker
+aws s3 sync "$S3_BASE_PATH/checkpoints" "$DESTINATION_DIR/experiments/$EXPERIMENT_NAME/checkpoints" --exclude "*" --include "checkpoint_$SELECTED_CHECKPOINT.pt" --profile sagemaker
+aws s3 sync "$S3_BASE_PATH/checkpoints" "$DESTINATION_DIR/experiments/$EXPERIMENT_NAME/checkpoints" --exclude "*" --include "ema_$SELECTED_CHECKPOINT.pt" --profile sagemaker
 
 echo "Download complete!"

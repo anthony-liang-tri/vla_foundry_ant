@@ -80,10 +80,27 @@ Key behavior:
 Follow these steps to download the trained policy and run the evaluation demo.
 
 #### 1. Download the policy checkpoint (from repo root)
+
+Download by W&B run name:
 ```bash
-bash examples/deployment/lbm_eval/download_model.sh <RUN_ID>
+python examples/deployment/lbm_eval/download_model_from_wandb.py --run-name "<RUN_NAME>"
 ```
-Example run id: `2025_11_05-21_34_11-model_diffusion_policy-lr_5e-05-bsz_1024`.
+Example: `2025_11_05-21_34_11-model_diffusion_policy-lr_5e-05-bsz_1024`
+
+Or use a W&B URL directly:
+```bash
+python examples/deployment/lbm_eval/download_model_from_wandb.py --run-url "https://wandb.ai/entity/project/runs/abc123"
+```
+
+To search for available runs:
+```bash
+python examples/deployment/lbm_eval/download_model_from_wandb.py --search "diffusion"
+```
+
+To download a specific checkpoint number (default is latest):
+```bash
+python examples/deployment/lbm_eval/download_model_from_wandb.py --run-name "<RUN_NAME>" --checkpoint 5
+```
 
 #### 2. Launch the inference policy service (from repo root)
 ```bash
