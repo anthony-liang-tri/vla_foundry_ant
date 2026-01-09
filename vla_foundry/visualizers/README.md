@@ -50,7 +50,7 @@ Ensure you have the required dependencies installed. Follow the environment setu
 Use the `visualizer.py` facade to initialize the visualizer. The backend is automatically selected based on the `VISUALIZER` environment variable.
 
 ```python
-import vla_foundry.visualizers as vz
+from vla_foundry.visualizers import visualizer as vz
 
 # Initialize the visualizer
 vz.init(run_name="example_run", add_rank_to_run=True)
@@ -68,7 +68,7 @@ The `visualizer.py` facade provides functions for logging various types of data:
 import numpy as np
 
 image = np.random.rand(100, 100, 3)  # Example image
-vz.log_image("example/image1", image)
+vz.log_images("example/image1", image)
 ```
 
 #### Log Multiple Images
