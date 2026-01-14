@@ -321,7 +321,7 @@ def save_checkpoint(
         cpu_state = {}
         for param_name, sharded_param in model.state_dict().items():
             full_param = sharded_param.full_tensor() if isinstance(sharded_param, DTensor) else sharded_param
-            if torch.distributed.get_rank() == 0:
+            if cfg.distributed.rank == 0:
                 cpu_state[param_name] = full_param.cpu()
             else:
                 del full_param
@@ -332,11 +332,11 @@ def save_checkpoint(
             group_state = {}
             for param_name, sharded_param in sharded_group.items():
                 full_tensor = sharded_param.full_tensor() if isinstance(sharded_param, DTensor) else sharded_param
-                if torch.distributed.get_rank() == 0:
+                if cfg.distributed.rank == 0:
                     group_state[param_name] = full_tensor.cpu()
                 else:
                     del full_tensor
-            if torch.distributed.get_rank() == 0:
+            if cfg.distributed.rank == 0:
                 full_state[group_id] = group_state
             else:
                 del group_state
