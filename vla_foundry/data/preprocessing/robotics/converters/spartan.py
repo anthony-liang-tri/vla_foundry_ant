@@ -121,6 +121,22 @@ class SpartanConverter(BaseRoboticsConverter):
         action_field_config = load_action_field_config(cfg.action_fields_config_path)
         self.action_key_fields = action_field_config["action_key_fields"]
         self.action_index_fields = action_field_config["action_index_fields"]
+
+        # Load pose groups from action field config
+        if "pose_groups" in action_field_config:
+            self.pose_groups = action_field_config["pose_groups"]
+            print(f"Loaded {len(action_field_config['pose_groups'])} pose groups from action field config")
+
+            # Validate pose groups are complete
+            self._validate_pose_groups()
+        else:
+            # Pose groups must be explicitly provided in action field config
+            raise ValueError(
+                "pose_groups not found in action field config. "
+                "Please add pose_groups to your action field configuration file to enable \
+                    relative coordinate computation."
+            )
+
         print(f"Loaded {len(self.action_key_fields)} action fields")
         if self.action_key_fields:
             prev_index = 0
@@ -159,6 +175,44 @@ class SpartanConverter(BaseRoboticsConverter):
                     for name, size in zip(self.action_key_fields, self.action_field_sizes, strict=False)
                 ],
             )
+
+    def _validate_pose_groups(self):
+        """Validate that pose groups are complete with required fields."""
+        if not self.pose_groups:
+            return
+
+        errors = []
+        valid_pose_groups = []
+
+        for i, pose_group in enumerate(self.pose_groups):
+            group_errors = []
+
+            # Check required fields
+            if "name" not in pose_group:
+                group_errors.append("missing 'name' field")
+            if "position_key" not in pose_group:
+                group_errors.append("missing 'position_key' field")
+            if "rotation_key" not in pose_group:
+                group_errors.append("missing 'rotation_key' field")
+
+            if group_errors:
+                errors.append(f"Pose group {i}: {', '.join(group_errors)}")
+                continue
+
+            # Pose group has all required fields
+            valid_pose_groups.append(pose_group)
+            position_key = pose_group["position_key"]
+            rotation_key = pose_group["rotation_key"]
+            print(f"  ✅ Valid pose group: {pose_group['name']} ({position_key}, {rotation_key})")
+
+        if errors:
+            error_msg = "Pose group validation failed:\n" + "\n".join(f"  - {error}" for error in errors)
+            raise ValueError(error_msg)
+
+        if valid_pose_groups:
+            print(f"✅ All {len(valid_pose_groups)} pose groups are valid")
+        else:
+            print("⚠️  No valid pose groups found")
 
     def discover_episodes(self, source_paths: List[str], max_episodes_to_process: int = -1) -> List[str]:
         """

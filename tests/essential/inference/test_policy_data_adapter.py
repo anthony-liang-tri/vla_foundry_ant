@@ -139,18 +139,20 @@ sys.modules["robot_gym.multiarm_spaces"] = multiarm_module
 
 
 from vla_foundry.data.robotics.utils import (  # noqa: E402
-    rot_6d_from_relative,
+    apply_relative_pose,
+    calculate_relative_pose,
+    pose_to_9d,
     rot_6d_to_matrix,
-    rot_6d_to_relative,
-    xyz_from_relative,
-    xyz_to_relative,
+    to_pose_matrix,
 )
 from vla_foundry.inference.robotics.data_adapter import (  # noqa: E402
     PolicyDataAdapter,
+)
+from vla_foundry.inference.robotics.lbm_mapping import ObservationMapping  # noqa: E402
+from vla_foundry.inference.robotics.utils import (  # noqa: E402
     any_to_actual_map,
     relative_to_absolute_map,
 )
-from vla_foundry.inference.robotics.lbm_mapping import ObservationMapping  # noqa: E402
 
 
 @pytest.fixture
@@ -265,6 +267,7 @@ def mock_data_config():
         augmentation=augmentation,
         image_size=224,
         proprioception_fields=[],
+        pose_groups=[],
     )
 
 
@@ -463,6 +466,13 @@ def test_policy_data_adapter_end_to_end_flow(field_mapping_file):
         "robot__action__poses__left::panda__rot_6d_relative",
         "robot__action__grippers__left::panda_hand",
     ]
+    pose_groups = [
+        {
+            "name": "left_panda_action",
+            "position_key": "robot__action__poses__left::panda__xyz",
+            "rotation_key": "robot__action__poses__left::panda__rot_6d",
+        }
+    ]
     field_dims = {
         action_fields[0]: 3,
         action_fields[1]: 6,
@@ -477,6 +487,7 @@ def test_policy_data_adapter_end_to_end_flow(field_mapping_file):
         image_names=image_names,
         augmentation=augmentation,
         proprioception_fields=[],
+        pose_groups=pose_groups,
     )
 
     adapter = PolicyDataAdapter(
@@ -571,7 +582,14 @@ def test_policy_data_adapter_end_to_end_flow(field_mapping_file):
     np.testing.assert_array_equal(images_dict["cam0_t0"], np.full((112, 112, 3), 20, dtype=np.uint8))
     assert batch["language_instruction"] == ["Instruction step 1"]
 
+    # Set up field mappings for reuse
     reference_index = min(adapter.num_past_timesteps - 1, len(adapter.action_buffer) - 1)
+    absolute_xyz_field = relative_to_absolute_map(action_fields[0])
+    absolute_rot_field = relative_to_absolute_map(action_fields[1])
+    absolute_actual_xyz_field = any_to_actual_map(absolute_xyz_field)
+    absolute_actual_rot_field = any_to_actual_map(absolute_rot_field)
+
+    # Stack action buffer data for processing
     stacked_xyz = np.stack(
         [
             adapter.action_buffer[idx]["robot__action__poses__left::panda__xyz"]
@@ -579,12 +597,6 @@ def test_policy_data_adapter_end_to_end_flow(field_mapping_file):
         ],
         axis=0,
     )
-    absolute_xyz_field = relative_to_absolute_map(action_fields[0])
-    absolute_actual_xyz_field = any_to_actual_map(absolute_xyz_field)
-    reference_xyz = adapter.reference[absolute_actual_xyz_field]
-    expected_xyz_relative = xyz_to_relative(stacked_xyz, reference_xyz=reference_xyz)
-    expected_xyz_tensor = torch.tensor(expected_xyz_relative, dtype=torch.float32)
-
     stacked_rot6d = np.stack(
         [
             adapter.action_buffer[idx]["robot__action__poses__left::panda__rot_6d"]
@@ -592,11 +604,16 @@ def test_policy_data_adapter_end_to_end_flow(field_mapping_file):
         ],
         axis=0,
     )
-    absolute_rot_field = relative_to_absolute_map(action_fields[1])
-    absolute_actual_rot_field = any_to_actual_map(absolute_rot_field)
+
+    # Convert to relative using pose matrices
+    reference_xyz = adapter.reference[absolute_actual_xyz_field]
     reference_rot = adapter.reference[absolute_actual_rot_field]
-    with np.errstate(invalid="ignore"):
-        expected_rot_relative = rot_6d_to_relative(stacked_rot6d, reference_6d=reference_rot)
+    reference_pose_matrix = to_pose_matrix(reference_xyz, reference_rot)
+    action_pose_matrices = to_pose_matrix(stacked_xyz, stacked_rot6d)
+    relative_pose_matrices = calculate_relative_pose(action_pose_matrices, reference_pose_matrix)
+    expected_xyz_relative, expected_rot_relative = pose_to_9d(relative_pose_matrices)
+
+    expected_xyz_tensor = torch.tensor(expected_xyz_relative, dtype=torch.float32)
     expected_rot_tensor = torch.tensor(expected_rot_relative, dtype=torch.float32)
 
     stacked_gripper = np.stack(
@@ -676,33 +693,31 @@ def test_policy_data_adapter_end_to_end_flow(field_mapping_file):
             elif "gripper" in action_field:
                 expected_gripper = pose_action.grippers[mapping_fields[0]]
                 np.testing.assert_allclose(actual_value, expected_gripper)
-    absolute_xyz_field = relative_to_absolute_map(action_fields[0])
-    absolute_actual_xyz_field = relative_to_absolute_map(any_to_actual_map(action_fields[0]))
+
+    # Verify reference values (field mappings already computed above)
     action_reference = adapter.action_buffer[reference_index][absolute_xyz_field]
-    actual_reference = adapter.reference[absolute_actual_xyz_field]
-    np.testing.assert_allclose(action_reference, translation0, atol=1e-6)
-    np.testing.assert_allclose(actual_reference, translation1, atol=1e-6)
-    relative_xyz = _denormalize_ref(model_output[0, num_past, xyz_slice])
-    expected_translation = xyz_from_relative(relative_xyz.cpu().numpy(), actual_reference)
-    np.testing.assert_allclose(
-        actions[num_past].poses["left::panda"].translation(),
-        expected_translation,
-        atol=1e-6,
-    )
-    absolute_rot_field = relative_to_absolute_map(action_fields[1])
-    absolute_actual_rot_field = relative_to_absolute_map(any_to_actual_map(action_fields[1]))
     action_reference_rot = adapter.action_buffer[reference_index][absolute_rot_field]
+    actual_reference = adapter.reference[absolute_actual_xyz_field]
     actual_reference_rot = adapter.reference[absolute_actual_rot_field]
+
+    np.testing.assert_allclose(action_reference, translation0, atol=1e-6)
     np.testing.assert_allclose(action_reference_rot, stacked_rot6d[reference_index], atol=1e-6)
+    np.testing.assert_allclose(actual_reference, translation1, atol=1e-6)
     rotation1_6d = rotation1.matrix()[:2, :].flatten()
     np.testing.assert_allclose(actual_reference_rot, rotation1_6d, atol=1e-6)
+
+    # Convert model output from relative to absolute poses
+    relative_xyz = _denormalize_ref(model_output[0, num_past, xyz_slice])
     relative_rot = _denormalize_ref(model_output[0, num_past, rot_slice])
-    expected_rot6d = rot_6d_from_relative(relative_rot.cpu().numpy(), actual_reference_rot)
+    reference_pose_matrix = to_pose_matrix(actual_reference, actual_reference_rot)
+    relative_pose_matrix = to_pose_matrix(relative_xyz.cpu().numpy(), relative_rot.cpu().numpy())
+    absolute_pose_matrix = apply_relative_pose(relative_pose_matrix, reference_pose_matrix)
+    expected_translation, expected_rot6d = pose_to_9d(absolute_pose_matrix)
     expected_rot_matrix = rot_6d_to_matrix(expected_rot6d)
+
+    np.testing.assert_allclose(actions[num_past].poses["left::panda"].translation(), expected_translation, atol=1e-6)
     np.testing.assert_allclose(
-        actions[num_past].poses["left::panda"].rotation().matrix(),
-        expected_rot_matrix,
-        atol=1e-6,
+        actions[num_past].poses["left::panda"].rotation().matrix(), expected_rot_matrix, atol=1e-6
     )
     assert actions[num_past].grippers["left::panda_hand"] == pytest.approx(0.55, abs=1e-6)
 
@@ -722,6 +737,13 @@ def test_policy_data_adapter_open_loop_cycle(field_mapping_file):
         "robot__action__poses__left::panda__rot_6d_relative",
         "robot__action__grippers__left::panda_hand",
     ]
+    pose_groups = [
+        {
+            "name": "left_panda_action",
+            "position_key": "robot__action__poses__left::panda__xyz",
+            "rotation_key": "robot__action__poses__left::panda__rot_6d",
+        }
+    ]
     field_dims = {
         action_fields[0]: 3,
         action_fields[1]: 6,
@@ -736,6 +758,7 @@ def test_policy_data_adapter_open_loop_cycle(field_mapping_file):
         image_names=image_names,
         augmentation=augmentation,
         proprioception_fields=[],
+        pose_groups=pose_groups,
     )
 
     adapter = PolicyDataAdapter(
@@ -927,6 +950,13 @@ def test_policy_data_adapter_proprioception_integration(field_mapping_file, crea
         "robot__action__poses__left::panda__rot_6d_relative",
         "robot__action__grippers__left::panda_hand",
     ]
+    pose_groups = [
+        {
+            "name": "left_panda_action",
+            "position_key": "robot__action__poses__left::panda__xyz",
+            "rotation_key": "robot__action__poses__left::panda__rot_6d",
+        }
+    ]
     proprioception_fields = [
         "robot__actual__poses__left::panda__xyz",
         "robot__actual__poses__left::panda__rot_6d",
@@ -952,6 +982,7 @@ def test_policy_data_adapter_proprioception_integration(field_mapping_file, crea
         image_names=image_names,
         augmentation=augmentation,
         proprioception_fields=proprioception_fields,
+        pose_groups=pose_groups,
     )
 
     adapter = PolicyDataAdapter(
@@ -995,6 +1026,416 @@ def test_policy_data_adapter_proprioception_integration(field_mapping_file, crea
         if expected_stack.ndim == 1:
             expected_stack = expected_stack[:, None]
         torch.testing.assert_close(normalized_calls[field], expected_stack)
+
+
+def test_stack_fields_absolute_fields(field_mapping_file):
+    """Test _stack_fields with absolute (non-relative) fields only."""
+    num_past = 1
+    num_future = 2
+    image_names = []
+    action_fields = [
+        "robot__action__grippers__left::panda_hand",
+        "robot__action__grippers__right::panda_hand",
+    ]
+    field_dims = {
+        "robot__action__grippers__left::panda_hand": 1,
+        "robot__action__grippers__right::panda_hand": 1,
+    }
+
+    processor = FakeRoboticsProcessor(field_dims=field_dims, timestep_dim=num_past + 1 + num_future)
+    augmentation = SimpleNamespace(image=SimpleNamespace(random_crop=SimpleNamespace(shape=(112, 112))))
+    data_config = SimpleNamespace(
+        action_fields=action_fields,
+        image_names=image_names,
+        augmentation=augmentation,
+        proprioception_fields=[],
+        pose_groups=[],
+    )
+
+    adapter = PolicyDataAdapter(
+        robotics_processor=processor,
+        data_config=data_config,
+        field_mapping_path=field_mapping_file,
+        image_names=image_names,
+        preprocessor_image_size=(128, 128),
+        num_past_timesteps=num_past,
+        num_future_timesteps=num_future,
+        image_indices=(-1, 0),
+    )
+
+    # Create buffer with known values
+    buffer = [
+        {
+            "robot__action__grippers__left::panda_hand": np.array([0.5], dtype=np.float64),
+            "robot__action__grippers__right::panda_hand": np.array([0.6], dtype=np.float64),
+        },
+        {
+            "robot__action__grippers__left::panda_hand": np.array([0.7], dtype=np.float64),
+            "robot__action__grippers__right::panda_hand": np.array([0.8], dtype=np.float64),
+        },
+        {
+            "robot__action__grippers__left::panda_hand": np.array([0.9], dtype=np.float64),
+            "robot__action__grippers__right::panda_hand": np.array([1.0], dtype=np.float64),
+        },
+    ]
+
+    result = adapter._stack_fields(buffer, action_fields, relative_fields=[])
+
+    # Check that all fields are present
+    assert set(result.keys()) == set(action_fields)
+
+    # Check shapes (should be [timesteps, dim])
+    assert result["robot__action__grippers__left::panda_hand"].shape == (3, 1)
+    assert result["robot__action__grippers__right::panda_hand"].shape == (3, 1)
+
+    # Check values
+    expected_left = torch.tensor([[0.5], [0.7], [0.9]], dtype=torch.float32)
+    expected_right = torch.tensor([[0.6], [0.8], [1.0]], dtype=torch.float32)
+    torch.testing.assert_close(result["robot__action__grippers__left::panda_hand"], expected_left)
+    torch.testing.assert_close(result["robot__action__grippers__right::panda_hand"], expected_right)
+
+
+def test_stack_fields_relative_pose_groups(field_mapping_file):
+    """Test _stack_fields with relative pose groups (xyz + rot_6d)."""
+    num_past = 1
+    num_future = 1
+    image_names = []
+    action_fields = [
+        "robot__action__poses__left::panda__xyz_relative",
+        "robot__action__poses__left::panda__rot_6d_relative",
+    ]
+    pose_groups = [
+        {
+            "name": "left_panda_action",
+            "position_key": "robot__action__poses__left::panda__xyz",
+            "rotation_key": "robot__action__poses__left::panda__rot_6d",
+        }
+    ]
+    field_dims = {
+        action_fields[0]: 3,
+        action_fields[1]: 6,
+    }
+
+    processor = FakeRoboticsProcessor(field_dims=field_dims, timestep_dim=num_past + 1 + num_future)
+    augmentation = SimpleNamespace(image=SimpleNamespace(random_crop=SimpleNamespace(shape=(112, 112))))
+    data_config = SimpleNamespace(
+        action_fields=action_fields,
+        image_names=image_names,
+        augmentation=augmentation,
+        proprioception_fields=[],
+        pose_groups=pose_groups,
+    )
+
+    adapter = PolicyDataAdapter(
+        robotics_processor=processor,
+        data_config=data_config,
+        field_mapping_path=field_mapping_file,
+        image_names=image_names,
+        preprocessor_image_size=(128, 128),
+        num_past_timesteps=num_past,
+        num_future_timesteps=num_future,
+        image_indices=(-1, 0),
+    )
+
+    # Set reference position and rotation (identity)
+    reference_xyz = np.array([0.0, 0.0, 0.0], dtype=np.float64)
+    reference_rot_6d = np.array([1.0, 0.0, 0.0, 0.0, 1.0, 0.0], dtype=np.float64)
+    adapter.reference = {
+        "robot__actual__poses__left::panda__xyz": reference_xyz,
+        "robot__actual__poses__left::panda__rot_6d": reference_rot_6d,
+    }
+
+    # Create buffer with absolute values
+    # First timestep: at reference (should give zero relative)
+    # Second timestep: translated by [0.1, 0.0, 0.0]
+    # Third timestep: translated by [0.2, 0.0, 0.0]
+    buffer = [
+        {
+            "robot__action__poses__left::panda__xyz": np.array([0.0, 0.0, 0.0], dtype=np.float64),
+            "robot__action__poses__left::panda__rot_6d": np.array([1.0, 0.0, 0.0, 0.0, 1.0, 0.0], dtype=np.float64),
+        },
+        {
+            "robot__action__poses__left::panda__xyz": np.array([0.1, 0.0, 0.0], dtype=np.float64),
+            "robot__action__poses__left::panda__rot_6d": np.array([1.0, 0.0, 0.0, 0.0, 1.0, 0.0], dtype=np.float64),
+        },
+        {
+            "robot__action__poses__left::panda__xyz": np.array([0.2, 0.0, 0.0], dtype=np.float64),
+            "robot__action__poses__left::panda__rot_6d": np.array([1.0, 0.0, 0.0, 0.0, 1.0, 0.0], dtype=np.float64),
+        },
+    ]
+
+    result = adapter._stack_fields(buffer, action_fields, relative_fields=action_fields)
+
+    # Check that all fields are present
+    assert set(result.keys()) == set(action_fields)
+
+    # Check shapes
+    assert result["robot__action__poses__left::panda__xyz_relative"].shape == (3, 3)
+    assert result["robot__action__poses__left::panda__rot_6d_relative"].shape == (3, 6)
+
+    # Check relative xyz values (should match the translations relative to reference)
+    expected_xyz = torch.tensor(
+        [[0.0, 0.0, 0.0], [0.1, 0.0, 0.0], [0.2, 0.0, 0.0]],
+        dtype=torch.float32,
+    )
+    torch.testing.assert_close(
+        result["robot__action__poses__left::panda__xyz_relative"],
+        expected_xyz,
+        atol=1e-5,
+        rtol=1e-5,
+    )
+
+    # Check relative rot_6d values (should be identity since no rotation change)
+    expected_rot_6d = torch.tensor(
+        [[1.0, 0.0, 0.0, 0.0, 1.0, 0.0]] * 3,
+        dtype=torch.float32,
+    )
+    torch.testing.assert_close(
+        result["robot__action__poses__left::panda__rot_6d_relative"],
+        expected_rot_6d,
+        atol=1e-5,
+        rtol=1e-5,
+    )
+
+
+def test_stack_fields_relative_joint_positions(field_mapping_file):
+    """Test _stack_fields with relative joint positions."""
+    num_past = 1
+    num_future = 1
+    image_names = []
+    action_fields = [
+        "robot__action__joint_position__left::panda_relative",
+    ]
+    field_dims = {
+        action_fields[0]: 7,
+    }
+
+    processor = FakeRoboticsProcessor(field_dims=field_dims, timestep_dim=num_past + 1 + num_future)
+    augmentation = SimpleNamespace(image=SimpleNamespace(random_crop=SimpleNamespace(shape=(112, 112))))
+    data_config = SimpleNamespace(
+        action_fields=action_fields,
+        image_names=image_names,
+        augmentation=augmentation,
+        proprioception_fields=[],
+        pose_groups=[],
+    )
+
+    adapter = PolicyDataAdapter(
+        robotics_processor=processor,
+        data_config=data_config,
+        field_mapping_path=field_mapping_file,
+        image_names=image_names,
+        preprocessor_image_size=(128, 128),
+        num_past_timesteps=num_past,
+        num_future_timesteps=num_future,
+        image_indices=(-1, 0),
+    )
+
+    # Set reference joint positions
+    reference_joints = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float64)
+    adapter.reference = {
+        "robot__actual__joint_position__left::panda": reference_joints,
+    }
+
+    # Create buffer with absolute joint positions
+    buffer = [
+        {
+            "robot__action__joint_position__left::panda": np.array(
+                [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7], dtype=np.float64
+            ),
+        },
+        {
+            "robot__action__joint_position__left::panda": np.array(
+                [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8], dtype=np.float64
+            ),
+        },
+    ]
+
+    result = adapter._stack_fields(buffer, action_fields, relative_fields=action_fields)
+
+    # Check that field is present
+    assert "robot__action__joint_position__left::panda_relative" in result
+
+    # Check shape
+    assert result["robot__action__joint_position__left::panda_relative"].shape == (2, 7)
+
+    # Check that values are wrapped to [-pi, pi]
+    expected = torch.tensor(
+        [
+            [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7],
+            [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
+        ],
+        dtype=torch.float32,
+    )
+    torch.testing.assert_close(
+        result["robot__action__joint_position__left::panda_relative"],
+        expected,
+        atol=1e-5,
+        rtol=1e-5,
+    )
+
+
+def test_stack_fields_with_timestep_slice(field_mapping_file):
+    """Test _stack_fields with timestep slicing."""
+    num_past = 1
+    num_future = 2
+    image_names = []
+    action_fields = ["robot__action__grippers__left::panda_hand"]
+    field_dims = {"robot__action__grippers__left::panda_hand": 1}
+
+    processor = FakeRoboticsProcessor(field_dims=field_dims, timestep_dim=num_past + 1 + num_future)
+    augmentation = SimpleNamespace(image=SimpleNamespace(random_crop=SimpleNamespace(shape=(112, 112))))
+    data_config = SimpleNamespace(
+        action_fields=action_fields,
+        image_names=image_names,
+        augmentation=augmentation,
+        proprioception_fields=[],
+        pose_groups=[],
+    )
+
+    adapter = PolicyDataAdapter(
+        robotics_processor=processor,
+        data_config=data_config,
+        field_mapping_path=field_mapping_file,
+        image_names=image_names,
+        preprocessor_image_size=(128, 128),
+        num_past_timesteps=num_past,
+        num_future_timesteps=num_future,
+        image_indices=(-1, 0),
+    )
+
+    # Create buffer with 5 timesteps
+    buffer = [
+        {"robot__action__grippers__left::panda_hand": np.array([0.1], dtype=np.float64)},
+        {"robot__action__grippers__left::panda_hand": np.array([0.2], dtype=np.float64)},
+        {"robot__action__grippers__left::panda_hand": np.array([0.3], dtype=np.float64)},
+        {"robot__action__grippers__left::panda_hand": np.array([0.4], dtype=np.float64)},
+        {"robot__action__grippers__left::panda_hand": np.array([0.5], dtype=np.float64)},
+    ]
+
+    # Slice to get only middle 3 timesteps
+    result = adapter._stack_fields(buffer, action_fields, relative_fields=[], timesteps_slice=slice(1, 4))
+
+    assert result["robot__action__grippers__left::panda_hand"].shape == (3, 1)
+    expected = torch.tensor([[0.2], [0.3], [0.4]], dtype=torch.float32)
+    torch.testing.assert_close(result["robot__action__grippers__left::panda_hand"], expected)
+
+
+def test_stack_fields_empty_buffer(field_mapping_file):
+    """Test _stack_fields with empty buffer."""
+    num_past = 1
+    num_future = 1
+    image_names = []
+    action_fields = ["robot__action__grippers__left::panda_hand"]
+    field_dims = {"robot__action__grippers__left::panda_hand": 1}
+
+    processor = FakeRoboticsProcessor(field_dims=field_dims, timestep_dim=num_past + 1 + num_future)
+    augmentation = SimpleNamespace(image=SimpleNamespace(random_crop=SimpleNamespace(shape=(112, 112))))
+    data_config = SimpleNamespace(
+        action_fields=action_fields,
+        image_names=image_names,
+        augmentation=augmentation,
+        proprioception_fields=[],
+        pose_groups=[],
+    )
+
+    adapter = PolicyDataAdapter(
+        robotics_processor=processor,
+        data_config=data_config,
+        field_mapping_path=field_mapping_file,
+        image_names=image_names,
+        preprocessor_image_size=(128, 128),
+        num_past_timesteps=num_past,
+        num_future_timesteps=num_future,
+        image_indices=(-1, 0),
+    )
+
+    result = adapter._stack_fields([], action_fields, relative_fields=[])
+    assert result == {}
+
+
+def test_stack_fields_mixed_absolute_and_relative(field_mapping_file):
+    """Test _stack_fields with both absolute and relative fields together."""
+    num_past = 1
+    num_future = 1
+    image_names = []
+    action_fields = [
+        "robot__action__poses__left::panda__xyz_relative",
+        "robot__action__poses__left::panda__rot_6d_relative",
+        "robot__action__grippers__left::panda_hand",  # Absolute field
+    ]
+    pose_groups = [
+        {
+            "name": "left_panda_action",
+            "position_key": "robot__action__poses__left::panda__xyz",
+            "rotation_key": "robot__action__poses__left::panda__rot_6d",
+        }
+    ]
+    field_dims = {
+        action_fields[0]: 3,
+        action_fields[1]: 6,
+        action_fields[2]: 1,
+    }
+
+    processor = FakeRoboticsProcessor(field_dims=field_dims, timestep_dim=num_past + 1 + num_future)
+    augmentation = SimpleNamespace(image=SimpleNamespace(random_crop=SimpleNamespace(shape=(112, 112))))
+    data_config = SimpleNamespace(
+        action_fields=action_fields,
+        image_names=image_names,
+        augmentation=augmentation,
+        proprioception_fields=[],
+        pose_groups=pose_groups,
+    )
+
+    adapter = PolicyDataAdapter(
+        robotics_processor=processor,
+        data_config=data_config,
+        field_mapping_path=field_mapping_file,
+        image_names=image_names,
+        preprocessor_image_size=(128, 128),
+        num_past_timesteps=num_past,
+        num_future_timesteps=num_future,
+        image_indices=(-1, 0),
+    )
+
+    # Set reference
+    adapter.reference = {
+        "robot__actual__poses__left::panda__xyz": np.array([0.0, 0.0, 0.0], dtype=np.float64),
+        "robot__actual__poses__left::panda__rot_6d": np.array([1.0, 0.0, 0.0, 0.0, 1.0, 0.0], dtype=np.float64),
+    }
+
+    # Create buffer
+    buffer = [
+        {
+            "robot__action__poses__left::panda__xyz": np.array([0.1, 0.0, 0.0], dtype=np.float64),
+            "robot__action__poses__left::panda__rot_6d": np.array([1.0, 0.0, 0.0, 0.0, 1.0, 0.0], dtype=np.float64),
+            "robot__action__grippers__left::panda_hand": np.array([0.5], dtype=np.float64),
+        },
+        {
+            "robot__action__poses__left::panda__xyz": np.array([0.2, 0.0, 0.0], dtype=np.float64),
+            "robot__action__poses__left::panda__rot_6d": np.array([1.0, 0.0, 0.0, 0.0, 1.0, 0.0], dtype=np.float64),
+            "robot__action__grippers__left::panda_hand": np.array([0.8], dtype=np.float64),
+        },
+    ]
+
+    relative_fields = [
+        "robot__action__poses__left::panda__xyz_relative",
+        "robot__action__poses__left::panda__rot_6d_relative",
+    ]
+
+    result = adapter._stack_fields(buffer, action_fields, relative_fields)
+
+    # Check all fields are present
+    assert set(result.keys()) == set(action_fields)
+
+    # Check relative pose fields
+    assert result["robot__action__poses__left::panda__xyz_relative"].shape == (2, 3)
+    assert result["robot__action__poses__left::panda__rot_6d_relative"].shape == (2, 6)
+
+    # Check absolute gripper field
+    assert result["robot__action__grippers__left::panda_hand"].shape == (2, 1)
+    expected_gripper = torch.tensor([[0.5], [0.8]], dtype=torch.float32)
+    torch.testing.assert_close(result["robot__action__grippers__left::panda_hand"], expected_gripper)
 
 
 def test_update_action_generates_valid_poses(

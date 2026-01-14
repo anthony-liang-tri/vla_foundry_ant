@@ -5205,6 +5205,7 @@ requires-dist = [
     { name = "boto3", specifier = ">=1.39.5" },
     { name = "botocore", specifier = ">=1.39.17" },
     { name = "click", specifier = "<8.3.0" },
+    { name = "click", specifier = ">=8.1.7" },
     { name = "diffusers", specifier = ">=0.34.0" },
     { name = "draccus", git = "https://github.com/marin-community/draccus" },
     { name = "einops", specifier = ">=0.8.1" },

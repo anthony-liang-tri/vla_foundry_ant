@@ -185,7 +185,7 @@ def test_discover_episodes_integration(temp_spartan_episodes, mock_config):
         with (
             patch(
                 "vla_foundry.data.robotics.utils.load_action_field_config",
-                return_value={"action_key_fields": [], "action_index_fields": []},
+                return_value={"action_key_fields": [], "action_index_fields": [], "pose_groups": []},
             ),
             patch("ray.get") as mock_ray_get,
             patch(
@@ -217,7 +217,7 @@ def test_discover_episodes_with_max_episodes_to_process(temp_spartan_episodes, m
         with (
             patch(
                 "vla_foundry.data.robotics.utils.load_action_field_config",
-                return_value={"action_key_fields": [], "action_index_fields": []},
+                return_value={"action_key_fields": [], "action_index_fields": [], "pose_groups": []},
             ),
             patch("ray.get") as mock_ray_get,
             patch(
@@ -252,7 +252,7 @@ def test_discover_episodes_empty_directory(mock_config):
             with (
                 patch(
                     "vla_foundry.data.robotics.utils.load_action_field_config",
-                    return_value={"action_key_fields": [], "action_index_fields": []},
+                    return_value={"action_key_fields": [], "action_index_fields": [], "pose_groups": []},
                 ),
                 patch("ray.get") as mock_ray_get,
                 patch(
@@ -320,7 +320,7 @@ class TestPointCloudGeneration:
 
             with patch(
                 "vla_foundry.data.robotics.utils.load_action_field_config",
-                return_value={"action_key_fields": ["action"], "action_index_fields": [7]},
+                return_value={"action_key_fields": ["action"], "action_index_fields": [7], "pose_groups": []},
             ):
                 from vla_foundry.data.preprocessing.robotics.converters.spartan import SpartanConverter
 
@@ -371,7 +371,7 @@ class TestPointCloudGeneration:
 
             with patch(
                 "vla_foundry.data.robotics.utils.load_action_field_config",
-                return_value={"action_key_fields": ["action"], "action_index_fields": [7]},
+                return_value={"action_key_fields": ["action"], "action_index_fields": [7], "pose_groups": []},
             ):
                 from vla_foundry.data.preprocessing.robotics.converters.spartan import SpartanConverter
 
@@ -416,7 +416,7 @@ class TestPointCloudGeneration:
 
             with patch(
                 "vla_foundry.data.robotics.utils.load_action_field_config",
-                return_value={"action_key_fields": ["action"], "action_index_fields": [7]},
+                return_value={"action_key_fields": ["action"], "action_index_fields": [7], "pose_groups": []},
             ):
                 from vla_foundry.data.preprocessing.robotics.converters.spartan import SpartanConverter
 

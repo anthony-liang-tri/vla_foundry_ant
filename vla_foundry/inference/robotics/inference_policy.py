@@ -11,6 +11,7 @@ import logging
 import os
 import uuid
 from collections import defaultdict
+from datetime import datetime
 from typing import Dict
 
 import torch
@@ -25,6 +26,7 @@ from grpc_workspace.lbm_policy_server import (
 from robot_gym.multiarm_spaces import MultiarmObservation, PosesAndGrippers
 from robot_gym.policy import Policy, PolicyMetadata
 
+import vla_foundry.visualizers.visualizer as vz
 from vla_foundry.data.processor.robotics_processor import RoboticsProcessor
 from vla_foundry.file_utils import (
     get_latest_checkpoint,
@@ -135,7 +137,7 @@ class InferenceDiffusionPolicy(Policy):
         )
 
         # Initialize data adapter with robotics processor, data config, and field mapping
-        self.data_adapter = defaultdict(PolicyDataAdapter)
+        self.data_adapter = {}
         self.should_reset = defaultdict(bool)
 
         # Initialize state
@@ -274,6 +276,11 @@ def main():
         num_flow_steps=args.num_flow_steps,
         open_loop_steps=args.open_loop_steps,
     )
+
+    # Create run name with date identifier
+    date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_name = f"PolicyDataAdapter_{date_str}"
+    vz.init(project_name="foundry-policy-evaluation", run_name=run_name, add_rank_to_run=True)
 
     # Run the policy server
     run_policy_server(policy, args)

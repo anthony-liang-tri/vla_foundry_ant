@@ -124,7 +124,10 @@ def main():
     metadata["processing"]["sample_counts"] = ray.get(logger_actor.get_values.remote())
     print("Sample counts:", metadata["processing"]["sample_counts"])
     upload_dict_to_s3(metadata, f"{cfg.output_dir.rstrip('/')}/shards", "processing_metadata.json")
-    upload_config_to_s3(cfg, f"{cfg.output_dir.rstrip('/')}/shards", "preprocessing_config.yaml")
+
+    # Save preprocessing config for reference
+    preprocessing_config_dict = vars(cfg).copy()
+    upload_config_to_s3(preprocessing_config_dict, f"{cfg.output_dir.rstrip('/')}/shards", "preprocessing_config.yaml")
 
     # Make a copy of the ouput directory
     dataset_uuid = str(uuid.uuid4())

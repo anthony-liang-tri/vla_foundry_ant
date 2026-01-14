@@ -18,8 +18,9 @@ from PIL import Image
 import vla_foundry.visualizers.visualizer as vz
 from vla_foundry.data.preprocessing.image_utils import resize_image
 from vla_foundry.data.robotics.utils import (
-    rot_6d_to_relative,
-    xyz_to_relative,
+    calculate_relative_pose,
+    pose_to_9d,
+    to_pose_matrix,
 )
 from vla_foundry.inference.robotics.lbm_mapping import ActionMapping, ObservationMapping
 from vla_foundry.inference.robotics.utils import (
@@ -27,8 +28,6 @@ from vla_foundry.inference.robotics.utils import (
     center_crop,
     relative_to_absolute_map,
 )
-
-vz.init(run_name="PolicyDataAdapter", add_rank_to_run=True)
 
 
 class PolicyDataAdapter:
@@ -42,7 +41,7 @@ class PolicyDataAdapter:
 
     Args:
         robotics_processor: The robotics processor to process the data.
-        data_config: The data configuration.
+        data_config: The data configuration containing action_fields, proprioception_fields, and pose_groups.
         field_mapping_path: The path to the field mapping file that references the field names in the gym format.
         image_names: The names of the images in the observation (in the format of camera_name_t<timestep>).
         preprocessor_image_size: The size of the image preprocessor.
@@ -62,18 +61,29 @@ class PolicyDataAdapter:
         self.robotics_processor = robotics_processor
         self.data_config = data_config
         self.action_fields = list(data_config.action_fields)
-        self.relative_action_fields = [field for field in self.action_fields if field.endswith("_relative")]  # noqa: E501
+        self.relative_action_fields = [field for field in self.action_fields if field.endswith("_relative")]
         self.proprioception_fields = list(data_config.proprioception_fields)
         self.relative_proprioception_fields = [
             field for field in self.proprioception_fields if field.endswith("_relative")
         ]
+        self.pose_groups = list(data_config.pose_groups)
+
+        # Create lookup table for fast pose group access during inference
+        self.pose_group_lookup = {}
+        for pose_group in self.pose_groups:
+            self.pose_group_lookup[pose_group["position_key"]] = pose_group
+            self.pose_group_lookup[pose_group["rotation_key"]] = pose_group
         self.num_past_timesteps = num_past_timesteps
         self.num_future_timesteps = num_future_timesteps
         self.image_indices = image_indices
         self.image_names = image_names
         self.field_mapping = ObservationMapping(field_mapping_path, image_names)
         self.action_mapping = ActionMapping(
-            field_mapping_path, self.action_fields, self.robotics_processor, num_past_timesteps=num_past_timesteps
+            field_mapping_path,
+            self.action_fields,
+            self.robotics_processor,
+            pose_groups=self.pose_groups,
+            num_past_timesteps=num_past_timesteps,
         )
         self.action_dim = self.action_mapping.action_dim
         self.language_instruction = "Do the task"
@@ -284,6 +294,54 @@ class PolicyDataAdapter:
 
         return lowdim
 
+    def _to_relative(self, buffer: list[dict], field: str, timesteps_slice: slice | None = None) -> np.ndarray:
+        """Convert absolute field to relative based on field type.
+
+        Automatically detects if field belongs to a pose group and applies appropriate conversion.
+
+        Args:
+            buffer: Buffer containing absolute field data
+            field: Field name (with _relative suffix)
+            timesteps_slice: Optional slice to apply to buffer
+
+        Returns:
+            Relative values as numpy array
+        """
+        absolute_field = relative_to_absolute_map(field)
+
+        # Check if this field belongs to a pose group
+        pose_group = self.pose_group_lookup.get(absolute_field)
+        if pose_group is not None:
+            # Handle pose group fields (xyz + rot_6d)
+            xyz_key = pose_group["position_key"]
+            rot_6d_key = pose_group["rotation_key"]
+
+            # Calculate relative pose
+            relative_xyz, relative_rot_6d = self._pose_to_relative(buffer, xyz_key, rot_6d_key, timesteps_slice)
+
+            # Return the appropriate component
+            if absolute_field == xyz_key:
+                return relative_xyz
+            else:  # rot_6d_key
+                return relative_rot_6d
+
+        # Handle non-pose relative fields (e.g., joint positions)
+        values = [np.asarray(entry[absolute_field], dtype=np.float64) for entry in buffer]
+        if timesteps_slice is not None:
+            values = values[timesteps_slice]
+        stacked = np.stack(values, axis=0)
+
+        actual_field = any_to_actual_map(absolute_field)
+        reference = self.reference.get(actual_field)
+        if reference is None:
+            raise KeyError(f"Reference for '{actual_field}' not initialized")
+
+        if "joint_position" in field:
+            return self._wrap_to_pi(stacked - reference)
+        else:
+            # TODO: This does not current support generic subtraction
+            raise ValueError(f"Unsupported relative field type for '{field}'")
+
     def _stack_fields(
         self,
         buffer: list[dict],
@@ -291,49 +349,81 @@ class PolicyDataAdapter:
         relative_fields: list[str],
         timesteps_slice: slice | None = None,
     ) -> Dict[str, torch.Tensor]:
+        """Stack fields from buffer into tensors, applying relative conversions as needed.
+
+        Note: If both xyz_relative and rot_6d_relative from the same pose group are in fields,
+        _pose_to_relative() will be called twice. This is acceptable for code clarity - the
+        alternative would require pre-processing pose groups which adds complexity. The duplicate
+        calculation is minimal compared to model inference time. Consider refactoring in the future.
+        """
         stacked_fields: Dict[str, torch.Tensor] = {}
         if not buffer or not fields:
             return stacked_fields
 
         for field in fields:
-            values = []
             absolute_field = relative_to_absolute_map(field)
-            for entry in buffer:
-                if absolute_field not in entry:
-                    raise KeyError(f"Field '{absolute_field}' missing from buffer entry")
-                values.append(np.asarray(entry[absolute_field], dtype=np.float64))
-
-            if timesteps_slice is not None:
-                values = values[timesteps_slice]
-
-            stacked = np.stack(values, axis=0)
 
             if field in relative_fields:
-                actual_field = any_to_actual_map(absolute_field)
-                reference = self.reference.get(actual_field)
-                if reference is None:
-                    raise KeyError(f"Reference for '{actual_field}' not initialized")
+                # Apply relative conversion
+                stacked = self._to_relative(buffer, field, timesteps_slice)
+            else:
+                # Absolute field - extract and stack
+                values = [np.asarray(entry[absolute_field], dtype=np.float64) for entry in buffer]
+                if timesteps_slice is not None:
+                    values = values[timesteps_slice]
+                stacked = np.stack(values, axis=0)
 
-                if "rot_6d" in field:
-                    stacked = rot_6d_to_relative(stacked, reference)
-                elif "xyz" in field or "gripper" in field:
-                    stacked = xyz_to_relative(stacked, reference)
-                elif "joint_position" in field:
-                    stacked = self._wrap_to_pi(stacked - reference)
-                else:
-                    raise ValueError(f"Unsupported relative field type for '{field}'")
-
+            # Convert to 2D tensor
             stacked = stacked.astype(np.float32)
             if stacked.ndim == 1:
                 stacked = stacked[:, None]
             if stacked.ndim != 2:
                 raise ValueError(f"Expected stacked tensor to be 2D for field '{field}', got shape {stacked.shape}")
-            tensor = torch.as_tensor(stacked, dtype=torch.float32)
-            logging.debug(f"Stacked shape: {stacked.shape} {field}")
 
-            stacked_fields[field] = tensor
+            logging.debug(f"Stacked shape: {stacked.shape} {field}")
+            stacked_fields[field] = torch.as_tensor(stacked, dtype=torch.float32)
 
         return stacked_fields
+
+    def _pose_to_relative(
+        self, buffer: list[dict], xyz_key: str, rot_6d_key: str, timesteps_slice: slice | None = None
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Convert absolute pose fields to relative pose.
+
+        Args:
+            buffer: Buffer containing absolute pose data
+            xyz_key: Key for position field (absolute)
+            rot_6d_key: Key for rotation field (absolute)
+            timesteps_slice: Optional slice to apply to buffer
+
+        Returns:
+            Tuple of (relative_xyz, relative_rot_6d) as numpy arrays
+        """
+        # Extract and stack values from buffer
+        values_xyz = [np.asarray(entry[xyz_key], dtype=np.float64) for entry in buffer]
+        values_rot = [np.asarray(entry[rot_6d_key], dtype=np.float64) for entry in buffer]
+        if timesteps_slice is not None:
+            values_xyz = values_xyz[timesteps_slice]
+            values_rot = values_rot[timesteps_slice]
+        xyz_stacked = np.stack(values_xyz, axis=0)
+        rot_6d_stacked = np.stack(values_rot, axis=0)
+
+        # Get reference pose
+        xyz_actual = any_to_actual_map(xyz_key)
+        rot_6d_actual = any_to_actual_map(rot_6d_key)
+        reference_xyz = self.reference.get(xyz_actual)
+        reference_rot_6d = self.reference.get(rot_6d_actual)
+
+        if reference_xyz is None or reference_rot_6d is None:
+            raise KeyError(f"Reference missing for pose: xyz={xyz_actual}, rot_6d={rot_6d_actual}")
+
+        # Calculate relative pose using pose matrices
+        reference_pose_matrix = to_pose_matrix(reference_xyz, reference_rot_6d)
+        current_pose_matrices = to_pose_matrix(xyz_stacked, rot_6d_stacked)
+        relative_pose_matrices = calculate_relative_pose(current_pose_matrices, reference_pose_matrix)
+        relative_xyz, relative_rot_6d = pose_to_9d(relative_pose_matrices)
+
+        return relative_xyz, relative_rot_6d
 
     @staticmethod
     def _wrap_to_pi(delta: np.ndarray) -> np.ndarray:

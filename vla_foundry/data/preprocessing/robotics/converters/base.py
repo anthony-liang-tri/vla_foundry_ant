@@ -7,7 +7,11 @@ import numpy as np
 from vla_foundry.data.preprocessing.image_utils import init_jpeg_encoder
 from vla_foundry.data.preprocessing.robotics.preprocess_masks import PaddingStrategy
 from vla_foundry.data.preprocessing.utils import upload_sample_to_s3
-from vla_foundry.data.robotics.utils import rot_6d_to_relative, xyz_to_relative
+from vla_foundry.data.robotics.utils import (
+    calculate_relative_pose,
+    pose_to_9d,
+    to_pose_matrix,
+)
 
 
 class BaseRoboticsConverter:
@@ -129,19 +133,36 @@ class BaseRoboticsConverter:
     def create_relative_lowdim_data(
         self, lowdim_data: Dict[str, np.ndarray], reference_data: Dict[str, np.ndarray]
     ) -> Dict[str, np.ndarray]:
-        """Create relative coordinate data."""
+        """Create relative coordinate data using configuration-based pose matching."""
+        if not hasattr(self, "pose_groups") or not self.pose_groups:
+            # No pose groups configured - return empty dict (no relative coordinates needed)
+            return {}
+
         relative_data = {}
+        for pose_group in self.pose_groups:
+            xyz_key = pose_group["position_key"]
+            rot_6d_key = pose_group["rotation_key"]
 
-        for key, data in lowdim_data.items():
-            if not np.issubdtype(data.dtype, np.number):
-                continue
+            xyz_data = lowdim_data[xyz_key]
+            rot_6d_data = lowdim_data[rot_6d_key]
+            reference_xyz = reference_data[xyz_key]
+            reference_rot_6d = reference_data[rot_6d_key]
 
-            if "xyz" in key.lower() and data.shape[-1] == 3:
-                relative_data[f"{key}_relative"] = xyz_to_relative(data, reference_data[key])
-            elif "rot_6d" in key.lower() and data.shape[-1] == 6:
-                relative_data[f"{key}_relative"] = rot_6d_to_relative(data, reference_data[key])
-            elif any(pos_word in key.lower() for pos_word in ["position", "pose", "pos"]) and data.shape[-1] == 3:
-                relative_data[f"{key}_relative"] = xyz_to_relative(data, reference_data[key])
+            # Create reference pose matrix
+            reference_pose_matrix = to_pose_matrix(reference_xyz, reference_rot_6d)
+
+            # Create pose matrices for all timesteps (vectorized)
+            current_pose_matrices = to_pose_matrix(xyz_data, rot_6d_data)
+
+            # Calculate relative poses (vectorized)
+            relative_pose_matrices = calculate_relative_pose(current_pose_matrices, reference_pose_matrix)
+
+            # Extract xyz and rot_6d from relative pose matrices (vectorized)
+            relative_xyz, relative_rot_6d = pose_to_9d(relative_pose_matrices)
+
+            # Store relative data with appropriate names
+            relative_data[f"{xyz_key}_relative"] = relative_xyz
+            relative_data[f"{rot_6d_key}_relative"] = relative_rot_6d
 
         return relative_data
 

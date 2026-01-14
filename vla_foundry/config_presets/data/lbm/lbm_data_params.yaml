@@ -22,6 +22,14 @@ action_fields:
   - robot__action__poses__right::panda__rot_6d_relative # 6
   - robot__action__grippers__right::panda_hand # 1
 
+pose_groups:
+  - name: "left_panda_action"
+    position_key: "robot__action__poses__left::panda__xyz"
+    rotation_key: "robot__action__poses__left::panda__rot_6d"
+  - name: "right_panda_action"
+    position_key: "robot__action__poses__right::panda__xyz"
+    rotation_key: "robot__action__poses__right::panda__rot_6d"
+
 intrinsics_fields:
   - intrinsics.scene_right_0
   - intrinsics.scene_left_0

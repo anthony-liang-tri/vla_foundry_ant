@@ -38,10 +38,11 @@ from vla_foundry.data.pipelines.robotics import extract_robotics_fields
 from vla_foundry.data.robotics.normalization import RoboticsNormalizer
 from vla_foundry.data.robotics.utils import (
     any_to_actual_key,
+    apply_relative_pose,
     load_action_field_config,
-    rot_6d_from_relative,
+    pose_to_9d,
     rot_6d_to_matrix,
-    xyz_from_relative,
+    to_pose_matrix,
 )
 from vla_foundry.params.data_params import RoboticsDataParams
 
@@ -122,31 +123,82 @@ def _reconstruct_relative_coordinates(sample: Dict[str, Any]) -> Dict[str, np.nd
     # Find all relative coordinate keys
     relative_keys = [key for key in lowdim if key.endswith("_relative")]
 
-    for relative_key in relative_keys:
-        # Convert relative key to absolute key by removing "_relative"
-        absolute_key = relative_key.replace("_relative", "")
+    # Group relative keys by pose groups (xyz + rot_6d pairs)
+    pose_groups = {}
+    standalone_keys = []
 
-        # Skip if absolute key doesn't exist
+    for relative_key in relative_keys:
+        absolute_key = relative_key.replace("_relative", "")
         if absolute_key not in lowdim:
             continue
 
-        # Find the corresponding robot__actual reference key
-        # Replace any trajectory type with "actual" to get the reference
-        reference_key = any_to_actual_key(absolute_key)
+        if "xyz" in absolute_key.lower():
+            # This is a position field - find its rotation counterpart
+            base_key = absolute_key.replace("__xyz", "")
+            rot_key = base_key + "__rot_6d"
+            rot_relative_key = rot_key + "_relative"
 
-        # Skip if reference key doesn't exist
-        if reference_key is not None and reference_key not in lowdim:
+            if rot_relative_key in relative_keys and rot_key in lowdim:
+                # This is a pose group
+                pose_groups[base_key] = {
+                    "xyz_key": absolute_key,
+                    "rot_key": rot_key,
+                    "xyz_relative_key": relative_key,
+                    "rot_relative_key": rot_relative_key,
+                }
+            else:
+                # Standalone xyz without rotation
+                standalone_keys.append(relative_key)
+        elif "rot_6d" in absolute_key.lower():
+            # Check if already processed as part of a pose group
+            base_key = absolute_key.replace("__rot_6d", "")
+            if base_key not in pose_groups:
+                standalone_keys.append(relative_key)
+        else:
+            standalone_keys.append(relative_key)
+
+    # Process pose groups (xyz + rot_6d pairs)
+    for _base_key, keys in pose_groups.items():
+        xyz_key = keys["xyz_key"]
+        rot_key = keys["rot_key"]
+        xyz_relative_key = keys["xyz_relative_key"]
+        rot_relative_key = keys["rot_relative_key"]
+
+        # Get reference keys
+        reference_xyz_key = any_to_actual_key(xyz_key)
+        reference_rot_key = any_to_actual_key(rot_key)
+
+        if reference_xyz_key not in lowdim or reference_rot_key not in lowdim:
             continue
 
-        # Determine if this is xyz or rot_6d based on the key name
-        if "xyz" in absolute_key.lower():
-            # This is an xyz coordinate - use robot__actual as reference
-            reference_xyz = lowdim[reference_key][reference_index]
-            reconstructed[absolute_key] = xyz_from_relative(lowdim[relative_key], reference_xyz)
-        elif "rot_6d" in absolute_key.lower():
-            # This is a 6D rotation - use robot__actual as reference
-            reference_6d = lowdim[reference_key][reference_index]
-            reconstructed[absolute_key] = rot_6d_from_relative(lowdim[relative_key], reference_6d)
+        # Get reference pose at reference timestep
+        reference_xyz = lowdim[reference_xyz_key][reference_index]
+        reference_rot = lowdim[reference_rot_key][reference_index]
+        reference_pose_matrix = to_pose_matrix(reference_xyz, reference_rot)
+
+        # Get relative poses
+        relative_xyz = lowdim[xyz_relative_key]
+        relative_rot = lowdim[rot_relative_key]
+        relative_pose_matrices = to_pose_matrix(relative_xyz, relative_rot)
+
+        # Convert to absolute
+        absolute_pose_matrices = apply_relative_pose(relative_pose_matrices, reference_pose_matrix)
+        absolute_xyz, absolute_rot = pose_to_9d(absolute_pose_matrices)
+
+        reconstructed[xyz_key] = absolute_xyz
+        reconstructed[rot_key] = absolute_rot
+
+    # Process standalone relative fields (if any remain)
+    for relative_key in standalone_keys:
+        absolute_key = relative_key.replace("_relative", "")
+        reference_key = any_to_actual_key(absolute_key)
+
+        if reference_key is None or reference_key not in lowdim:
+            continue
+
+        # For standalone fields, just add the reference back
+        reference_value = lowdim[reference_key][reference_index]
+        reconstructed[absolute_key] = lowdim[relative_key] + reference_value
 
     return reconstructed
 

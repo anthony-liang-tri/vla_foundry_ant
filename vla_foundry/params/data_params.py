@@ -1,6 +1,7 @@
+import logging
 import os
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Dict, Optional
 
 from vla_foundry.data.processor import get_processor
 from vla_foundry.file_utils import yaml_load
@@ -89,6 +90,7 @@ class RoboticsDataParams(DataParams):
     mask_padded_images: bool = field(default=False)
     proprioception_fields: list[str] = field(default_factory=list)
     action_fields: list[str] = field(default_factory=list)
+    pose_groups: list[Dict[str, str]] = field(default_factory=list)
     intrinsics_fields: list[str] = field(default_factory=list)
     extrinsics_fields: list[str] = field(default_factory=list)
     normalization: NormalizationParams = field(default_factory=NormalizationParams)
@@ -134,8 +136,8 @@ class RoboticsDataParams(DataParams):
             for processing_config in processing_configs:
                 if processing_config["camera_names"] != camera_names:
                     raise ValueError(
-                        f"Camera names mismatch between preprocessing configs: {processing_config['camera_names']} and "
-                        f"{camera_names}. Please provide camera names explicitly or use coherent data sources."
+                        f"Camera names mismatch between preprocessing configs: {processing_config['camera_names']} "
+                        f"and {camera_names}. Please provide camera names explicitly or use coherent data sources."
                     )
             object.__setattr__(self, "camera_names", camera_names)
 
@@ -149,6 +151,14 @@ class RoboticsDataParams(DataParams):
                         f"and {image_indices}. Please provide image indices explicitly or use coherent data sources."
                     )
             object.__setattr__(self, "image_indices", image_indices)
+
+        # If no pose groups are provided, they must be explicitly configured
+        # Pose groups are now required to be explicitly specified in configuration
+        if not self.pose_groups:
+            logging.warning(
+                "No pose groups specified. Relative coordinate transformations will not be available. "
+                "Please add pose_groups to your data configuration if you need relative coordinates."
+            )
 
         # Compute image_names from camera_names and image_indices
         if self.image_names is None or len(self.image_names) == 0:

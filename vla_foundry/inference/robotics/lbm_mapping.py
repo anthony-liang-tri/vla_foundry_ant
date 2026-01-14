@@ -1,3 +1,4 @@
+import logging
 from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple
 
 import fsspec
@@ -8,11 +9,12 @@ from pydrake.math import RigidTransform, RotationMatrix
 from robot_gym.multiarm_spaces import MultiarmObservation, PosesAndGrippers
 
 from vla_foundry.data.robotics.utils import (
+    apply_relative_pose,
     get_rot_6d,
     get_xyz,
-    rot_6d_from_relative,
+    pose_to_9d,
     rot_6d_to_matrix,
-    xyz_from_relative,
+    to_pose_matrix,
 )
 from vla_foundry.inference.robotics.utils import (
     any_to_actual_map,
@@ -192,6 +194,7 @@ class ActionMapping:
         mapping_path: str,
         action_fields: List[str],
         robotics_processor,
+        pose_groups: List[Dict[str, str]] = None,
         num_past_timesteps: int = None,
     ):
         with fsspec.open(mapping_path, "r") as handle:
@@ -199,6 +202,7 @@ class ActionMapping:
         self._field_paths = mapping["field_paths"]
         self.action_fields = action_fields
         self.relative_action_fields = [field for field in self.action_fields if field.endswith("_relative")]
+        self.pose_groups = pose_groups or []
         self.field_dims = {
             field: robotics_processor.normalizer.get_field_dimension(field) for field in self.action_fields
         }
@@ -206,6 +210,21 @@ class ActionMapping:
         self.normalizer = robotics_processor.normalizer
         self.num_past_timesteps = num_past_timesteps
 
+        # Create lookup table for fast pose group access during inference
+        self.pose_group_lookup = {}
+        for pose_group in self.pose_groups:
+            self.pose_group_lookup[pose_group["position_key"]] = pose_group
+            self.pose_group_lookup[pose_group["rotation_key"]] = pose_group
+
+        # Log relative action mode for verification
+        if self.relative_action_fields:
+            logging.info(f"🔄 RELATIVE ACTION MODE: {len(self.relative_action_fields)} relative fields detected")
+            logging.info(f"   Relative fields: {self.relative_action_fields}")
+            logging.info(f"   Pose groups: {len(self.pose_groups)} groups configured")
+        else:
+            logging.info("📍 ABSOLUTE ACTION MODE: No relative fields detected")
+
+    # TODO: this function is not used anywhere, consider removing
     def get_field_std(self, field: str, scope: str = "per_timestep") -> np.ndarray:
         """Get the standard deviation for a field from the normalizer statistics."""
         absolute_field = relative_to_absolute_map(field)
@@ -218,6 +237,89 @@ class ActionMapping:
             return np.array(field_stats["std"], dtype=np.float64)
         else:
             return np.array(field_stats["std_per_timestep"], dtype=np.float64)
+
+    def _pose_to_absolute(
+        self,
+        relative_xyz: np.ndarray,
+        relative_rot_6d: np.ndarray,
+        reference_xyz: np.ndarray,
+        reference_rot_6d: np.ndarray,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Convert relative pose to absolute using reference pose.
+
+        Args:
+            relative_xyz: Relative position component
+            relative_rot_6d: Relative rotation component
+            reference_xyz: Reference position
+            reference_rot_6d: Reference rotation
+
+        Returns:
+            Tuple of (absolute_xyz, absolute_rot_6d)
+        """
+        # Flatten references if needed
+        reference_xyz = reference_xyz.flatten() if reference_xyz.ndim > 1 else reference_xyz
+        reference_rot_6d = reference_rot_6d.flatten() if reference_rot_6d.ndim > 1 else reference_rot_6d
+
+        # Remove extra batch dimension if present
+        if relative_xyz.ndim == 3 and relative_xyz.shape[0] == 1:
+            relative_xyz = relative_xyz.squeeze(0)
+        if relative_rot_6d.ndim == 3 and relative_rot_6d.shape[0] == 1:
+            relative_rot_6d = relative_rot_6d.squeeze(0)
+
+        # Convert relative to absolute: absolute = reference @ relative
+        reference_pose_matrix = to_pose_matrix(reference_xyz, reference_rot_6d)
+        relative_pose_matrices = to_pose_matrix(relative_xyz, relative_rot_6d)
+        absolute_pose_matrices = apply_relative_pose(relative_pose_matrices, reference_pose_matrix)
+
+        # Extract absolute components
+        return pose_to_9d(absolute_pose_matrices)
+
+    def _to_absolute(
+        self, field: str, relative_data: np.ndarray, action: dict, reference: Dict[str, np.ndarray]
+    ) -> None:
+        """Convert relative field to absolute and store in action dict.
+
+        Automatically detects if field belongs to a pose group and applies appropriate conversion.
+
+        Args:
+            field: Field name (with _relative suffix)
+            relative_data: The relative field data
+            action: Action dictionary to update with absolute values
+            reference: Reference values for conversion
+        """
+        absolute_field = relative_to_absolute_map(field)
+
+        # Check if this field belongs to a pose group
+        pose_group = self.pose_group_lookup.get(absolute_field)
+        if pose_group is not None:
+            # Handle pose group fields - compute once for both xyz and rot_6d
+            xyz_key = pose_group["position_key"]
+            rot_6d_key = pose_group["rotation_key"]
+            xyz_relative = f"{xyz_key}_relative"
+            rot_6d_relative = f"{rot_6d_key}_relative"
+
+            # Only compute if we haven't processed this pose group yet
+            if xyz_key not in action or rot_6d_key not in action:
+                # Get reference pose
+                xyz_actual = any_to_actual_map(xyz_key)
+                rot_6d_actual = any_to_actual_map(rot_6d_key)
+
+                # Get relative data
+                relative_xyz = action[xyz_relative]
+                relative_rot_6d = action[rot_6d_relative]
+
+                # Convert to absolute
+                absolute_xyz, absolute_rot_6d = self._pose_to_absolute(
+                    relative_xyz, relative_rot_6d, reference[xyz_actual], reference[rot_6d_actual]
+                )
+
+                # Store absolute values
+                action[xyz_key] = absolute_xyz
+                action[rot_6d_key] = absolute_rot_6d
+        else:
+            # Handle non-pose relative fields (e.g., joint positions, grippers)
+            absolute_actual_field = any_to_actual_map(absolute_field)
+            action[absolute_field] = relative_data + reference[absolute_actual_field]
 
     def from_action_model(
         self,
@@ -234,9 +336,14 @@ class ActionMapping:
             reference: The reference to convert the relative action fields to absolute action fields.
         Returns:
             The action in the buffer action format.
+
+        Note: If both xyz_relative and rot_6d_relative from the same pose group are in action_fields,
+        _pose_to_absolute() will be called during the first field's processing. This is acceptable
+        for code clarity - the pose group check prevents duplicate computation.
         """
         action = {}
         start_idx = 0
+
         # Denormalize all action fields
         for field in self.action_fields:
             dim = self.field_dims[field]
@@ -250,27 +357,36 @@ class ActionMapping:
             )
             start_idx += dim
 
-        # Convert relative to current position action fields to absolute action fields
+        # Convert relative fields to absolute
         for field in self.relative_action_fields:
-            absolute_field = relative_to_absolute_map(field)
-            absolute_actual_field = any_to_actual_map(absolute_field)
-
-            # Get the action buffer reference and actual observation reference
-            actual_reference = reference[absolute_actual_field]
-
-            # Use the clipped reference for relative-to-absolute conversion
-            if "xyz" in field or "gripper" in field:
-                action[absolute_field] = xyz_from_relative(action[field], actual_reference)
-            elif "rot_6d" in field:
-                action[absolute_field] = rot_6d_from_relative(action[field], actual_reference)
-            else:
-                raise ValueError(f"Invalid field: {field}")
+            self._to_absolute(field, action[field], action, reference)
 
         # Create a list of action dictionaries for each timestep instead of a dictionary of sequences
         action_list = []
         absolute_fields = [relative_to_absolute_map(field) for field in self.action_fields]
         for t in range(action_from_model.shape[1]):
-            action_dict = {absolute_field: action[absolute_field][0, t, :] for absolute_field in absolute_fields}
+            action_dict = {}
+            for absolute_field in absolute_fields:
+                field_data = action[absolute_field]
+                # Handle both 2D (T, dim) and 3D (1, T, dim) cases
+                if field_data.ndim == 3:
+                    if field_data.shape[0] != 1:
+                        raise ValueError(
+                            f"Expected batch size 1 for 3D action field '{absolute_field}', "
+                            f"but got shape {field_data.shape}.  "
+                            f"Only batch size 1 is supported in action conversion."
+                        )
+                    action_dict[absolute_field] = field_data[0, t, :]
+                elif field_data.ndim == 2:
+                    action_dict[absolute_field] = field_data[t, :]
+                else:
+                    # Don't silently broadcast - this indicates a bug
+                    raise ValueError(
+                        f"Unexpected dimensionality for action field '{absolute_field}': "
+                        f"expected 2D (T, {field_data.shape[-1] if field_data.ndim > 0 else '? '}) "
+                        f"or 3D (1, T, {field_data.shape[-1] if field_data.ndim > 0 else '? '}), "
+                        f"but got shape {field_data.shape}"
+                    )
             action_list.append(action_dict)
         return action_list
 

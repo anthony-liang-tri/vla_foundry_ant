@@ -27,7 +27,6 @@ def any_to_actual_key(field: str) -> str:
 
 
 def normalize(x):
-    """Normalize a vector or batch of vectors along the last dimension."""
     return x / np.linalg.norm(x, axis=-1, keepdims=True)
 
 
@@ -38,6 +37,7 @@ def load_action_field_config(config_path: str) -> Dict[str, List[Any]]:
     return {
         "action_key_fields": data.get("action_key_fields", []),
         "action_index_fields": data.get("action_index_fields", []),
+        "pose_groups": data.get("pose_groups", []),
     }
 
 
@@ -45,10 +45,31 @@ def rot_6d_to_matrix(rot_6d: np.ndarray) -> np.ndarray:
     """
     Convert 6D rotation representation to rotation matrix using Gram-Schmidt orthogonalization.
 
-    Takes a [N, 6] or [6,] np array and converts to [N, 3, 3] or [3, 3] rotation matrices.
-    The input is assumed to be the first 2 rows of a rotation matrix.
+    Mathematical formulation:
+    Given 6D input representing the first 2 rows of a rotation matrix:
+        a1 = rot_6d[:3]  (first row)
+        a2 = rot_6d[3:]  (second row)
 
-    Based on Zhou et al. 2019: "On the Continuity of Rotation Representations in Neural Networks"
+    Apply Gram-Schmidt orthogonalization:
+        b1 = normalize(a1)
+        b2 = normalize(a2 - proj(a2, b1))  where proj(a2, b1) = (a2 · b1) * b1
+        b3 = b1 × b2  (cross product)
+
+    Result: R = [b1; b2; b3] forms an orthonormal rotation matrix (as rows)
+
+    This ensures the output is a proper rotation matrix (orthogonal with det(R) = 1).
+
+    Broadcasting behavior: Supports both single and batch inputs seamlessly.
+    - Single input [6,] -> Single output [3, 3]
+    - Batch input [N, 6] -> Batch output [N, 3, 3]
+
+    Args:
+        rot_6d: 6D rotation data of shape (6,) or (N, 6)
+
+    Returns:
+        rotation_matrix: Shape (3, 3) or (N, 3, 3) rotation matrices
+
+    Note: This uses a row-based convention (not the column-based Zhou et al. 2019 standard).
     """
     # Handle single vector or batch of vectors
     original_shape = rot_6d.shape
@@ -81,118 +102,229 @@ def matrix_to_rot_6d(rotation_matrix: np.ndarray) -> np.ndarray:
     """
     Convert rotation matrix to 6D rotation representation.
 
-    Takes a [N, 3, 3] or [3, 3] np array and converts to [N, 6] or [6,] array.
+    Mathematical formulation:
+    From a 3x3 rotation matrix R = [r1; r2; r3] (rows),
+    extract the first 2 rows and flatten:
+        rot_6d = [r1, r2] = [r1[0], r1[1], r1[2], r2[0], r2[1], r2[2]]
+
+    The third row r3 can be reconstructed as r3 = r1 × r2 due to the
+    orthonormality property of rotation matrices.
+
+    This representation is continuous and avoids singularities present in
+    other rotation representations like Euler angles.
+
+    Broadcasting behavior: Supports both single and batch inputs seamlessly.
+    - Single input [3, 3] -> Single output [6,]
+    - Batch input [N, 3, 3] -> Batch output [N, 6]
+
     Inverse of rot_6d_to_matrix().
+
+    Args:
+        rotation_matrix: Rotation matrix/matrices of shape (3, 3) or (N, 3, 3)
+
+    Returns:
+        rot_6d: 6D rotation data of shape (6,) or (N, 6)
+
+    Note: This uses a row-based convention (not the column-based Zhou et al. 2019 standard).
     """
     batch_dim = rotation_matrix.shape[:-2]
     rot_6d = rotation_matrix[..., :2, :].copy().reshape(batch_dim + (6,))
     return rot_6d
 
 
-def xyz_to_relative(xyz_sequence: np.ndarray, reference_xyz: np.ndarray) -> np.ndarray:
-    """
-    Convert a sequence of xyz positions to relative positions with respect to a reference frame.
+def to_pose_matrix(xyz: np.ndarray, rot_6d: np.ndarray) -> np.ndarray:
+    """Convert xyz and rot_6d to full 4x4 pose matrix/matrices.
+
+    Mathematical formulation:
+    For a single pose:
+        T = [R  t]
+            [0  1]
+    where:
+        - R is the 3x3 rotation matrix (from rot_6d)
+        - t is the 3x1 translation vector (xyz)
+        - T is the 4x4 homogeneous transformation matrix
+
+    For batch processing, this operation is vectorized across the time dimension.
+
+    Broadcasting behavior: NO BROADCASTING SUPPORTED.
+    Both inputs must have matching dimensions:
+    - Both single: xyz (3,) and rot_6d (6,) -> output (4, 4)
+    - Both batch: xyz (T, 3) and rot_6d (T, 6) -> output (T, 4, 4)
+    - Mixed dimensions will result in errors to prevent silent bugs.
+
+    Note: rot_6d_to_matrix() may internally handle single->batch conversion,
+    creating asymmetric behavior. For batch xyz + single rot_6d, the single
+    rotation will be applied to all positions via rot_6d_to_matrix's internal
+    broadcasting.
 
     Args:
-        xyz_sequence: Array of shape (T, 3) where T is the number of timesteps
-        reference_index: Index of the reference timestep to compute relative positions from
+        xyz: Position data of shape (3,) or (T, 3)
+        rot_6d: Rotation data of shape (6,) or (T, 6)
 
     Returns:
-        Array of shape (T, 3) with relative xyz positions
+        pose_matrix: Shape (4, 4) or (T, 4, 4) pose matrix/matrices
+
+    Raises:
+        ValueError: For dimension mismatches that cannot be naturally handled
     """
-    reference_position = reference_xyz
-    relative_positions = xyz_sequence - reference_position
-    return relative_positions
+    # Handle single timestep case
+    if xyz.ndim == 1:
+        rot_matrix = rot_6d_to_matrix(rot_6d)
+        pose_matrix = np.eye(4)
+        pose_matrix[:3, :3] = rot_matrix
+        pose_matrix[:3, 3] = xyz
+        return pose_matrix
+
+    # Batch processing
+    T = xyz.shape[0]
+    rot_matrices = rot_6d_to_matrix(rot_6d)  # Shape: (T, 3, 3)
+
+    # Create batch of identity matrices
+    pose_matrices = np.tile(np.eye(4), (T, 1, 1))  # Shape: (T, 4, 4)
+
+    # Set rotation parts
+    pose_matrices[:, :3, :3] = rot_matrices
+
+    # Set translation parts
+    pose_matrices[:, :3, 3] = xyz
+
+    return pose_matrices
 
 
-def rot_6d_to_relative(rot_6d_sequence: np.ndarray, reference_6d: np.ndarray) -> np.ndarray:
-    """
-    Convert a sequence of 6D rotations to relative rotations with respect to a reference frame.
+def calculate_relative_pose(pose_matrix: np.ndarray, reference_pose_matrix: np.ndarray) -> np.ndarray:
+    """Calculate relative pose matrix/matrices given pose(s) and a reference pose.
+
+    Mathematical formulation:
+        T_relative = T_reference^(-1) @ T_current
+
+    where:
+        - T_reference is the 4x4 reference pose matrix (MUST be single pose)
+        - T_current is the 4x4 current pose matrix (or batch of matrices)
+        - T_relative represents the transformation from reference frame to current frame
+        - @ denotes matrix multiplication
+
+    This computes the pose of the current frame expressed in the reference frame's
+    coordinate system.
+
+    Broadcasting behavior: LIMITED BROADCASTING SUPPORTED.
+    - Single pose vs single reference: (4, 4) vs (4, 4) -> (4, 4)
+    - Batch poses vs single reference: (T, 4, 4) vs (4, 4) -> (T, 4, 4)
+    - Batch reference poses are NOT supported and will cause errors
+
+    The inverse of a homogeneous transformation matrix is:
+        T^(-1) = [R^T  -R^T*t]
+                 [0     1     ]
+    where R^T is the rotation transpose and t is the translation.
 
     Args:
-        rot_6d_sequence: Array of shape (T, 6) where T is the number of timesteps
-        reference_data: Reference data of shape (3,) or (T, 3)
+        pose_matrix: Shape (4, 4) or (T, 4, 4) current pose matrix/matrices
+        reference_pose_matrix: Shape (4, 4) reference pose matrix (single pose only)
 
     Returns:
-        Array of shape (T, 6) with relative 6D rotations
+        relative_pose: Shape (4, 4) or (T, 4, 4) relative pose matrix/matrices
+
+    Raises:
+        ValueError: If reference_pose_matrix is not shape (4, 4)
     """
+    # Validate that reference pose is a single (4, 4) matrix
+    if reference_pose_matrix.shape != (4, 4):
+        raise ValueError(f"reference_pose_matrix must be shape (4, 4), got {reference_pose_matrix.shape}")
 
-    # Convert all rotations to matrices
-    rotation_matrices = np.array([rot_6d_to_matrix(rot) for rot in rot_6d_sequence])
+    reference_pose_inv = np.linalg.inv(reference_pose_matrix)
 
-    # Get reference rotation matrix and compute its inverse (transpose for rotation matrices)
-    reference_rotation = rot_6d_to_matrix(reference_6d)
-    reference_rotation_inv = reference_rotation.T
+    # Handle single pose case
+    if pose_matrix.ndim == 2:
+        return reference_pose_inv @ pose_matrix
 
-    # Compute relative rotations: R_relative = R_reference^-1 @ R_current
-    relative_rotations = np.array(
-        [reference_rotation_inv @ rotation_matrices[i] for i in range(len(rotation_matrices))]
-    )
-
-    # Convert back to 6D representation
-    relative_rot_6d = np.array([matrix_to_rot_6d(rot) for rot in relative_rotations])
-
-    return relative_rot_6d
+    # Batch processing - use broadcasting: (4, 4) @ (T, 4, 4) -> (T, 4, 4)
+    return reference_pose_inv @ pose_matrix
 
 
-def xyz_from_relative(relative_xyz_sequence: np.ndarray, reference_position: np.ndarray) -> np.ndarray:
-    """
-    Convert a sequence of relative xyz positions back to absolute positions.
+def apply_relative_pose(relative_pose_matrix: np.ndarray, reference_pose_matrix: np.ndarray) -> np.ndarray:
+    """Apply a relative pose matrix to a reference pose matrix to get the absolute pose.
+
+    Mathematical formulation:
+        T_absolute = T_reference @ T_relative
+
+    where:
+        - T_reference is the 4x4 reference pose matrix (MUST be single pose)
+        - T_relative is the 4x4 relative pose matrix (or batch of matrices)
+        - T_absolute is the resulting absolute pose matrix
+        - @ denotes matrix multiplication
+
+    This operation composes two transformations: first the reference transformation,
+    then the relative transformation. This is the inverse operation of
+    calculate_relative_pose().
+
+    Mathematically, this represents the composition of coordinate transformations:
+    T_absolute = T_reference @ T_relative means "first apply T_relative, then T_reference"
+
+    Broadcasting behavior: LIMITED BROADCASTING SUPPORTED.
+    - Single relative vs single reference: (4, 4) vs (4, 4) -> (4, 4)
+    - Batch relative vs single reference: (T, 4, 4) vs (4, 4) -> (T, 4, 4)
+    - Batch reference poses are NOT supported and will cause errors
 
     Args:
-        relative_xyz_sequence: Array of shape (T, 3) or (B, T, 3) with relative xyz positions
-        reference_position: Reference position of shape (3,) to add back
+        relative_pose_matrix: Shape (4, 4) or (T, 4, 4) relative pose matrix/matrices
+        reference_pose_matrix: Shape (4, 4) reference pose matrix (single pose only)
 
     Returns:
-        Array of shape (T, 3) or (B, T, 3) with absolute xyz positions
+        absolute_pose: Shape (4, 4) or (T, 4, 4) absolute pose matrix/matrices
+
+    Raises:
+        ValueError: If reference_pose_matrix is not shape (4, 4)
     """
-    return relative_xyz_sequence + reference_position
+    # Validate that reference pose is a single (4, 4) matrix
+    if reference_pose_matrix.shape != (4, 4):
+        raise ValueError(f"reference_pose_matrix must be shape (4, 4), got {reference_pose_matrix.shape}")
+
+    # Handle single relative pose case
+    if relative_pose_matrix.ndim == 2:
+        return reference_pose_matrix @ relative_pose_matrix
+
+    # Batch processing - use broadcasting: (4, 4) @ (T, 4, 4) -> (T, 4, 4)
+    return reference_pose_matrix @ relative_pose_matrix
 
 
-def rot_6d_from_relative(relative_rot_6d_sequence: np.ndarray, reference_rot_6d: np.ndarray) -> np.ndarray:
-    """
-    Convert a sequence of relative 6D rotations back to absolute rotations.
+def pose_to_9d(pose_matrix: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Extract xyz and rot_6d components from a pose matrix.
+
+    Mathematical formulation:
+    From a 4x4 homogeneous transformation matrix:
+        T = [R  t]
+            [0  1]
+
+    Extract:
+        - xyz = t (translation vector from T[:3, 3])
+        - rot_6d = first 2 rows of R flattened (rotation matrix from T[:3, :3])
+
+    The 6D rotation representation stores the first 2 rows of the 3x3 rotation
+    matrix R. The third row can be reconstructed via Gram-Schmidt orthogonalization
+    since rotation matrices are orthonormal.
+
+    Broadcasting behavior: Supports both single and batch inputs seamlessly.
+    - Single input (4, 4) -> outputs (3,) and (6,)
+    - Batch input (T, 4, 4) -> outputs (T, 3) and (T, 6)
 
     Args:
-        relative_rot_6d_sequence: Array of shape (T, 6) or (B, T, 6) with relative 6D rotations
-        reference_rot_6d: Reference 6D rotation of shape (6,), (B, 6) or (B, T, 6) to compose with
+        pose_matrix: Shape (4, 4) or (T, 4, 4) pose matrix/matrices
 
     Returns:
-        Array of shape (T, 6) or (B, T, 6) with absolute 6D rotations
+        xyz: Shape (3,) or (T, 3) position data
+        rot_6d: Shape (6,) or (T, 6) rotation data
     """
-    relative = np.asarray(relative_rot_6d_sequence)
-    if relative.shape[-1] != 6:
-        raise ValueError("relative_rot_6d_sequence must have last dimension equal to 6")
-
-    original_shape = relative.shape
-    relative_flat = relative.reshape(-1, 6)
-
-    reference = np.asarray(reference_rot_6d)
-    if reference.shape[-1] != 6:
-        raise ValueError("reference_rot_6d must have last dimension equal to 6")
-
-    if reference.ndim == 1:
-        reference_flat = np.broadcast_to(reference, (relative_flat.shape[0], 6))
+    if pose_matrix.ndim == 2:
+        # Single pose matrix
+        xyz = pose_matrix[:3, 3]
+        rot_matrix = pose_matrix[:3, :3]
+        rot_6d = matrix_to_rot_6d(rot_matrix)
+        return xyz, rot_6d
     else:
-        target_shape = original_shape[:-1] + (6,)
-        expand_dims = len(target_shape) - reference.ndim
-        if expand_dims < 0:
-            raise ValueError("reference_rot_6d has more dimensions than relative_rot_6d_sequence")
-        ref = reference
-        for _ in range(expand_dims):
-            axis = ref.ndim - 1 if ref.ndim > 1 else 0
-            ref = np.expand_dims(ref, axis=axis)
-        reference_broadcast = np.broadcast_to(ref, target_shape)
-        reference_flat = reference_broadcast.reshape(-1, 6)
-
-    reference_matrices = rot_6d_to_matrix(reference_flat)
-    relative_matrices = rot_6d_to_matrix(relative_flat)
-
-    absolute_matrices = np.matmul(reference_matrices, relative_matrices)
-
-    absolute_rot_6d_flat = np.stack([matrix_to_rot_6d(rot) for rot in absolute_matrices], axis=0)
-
-    return absolute_rot_6d_flat.reshape(original_shape)
+        # Batch of pose matrices
+        xyz = pose_matrix[:, :3, 3]  # Shape: (T, 3)
+        rot_matrices = pose_matrix[:, :3, :3]  # Shape: (T, 3, 3)
+        rot_6d = matrix_to_rot_6d(rot_matrices)  # Shape: (T, 6)
+        return xyz, rot_6d
 
 
 def rpy_to_R(roll: float, pitch: float, yaw: float) -> np.ndarray:
@@ -244,19 +376,13 @@ def xyzrpy_to_T(pose: Union[np.ndarray, List[float]]) -> np.ndarray:
 
 # Example usage:
 if __name__ == "__main__":
-    # Example with xyz positions
+    # Example with pose matrices and relative transformations
+    np.random.seed(42)
+
+    # Create sample poses using xyz positions and 6D rotations
     xyz_positions = np.array([[1.0, 2.0, 3.0], [1.5, 2.2, 3.1], [2.0, 2.5, 3.3], [2.2, 2.8, 3.5]])
 
-    reference_idx = 1  # Use second position as reference
-    relative_xyz = xyz_to_relative(xyz_positions, xyz_positions[reference_idx])
-    print("Original positions:")
-    print(xyz_positions)
-    print(f"\nRelative to index {reference_idx}:")
-    print(relative_xyz)
-
-    # Example with 6D rotations (random valid 6D rotations)
-    np.random.seed(42)
-    # Generate some 6D rotations by creating rotation matrices and taking first 2 columns
+    # Generate random 6D rotations by creating rotation matrices
     rot_6d_positions = []
     for _ in range(4):
         # Create a random rotation matrix using QR decomposition
@@ -271,11 +397,43 @@ if __name__ == "__main__":
 
     rot_6d_positions = np.array(rot_6d_positions)
 
-    relative_rot_6d = rot_6d_to_relative(rot_6d_positions, rot_6d_positions[reference_idx])
+    # Convert to pose matrices
+    pose_matrices = to_pose_matrix(xyz_positions, rot_6d_positions)
+    print("Original pose matrices shape:", pose_matrices.shape)
+
+    # Use second pose as reference and calculate relative poses
+    reference_idx = 1
+    reference_pose = pose_matrices[reference_idx]
+    relative_poses = calculate_relative_pose(pose_matrices, reference_pose)
+
+    # Show original vs relative like the old examples
+    print("Original xyz positions:")
+    print(xyz_positions)
+    print(f"\nRelative xyz to index {reference_idx}:")
+    for i, rel_pose in enumerate(relative_poses):
+        rel_xyz, _ = pose_to_9d(rel_pose)
+        print(f"Position {i}: {rel_xyz}")
+
     print("\nOriginal 6D rotations:")
     print(rot_6d_positions)
     print(f"\nRelative 6D rotations to index {reference_idx}:")
-    print(relative_rot_6d)
+    for i, rel_pose in enumerate(relative_poses):
+        _, rel_rot_6d = pose_to_9d(rel_pose)
+        print(f"Rotation {i}: {rel_rot_6d}")
+
+    # Example of converting back to absolute poses
+    recovered_poses = np.array([apply_relative_pose(rel_pose, reference_pose) for rel_pose in relative_poses])
+    print("\nRecovered poses match original:", np.allclose(pose_matrices, recovered_poses))
+
+    # Example with xyzrpy format
+    xyzrpy_poses = np.array(
+        [
+            [0, 0, 0, 0, 0, 0],  # Identity pose
+            [1, 0, 0, np.pi / 4, 0, 0],  # Translation + rotation
+        ]
+    )
+    pose_matrices_from_rpy = xyzrpy_to_T(xyzrpy_poses)
+    print("\nPose matrices from RPY shape:", pose_matrices_from_rpy.shape)
 
 
 def crop_sequence(
