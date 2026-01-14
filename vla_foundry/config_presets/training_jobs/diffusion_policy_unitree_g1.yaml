@@ -1,0 +1,13 @@
+<<: !include diffusion_policy_bellpepper.yaml
+
+data:
+  <<: !include ../data/unitree_g1/g1_data_params.yaml
+  <<: !include ../data/diffusion_policy.yaml
+  dataset_manifest:
+    - s3://tri-ml-datasets/vla_foundry_scratch/tmp/aykut/DummyG1_w_fix/shards/manifest.jsonl
+  dataset_statistics:
+    - s3://tri-ml-datasets/vla_foundry_scratch/tmp/aykut/DummyG1_w_fix/shards/stats.json
+  dataset_modality:
+    - robotics
+  dataset_weighting:
+    - 1.0

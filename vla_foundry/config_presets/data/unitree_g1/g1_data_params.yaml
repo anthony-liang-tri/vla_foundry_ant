@@ -1,0 +1,20 @@
+type: robotics
+
+language_instruction_types:
+  - original
+  - randomized
+  - verbose
+  - alternative
+
+proprioception_fields:
+  - state # 28
+
+action_fields:
+  - actions # 28
+
+normalization:
+  enabled: true
+  method: percentile_1_99
+  scope: global
+  epsilon: 1e-2
+  centered_norm: true

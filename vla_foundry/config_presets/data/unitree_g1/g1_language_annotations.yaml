@@ -1,0 +1,46 @@
+# Set of language instructions.
+# Meant for training.
+#   original: human prompt
+#   randomized: versions of the original created with ChatGPT
+# Meant for evaluation.
+#   alternative: alternative and valid versions created from the original prompt
+#   nonsense: non sensical prompt
+#   original_with_nonsense_nouns: original prompt with the nouns swapped to nonsense words
+language_dict:
+  # This is used to populate language instruction for skills with no hints
+  # at all. I.e. datagram from oxe with no "task_description" in their
+  # metadata file.
+  DoSomethingUseful:
+    original:
+    - perform some useful task
+    randomized:
+    - accomplish a beneficial task
+    - execute a helpful action
+    - carry out a productive activity
+    - complete a valuable task
+    - finish a task of usefulness
+    - perform a constructive duty
+    - undertake a useful chore
+    - engage in a useful endeavor
+    - do something advantageous
+    - implement a helpful task
+    - fulfill a beneficial action
+    - achieve a productive task
+    - conduct a beneficial activity
+    - complete a useful task
+    - carry out an effective task
+    - execute a purposeful action
+    - initiate a beneficial activity
+    - manage a constructive task
+    - deliver a helpful performance
+    - handle a helpful undertaking
+  StackOxoContainers:
+    original:
+    - stack the light container on top of the colorful one
+    randomized:
+    - Stack the white container on top of the colorful one
+    - stack the container containing lens wipes on top of the container containing paper clips
+    - get the lens wipe container and place it on top of the paper clip container
+    - pick up the container with lens wipes and put it on top of the container with paper clips
+    - lift the container of lens wipes and set it on top of the container of paper clips
+    - take the lens wipe container and stack it on top of the paper clip container
