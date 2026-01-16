@@ -280,7 +280,7 @@ def main():
     # Create run name with date identifier
     date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_name = f"PolicyDataAdapter_{date_str}"
-    vz.init(project_name="foundry-policy-evaluation", run_name=run_name, add_rank_to_run=True)
+    vz.init(run_name=run_name, add_rank_to_run=True)
 
     # Run the policy server
     run_policy_server(policy, args)
