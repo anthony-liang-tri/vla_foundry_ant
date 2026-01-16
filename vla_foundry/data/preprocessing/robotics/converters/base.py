@@ -195,6 +195,7 @@ class BaseRoboticsConverter:
             with ThreadPoolExecutor(max_workers=self.cfg.num_workers) as executor:
                 futures = set()
                 results = []
+                stats_samples_batch = []  # Collect stats samples for batched update
 
                 for anchor_timestep in range(0, episode_length, self.cfg.stride):
                     # If we have max_workers futures in flight, wait for one to complete
@@ -206,7 +207,7 @@ class BaseRoboticsConverter:
                         results.append(result)
 
                     # Create sample_images, sample_lowdim, sample_metadata, language_instructions,
-                    # and optionally point_clouds
+                    # and optionally point_clouds and stats_sample
                     result = self.extract_sample_data(
                         anchor_timestep,
                         episode_path,
@@ -220,13 +221,18 @@ class BaseRoboticsConverter:
                         logger_actor,
                     )
 
-                    # Handle both 4-tuple and 5-tuple returns
+                    # Handle 4+ tuple returns (sample_point_clouds and stats_sample are optional 5th and 6th elements)
                     sample_images, sample_lowdim, sample_metadata, language_instructions, *extra = result
-                    sample_point_clouds = extra[0] if extra else None
+                    sample_point_clouds = extra[0] if len(extra) >= 1 else None
+                    stats_sample = extra[1] if len(extra) >= 2 else None
 
                     if sample_images is None and sample_lowdim is None:
                         # Filtered out either by max_padding or still_samples
                         continue
+
+                    # Collect stats sample for batched update
+                    if stats_sample is not None:
+                        stats_samples_batch.append(stats_sample)
 
                     sample_data = {
                         "images": sample_images,
@@ -256,6 +262,10 @@ class BaseRoboticsConverter:
                 for future in as_completed(futures):
                     result = future.result()  # Raise any exceptions
                     results.append(result)
+
+            # Send batched statistics update (one call per episode instead of per sample)
+            if statistics_ray_actor is not None and stats_samples_batch:
+                statistics_ray_actor.merge_from_samples.remote(stats_samples_batch)
 
             return results
 

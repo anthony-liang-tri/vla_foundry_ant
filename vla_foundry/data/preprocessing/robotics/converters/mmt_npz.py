@@ -315,20 +315,19 @@ class MMTNPZConverter(BaseRoboticsConverter):
             else:
                 sample_metadata[key] = value
 
-        if statistics_ray_actor is not None:
-            statistics_ray_actor.merge_from_samples.remote(
-                [
-                    # Exclude bounding box keys from statistics calculation and
-                    # hence avoid normalization during training
-                    {
-                        "lowdim": {k: v for k, v in sample_lowdim.items() if k not in self.item_bbox_keys},
-                        "past_mask": past_mask,
-                        "future_mask": future_mask,
-                    }
-                ]
-            )
+        # Build stats_sample for batched statistics update (don't send immediately)
+        # Exclude bounding box keys from statistics calculation and hence avoid normalization during training
+        stats_sample = (
+            None
+            if statistics_ray_actor is None
+            else {
+                "lowdim": {k: v for k, v in sample_lowdim.items() if k not in self.item_bbox_keys},
+                "past_mask": past_mask,
+                "future_mask": future_mask,
+            }
+        )
 
-        # Add intrinsics, extrinsics, past_mask, future_mask to lowdim (after merging statistics)
+        # Add intrinsics, extrinsics, past_mask, future_mask to lowdim (after building stats_sample)
         for key, value in sample_intrinsics.items():
             sample_lowdim[f"intrinsics.{key}"] = value
         for key, value in sample_extrinsics.items():
@@ -338,4 +337,4 @@ class MMTNPZConverter(BaseRoboticsConverter):
 
         language_instructions = self.get_language_instructions(sample_metadata)
 
-        return sample_images, sample_lowdim, sample_metadata, language_instructions
+        return sample_images, sample_lowdim, sample_metadata, language_instructions, None, stats_sample

@@ -346,9 +346,16 @@ class TestPointCloudGeneration:
                     logger_actor=logger_actor,
                 )
 
-                # Unpack result (should be 5-tuple with point_clouds)
-                assert len(result) == 5
-                sample_images, sample_lowdim, sample_metadata, language_instructions, sample_point_clouds = result
+                # Unpack result (should be 6-tuple with point_clouds and stats)
+                assert len(result) == 6
+                (
+                    sample_images,
+                    sample_lowdim,
+                    sample_metadata,
+                    language_instructions,
+                    sample_point_clouds,
+                    sample_stats,
+                ) = result
 
                 # Verify point clouds are generated
                 assert sample_point_clouds is not None
@@ -397,9 +404,16 @@ class TestPointCloudGeneration:
                     logger_actor=logger_actor,
                 )
 
-                # Unpack result (should be 5-tuple but point_clouds is None)
-                assert len(result) == 5
-                sample_images, sample_lowdim, sample_metadata, language_instructions, sample_point_clouds = result
+                # Unpack result (should be 6-tuple but point_clouds is None)
+                assert len(result) == 6
+                (
+                    sample_images,
+                    sample_lowdim,
+                    sample_metadata,
+                    language_instructions,
+                    sample_point_clouds,
+                    sample_stats,
+                ) = result
 
                 # Verify point clouds are NOT generated
                 assert sample_point_clouds is None
@@ -445,7 +459,14 @@ class TestPointCloudGeneration:
                     logger_actor=logger_actor,
                 )
 
-                sample_images, sample_lowdim, sample_metadata, language_instructions, sample_point_clouds = result
+                (
+                    sample_images,
+                    sample_lowdim,
+                    sample_metadata,
+                    language_instructions,
+                    sample_point_clouds,
+                    sample_stats,
+                ) = result
 
                 # Verify depth images are NOT in sample_images
                 depth_keys = [k for k in sample_images if "_depth" in k]

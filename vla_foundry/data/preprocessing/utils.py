@@ -1,6 +1,8 @@
 import io
 import json
+import random
 import tarfile
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
@@ -154,15 +156,27 @@ def create_shard(shard_files: List[str], shard_idx: int, output_dir: str) -> str
 
     def download_tar(s3_key):
         """Download a single tar file from S3."""
-        obj_buffer = io.BytesIO()
         full_key = f"{s3_prefix.rstrip('/')}/episodes/{s3_key}"
-        s3_client.download_fileobj(bucket_name, full_key, obj_buffer)
-        obj_buffer.seek(0)
-        return (s3_key, obj_buffer)
+        max_retries = 10
+        base_delay = 1.0
 
-    # Download all tars in parallel (use 20 threads for download phase)
+        for attempt in range(max_retries):
+            try:
+                obj_buffer = io.BytesIO()
+                s3_client.download_fileobj(bucket_name, full_key, obj_buffer)
+                obj_buffer.seek(0)
+                return (s3_key, obj_buffer)
+            except Exception as e:
+                if attempt == max_retries - 1:
+                    raise
+                # Exponential backoff with jitter
+                delay = base_delay * (2**attempt) + random.uniform(0, 1)
+                print(f"S3 download failed (attempt {attempt + 1}/{max_retries}), retrying in {delay:.1f}s: {e}")
+                time.sleep(delay)
+
+    # Download all tars in parallel (reduced concurrency to avoid S3 throttling)
     downloaded_tars = {}
-    with ThreadPoolExecutor(max_workers=20) as executor:
+    with ThreadPoolExecutor(max_workers=5) as executor:
         futures = [executor.submit(download_tar, s3_key) for s3_key in shard_files]
         for future in as_completed(futures):
             s3_key, obj_buffer = future.result()
@@ -184,8 +198,23 @@ def create_shard(shard_files: List[str], shard_idx: int, output_dir: str) -> str
     # Upload shard back to S3
     shard_buffer.seek(0)
     shard_key = f"shard_{shard_idx:06d}.tar"
-    s3_client.upload_fileobj(shard_buffer, bucket_name, f"{s3_prefix.rstrip('/')}/shards/{shard_key}")
-    print(f"Uploaded shard {shard_key} to s3://{bucket_name}/{s3_prefix.rstrip('/')}/shards/{shard_key}")
+    shard_path = f"{s3_prefix.rstrip('/')}/shards/{shard_key}"
+
+    max_retries = 10
+    base_delay = 1.0
+    for attempt in range(max_retries):
+        try:
+            shard_buffer.seek(0)
+            s3_client.upload_fileobj(shard_buffer, bucket_name, shard_path)
+            break
+        except Exception as e:
+            if attempt == max_retries - 1:
+                raise
+            delay = base_delay * (2**attempt) + random.uniform(0, 1)
+            print(f"S3 upload failed (attempt {attempt + 1}/{max_retries}), retrying in {delay:.1f}s: {e}")
+            time.sleep(delay)
+
+    print(f"Uploaded shard {shard_key} to s3://{bucket_name}/{shard_path}")
     return (shard_key.rstrip(".tar"), len(shard_files))
 
 

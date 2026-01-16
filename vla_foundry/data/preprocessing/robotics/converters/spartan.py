@@ -672,9 +672,11 @@ class SpartanConverter(BaseRoboticsConverter):
             is_padded=bool(past_padding > 0 or future_padding > 0),
         )
 
+        # Build stats_sample for batched statistics update (don't send immediately)
+        stats_sample = None
         if statistics_ray_actor is not None:
             stats_sample = {
-                "lowdim": sample_lowdim,
+                "lowdim": {k: v.copy() for k, v in sample_lowdim.items()},  # Copy before modifying
                 "past_mask": past_mask,
                 "future_mask": future_mask,
             }
@@ -682,9 +684,7 @@ class SpartanConverter(BaseRoboticsConverter):
             if sample_point_clouds is not None:
                 stats_sample["point_clouds"] = sample_point_clouds
 
-            statistics_ray_actor.merge_from_samples.remote([stats_sample])
-
-        # Add intrinsics, extrinsics, past_mask, future_mask to lowdim (after merging statistics)
+        # Add intrinsics, extrinsics, past_mask, future_mask to lowdim (after building stats_sample)
         for key, value in sample_intrinsics.items():
             sample_lowdim[f"intrinsics.{key}"] = value
         for key, value in sample_extrinsics.items():
@@ -694,4 +694,4 @@ class SpartanConverter(BaseRoboticsConverter):
 
         language_instructions = self.get_language_instructions(episode_path)
 
-        return sample_images, sample_lowdim, sample_metadata, language_instructions, sample_point_clouds
+        return sample_images, sample_lowdim, sample_metadata, language_instructions, sample_point_clouds, stats_sample

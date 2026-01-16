@@ -323,6 +323,20 @@ class LeRobotConverter(BaseRoboticsConverter):
         past_mask, future_mask = create_past_and_future_masks(
             anchor_timestep, self.cfg.past_lowdim_steps, self.cfg.future_lowdim_steps, episode_length
         )
+
+        # Build stats_sample for batched statistics update (don't send immediately)
+        # Must be done before modifying sample_lowdim with masks
+        stats_sample = (
+            None
+            if statistics_ray_actor is None
+            else {
+                "lowdim": {k: v.copy() for k, v in sample_lowdim.items()},  # Copy before modifying
+                "past_mask": past_mask,
+                "future_mask": future_mask,
+            }
+        )
+
+        # Add masks to sample_lowdim (after building stats_sample)
         sample_lowdim["past_mask"] = past_mask
         sample_lowdim["future_mask"] = future_mask
 
@@ -337,15 +351,4 @@ class LeRobotConverter(BaseRoboticsConverter):
                 sample_metadata[key] = value
         language_instructions = self.get_language_instructions(sample_metadata)
 
-        if statistics_ray_actor is not None:
-            statistics_ray_actor.merge_from_samples.remote(
-                [
-                    {
-                        "lowdim": sample_lowdim,
-                        "past_mask": past_mask,
-                        "future_mask": future_mask,
-                    }
-                ]
-            )
-
-        return sample_images, sample_lowdim, sample_metadata, language_instructions
+        return sample_images, sample_lowdim, sample_metadata, language_instructions, None, stats_sample

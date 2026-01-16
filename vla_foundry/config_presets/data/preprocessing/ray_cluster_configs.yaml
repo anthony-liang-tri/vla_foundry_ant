@@ -1,14 +1,21 @@
 cluster_name: s3-webdataset-cluster
 min_workers: 60
 max_workers: 60
+idle_timeout_minutes: 10  # Prevent autoscaler from terminating "idle" nodes
+
 available_node_types:
     ray.head.default:
-        resources: {}
+        resources: {"CPU": 0, "memory": 0}  # Zero resources = no jobs scheduled on head
         node_config:
             SubnetIds: [subnet-07bf42d7c9cb929e4, subnet-0f72615fd9bd3c717, subnet-0a29e4f1a47443e28, subnet-06e0db77592be2b36]
             SecurityGroupIds: [sg-02ef5539cfee1e6c3]
             ImageId: ami-0fc5d935ebf8bc3bc # ray us-east-1
-            InstanceType: i4i.4xlarge
+            InstanceType: m5.xlarge  # Small instance for head - just runs GCS/dashboard/autoscaler
+            BlockDeviceMappings:
+              - DeviceName: /dev/sda1
+                Ebs:
+                    VolumeSize: 20  # 20GB root volume for head (needs ~5GB)
+                    VolumeType: gp3
             IamInstanceProfile:
                 Arn: arn:aws:iam::124224456861:instance-profile/ray-autoscaler-v1
             TagSpecifications:
@@ -44,7 +51,11 @@ provider:
     use_internal_ips: True
 
 file_mounts: {
-    "/home/ubuntu/vla_foundry": "./",
+    # Mount only what the project needs (avoid scanning/rsyncing huge local folders like experiments/).
+    "/home/ubuntu/vla_foundry/pyproject.toml": "./pyproject.toml",
+    "/home/ubuntu/vla_foundry/uv.lock": "./uv.lock",
+    "/home/ubuntu/vla_foundry/vla_foundry": "./vla_foundry",
+    "/home/ubuntu/vla_foundry/packages": "./packages",
     "/home/ubuntu/.cache/huggingface/token": "~/.cache/huggingface/token",
 }
 
@@ -53,13 +64,24 @@ rsync_exclude:
     - "**/.venv"
     - "**/wandb"
     - "**/wandb/"
+    - "**/.git/"
+    - "**/__pycache__/"
+    - "**/*.pyc"
+    - "downloaded_results/"
+    - "results/"
+    - "experiments/"
+    - "out.log"
+    - ".git"
   
 setup_commands:
+    # Wait for cloud-init / apt-daily / unattended-upgrades to release apt/dpkg locks.
+    - "sudo bash -lc 'set -euo pipefail; max_tries=180; try=0; locks=(/var/lib/apt/lists/lock /var/cache/apt/archives/lock /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock); while true; do busy=0; for l in \"${locks[@]}\"; do if sudo fuser \"$l\" >/dev/null 2>&1; then echo \"apt lock held $l (waiting)\"; busy=1; fi; done; if [ \"$busy\" -eq 0 ]; then break; fi; try=$((try+1)); if [ \"$try\" -ge \"$max_tries\" ]; then echo \"Timed out waiting for apt locks\"; exit 1; fi; sleep 5; done'"
     - sudo apt-get update -y
-    - sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" ffmpeg
+    - sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" ffmpeg python3-pip
+    - sudo ln -sf /usr/bin/pip3 /usr/bin/pip || true
     - sudo NEEDRESTART_MODE=a apt install awscli -y
-    - sudo mkfs -t xfs /dev/nvme1n1
-    - sudo mount /dev/nvme1n1 /tmp
+    # Format and mount NVMe if available (skip if already mounted or doesn't exist)
+    - "if [ -b /dev/nvme1n1 ] && ! mountpoint -q /tmp; then sudo mkfs -t xfs -f /dev/nvme1n1 && sudo mount /dev/nvme1n1 /tmp; fi"
     - sudo chown -R $USER /tmp
     # NOTE: This seems to be necessary at TRI AWS due to some permissions issue.
     - sudo chmod 1777 /tmp
@@ -67,16 +89,11 @@ setup_commands:
     - curl -LsSf https://astral.sh/uv/install.sh | sh
     - echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc
     # Symlink everything in /tmp because the root filesystem is too small.
-    - mv /home/ubuntu/.cache /tmp/.cache && ln -s /tmp/.cache /home/ubuntu/.cache
-    - mkdir -p vla_foundry/.venv && mv vla_foundry/.venv /tmp/.venv && ln -s /tmp/.venv vla_foundry/.venv
+    # Use || true to handle cases where already done (retry/re-run)
+    - "[ -L /home/ubuntu/.cache ] || ([ -d /home/ubuntu/.cache ] && mv /home/ubuntu/.cache /home/ubuntu/.cache.bak || true; mkdir -p /tmp/.cache && ln -s /tmp/.cache /home/ubuntu/.cache) || true"
+    - "[ -L vla_foundry/.venv ] || ([ -d vla_foundry/.venv ] && mv vla_foundry/.venv vla_foundry/.venv.bak || true; mkdir -p /tmp/.venv && ln -s /tmp/.venv vla_foundry/.venv) || true"
     - cd vla_foundry && UV_PROJECT_ENVIRONMENT=/home/ubuntu/vla_foundry/.venv uv sync --group=preprocessing
     - echo 'export HF_TOKEN=$(cat /home/ubuntu/.cache/huggingface/token)' >> ~/.bashrc
     - echo 'source /home/ubuntu/vla_foundry/.venv/bin/activate' >> ~/.bashrc
 
-head_setup_commands:
-    - source /home/ubuntu/vla_foundry/.venv/bin/activate && ray stop --force || true
-    - source /home/ubuntu/vla_foundry/.venv/bin/activate && ray start --head --port=6379 --dashboard-host=0.0.0.0 --include-dashboard=true
-
-worker_setup_commands:
-    - source /home/ubuntu/vla_foundry/.venv/bin/activate && ray stop --force || true
-    - source /home/ubuntu/vla_foundry/.venv/bin/activate && ray start --address="$RAY_HEAD_IP:6379"
+# Let autoscaler handle all ray start/stop - no head_setup_commands or worker_setup_commands needed
