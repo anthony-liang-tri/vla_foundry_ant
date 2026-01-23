@@ -6,6 +6,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
+from functools import partial
 from typing import Any, Dict, List
 
 import boto3
@@ -102,7 +103,7 @@ def upload_sample_to_s3(
     tar_buffer.seek(0)
     bucket_name, s3_prefix = output_dir.removeprefix("s3://").split("/", 1)
     unique_id = extract_unique_id(episode_path)
-    s3_key = f"{s3_prefix.rstrip('/')}/episodes/{unique_id}_{episode_id}_frame_{frame_idx}.tar"
+    s3_key = f"{s3_prefix.rstrip('/')}/frames/{unique_id}_{episode_id}_frame_{frame_idx}.tar"
     s3_client.upload_fileobj(tar_buffer, bucket_name, s3_key)
     print(f"Uploaded {bucket_name.rstrip('/')}/{s3_key}", flush=True)
     return f"{unique_id}_{episode_id}_frame_{frame_idx}.tar"
@@ -146,6 +147,71 @@ def upload_config_to_s3(config, s3_path: str, file_name: str):
     print(f"Uploaded {file_name} to s3://{bucket_name}/{s3_key}")
 
 
+def _download_tar_from_s3(s3_key: str, s3_client, bucket_name: str, s3_prefix: str):
+    """Download a single tar file from S3 with retry logic."""
+    full_key = f"{s3_prefix.rstrip('/')}/frames/{s3_key}"
+    max_retries = 10
+    base_delay = 1.0
+
+    for attempt in range(max_retries):
+        try:
+            obj_buffer = io.BytesIO()
+            s3_client.download_fileobj(bucket_name, full_key, obj_buffer)
+            obj_buffer.seek(0)
+            return (s3_key, obj_buffer)
+        except Exception as e:
+            if attempt == max_retries - 1:
+                raise
+            # Exponential backoff with jitter
+            delay = base_delay * (2**attempt) + random.uniform(0, 1)
+            print(f"S3 download failed (attempt {attempt + 1}/{max_retries}), retrying in {delay:.1f}s: {e}")
+            time.sleep(delay)
+
+
+@ray.remote
+def create_episode_shard(shard_files: List[str], episode_key: str, output_dir: str) -> str:
+    """Download tar files from S3 and create an episode-based shard."""
+    s3_config = Config(max_pool_connections=50, retries={"max_attempts": 3, "mode": "adaptive"})
+    s3_client = boto3.client("s3", config=s3_config)
+
+    bucket_name, s3_prefix = output_dir.removeprefix("s3://").split("/", 1)
+
+    download_tar = partial(_download_tar_from_s3, s3_client=s3_client, bucket_name=bucket_name, s3_prefix=s3_prefix)
+
+    # Download all tars in parallel
+    downloaded_tars = {}
+    with ThreadPoolExecutor(max_workers=20) as executor:
+        futures = [executor.submit(download_tar, s3_key) for s3_key in shard_files]
+        for future in as_completed(futures):
+            s3_key, obj_buffer = future.result()
+            downloaded_tars[s3_key] = obj_buffer
+
+    # Sort files by frame index to maintain temporal order within episode
+    def get_frame_idx(filename):
+        # filename format: {unique_id}_{episode_id}_frame_{frame_idx}.tar
+        return int(filename.rsplit("_frame_", 1)[1].replace(".tar", ""))
+
+    sorted_files = sorted(shard_files, key=get_frame_idx)
+
+    # Create shard by combining all downloaded tars
+    shard_buffer = io.BytesIO()
+    with tarfile.open(fileobj=shard_buffer, mode="w") as shard_tar:
+        for s3_key in sorted_files:
+            obj_buffer = downloaded_tars[s3_key]
+            obj_buffer.seek(0)
+
+            with tarfile.open(fileobj=obj_buffer, mode="r") as tar:
+                for member in tar.getmembers():
+                    shard_tar.addfile(member, tar.extractfile(member))
+
+    # Upload shard back to S3
+    shard_buffer.seek(0)
+    shard_key = f"episode_{episode_key}.tar"
+    s3_client.upload_fileobj(shard_buffer, bucket_name, f"{s3_prefix.rstrip('/')}/episodes/{shard_key}")
+    print(f"Uploaded episode shard {shard_key} to s3://{bucket_name}/{s3_prefix.rstrip('/')}/episodes/{shard_key}")
+    return (shard_key.rstrip(".tar"), len(shard_files))
+
+
 @ray.remote
 def create_shard(shard_files: List[str], shard_idx: int, output_dir: str) -> str:
     """Download tar files from S3 and create a shard. OPTIMIZED with parallel downloads."""
@@ -154,25 +220,7 @@ def create_shard(shard_files: List[str], shard_idx: int, output_dir: str) -> str
 
     bucket_name, s3_prefix = output_dir.removeprefix("s3://").split("/", 1)
 
-    def download_tar(s3_key):
-        """Download a single tar file from S3."""
-        full_key = f"{s3_prefix.rstrip('/')}/episodes/{s3_key}"
-        max_retries = 10
-        base_delay = 1.0
-
-        for attempt in range(max_retries):
-            try:
-                obj_buffer = io.BytesIO()
-                s3_client.download_fileobj(bucket_name, full_key, obj_buffer)
-                obj_buffer.seek(0)
-                return (s3_key, obj_buffer)
-            except Exception as e:
-                if attempt == max_retries - 1:
-                    raise
-                # Exponential backoff with jitter
-                delay = base_delay * (2**attempt) + random.uniform(0, 1)
-                print(f"S3 download failed (attempt {attempt + 1}/{max_retries}), retrying in {delay:.1f}s: {e}")
-                time.sleep(delay)
+    download_tar = partial(_download_tar_from_s3, s3_client=s3_client, bucket_name=bucket_name, s3_prefix=s3_prefix)
 
     # Download all tars in parallel (reduced concurrency to avoid S3 throttling)
     downloaded_tars = {}

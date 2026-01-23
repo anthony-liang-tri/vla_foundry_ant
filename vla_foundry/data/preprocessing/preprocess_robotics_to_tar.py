@@ -14,7 +14,13 @@ from vla_foundry.data.preprocessing.robotics.preprocess_statistics import (
     LoggerActor,
     StreamingDatasetStatisticsRayActor,
 )
-from vla_foundry.data.preprocessing.utils import create_shard, recursive_s3_copy, upload_config_to_s3, upload_dict_to_s3
+from vla_foundry.data.preprocessing.utils import (
+    create_episode_shard,
+    create_shard,
+    recursive_s3_copy,
+    upload_config_to_s3,
+    upload_dict_to_s3,
+)
 from vla_foundry.file_utils import check_directory_has_files_with_substring
 
 
@@ -30,8 +36,8 @@ def main():
     cfg = draccus.parse(config_class=TYPE_MAPPER[args.type])
 
     # Safety check: ensure output directory doesn't have existing preprocessing outputs
-    episodes_dir = os.path.join(cfg.output_dir, "episodes")
-    existing_episode_files = check_directory_has_files_with_substring(episodes_dir, "_frame_")
+    frames_dir = os.path.join(cfg.output_dir, "frames")
+    existing_episode_files = check_directory_has_files_with_substring(frames_dir, "_frame_")
     if existing_episode_files:
         error_msg = (
             f"❌ ERROR: Output directory is not empty!\n"
@@ -105,18 +111,38 @@ def main():
     shard_results = ray.get(shard_futures)
     print(f"✅ Created {len(shard_results)} shards.")
 
-    # Upload manifest to S3 in the same directory as the tar files
+    # Ray Phase 3: Group files by episode and create episode-based shards
+    episode_groups = {}
+    for filename in results:
+        # filename format: {unique_id}_{episode_id}_frame_{frame_idx}.tar
+        episode_key = filename.rsplit("_frame_", 1)[0]
+        episode_groups.setdefault(episode_key, []).append(filename)
+    print(f"Creating {len(episode_groups)} episode shards")
+    episode_shard_futures = [
+        create_episode_shard.remote(files, episode_key, cfg.output_dir) for episode_key, files in episode_groups.items()
+    ]
+    episode_shard_results = ray.get(episode_shard_futures)
+    print(f"✅ Created {len(episode_shard_results)} episode shards.")
+
+    # Upload episode manifest to S3 in the episodes/ directory
+    episode_manifest_lines = []
+    for shard_name, num_sequences in episode_shard_results:
+        episode_manifest_lines.append({"shard": shard_name, "num_sequences": num_sequences})
+    upload_dict_to_s3(episode_manifest_lines, f"{cfg.output_dir.rstrip('/')}/episodes", "manifest.jsonl")
+
+    # Upload shards manifest to S3 in the shards/ directory
     manifest_lines = []
     for shard_name, num_sequences in shard_results:
         manifest_entry = {"shard": shard_name, "num_sequences": num_sequences}
         manifest_lines.append(manifest_entry)
     upload_dict_to_s3(manifest_lines, f"{cfg.output_dir.rstrip('/')}/shards", "manifest.jsonl")
 
-    # Upload statistics to S3 in the same directory as the tar files
+    # Upload statistics to S3 in the shards/ directory and the episodes/ directory
     if cfg.compute_statistics:
         statistics_state = statistics_ray_actor.get_statistics.remote()
         statistics_state = ray.get(statistics_state)
         upload_dict_to_s3(statistics_state, f"{cfg.output_dir.rstrip('/')}/shards", "stats.json")
+        upload_dict_to_s3(statistics_state, f"{cfg.output_dir.rstrip('/')}/episodes", "stats.json")
 
     # Update and save processing metadata with final statistics
     metadata["processing"]["total_samples_created"] = sum(num_sequences for _, num_sequences in shard_results)
