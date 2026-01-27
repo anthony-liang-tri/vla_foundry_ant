@@ -49,6 +49,6 @@ extrinsics_fields:
 normalization:
   enabled: true
   method: percentile_1_99
-  scope: global
+  scope: per_timestep
   epsilon: 1e-2
   centered_norm: true
