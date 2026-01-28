@@ -78,9 +78,9 @@ data:
   prefetch_factor: 8
   num_workers: 8
   dataset_manifest: 
-    - s3://tri-ml-datasets-uw2/vla_foundry_datasets/stage3_singletask_sim_lbm1trainset_replication/BimanualPutRedBellPepperInBin/shards/manifest.jsonl
+    - s3://tri-ml-datasets-uw2/vla_foundry_datasets/v0.4.1/BimanualPutRedBellPepperInBin/shards/manifest.jsonl
   dataset_statistics: 
-    - s3://tri-ml-datasets-uw2/vla_foundry_datasets/stage3_singletask_sim_lbm1trainset_replication/BimanualPutRedBellPepperInBin/shards/stats.json
+    - s3://tri-ml-datasets-uw2/vla_foundry_datasets/v0.4.1/BimanualPutRedBellPepperInBin/shards/stats.json
   dataset_modality: 
     - robotics
   dataset_weighting: 

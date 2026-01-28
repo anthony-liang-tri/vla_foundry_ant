@@ -4,12 +4,12 @@
 --num_checkpoints 5 \
 --total_train_samples 100000 \
 --data.dataset_manifest "[
-'s3://tri-ml-datasets-uw2/vla_foundry_datasets/stage3_singletask_sim/BimanualHangMugsOnMugHolderFromDryingRack/shards/manifest.jsonl',
-'s3://tri-ml-datasets-uw2/vla_foundry_datasets/stage3_singletask_sim/BimanualLayCerealBoxOnCuttingBoardFromTopShelf/shards/manifest.jsonl',
+'s3://tri-ml-datasets-uw2/vla_foundry_datasets/v0.4.1/BimanualHangMugsOnMugHolderFromDryingRack/shards/manifest.jsonl',
+'s3://tri-ml-datasets-uw2/vla_foundry_datasets/v0.4.1/BimanualLayCerealBoxOnCuttingBoardFromTopShelf/shards/manifest.jsonl',
 ]" \
 --data.dataset_statistics "[
-'s3://tri-ml-datasets-uw2/vla_foundry_datasets/stage3_singletask_sim/BimanualHangMugsOnMugHolderFromDryingRack/shards/stats.json',
-'s3://tri-ml-datasets-uw2/vla_foundry_datasets/stage3_singletask_sim/BimanualLayCerealBoxOnCuttingBoardFromTopShelf/shards/stats.json',
+'s3://tri-ml-datasets-uw2/vla_foundry_datasets/v0.4.1/BimanualHangMugsOnMugHolderFromDryingRack/shards/stats.json',
+'s3://tri-ml-datasets-uw2/vla_foundry_datasets/v0.4.1/BimanualLayCerealBoxOnCuttingBoardFromTopShelf/shards/stats.json',
 ]" \
 --data.dataset_modality "['robotics', 'robotics']" \
 --data.dataset_weighting "[1.0, 1.0]" \
