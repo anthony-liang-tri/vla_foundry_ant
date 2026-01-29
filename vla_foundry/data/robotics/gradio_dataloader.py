@@ -337,8 +337,6 @@ class RoboticsDataLoader:
             self.normalizer = RoboticsNormalizer(
                 normalization_params=self.params.normalization,
                 statistics_path=self.params.dataset_statistics,
-                lowdim_past_timesteps=self.params.lowdim_past_timesteps,
-                lowdim_future_timesteps=self.params.lowdim_future_timesteps,
             )
             if self.normalizer:
                 logging.info("RoboticsDataLoader: Normalizer initialized for denormalization")
@@ -391,7 +389,19 @@ class RoboticsDataLoader:
                 # Handle S3 paths with pipe prefix for WebDataset
                 wds_path = f"pipe:aws s3 cp {shard_path} -" if shard_path.startswith("s3://") else shard_path
 
-                dataset = wds.WebDataset(wds_path).decode("pilrgb").map(extract_robotics_fields)
+                dataset = (
+                    wds.WebDataset(wds_path)
+                    .decode("pilrgb")
+                    .map(
+                        lambda sample: extract_robotics_fields(
+                            sample,
+                            action_fields=self.params.action_fields,
+                            proprioception_fields=self.params.proprioception_fields,
+                            intrinsics_fields=self.params.intrinsics_fields,
+                            extrinsics_fields=self.params.extrinsics_fields,
+                        )
+                    )
+                )
 
                 for sample in dataset:
                     self.samples.append(sample)

@@ -149,6 +149,18 @@ def main():
             }
         )
 
+        # Load camera names from preprocessing config to get intrinsics/extrinsics fields
+        try:
+            preproc_config_path = f"{args.dataset_path}/preprocessing_config.yaml"
+            with fsspec.open(preproc_config_path, "r") as f:
+                preproc_config = yaml.safe_load(f)
+            camera_names = preproc_config.get("camera_names", [])
+            config_dict["intrinsics_fields"] = [f"intrinsics.{cam}" for cam in camera_names]
+            config_dict["extrinsics_fields"] = [f"extrinsics.{cam}" for cam in camera_names]
+            print(f"📷 Found cameras: {camera_names}")
+        except Exception as e:
+            print(f"⚠️ Could not load camera names from preprocessing config: {e}")
+
         params = RoboticsDataParams.from_dict(config_dict)
 
         data_loader = RoboticsDataLoader(
