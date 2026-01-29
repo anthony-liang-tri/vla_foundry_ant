@@ -14,7 +14,7 @@ from tqdm import tqdm
 from vla_foundry.distributed import is_master
 from vla_foundry.file_utils import get_unwrapped_model
 from vla_foundry.meters import Metrics
-from vla_foundry.models.batch_handlers import create_batch_handler
+from vla_foundry.models.registry import create_batch_handler
 from vla_foundry.params.train_experiment_params import TrainExperimentParams
 from vla_foundry.precision import get_autocast
 

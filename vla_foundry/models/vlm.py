@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from einops import rearrange
 
+from vla_foundry.models.registry import register_model
 from vla_foundry.models.transformer_base import TransformerBase
 from vla_foundry.params.model_params import ViTParams, VLMParams
 
@@ -141,3 +142,19 @@ class VLM(TransformerBase):
             # but this does not work in batched generation (output tensors need to have the same size)
 
         return generated
+
+
+@register_model("vlm")
+def create_vlm(model_params: VLMParams, load_pretrained: bool = True):
+    from vla_foundry.models.transformer import Transformer
+    from vla_foundry.models.transformer_hf import TransformerHF
+    from vla_foundry.models.vit import ViT
+    from vla_foundry.models.vit_hf import ViTHF
+
+    transformer = (
+        Transformer(model_params.transformer)
+        if model_params.transformer.type == "transformer"
+        else TransformerHF(model_params.transformer, load_pretrained=load_pretrained)
+    )
+    vit = ViT(model_params.vit) if model_params.vit.type == "vit" else ViTHF(model_params.vit)
+    return VLM(model_params, transformer, vit)

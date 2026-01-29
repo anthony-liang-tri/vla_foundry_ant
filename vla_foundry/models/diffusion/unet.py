@@ -7,6 +7,7 @@ import torch.nn.functional as F
 
 from vla_foundry.model_utils import Float32Module
 from vla_foundry.models.base_model import BaseModel
+from vla_foundry.models.fsdp_block import FSDPBlock
 from vla_foundry.params.model_params import UNetParams
 
 
@@ -25,7 +26,7 @@ class SinusoidalPositionEmbeddings(nn.Module):
         return emb
 
 
-class ResnetBlock(nn.Module):
+class ResnetBlock(FSDPBlock):
     def __init__(self, in_channels, out_channels, time_emb_dim, text_emb_dim=None):
         super().__init__()
         self.out_channels = out_channels
@@ -61,7 +62,7 @@ class ResnetBlock(nn.Module):
         return h + self.shortcut(x)  # [bsz, out_channels, h, w]
 
 
-class SelfAttentionBlock(nn.Module):
+class SelfAttentionBlock(FSDPBlock):
     """Self-attention block for spatial attention"""
 
     def __init__(self, channels):
@@ -89,7 +90,7 @@ class SelfAttentionBlock(nn.Module):
         return x + self.proj_out(h)  # [B, C, H, W]
 
 
-class CrossAttentionBlock(nn.Module):
+class CrossAttentionBlock(FSDPBlock):
     """Cross-attention block for text conditioning"""
 
     def __init__(self, channels, context_dim):

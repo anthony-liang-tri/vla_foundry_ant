@@ -82,3 +82,9 @@ class CLIPHF(BaseModel):
     @torch.jit.ignore
     def set_grad_checkpointing(self, enable=True):
         raise NotImplementedError
+
+    def get_fsdp_block_types(self):
+        """Return block types for FSDP wrapping."""
+        from transformers.models.clip.modeling_clip import CLIPEncoderLayer
+
+        return (CLIPEncoderLayer,)

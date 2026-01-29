@@ -8,7 +8,7 @@ import torch.nn as nn
 from torch.distributed.distributed_c10d import ReduceOp
 
 from vla_foundry.distributed import is_master
-from vla_foundry.models.batch_handlers import create_batch_handler
+from vla_foundry.models.registry import create_batch_handler
 from vla_foundry.params.train_experiment_params import TrainExperimentParams
 from vla_foundry.precision import get_autocast
 

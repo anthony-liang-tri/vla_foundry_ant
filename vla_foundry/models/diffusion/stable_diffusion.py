@@ -118,3 +118,20 @@ class StableDiffusion(BaseModel):
         images = (images * 255).round().astype("uint8")
         images = [Image.fromarray(image) for image in images]
         return images
+
+    def get_fsdp_block_types(self):
+        """Return block types for FSDP wrapping."""
+        if self.model_params.use_diffusers_unet:
+            from diffusers.models.unets.unet_2d_blocks import (
+                AttnDownBlock2D,
+                AttnUpBlock2D,
+                DownBlock2D,
+                UNetMidBlock2D,
+                UpBlock2D,
+            )
+
+            return (DownBlock2D, UpBlock2D, UNetMidBlock2D, AttnUpBlock2D, AttnDownBlock2D)
+        else:
+            from vla_foundry.models.diffusion.unet import CrossAttentionBlock, ResnetBlock, SelfAttentionBlock
+
+            return (ResnetBlock, SelfAttentionBlock, CrossAttentionBlock)

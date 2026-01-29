@@ -1,6 +1,8 @@
 import torch
+from torch import nn
 from transformers import AutoConfig, AutoModelForVision2Seq
 
+from vla_foundry.models.registry import register_model
 from vla_foundry.models.transformer_base import TransformerBase
 from vla_foundry.models.utils import get_hidden_dim_hf, get_num_hidden_layers_hf
 from vla_foundry.params.model_params import VLMHFParams
@@ -82,3 +84,30 @@ class VLMHF(TransformerBase):
             attn_mask = torch.cat([attn_mask, next_token_mask], dim=-1)
 
         return generated
+
+    def get_fsdp_block_types(self):
+        """Return block types for FSDP wrapping."""
+        block_types = set()
+
+        # Find text/language model blocks
+        for attr in ["language_model", "text_model"]:
+            if hasattr(self.model.model, attr):
+                for _name, module in getattr(self.model.model, attr).named_modules():
+                    if isinstance(module, nn.ModuleList) and len(module) > 0:
+                        block_types.add(type(module[0]))
+
+        # Find vision model blocks
+        if hasattr(self.model.model, "vision_model") and hasattr(self.model.model.vision_model, "encoder"):
+            for _name, module in self.model.model.vision_model.encoder.named_modules():
+                if isinstance(module, nn.ModuleList) and len(module) > 0:
+                    block_types.add(type(module[0]))
+
+        if not block_types:
+            raise ValueError("Could not find any model block classes.")
+
+        return tuple(block_types)
+
+
+@register_model("vlm_hf")
+def create_vlm_hf(model_params: VLMHFParams, load_pretrained: bool = True):
+    return VLMHF(model_params, load_pretrained=load_pretrained)

@@ -3,6 +3,8 @@ Batch handlers for different model types.
 
 This module contains batch preparation and loss computation logic for each model type,
 eliminating the need for if/elif statements in the training loop.
+
+Batch handlers are registered using decorators from the registry module.
 """
 
 from abc import ABC, abstractmethod
@@ -10,6 +12,7 @@ from abc import ABC, abstractmethod
 import torch
 
 from vla_foundry.data.sampler import sample_chunk
+from vla_foundry.models.registry import register_batch_handler
 
 
 class BatchHandler(ABC):
@@ -76,6 +79,8 @@ class BatchHandler(ABC):
         return sliced_inputs
 
 
+@register_batch_handler("transformer")
+@register_batch_handler("transformer_hf")
 class TransformerBatchHandler(BatchHandler):
     """Handles batch preparation for transformer and transformer_hf models."""
 
@@ -114,6 +119,8 @@ class TransformerBatchHandler(BatchHandler):
         return loss_fn(outputs.logits, targets, mask=mask)
 
 
+@register_batch_handler("vlm")
+@register_batch_handler("vlm_hf")
 class VLMBatchHandler(BatchHandler):
     """Handles batch preparation for vlm and vlm_hf models."""
 
@@ -160,6 +167,7 @@ class VLMBatchHandler(BatchHandler):
         return loss_fn(outputs.logits, targets, mask=mask)
 
 
+@register_batch_handler("stable_diffusion")
 class StableDiffusionBatchHandler(BatchHandler):
     """Handles batch preparation for stable_diffusion models."""
 
@@ -207,6 +215,7 @@ class StableDiffusionBatchHandler(BatchHandler):
         return loss_fn(predicted_direction, targets, mask=mask)
 
 
+@register_batch_handler("diffusion_policy")
 class DiffusionPolicyBatchHandler(BatchHandler):
     """Handles batch preparation for diffusion policy models."""
 
@@ -263,25 +272,3 @@ class DiffusionPolicyBatchHandler(BatchHandler):
             mask = mask[:, -seq_len:]
 
         return loss_fn(input=predicted_direction, target=target_direction, mask=mask)
-
-
-def create_batch_handler(model_type: str) -> BatchHandler:
-    """
-    Factory function to create the appropriate batch handler for a model type.
-
-    Args:
-        model_type: The type of model (e.g., 'transformer', 'vlm', etc.)
-
-    Returns:
-        BatchHandler instance for the specified model type
-    """
-    if model_type in ["transformer", "transformer_hf"]:
-        return TransformerBatchHandler()
-    elif model_type in ["vlm", "vlm_hf"]:
-        return VLMBatchHandler()
-    elif model_type == "stable_diffusion":
-        return StableDiffusionBatchHandler()
-    elif model_type == "diffusion_policy":
-        return DiffusionPolicyBatchHandler()
-    else:
-        raise ValueError(f"Batch handler not supported for model type: {model_type}")

@@ -50,3 +50,9 @@ class CLIP_OpenCLIP(BaseModel):
     @torch.jit.ignore
     def set_grad_checkpointing(self, enable=True):
         raise NotImplementedError
+
+    def get_fsdp_block_types(self):
+        """Return block types for FSDP wrapping."""
+        import open_clip
+
+        return (open_clip.transformer.ResidualAttentionBlock,)

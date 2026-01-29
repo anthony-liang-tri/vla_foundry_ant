@@ -5,7 +5,9 @@ from torch import nn
 
 from vla_foundry.activations import get_feed_forward
 from vla_foundry.attention import get_attn_func
+from vla_foundry.models.fsdp_block import FSDPBlock
 from vla_foundry.models.model_outputs.llm_output import TransformerOutput
+from vla_foundry.models.registry import register_model
 from vla_foundry.models.transformer_base import TransformerBase
 from vla_foundry.norms import get_norm_class
 from vla_foundry.params.model_params import TransformerParams
@@ -87,7 +89,7 @@ class CustomAttn(nn.Module):
         return self.out_proj(output), past_key_value
 
 
-class TransformerBlock(nn.Module):
+class TransformerBlock(FSDPBlock):
     def __init__(self, layer_id: int, model_params: TransformerParams):
         super().__init__()
         self.n_heads = model_params.n_heads
@@ -325,3 +327,8 @@ class Transformer(TransformerBase):
             # but this does not work in batched generation (output tensors need to have the same size)
 
         return generated
+
+
+@register_model("transformer")
+def create_transformer(model_params: TransformerParams, load_pretrained: bool = True):
+    return Transformer(model_params)

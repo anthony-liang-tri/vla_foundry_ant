@@ -9,8 +9,8 @@ from vla_foundry.models.batch_handlers import (
     StableDiffusionBatchHandler,
     TransformerBatchHandler,
     VLMBatchHandler,
-    create_batch_handler,
 )
+from vla_foundry.models.registry import create_batch_handler
 
 
 class TestBatchHandlerBase:
@@ -760,5 +760,5 @@ class TestBatchHandlerFactory:
 
     def test_create_handler_unsupported_type(self):
         """Test creating handler for unsupported model type."""
-        with pytest.raises(ValueError, match="Batch handler not supported for model type: unsupported_type"):
+        with pytest.raises(ValueError, match="Batch handler for model type 'unsupported_type' is not registered"):
             create_batch_handler("unsupported_type")

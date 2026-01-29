@@ -14,7 +14,7 @@ from torch.distributed.fsdp import (
     fully_shard as FSDP2,
 )
 
-from vla_foundry.models import get_model_block
+from vla_foundry.models.fsdp_block import FSDPBlock
 
 
 def is_global_master(cfg):
@@ -172,9 +172,18 @@ def wrap_fsdp_ddp(model, device, cfg):
         # Convert to frozenset to avoid mutation during FSDP operations
         ignored_params = frozenset(scalar_params) if scalar_params else None
 
-        model_block_tuple = get_model_block(cfg.model.type, cfg.model)
+        # Get block types from model if it provides them (for HF models)
+        hf_block_types = None
+        if hasattr(model, "get_fsdp_block_types"):
+            hf_block_types = model.get_fsdp_block_types()
+
         for p in model.modules():
-            if isinstance(p, model_block_tuple):
+            # Check if module should be wrapped:
+            # 1. Custom blocks inherit from FSDPBlock
+            # 2. HF library blocks match types from get_fsdp_block_types()
+            should_wrap = isinstance(p, FSDPBlock) or (hf_block_types and isinstance(p, hf_block_types))
+
+            if should_wrap:
                 # Get scalar parameters specific to this module
                 module_scalar_params = set()
                 for param in p.parameters():
