@@ -17,7 +17,7 @@ class HyperParams(BaseParams):
     lr_cooldown_end: float = field(default=0.0)
     force_min_lr: float = field(default=0.0)
     optimizer: str = field(default="adamw")
-    wd: float = field(default=0.2)
+    wd: float = field(default=0.01)
     beta1: float = field(default=0.9)
     beta2: float = field(default=0.95)
     eps: float = field(default=1.0e-8)

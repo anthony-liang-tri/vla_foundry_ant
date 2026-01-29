@@ -164,7 +164,7 @@ class NoiseSchedulerParams(ModelParams):
     num_timesteps: int = field(default=1000)
     beta_start: float = field(default=0.0001)
     beta_end: float = field(default=0.02)
-    clamp_range: Tuple[float, float] = field(default=None)
+    clamp_range: Tuple[float, float] = field(default=(-1.5, 1.5))
 
     def init_shared_attributes(self, cfg):
         super().init_shared_attributes(cfg)
