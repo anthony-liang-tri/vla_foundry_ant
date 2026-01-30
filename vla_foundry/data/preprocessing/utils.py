@@ -51,6 +51,13 @@ def upload_sample_to_s3(
                     image_bytes, original_image_size = image_to_bytes(img_data, jpeg_quality, resize_images_size)
                     file_extension = "jpg"
             else:
+                # Bytes passed directly - resize cannot be applied
+                if resize_images_size is not None:
+                    raise ValueError(
+                        f"Image '{img_key}' is already encoded as bytes but resize_images_size={resize_images_size} "
+                        "is configured. Converters must return numpy arrays for resizing to work. "
+                        "Either return numpy arrays from the converter or set resize_images_size=null."
+                    )
                 image_bytes = img_data
                 original_image_size = Image.open(io.BytesIO(img_data)).size
                 file_extension = "jpg"  # Assume pre-encoded bytes are JPEG
