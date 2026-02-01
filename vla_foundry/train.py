@@ -110,6 +110,13 @@ def train_one_checkpoint(
         # Prepare model inputs and targets (including chunking) using batch handler
         model_inputs, targets, mask = batch_handler.prepare_inputs_and_targets(batch, device, model_dtype, cfg)
 
+        # Validate that mask and future_mask are mutually exclusive
+        if mask is not None and "future_mask" in model_inputs:
+            raise ValueError(
+                "mask and future_mask should not both be present. "
+                "Use mask for LLM/VLM or future_mask for diffusion policy, not both."
+            )
+
         forward_total_time = 0
         backward_total_time = 0
         total_lm_loss = 0
@@ -134,14 +141,14 @@ def train_one_checkpoint(
                     break
 
                 targets_ii = targets[start_idx:end_idx]
+                # Get mask for microbatch: use mask if present, otherwise use future_mask (diffusion policy)
+                mask_ii = mask[start_idx:end_idx] if mask is not None else model_inputs_ii.get("future_mask", None)
 
                 # Forward pass - same for all model types!
                 outputs = model(**model_inputs_ii)
                 forward_total_time += time.time() - forward_start
 
-                local_loss = batch_handler.compute_loss(
-                    outputs, targets_ii, loss, cfg, mask=model_inputs_ii.get("future_mask", None)
-                )
+                local_loss = batch_handler.compute_loss(outputs, targets_ii, loss, cfg, mask=mask_ii)
 
                 # Scale loss by microbatch size ratio
                 local_loss = local_loss * (model_inputs_ii["input_ids"].shape[0] / model_inputs["input_ids"].shape[0])

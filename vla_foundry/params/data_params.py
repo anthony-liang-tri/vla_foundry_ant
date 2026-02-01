@@ -35,6 +35,18 @@ class TextDataParams(DataParams):
 @dataclass(frozen=True)
 class TextUntokenizedDataParams(DataParams):
     tokenizer: str = field(default="EleutherAI/gpt-neox-20b")
+    tokenizer_loaded = None
+
+    @property
+    def pad_token_id(self):
+        if self.tokenizer_loaded is None:
+            from vla_foundry.data.tokenizer import get_tokenizer
+
+            tokenizer = get_tokenizer(self.tokenizer)
+            if tokenizer.pad_token is None:
+                tokenizer.add_special_tokens({"pad_token": "[PAD]"})
+            object.__setattr__(self, "tokenizer_loaded", tokenizer)
+        return self.tokenizer_loaded.pad_token_id
 
 
 @register_data_params("image_caption")

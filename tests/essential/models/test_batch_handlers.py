@@ -128,8 +128,13 @@ class TestTransformerBatchHandler:
         assert targets.shape == (2, 8)
         assert targets.dtype == torch.long
 
-        # Check mask - TransformerBatchHandler should return None
-        assert mask is None
+        # Check mask - TransformerBatchHandler returns mask for pad tokens
+        assert mask is not None
+        assert mask.shape == (2, 8)
+        assert mask.dtype == torch.bool
+        # Verify mask matches pad token positions in targets
+        expected_mask = targets == mock_cfg.data.pad_token_id
+        assert torch.equal(mask, expected_mask)
 
     def test_prepare_inputs_and_targets_without_mask(self, handler, sample_batch_no_mask, mock_cfg):
         """Test prepare_inputs_and_targets without attention mask."""
@@ -149,8 +154,13 @@ class TestTransformerBatchHandler:
         # Check targets
         assert targets.shape == (2, 8)
 
-        # Check mask - TransformerBatchHandler should return None
-        assert mask is None
+        # Check mask - TransformerBatchHandler returns mask for pad tokens
+        assert mask is not None
+        assert mask.shape == (2, 8)
+        assert mask.dtype == torch.bool
+        # Verify mask matches pad token positions in targets
+        expected_mask = targets == mock_cfg.data.pad_token_id
+        assert torch.equal(mask, expected_mask)
 
     def test_compute_loss(self, handler, mock_cfg):
         """Test compute_loss method."""

@@ -70,12 +70,13 @@ def validate_one_checkpoint(
         with torch.no_grad():
             # Prepare model inputs and targets (including chunking) using batch handler.
             model_inputs, targets, mask = batch_handler.prepare_inputs_and_targets(batch, device, model_dtype, cfg)
+            # Use returned mask if present, otherwise check for future_mask (diffusion policy)
+            if mask is None:
+                mask = model_inputs.get("future_mask", None)
 
             with autocast():
                 outputs = model(**model_inputs)
-                batch_loss = batch_handler.compute_loss(
-                    outputs, targets, loss, cfg, mask=model_inputs.get("future_mask", None)
-                )
+                batch_loss = batch_handler.compute_loss(outputs, targets, loss, cfg, mask=mask)
 
         # Accumulate validation loss per rank.
         bs = len(model_inputs["input_ids"])

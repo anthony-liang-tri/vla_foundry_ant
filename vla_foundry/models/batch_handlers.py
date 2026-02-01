@@ -47,6 +47,12 @@ class BatchHandler(ABC):
 
         Returns:
             Tuple of (model_inputs_dict, targets_tensor, mask_tensor)
+
+        Note:
+            The returned mask and model_inputs["future_mask"] are mutually exclusive:
+            - LLM/VLM handlers return a mask (for padding/image tokens) and no future_mask
+            - Diffusion policy handlers return mask=None and put future_mask in model_inputs
+            The training loop validates this invariant.
         """
         pass
 
@@ -113,7 +119,17 @@ class TransformerBatchHandler(BatchHandler):
         if attention_mask is not None:
             model_inputs["attention_mask"] = attention_mask
 
-        return model_inputs, targets, None
+        # Mask out pad tokens from loss computation
+        if hasattr(cfg.data, "pad_token_id") and cfg.data.pad_token_id is not None:
+            mask = targets == cfg.data.pad_token_id
+        else:
+            mask = None
+
+        # For reference:
+        # model_inputs["attention_mask"] tells us which tokens the model skips in forward (e.g. padding)
+        # mask tells us which tokens the model skips in loss computation (e.g. padding, image tokens)
+        # For LLMs, these should be the same but shifted by one token due to the autoregressive nature.
+        return model_inputs, targets, mask
 
     def compute_loss(self, outputs, targets, loss_fn, cfg, mask=None):
         return loss_fn(outputs.logits, targets, mask=mask)
@@ -161,6 +177,8 @@ class VLMBatchHandler(BatchHandler):
 
         mask = (targets == cfg.data.pad_token_id) | (targets == cfg.data.image_token_id)
 
+        # model_inputs["attention_mask"] tells us which tokens the model skips in forward (e.g. padding)
+        # mask tells us which tokens the model skips in loss computation (e.g. padding, image tokens)
         return model_inputs, targets, mask
 
     def compute_loss(self, outputs, targets, loss_fn, cfg, mask=None):
