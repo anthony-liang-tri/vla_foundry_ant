@@ -91,6 +91,8 @@ setup_commands:
     # Symlink everything in /tmp because the root filesystem is too small.
     # Use || true to handle cases where already done (retry/re-run)
     - "[ -L /home/ubuntu/.cache ] || ([ -d /home/ubuntu/.cache ] && mv /home/ubuntu/.cache /home/ubuntu/.cache.bak || true; mkdir -p /tmp/.cache && ln -s /tmp/.cache /home/ubuntu/.cache) || true"
+    # Restore huggingface token after .cache was moved to .cache.bak
+    - "mkdir -p /home/ubuntu/.cache/huggingface && [ -f /home/ubuntu/.cache.bak/huggingface/token ] && cp /home/ubuntu/.cache.bak/huggingface/token /home/ubuntu/.cache/huggingface/token || true"
     - "[ -L vla_foundry/.venv ] || ([ -d vla_foundry/.venv ] && mv vla_foundry/.venv vla_foundry/.venv.bak || true; mkdir -p /tmp/.venv && ln -s /tmp/.venv vla_foundry/.venv) || true"
     - cd vla_foundry && UV_PROJECT_ENVIRONMENT=/home/ubuntu/vla_foundry/.venv uv sync --group=preprocessing
     - echo 'export HF_TOKEN=$(cat /home/ubuntu/.cache/huggingface/token)' >> ~/.bashrc
