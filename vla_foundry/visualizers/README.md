@@ -105,6 +105,68 @@ transform = RigidTransform()  # Example rigid transform
 vz.log_rigid_transform("example/transform", transform)
 ```
 
+### Sparse logging and runtime enable/disable
+
+The Visualizer facade supports reducing log volume during eval without removing log calls.
+
+
+#### Enable / disable logging at runtime, example:
+
+```python
+from vla_foundry.visualizers import visualizer as vz
+
+vz.disable()  # subsequent log_* calls become no-ops
+vz.enable()   # resume logging
+```
+
+#### Log every N calls per name
+All log_* functions accept an optional n (alias: every_n) argument. Counters are tracked per (log type, path).
+
+```
+vz.log_images("observation_images", images, n=100)  # logs on call 1, 100, 200, ...
+vz.log_scalar("metrics/loss", loss, n=50)           # logs on call 1, 50, 100, ...
+```
+
+#### Tests:
+
+W&B:
+
+```
+VISUALIZER=wandb uv run python - <<'PY'
+from vla_foundry.visualizers import visualizer as vz
+import numpy as np
+vz.init(run_name="sparse_logging_smoke")
+
+vz.enable()
+for i in range(1, 11):
+    vz.log_scalar("every_n/n3", i, n=3)
+    vz.log_scalar("every_n/n4", i, n=4)
+    vz.log_images("every_n/img_n5", np.random.rand(64,64,3), n=5)
+
+for i in range(1, 11):
+    vz.enable() if (i % 2 == 0) else vz.disable()
+    vz.log_scalar("toggle/only_even_iterations", i)
+
+vz.shutdown()
+PY
+```
+
+Rerun:
+
+```
+VISUALIZER=rerun uv run python - <<'PY'
+from vla_foundry.visualizers import visualizer as vz
+import numpy as np
+vz.init(run_name="sparse_rerun_smoke")
+vz.enable()
+for i in range(1, 11):
+    vz.log_scalar("every_n/n3", i, n=3)
+    vz.log_images("every_n/img_n5", np.random.rand(64,64,3), n=5)
+vz.shutdown()
+PY
+```
+
+
 ### 4. **Shutdown**
 The visualizer will automatically shut down at the end of the program. However, you can explicitly call `shutdown` if needed:
 ```python

@@ -19,6 +19,20 @@ import vla_foundry.visualizers.visualizer as vz
 # Initialize the visualizer
 vz.init(run_name="tutorial_logging", add_rank_to_run=True)
 
+print("\n--- Sparse logging demo ---")
+print("n=5 logs on call 1, then 5, 10, 15... per key")
+
+for step in range(1, 16):
+    vz.log_scalar("every_n/n5", step, n=5)
+    vz.log_images("every_n/img_n5", np.random.rand(64, 64, 3), n=5)
+
+print("\n--- Runtime enable/disable demo ---")
+vz.disable()
+vz.log_scalar("toggle/only_when_enabled", -1)  # should NOT appear
+vz.enable()
+vz.log_scalar("toggle/only_when_enabled", 1)  # should appear
+
+
 # Loop to log dynamic data
 for step in range(10):
     print(f"Step {step + 1}/10")

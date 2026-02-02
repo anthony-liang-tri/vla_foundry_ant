@@ -38,6 +38,7 @@ from vla_foundry.inference.robotics.data_adapter import PolicyDataAdapter
 from vla_foundry.logger import setup_logging
 from vla_foundry.models import create_model
 from vla_foundry.params.train_experiment_params import load_experiment_params_from_yaml
+from vla_foundry.visualizers import visualizer
 
 
 def _get_policy_metadata():
@@ -137,11 +138,16 @@ class InferenceDiffusionPolicy(Policy):
         )
 
         # Initialize data adapter with robotics processor, data config, and field mapping
-        self.data_adapter = {}
-        self.should_reset = defaultdict(bool)
+        self.data_adapter: Dict[uuid.UUID, PolicyDataAdapter] = {}
+        self.should_reset: Dict[uuid.UUID, bool] = {}
 
         # Initialize state
         self.reset()
+
+        # Initialize visualizer (enabled via VISUALIZER=rerun env var)
+        visualizer.init(run_name="inference_policy")
+        # Log test message to verify rerun is working
+        visualizer.log_text("status", "Inference policy initialized")
 
         logging.info(f"LBMDiffusionPolicy initialized with model on {self.device}")
 
@@ -162,6 +168,9 @@ class InferenceDiffusionPolicy(Policy):
         # Step the data adapter to update its state with the new observation
         self.data_adapter[client_id].step_observations(observation)
 
+        # Log observation to visualizer
+        visualizer.log_robot_gym_multiarm_observation("observation", observation)
+
         # Recompute the trajectory if we are at the beginning of a new open loop step
         if self.current_open_loop_step[client_id] % self.open_loop_steps == self.open_loop_steps - 1:
             # Step the data adapter before getting the model input that needs to be updated for current step
@@ -172,6 +181,16 @@ class InferenceDiffusionPolicy(Policy):
             attention_mask = model_input["attention_mask"].to(self.device) if "attention_mask" in model_input else None
             pixel_values = model_input["pixel_values"].to(self.device) if "pixel_values" in model_input else None
             actions_tensor = model_input["actions"].to(self.device) if "actions" in model_input else None
+
+            # Log processed images going into the model (every 10 steps)
+            if pixel_values is not None:
+                # pixel_values shape: [batch, num_cameras * timesteps, channels, height, width]
+                pv = pixel_values.cpu().numpy()
+                for i in range(pv.shape[1]):
+                    # Convert from CHW to HWC and denormalize from [-1,1] or [0,1] to [0,255]
+                    img = pv[0, i].transpose(1, 2, 0)  # CHW -> HWC
+                    img = ((img - img.min()) / (img.max() - img.min() + 1e-8) * 255).astype("uint8")
+                    visualizer.log_images(f"model_input/image_{i}", img, every_n=10)
             proprioception = None
             if "proprioception" in model_input and model_input["proprioception"] is not None:
                 proprioception = model_input["proprioception"].to(self.device)
@@ -197,6 +216,10 @@ class InferenceDiffusionPolicy(Policy):
         actions = self.data_adapter[client_id].step_action()
         self.current_open_loop_step[client_id] += 1
         self._step_count[client_id] += 1
+
+        # Log action to visualizer
+        visualizer.log_robot_gym_poses_and_grippers("action", actions)
+
         return actions
 
     def step_batch(self, observations: Dict[uuid.UUID, MultiarmObservation]) -> Dict[uuid.UUID, PosesAndGrippers]:
@@ -212,6 +235,21 @@ class InferenceDiffusionPolicy(Policy):
         batch_actions = {}
 
         for client_id, observation in observations.items():
+            # Initialize data adapter if client hasn't been seen before
+            if client_id not in self.data_adapter:
+                logging.debug(f"Initializing data adapter for new client {client_id}")
+                self.data_adapter[client_id] = PolicyDataAdapter(
+                    robotics_processor=self.robotics_processor,
+                    data_config=self.cfg.data,
+                    field_mapping_path=self.field_mapping_path,
+                    image_names=self.image_names,
+                    preprocessor_image_size=self.preprocessor_image_size,
+                    num_past_timesteps=self.num_past_timesteps,
+                    num_future_timesteps=self.future_timesteps,
+                    image_indices=self.cfg.data.image_indices,
+                )
+                self.should_reset[client_id] = True
+
             if self.should_reset[client_id]:
                 logging.debug(f"Resetting data adapter for {client_id}")
                 self.data_adapter[client_id].reset(initial_observation=observation)

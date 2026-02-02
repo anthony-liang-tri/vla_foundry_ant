@@ -18,7 +18,7 @@ import atexit
 import importlib.util  # Add this import
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import wraps
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -86,6 +86,14 @@ class _State:
     initialized: bool = False
     rank_prefix: str = ""  # used to namespace multi-process logs
 
+    # Tracks if user explicitly called disable() before init().
+    # If True, init() will respect that and not auto-enable.
+    user_disabled: bool = False
+
+    # Per-(log method, path) counters used for sparse logging (every-n subsampling).
+    # Example key: ("images", "observation_images")
+    counters: Dict[Tuple[str, str], int] = field(default_factory=dict)
+
 
 _STATE = _State()
 
@@ -126,7 +134,9 @@ def _get_backend(name: str) -> Optional[Backend]:
             logger.warning(f"{_VISUALIZER_LOG_PREFIX} Rerun package not available; using disabled.")
             return None
         try:
-            from vla_foundry.visualizers.rerun_backend import RerunBackend  # Import only when needed
+            from vla_foundry.visualizers.rerun_backend import (
+                RerunBackend,
+            )  # Import only when needed
 
             register_backend(RerunBackend())
         except ImportError as e:
@@ -137,7 +147,9 @@ def _get_backend(name: str) -> Optional[Backend]:
             logger.warning(f"{_VISUALIZER_LOG_PREFIX} WandB package not available; using disabled.")
             return None
         try:
-            from vla_foundry.visualizers.wandb_backend import WandbBackend  # Import only when needed
+            from vla_foundry.visualizers.wandb_backend import (
+                WandbBackend,
+            )  # Import only when needed
 
             register_backend(WandbBackend())
         except ImportError as e:
@@ -168,6 +180,9 @@ def init(
     if _STATE.initialized:
         return
 
+    # New session/run: reset sparse-logging counters so frequencies start from 0.
+    _STATE.counters.clear()
+
     # Automatically detect the backend if not explicitly provided
     chosen = backend or _choose_backend_from_env()
     be = _get_backend(chosen)
@@ -195,7 +210,8 @@ def init(
 
     # Backend init
     be.init(rn, spawn=spawn)
-    _STATE.enabled = True
+    # Respect pre-init disable() calls: only enable if user hasn't explicitly disabled.
+    _STATE.enabled = not _STATE.user_disabled
     _STATE.initialized = True
 
     # Ensure we shut down cleanly
@@ -204,6 +220,90 @@ def init(
 
 def enabled() -> bool:
     return _STATE.enabled and _STATE.backend is not None
+
+
+def set_logging_enabled(is_enabled: bool) -> None:
+    """Enable/disable logging *without* shutting down the backend.
+
+    This is useful for evaluation loops where you want to selectively log only
+    some samples/steps while keeping the same backend run/session alive.
+
+    Can be called before init() - the setting will persist.
+    """
+    _STATE.enabled = bool(is_enabled)
+    # Track user intent so init() respects pre-init disable() calls.
+    _STATE.user_disabled = not is_enabled
+
+
+def enable_logging() -> None:
+    """Convenience wrapper for ``set_logging_enabled(True)``."""
+
+    set_logging_enabled(True)
+
+
+def enable() -> None:
+    """Alias for :func:`enable_logging`."""
+
+    enable_logging()
+
+
+def disable_logging() -> None:
+    """Convenience wrapper for ``set_logging_enabled(False)``."""
+
+    set_logging_enabled(False)
+
+
+def disable() -> None:
+    """Alias for :func:`disable_logging`."""
+
+    disable_logging()
+
+
+def reset_sparse_counters() -> None:
+    """Clear per-path counters used by sparse (every-n) logging."""
+
+    _STATE.counters.clear()
+
+
+def _pop_every_n(kwargs: Dict[str, Any]) -> Optional[int]:
+    """Extract the sparse-logging frequency from kwargs.
+
+    We support both ``n=...`` (as requested) and ``every_n=...``.
+    The value is removed from ``kwargs`` so backends don't need to know about it.
+    """
+
+    every_n = None
+    if "every_n" in kwargs:
+        every_n = kwargs.pop("every_n")
+    elif "n" in kwargs:
+        every_n = kwargs.pop("n")
+
+    if every_n is None:
+        return None
+    # Guard against bools (since bool is a subclass of int)
+    if isinstance(every_n, bool):
+        raise TypeError("n/every_n must be an integer >= 1")
+    try:
+        every_n_int = int(every_n)
+    except (TypeError, ValueError) as err:
+        raise TypeError("n/every_n must be an integer >= 1") from err
+    if every_n_int < 1:
+        raise ValueError("n/every_n must be an integer >= 1")
+    return every_n_int
+
+
+def _should_log(kind: str, path: str, every_n: Optional[int]) -> bool:
+    """Return True if we should log this (kind, path) event."""
+
+    if every_n is None or every_n <= 1:
+        return True
+
+    key = (kind, path)
+    count = _STATE.counters.get(key, 0) + 1
+    _STATE.counters[key] = count
+
+    # Log on the first call, then on every Nth call thereafter (N, 2N, 3N, ...)
+    return (count == 1) or (count % every_n == 0)
 
 
 def _prefix(path: str) -> str:
@@ -242,7 +342,11 @@ class Visualizer:
         images : Any
             Either a single NumPy array representing an image or a dictionary of images.
         """
-        _STATE.backend.log_images(path, images, **kwargs)  # Delegate directly to the backend
+        every_n = _pop_every_n(kwargs)
+        full_path = _prefix(path)
+        if not _should_log("images", full_path, every_n):
+            return
+        _STATE.backend.log_images(full_path, images, **kwargs)  # type: ignore[union-attr]
 
     @ensure_initialized_and_enabled
     def log_scalar(self, path: str, value: float, **kwargs) -> None:
@@ -256,7 +360,11 @@ class Visualizer:
         value : float
             Scalar value to log.
         """
-        _STATE.backend.log_scalar(_prefix(path), value, **kwargs)  # type: ignore[union-attr]
+        every_n = _pop_every_n(kwargs)
+        full_path = _prefix(path)
+        if not _should_log("scalar", full_path, every_n):
+            return
+        _STATE.backend.log_scalar(full_path, value, **kwargs)  # type: ignore[union-attr]
 
     @ensure_initialized_and_enabled
     def log_points3d(self, path: str, points: np.ndarray, **kwargs) -> None:
@@ -270,10 +378,14 @@ class Visualizer:
         points : np.ndarray
             3D points as a NumPy array of shape (N, 3).
         """
-        _STATE.backend.log_points3d(_prefix(path), points, **kwargs)  # type: ignore[union-attr]
+        every_n = _pop_every_n(kwargs)
+        full_path = _prefix(path)
+        if not _should_log("points3d", full_path, every_n):
+            return
+        _STATE.backend.log_points3d(full_path, points, **kwargs)  # type: ignore[union-attr]
 
     @ensure_initialized_and_enabled
-    def log_trajectory(self, path: str, trajectory_points: np.ndarray) -> None:
+    def log_trajectory(self, path: str, trajectory_points: np.ndarray, **kwargs) -> None:
         """
         Log a trajectory as waypoints and a path in the visualization hierarchy.
 
@@ -284,10 +396,15 @@ class Visualizer:
         trajectory_points : np.ndarray
             Array of shape (N, 3) representing the trajectory points.
         """
+        every_n = _pop_every_n(kwargs)
+        full_path = _prefix(path)
+        if not _should_log("trajectory", full_path, every_n):
+            return
+
         if trajectory_points.ndim != 2 or trajectory_points.shape[1] != 3:
             raise ValueError("trajectory_points must be a (N, 3) array")
-        self.log_points3d(f"{path}/waypoints", trajectory_points)
-        self.log_line_strips3d(f"{path}/path", trajectory_points)
+        self.log_points3d(f"{path}/waypoints", trajectory_points, **kwargs)
+        self.log_line_strips3d(f"{path}/path", trajectory_points, **kwargs)
 
     @ensure_initialized_and_enabled
     def log_line_strips3d(self, path: str, line_strips: np.ndarray, **kwargs) -> None:
@@ -301,7 +418,11 @@ class Visualizer:
         line_strips : np.ndarray
             Line strips as a NumPy array of shape (N, 3).
         """
-        _STATE.backend.log_line_strips3d(_prefix(path), line_strips, **kwargs)  # type: ignore[union-attr]
+        every_n = _pop_every_n(kwargs)
+        full_path = _prefix(path)
+        if not _should_log("line_strips3d", full_path, every_n):
+            return
+        _STATE.backend.log_line_strips3d(full_path, line_strips, **kwargs)  # type: ignore[union-attr]
 
     @ensure_initialized_and_enabled
     def log_text(self, path: str, text: str, **kwargs) -> None:
@@ -315,7 +436,11 @@ class Visualizer:
         text : str
             Text value to log.
         """
-        _STATE.backend.log_text(_prefix(path), text, **kwargs)  # type: ignore[union-attr]
+        every_n = _pop_every_n(kwargs)
+        full_path = _prefix(path)
+        if not _should_log("text", full_path, every_n):
+            return
+        _STATE.backend.log_text(full_path, text, **kwargs)  # type: ignore[union-attr]
 
     @ensure_initialized_and_enabled
     def log_pose(self, path: str, translation: np.ndarray, rotation: np.ndarray, **kwargs) -> None:
@@ -334,6 +459,11 @@ class Visualizer:
             - Rotation matrix of shape (3, 3)
             - Transformation matrix of shape (4, 4) (translation will be ignored)
         """
+        every_n = _pop_every_n(kwargs)
+        full_path = _prefix(path)
+        if not _should_log("pose", full_path, every_n):
+            return
+
         # Ensure inputs are numpy arrays
         translation = np.asarray(translation)
         rotation = np.asarray(rotation)
@@ -396,7 +526,7 @@ class Visualizer:
         quaternion = np.ascontiguousarray(quaternion, dtype=np.float64)
 
         # Backend expects quaternion [x, y, z, w] and translation vector
-        _STATE.backend.log_pose(_prefix(path), final_translation, quaternion, **kwargs)  # type: ignore[union-attr]
+        _STATE.backend.log_pose(full_path, final_translation, quaternion, **kwargs)  # type: ignore[union-attr]
 
     @ensure_initialized_and_enabled
     def log_point_cloud(
@@ -407,6 +537,7 @@ class Visualizer:
         color_image: Optional[np.ndarray],
         intrinsics_rgb: np.ndarray,
         original_image_size: Tuple[int, int],
+        **kwargs,
     ) -> None:
         """
         Log a 3D point cloud reconstructed from a depth map and camera intrinsics.
@@ -442,6 +573,11 @@ class Visualizer:
         -------
         None
         """
+        every_n = _pop_every_n(kwargs)
+        full_path = _prefix(path)
+        if not _should_log("point_cloud", full_path, every_n):
+            return
+
         scaled_depth = raw_depth.astype(np.float32) / float(np.asarray(depth_scale).reshape(-1)[0])
         fx, fy, cx, cy = intrinsics_rgb
 
@@ -462,10 +598,11 @@ class Visualizer:
         if color_image is not None:
             colors = color_image.reshape(-1, 3)[valid]
 
-        self.log_points3d(path, pts, colors=colors)
+        self.log_points3d(path, pts, colors=colors, **kwargs)
 
     def flush(self) -> None:
-        if not enabled():
+        # Flushing should still work even if sparse logging is temporarily disabled.
+        if not _STATE.initialized or _STATE.backend is None:
             return
         _STATE.backend.flush()  # type: ignore[union-attr]
 
@@ -473,7 +610,8 @@ class Visualizer:
         """
         Perform cleanup during shutdown. Ensure the backend is active before shutting down.
         """
-        if not enabled():
+        # Important: shutdown must still finish the backend even if logging was temporarily disabled.
+        if not _STATE.initialized:
             return
         try:
             if _STATE.backend is not None:
@@ -483,6 +621,8 @@ class Visualizer:
                 _STATE.backend.shutdown()  # type: ignore[union-attr]
         finally:
             _STATE.enabled = False
+            _STATE.backend = None
+            _STATE.initialized = False
 
 
 # Create a new DrakeVisualizer class for robot_gym and drake-specific methods
@@ -582,7 +722,11 @@ class DrakeVisualizer(Visualizer):
             if image_set.label:
                 self.log_images(f"{path}/{camera_id}/label", image_set.label.array, **kwargs)
         if observation.language_instruction:
-            self.log_text(f"{path}/language_instruction", observation.language_instruction, **kwargs)
+            self.log_text(
+                f"{path}/language_instruction",
+                observation.language_instruction,
+                **kwargs,
+            )
 
 
 # Default instances for facade-like usage
@@ -630,6 +774,4 @@ def log_robot_gym_action_predictions(path: str, predictions: List[PosesAndGrippe
 
 
 def log_robot_gym_multiarm_observation(path: str, observation: MultiarmObservation, **kwargs) -> None:
-    _get_drake_visualizer().log_robot_gym_multiarm_observation(path, observation, **kwargs)
-
     _get_drake_visualizer().log_robot_gym_multiarm_observation(path, observation, **kwargs)
