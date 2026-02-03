@@ -305,26 +305,90 @@ class Transformer(TransformerBase):
             hidden_states=tuple(hidden_states) if output_hidden_states else None,
         )
 
-    def generate(self, input_ids, attention_mask, max_new_tokens=20):
+    def generate(
+        self,
+        input_ids,
+        attention_mask,
+        max_new_tokens=20,
+        temperature=1.0,
+        top_p=0.9,
+        top_k=50,
+        eos_token_id=None,
+        use_cache=True,
+    ):
+        """
+        Generate tokens autoregressively with KV-cache support.
+
+        Args:
+            input_ids: Input token ids
+            attention_mask: Attention mask
+            max_new_tokens: Maximum number of tokens to generate
+            temperature: Sampling temperature (1.0 = neutral, <1.0 = more deterministic, >1.0 = more random)
+            top_p: Nucleus sampling threshold (0.0-1.0, lower = more focused)
+            top_k: Top-k sampling (0 = disabled)
+            eos_token_id: End of sequence token id for early stopping
+            use_cache: Whether to use KV-cache for faster generation
+        """
         # Add batch dimension if needed
         if input_ids.dim() == 1:
             input_ids = input_ids.unsqueeze(0)
             attention_mask = attention_mask.unsqueeze(0)
 
+        batch_size = input_ids.shape[0]
         generated = input_ids.clone()
         attn_mask = attention_mask.clone()
+        past_key_values = None
 
-        for _ in range(max_new_tokens):
-            outputs = self.forward(input_ids=generated, attention_mask=attn_mask)
-            last_output = outputs.logits[:, -1, :]
-            next_token = torch.argmax(last_output, dim=-1, keepdim=True)
+        for _step in range(max_new_tokens):
+            # Only process last token if we have cached K/V, otherwise process full sequence
+            curr_input_ids = generated[:, -1:] if use_cache and past_key_values is not None else generated
+
+            outputs = self.forward(
+                input_ids=curr_input_ids,
+                attention_mask=attn_mask,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+            )
+
+            logits = outputs.logits[:, -1, :]
+            if use_cache:
+                past_key_values = outputs.past_key_values
+
+            # Apply temperature
+            if temperature != 1.0:
+                logits = logits / temperature
+
+            # Apply top-k filtering
+            if top_k > 0:
+                indices_to_remove = logits < torch.topk(logits, top_k)[0][..., -1, None]
+                logits = logits.masked_fill(indices_to_remove, float("-inf"))
+
+            # Apply top-p (nucleus) filtering
+            if top_p < 1.0:
+                sorted_logits, sorted_indices = torch.sort(logits, descending=True)
+                cumulative_probs = torch.cumsum(torch.softmax(sorted_logits, dim=-1), dim=-1)
+                sorted_indices_to_remove = cumulative_probs > top_p
+                sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
+                sorted_indices_to_remove[..., 0] = 0
+                indices_to_remove = sorted_indices_to_remove.scatter(1, sorted_indices, sorted_indices_to_remove)
+                logits = logits.masked_fill(indices_to_remove, float("-inf"))
+
+            # Sample from the distribution (or greedy if temperature=0)
+            if temperature == 0:
+                next_token = torch.argmax(logits, dim=-1, keepdim=True)
+            else:
+                probs = torch.softmax(logits, dim=-1)
+                next_token = torch.multinomial(probs, num_samples=1)
+
             generated = torch.cat([generated, next_token], dim=-1)
 
             # Update attention mask: 1 for non-padding tokens
-            next_token_mask = torch.ones_like(next_token, dtype=attn_mask.dtype)
+            next_token_mask = torch.ones((batch_size, 1), dtype=attn_mask.dtype, device=attn_mask.device)
             attn_mask = torch.cat([attn_mask, next_token_mask], dim=-1)
-            # Note: You could enable the generation to break earlier than max_new_tokens when it detects a eos token,
-            # but this does not work in batched generation (output tensors need to have the same size)
+
+            # Early stopping on EOS token
+            if eos_token_id is not None and (next_token == eos_token_id).all():
+                break
 
         return generated
 
