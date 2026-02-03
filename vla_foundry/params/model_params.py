@@ -96,9 +96,13 @@ class VLMParams(ModelParams):
     vit: Union[ViTParams, ViTHFParams] = field(default_factory=ViTParams)
     transformer: Union[TransformerParams, TransformerHFParams] = field(default_factory=TransformerParams)
     image_token_id: int = field(default=None)
+    processor: str = field(default=None)
 
     def init_shared_attributes(self, cfg):
         super().init_shared_attributes(cfg)
+        if self.processor is None and hasattr(cfg.data, "processor") and cfg.data.processor is not None:
+            object.__setattr__(self, "processor", cfg.data.processor)
+
         # Prefer computing special ids from the processor/tokenizer rather than requiring user input
         # 1) Resolve processor once (reuse if already loaded on data params)
         processor = getattr(cfg.data, "processor_loaded", None)
