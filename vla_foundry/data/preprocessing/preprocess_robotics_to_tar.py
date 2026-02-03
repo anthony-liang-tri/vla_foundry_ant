@@ -18,8 +18,8 @@ from vla_foundry.data.preprocessing.utils import (
     create_episode_shard,
     create_shard,
     recursive_s3_copy,
-    upload_config_to_s3,
-    upload_dict_to_s3,
+    save_and_upload_config,
+    save_and_upload_dict,
 )
 from vla_foundry.file_utils import check_directory_has_files_with_substring
 
@@ -128,36 +128,37 @@ def main():
     episode_manifest_lines = []
     for shard_name, num_sequences in episode_shard_results:
         episode_manifest_lines.append({"shard": shard_name, "num_sequences": num_sequences})
-    upload_dict_to_s3(episode_manifest_lines, f"{cfg.output_dir.rstrip('/')}/episodes", "manifest.jsonl")
+    save_and_upload_dict(episode_manifest_lines, f"{cfg.output_dir.rstrip('/')}/episodes", "manifest.jsonl")
 
     # Upload shards manifest to S3 in the shards/ directory
     manifest_lines = []
     for shard_name, num_sequences in shard_results:
         manifest_entry = {"shard": shard_name, "num_sequences": num_sequences}
         manifest_lines.append(manifest_entry)
-    upload_dict_to_s3(manifest_lines, f"{cfg.output_dir.rstrip('/')}/shards", "manifest.jsonl")
+    save_and_upload_dict(manifest_lines, f"{cfg.output_dir.rstrip('/')}/shards", "manifest.jsonl")
 
     # Upload statistics to S3 in the shards/ directory and the episodes/ directory
     if cfg.compute_statistics:
         statistics_state = statistics_ray_actor.get_statistics.remote()
         statistics_state = ray.get(statistics_state)
-        upload_dict_to_s3(statistics_state, f"{cfg.output_dir.rstrip('/')}/shards", "stats.json")
-        upload_dict_to_s3(statistics_state, f"{cfg.output_dir.rstrip('/')}/episodes", "stats.json")
+        save_and_upload_dict(statistics_state, f"{cfg.output_dir.rstrip('/')}/shards", "stats.json")
+        save_and_upload_dict(statistics_state, f"{cfg.output_dir.rstrip('/')}/episodes", "stats.json")
 
     # Update and save processing metadata with final statistics
     metadata["processing"]["total_samples_created"] = sum(num_sequences for _, num_sequences in shard_results)
     metadata["processing"]["timestamp_end"] = datetime.datetime.now().isoformat()
     metadata["processing"]["sample_counts"] = ray.get(logger_actor.get_values.remote())
     print("Sample counts:", metadata["processing"]["sample_counts"])
-    upload_dict_to_s3(metadata, f"{cfg.output_dir.rstrip('/')}/shards", "processing_metadata.json")
-
-    # Save preprocessing config for reference
+    save_and_upload_dict(metadata, f"{cfg.output_dir.rstrip('/')}/shards", "processing_metadata.json")
     preprocessing_config_dict = vars(cfg).copy()
-    upload_config_to_s3(preprocessing_config_dict, f"{cfg.output_dir.rstrip('/')}/shards", "preprocessing_config.yaml")
+    save_and_upload_config(
+        preprocessing_config_dict, f"{cfg.output_dir.rstrip('/')}/shards", "preprocessing_config.yaml"
+    )
 
     # Make a copy of the ouput directory
-    dataset_uuid = str(uuid.uuid4())
-    recursive_s3_copy(cfg.output_dir, f"{cfg.output_dir_fixed_path.rstrip('/')}/{dataset_uuid}")
+    if cfg.output_dir.startswith("s3://"):
+        dataset_uuid = str(uuid.uuid4())
+        recursive_s3_copy(cfg.output_dir, f"{cfg.output_dir_fixed_path.rstrip('/')}/{dataset_uuid}")
 
     ray.shutdown()
     print("🎉 Complete! All samples uploaded and sharded.")

@@ -82,7 +82,11 @@ def discover_and_validate_episodes_in_directory(
             item_basename.endswith(ext) for ext in [".pkl", ".npz", ".txt", ".json", ".yaml", ".tar", ".gz"]
         ):
             episode_path = os.path.join(diffusion_spartan_path, item_basename)
-            task_name = episode_path.removeprefix("s3://robotics-manip-lbm/efs/data/tasks/").split("/")[0]
+            if episode_path.startswith("s3://"):
+                task_name = episode_path.removeprefix("s3://robotics-manip-lbm/efs/data/tasks/").split("/")[0]
+            else:
+                # Somewhat hacky but I think this is always correct.
+                task_name = episode_path.split("tasks/")[-1].split("/")[0]
             episode_num = int(item_basename.split("_")[-1])
             if validation_episodes and episode_num in validation_episodes[task_name]:
                 continue

@@ -7,6 +7,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
 from functools import partial
+from pathlib import Path
 from typing import Any, Dict, List
 
 import boto3
@@ -27,10 +28,10 @@ def upload_sample_to_s3(
     jpeg_quality: int = 95,
     resize_images_size: List[int] = None,
 ) -> None:
-    """Upload sample data to S3 as tar file."""
+    """Upload sample data to S3 as tar file. (or save locally)"""
     if resize_images_size is None:
         resize_images_size = [224, 224]
-    s3_client = boto3.client("s3")
+    s3_client = boto3.client("s3") if output_dir.startswith("s3://") else None
     tar_buffer = io.BytesIO()
     uuid_prefix = str(uuid.uuid4())
 
@@ -108,12 +109,24 @@ def upload_sample_to_s3(
                 tar.addfile(tarinfo, data_buffer)
 
     tar_buffer.seek(0)
-    bucket_name, s3_prefix = output_dir.removeprefix("s3://").split("/", 1)
     unique_id = extract_unique_id(episode_path)
-    s3_key = f"{s3_prefix.rstrip('/')}/frames/{unique_id}_{episode_id}_frame_{frame_idx}.tar"
-    s3_client.upload_fileobj(tar_buffer, bucket_name, s3_key)
-    print(f"Uploaded {bucket_name.rstrip('/')}/{s3_key}", flush=True)
-    return f"{unique_id}_{episode_id}_frame_{frame_idx}.tar"
+    tar_filename = f"{unique_id}_{episode_id}_frame_{frame_idx}.tar"
+
+    if output_dir.startswith("s3://"):
+        # Upload to S3
+        bucket_name, s3_prefix = output_dir.removeprefix("s3://").split("/", 1)
+        s3_key = f"{s3_prefix.rstrip('/')}/frames/{tar_filename}"
+        s3_client.upload_fileobj(tar_buffer, bucket_name, s3_key)
+        print(f"Uploaded s3://{bucket_name}/{s3_key}", flush=True)
+    else:
+        # Save to local filesystem
+        local_path = Path(output_dir) / "frames" / tar_filename
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(local_path, "wb") as f:
+            f.write(tar_buffer.getvalue())
+        print(f"Saved {local_path}", flush=True)
+
+    return tar_filename
 
 
 def extract_unique_id(episode_path: str) -> str:
@@ -125,22 +138,34 @@ def extract_unique_id(episode_path: str) -> str:
         return str(uuid.uuid4())
 
 
-def upload_dict_to_s3(dict_data: Dict, s3_path: str, file_name: str):
-    # Used to upload manifest.jsonl and stats.json
-    bucket_name, s3_prefix = s3_path.removeprefix("s3://").split("/", 1)
+def save_and_upload_dict(dict_data: Dict, output_path: str, file_name: str):
+    # Used to upload manifest.jsonl and stats.json (or save locally)
+    bucket_name, s3_prefix = output_path.removeprefix("s3://").split("/", 1)
     body = "\n".join(json.dumps(record) for record in dict_data) if "jsonl" in file_name else json.dumps(dict_data)
-    s3_key = f"{s3_prefix.rstrip('/')}/{file_name}"
-    boto3.client("s3").put_object(
-        Bucket=bucket_name,
-        Key=s3_key,
-        Body=body.encode("utf-8"),
-        ContentType="application/json",
-    )
-    print(f"Uploaded {file_name} to s3://{bucket_name}/{s3_key}")
+
+    if output_path.startswith("s3://"):
+        # Upload to S3
+        bucket_name, s3_prefix = output_path.removeprefix("s3://").split("/", 1)
+        s3_key = f"{s3_prefix.rstrip('/')}/{file_name}"
+        boto3.client("s3").put_object(
+            Bucket=bucket_name,
+            Key=s3_key,
+            Body=body.encode("utf-8"),
+            ContentType="application/json",
+        )
+        print(f"Uploaded {file_name} to s3://{bucket_name}/{s3_key}")
+    else:
+        # Save to local filesystem
+        local_path = Path(output_path) / file_name
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(local_path, "w", encoding="utf-8") as f:
+            f.write(body)
+        print(f"Saved {file_name} to {local_path}")
 
 
-def upload_config_to_s3(config, s3_path: str, file_name: str):
-    # Draccus dump to temp file then upload to s3
+def save_and_upload_config(config, output_path: str, file_name: str):
+    # Draccus dump to temp file then upload to s3 (or save locally)
+    import shutil
     import tempfile
 
     import draccus
@@ -148,10 +173,19 @@ def upload_config_to_s3(config, s3_path: str, file_name: str):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".yaml", mode="w") as temp_file:
         draccus.dump(config, temp_file)
         temp_path = temp_file.name
-    bucket_name, s3_prefix = s3_path.removeprefix("s3://").split("/", 1)
-    s3_key = f"{s3_prefix.rstrip('/')}/{file_name}"
-    boto3.client("s3").upload_file(temp_path, bucket_name, s3_key)
-    print(f"Uploaded {file_name} to s3://{bucket_name}/{s3_key}")
+
+    if output_path.startswith("s3://"):
+        # Upload to S3
+        bucket_name, s3_prefix = output_path.removeprefix("s3://").split("/", 1)
+        s3_key = f"{s3_prefix.rstrip('/')}/{file_name}"
+        boto3.client("s3").upload_file(temp_path, bucket_name, s3_key)
+        print(f"Uploaded {file_name} to s3://{bucket_name}/{s3_key}")
+    else:
+        # Save to local filesystem
+        local_path = Path(output_path) / file_name
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(temp_path, local_path)
+        print(f"Saved {file_name} to {local_path}")
 
 
 def _download_tar_from_s3(s3_key: str, s3_client, bucket_name: str, s3_prefix: str):
@@ -222,27 +256,44 @@ def create_episode_shard(shard_files: List[str], episode_key: str, output_dir: s
 @ray.remote
 def create_shard(shard_files: List[str], shard_idx: int, output_dir: str) -> str:
     """Download tar files from S3 and create a shard. OPTIMIZED with parallel downloads."""
-    s3_config = Config(max_pool_connections=50, retries={"max_attempts": 3, "mode": "adaptive"})
-    s3_client = boto3.client("s3", config=s3_config)
+    is_s3 = output_dir.startswith("s3://")
 
-    bucket_name, s3_prefix = output_dir.removeprefix("s3://").split("/", 1)
+    if is_s3:
+        s3_config = Config(max_pool_connections=50, retries={"max_attempts": 3, "mode": "adaptive"})
+        s3_client = boto3.client("s3", config=s3_config)
+        bucket_name, s3_prefix = output_dir.removeprefix("s3://").split("/", 1)
 
-    download_tar = partial(_download_tar_from_s3, s3_client=s3_client, bucket_name=bucket_name, s3_prefix=s3_prefix)
+        def read_tar(tar_key):
+            """Download a single tar file from S3."""
+            obj_buffer = io.BytesIO()
+            full_key = f"{s3_prefix.rstrip('/')}/episodes/{tar_key}"
+            s3_client.download_fileobj(bucket_name, full_key, obj_buffer)
+            obj_buffer.seek(0)
+            return (tar_key, obj_buffer)
+    else:
+        episodes_dir = Path(output_dir) / "episodes"
 
-    # Download all tars in parallel (reduced concurrency to avoid S3 throttling)
+        def read_tar(tar_key):
+            """Read a single tar file from local filesystem."""
+            tar_path = episodes_dir / tar_key
+            with open(tar_path, "rb") as f:
+                obj_buffer = io.BytesIO(f.read())
+            return (tar_key, obj_buffer)
+
+    # Read all tars in parallel (use 5 threads. reduced concurrency to avoid S3 throttling)
     downloaded_tars = {}
     with ThreadPoolExecutor(max_workers=5) as executor:
-        futures = [executor.submit(download_tar, s3_key) for s3_key in shard_files]
+        futures = [executor.submit(read_tar, tar_key) for tar_key in shard_files]
         for future in as_completed(futures):
-            s3_key, obj_buffer = future.result()
-            downloaded_tars[s3_key] = obj_buffer
+            tar_key, obj_buffer = future.result()
+            downloaded_tars[tar_key] = obj_buffer
 
-    # Create shard by combining all downloaded tars
+    # Create shard by combining all tars
     shard_buffer = io.BytesIO()
     with tarfile.open(fileobj=shard_buffer, mode="w") as shard_tar:
         # Process in original order for consistency
-        for s3_key in shard_files:
-            obj_buffer = downloaded_tars[s3_key]
+        for tar_key in shard_files:
+            obj_buffer = downloaded_tars[tar_key]
             obj_buffer.seek(0)
 
             # Extract contents and add to shard
@@ -250,17 +301,24 @@ def create_shard(shard_files: List[str], shard_idx: int, output_dir: str) -> str
                 for member in tar.getmembers():
                     shard_tar.addfile(member, tar.extractfile(member))
 
-    # Upload shard back to S3
+    # Save shard
     shard_buffer.seek(0)
-    shard_key = f"shard_{shard_idx:06d}.tar"
-    shard_path = f"{s3_prefix.rstrip('/')}/shards/{shard_key}"
+    shard_name = f"shard_{shard_idx:06d}.tar"
 
     max_retries = 10
     base_delay = 1.0
     for attempt in range(max_retries):
         try:
             shard_buffer.seek(0)
-            s3_client.upload_fileobj(shard_buffer, bucket_name, shard_path)
+            if is_s3:
+                s3_client.upload_fileobj(shard_buffer, bucket_name, f"{s3_prefix.rstrip('/')}/shards/{shard_name}")
+                print(f"Uploaded shard {shard_name} to s3://{bucket_name}/{s3_prefix.rstrip('/')}/shards/{shard_name}")
+            else:
+                shard_path = Path(output_dir) / "shards" / shard_name
+                shard_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(shard_path, "wb") as f:
+                    f.write(shard_buffer.getvalue())
+                print(f"Saved shard {shard_name} to {shard_path}")
             break
         except Exception as e:
             if attempt == max_retries - 1:
@@ -269,8 +327,7 @@ def create_shard(shard_files: List[str], shard_idx: int, output_dir: str) -> str
             print(f"S3 upload failed (attempt {attempt + 1}/{max_retries}), retrying in {delay:.1f}s: {e}")
             time.sleep(delay)
 
-    print(f"Uploaded shard {shard_key} to s3://{bucket_name}/{shard_path}")
-    return (shard_key.rstrip(".tar"), len(shard_files))
+    return (shard_name.rstrip(".tar"), len(shard_files))
 
 
 def is_still_sample(lowdim_data: Dict[str, np.ndarray], start_idx: int, end_idx: int, still_threshold: float) -> bool:
