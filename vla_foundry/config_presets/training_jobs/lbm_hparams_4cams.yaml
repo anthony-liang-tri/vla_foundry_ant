@@ -19,6 +19,12 @@ model:
 data:
   <<: !include ../data/lbm/lbm_data_params.yaml
   <<: !include ../data/diffusion_policy.yaml
+  augmentation:
+    image:
+      color_jitter:
+        enabled: true
+      random_crop:
+        enabled: true
   camera_names:
     - scene_right_0
     - scene_left_0
@@ -36,8 +42,6 @@ data:
     - robot__actual__poses__right::panda__xyz
     - robot__actual__poses__left::panda__rot_6d
     - robot__actual__poses__right::panda__rot_6d
-    - robot__actual__grippers__left::panda_hand
-    - robot__actual__grippers__right::panda_hand
   image_indices:
     - -1
     - 0
