@@ -7,12 +7,36 @@ from draccus.choice_types import CHOICE_TYPE_KEY
 from draccus.parsers.decoding import decode_choice_class
 from draccus.utils import is_choice_type
 
+# Field migrations: mapping of (path_prefix, old_field_name) -> new_field_name
+# path_prefix is a tuple of field names leading to the field, e.g., ("image",) for augmentation.image
+FIELD_MIGRATIONS = {
+    (("image",), "random_crop"): "crop",  # When loaded as nested field in DataAugmentationParams
+    ((), "random_crop"): "crop",  # When ImageAugmentationParams is loaded directly
+}
+
+
+def _apply_field_migrations(raw_value: Any, path: SequenceType[str]) -> Any:
+    """Apply field migrations to rename deprecated fields."""
+    if not isinstance(raw_value, dict):
+        return raw_value
+
+    result = raw_value.copy()
+    for (path_prefix, old_name), new_name in FIELD_MIGRATIONS.items():
+        if path == path_prefix and old_name in result and new_name not in result:
+            logging.warning(f"Migrating deprecated field '{old_name}' to '{new_name}' at path {'.'.join(path)}")
+            result[new_name] = result.pop(old_name)
+
+    return result
+
 
 def _strip_unknown_keys(raw_value: Any, cls: Type[Any], path: SequenceType[str]) -> Any:
     """Ignore keys that are not in the dataclass definition while decoding."""
     target_cls = _resolve_dataclass(cls)
     if target_cls is None or not isinstance(raw_value, dict):
         return raw_value
+
+    # Apply field migrations before stripping unknown keys
+    raw_value = _apply_field_migrations(raw_value, path)
 
     # For Choice types, determine the actual subclass from the 'type' field
     if is_choice_type(target_cls) and CHOICE_TYPE_KEY in raw_value:

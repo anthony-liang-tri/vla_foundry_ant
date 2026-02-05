@@ -16,15 +16,20 @@ class Augmentations:
 
         self.transforms = []
 
-        # Add random crop augmentation
-        if (random_crop := self.augmentation_params.image.get("random_crop", None)) and random_crop.enabled:
-            crop_h, crop_w = random_crop.shape
-            if crop_h <= 1.0 and crop_w <= 1.0:
-                self.transforms.append(RandomRatioCrop((crop_h, crop_w)))
-            elif crop_h > 1.0 and crop_w > 1.0:
-                self.transforms.append(transforms.RandomCrop((crop_h, crop_w)))
-            else:
-                raise ValueError(f"Invalid crop shape: {random_crop.shape}")
+        # Add crop augmentation
+        if (crop := self.augmentation_params.image.get("crop", None)) and crop.enabled:
+            crop_h, crop_w = crop.shape
+            if crop.mode == "center":
+                if crop_h <= 1.0 and crop_w <= 1.0:
+                    raise ValueError("Center crop with ratio-based shape is not supported. Use absolute pixel values.")
+                self.transforms.append(transforms.CenterCrop((int(crop_h), int(crop_w))))
+            else:  # random mode
+                if crop_h <= 1.0 and crop_w <= 1.0:
+                    self.transforms.append(RandomRatioCrop((crop_h, crop_w)))
+                elif crop_h > 1.0 and crop_w > 1.0:
+                    self.transforms.append(transforms.RandomCrop((int(crop_h), int(crop_w))))
+                else:
+                    raise ValueError(f"Invalid crop shape: {crop.shape}")
 
         # Add color jitter augmentation
         if (color_jitter := self.augmentation_params.image.get("color_jitter", None)) and color_jitter.enabled:

@@ -259,7 +259,7 @@ def mock_data_config():
         "scene_right_0_t0",
     ]
 
-    augmentation = SimpleNamespace(image=SimpleNamespace(random_crop=SimpleNamespace(shape=(224, 224))))
+    augmentation = SimpleNamespace(image=SimpleNamespace(crop=SimpleNamespace(shape=(224, 224))))
 
     return SimpleNamespace(
         action_fields=action_fields,
@@ -481,7 +481,7 @@ def test_policy_data_adapter_end_to_end_flow(field_mapping_file):
 
     processor = FakeRoboticsProcessor(field_dims=field_dims, timestep_dim=num_past + 1 + num_future)
 
-    augmentation = SimpleNamespace(image=SimpleNamespace(random_crop=SimpleNamespace(shape=(112, 112))))
+    augmentation = SimpleNamespace(image=SimpleNamespace(crop=SimpleNamespace(shape=(112, 112))))
     data_config = SimpleNamespace(
         action_fields=action_fields,
         image_names=image_names,
@@ -752,7 +752,7 @@ def test_policy_data_adapter_open_loop_cycle(field_mapping_file):
 
     processor = FakeRoboticsProcessor(field_dims=field_dims, timestep_dim=num_past + 1 + num_future)
 
-    augmentation = SimpleNamespace(image=SimpleNamespace(random_crop=SimpleNamespace(shape=(112, 112))))
+    augmentation = SimpleNamespace(image=SimpleNamespace(crop=SimpleNamespace(shape=(112, 112))))
     data_config = SimpleNamespace(
         action_fields=action_fields,
         image_names=image_names,
@@ -976,7 +976,7 @@ def test_policy_data_adapter_proprioception_integration(field_mapping_file, crea
     }
 
     processor = FakeRoboticsProcessor(field_dims=field_dims, timestep_dim=num_past + 1 + num_future)
-    augmentation = SimpleNamespace(image=SimpleNamespace(random_crop=SimpleNamespace(shape=(112, 112))))
+    augmentation = SimpleNamespace(image=SimpleNamespace(crop=SimpleNamespace(shape=(112, 112))))
     data_config = SimpleNamespace(
         action_fields=action_fields,
         image_names=image_names,
@@ -1043,7 +1043,7 @@ def test_stack_fields_absolute_fields(field_mapping_file):
     }
 
     processor = FakeRoboticsProcessor(field_dims=field_dims, timestep_dim=num_past + 1 + num_future)
-    augmentation = SimpleNamespace(image=SimpleNamespace(random_crop=SimpleNamespace(shape=(112, 112))))
+    augmentation = SimpleNamespace(image=SimpleNamespace(crop=SimpleNamespace(shape=(112, 112))))
     data_config = SimpleNamespace(
         action_fields=action_fields,
         image_names=image_names,
@@ -1117,7 +1117,7 @@ def test_stack_fields_relative_pose_groups(field_mapping_file):
     }
 
     processor = FakeRoboticsProcessor(field_dims=field_dims, timestep_dim=num_past + 1 + num_future)
-    augmentation = SimpleNamespace(image=SimpleNamespace(random_crop=SimpleNamespace(shape=(112, 112))))
+    augmentation = SimpleNamespace(image=SimpleNamespace(crop=SimpleNamespace(shape=(112, 112))))
     data_config = SimpleNamespace(
         action_fields=action_fields,
         image_names=image_names,
@@ -1211,7 +1211,7 @@ def test_stack_fields_relative_joint_positions(field_mapping_file):
     }
 
     processor = FakeRoboticsProcessor(field_dims=field_dims, timestep_dim=num_past + 1 + num_future)
-    augmentation = SimpleNamespace(image=SimpleNamespace(random_crop=SimpleNamespace(shape=(112, 112))))
+    augmentation = SimpleNamespace(image=SimpleNamespace(crop=SimpleNamespace(shape=(112, 112))))
     data_config = SimpleNamespace(
         action_fields=action_fields,
         image_names=image_names,
@@ -1284,7 +1284,7 @@ def test_stack_fields_with_timestep_slice(field_mapping_file):
     field_dims = {"robot__action__grippers__left::panda_hand": 1}
 
     processor = FakeRoboticsProcessor(field_dims=field_dims, timestep_dim=num_past + 1 + num_future)
-    augmentation = SimpleNamespace(image=SimpleNamespace(random_crop=SimpleNamespace(shape=(112, 112))))
+    augmentation = SimpleNamespace(image=SimpleNamespace(crop=SimpleNamespace(shape=(112, 112))))
     data_config = SimpleNamespace(
         action_fields=action_fields,
         image_names=image_names,
@@ -1330,7 +1330,7 @@ def test_stack_fields_empty_buffer(field_mapping_file):
     field_dims = {"robot__action__grippers__left::panda_hand": 1}
 
     processor = FakeRoboticsProcessor(field_dims=field_dims, timestep_dim=num_past + 1 + num_future)
-    augmentation = SimpleNamespace(image=SimpleNamespace(random_crop=SimpleNamespace(shape=(112, 112))))
+    augmentation = SimpleNamespace(image=SimpleNamespace(crop=SimpleNamespace(shape=(112, 112))))
     data_config = SimpleNamespace(
         action_fields=action_fields,
         image_names=image_names,
@@ -1378,7 +1378,7 @@ def test_stack_fields_mixed_absolute_and_relative(field_mapping_file):
     }
 
     processor = FakeRoboticsProcessor(field_dims=field_dims, timestep_dim=num_past + 1 + num_future)
-    augmentation = SimpleNamespace(image=SimpleNamespace(random_crop=SimpleNamespace(shape=(112, 112))))
+    augmentation = SimpleNamespace(image=SimpleNamespace(crop=SimpleNamespace(shape=(112, 112))))
     data_config = SimpleNamespace(
         action_fields=action_fields,
         image_names=image_names,

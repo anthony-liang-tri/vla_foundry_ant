@@ -38,17 +38,20 @@ class ColorJitterParams(BaseAugmentationParams):
 
 
 @dataclass(frozen=True)
-class RandomCropParams(BaseAugmentationParams):
+class CropParams(BaseAugmentationParams):
     """
-    Configuration for random crop parameters
+    Configuration for crop parameters
     """
 
     shape: Tuple[Union[int, float], Union[int, float]] = field(default=(224, 224))
+    mode: str = field(default="random")  # "random" or "center"
 
     def __post_init__(self):
         h, w = self.shape
         if not (isinstance(h, (int, float)) and isinstance(w, (int, float)) and h > 0 and w > 0):
-            raise ValueError("random_crop_shape must be a tuple of positive integers or floats (H, W).")
+            raise ValueError("crop shape must be a tuple of positive integers or floats (H, W).")
+        if self.mode not in ("random", "center"):
+            raise ValueError(f"crop mode must be 'random' or 'center', got '{self.mode}'")
 
 
 @dataclass(frozen=True)
@@ -58,7 +61,7 @@ class ImageAugmentationParams(BaseParams):
     """
 
     color_jitter: ColorJitterParams = field(default_factory=ColorJitterParams)
-    random_crop: RandomCropParams = field(default_factory=RandomCropParams)
+    crop: CropParams = field(default_factory=CropParams)
 
     @property
     def augmentations(self):

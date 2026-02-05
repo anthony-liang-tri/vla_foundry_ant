@@ -13,9 +13,9 @@ from vla_foundry.data.augmentations.base import Augmentations
 from vla_foundry.data.augmentations.random_ratio_crop import RandomRatioCrop
 from vla_foundry.params.robotics.augmentation_params import (
     ColorJitterParams,
+    CropParams,
     DataAugmentationParams,
     ImageAugmentationParams,
-    RandomCropParams,
 )
 
 
@@ -57,26 +57,26 @@ def test_color_jitter_params_validation(brightness, contrast, saturation, hue, s
 
 
 @pytest.mark.parametrize(
-    "random_crop_factory,should_raise",
+    "crop_factory,should_raise",
     [
-        (lambda: RandomCropParams(shape=(128, 128), enabled=True), False),  # Valid random crop
-        (lambda: RandomCropParams(shape=(-128, 128), enabled=True), True),  # Invalid shape (negative height)
-        (lambda: RandomCropParams(shape=(128, -128), enabled=True), True),  # Invalid shape (negative width)
-        (lambda: RandomCropParams(shape=(0, 128), enabled=True), True),  # Invalid shape (zero height)
-        (lambda: RandomCropParams(shape=(128, 0), enabled=True), True),  # Invalid shape (zero width)
-        (lambda: RandomCropParams(shape=(128, 128), enabled=False), False),  # Valid when disabled
+        (lambda: CropParams(shape=(128, 128), enabled=True), False),  # Valid crop
+        (lambda: CropParams(shape=(-128, 128), enabled=True), True),  # Invalid shape (negative height)
+        (lambda: CropParams(shape=(128, -128), enabled=True), True),  # Invalid shape (negative width)
+        (lambda: CropParams(shape=(0, 128), enabled=True), True),  # Invalid shape (zero height)
+        (lambda: CropParams(shape=(128, 0), enabled=True), True),  # Invalid shape (zero width)
+        (lambda: CropParams(shape=(128, 128), enabled=False), False),  # Valid when disabled
     ],
 )
-def test_image_augmentation_params_random_crop_validation(random_crop_factory, should_raise):
-    """Test validation logic for random crop in ImageAugmentationParams."""
+def test_image_augmentation_params_crop_validation(crop_factory, should_raise):
+    """Test validation logic for crop in ImageAugmentationParams."""
     if should_raise:
         with pytest.raises(ValueError):
             ImageAugmentationParams(
-                random_crop=random_crop_factory(),
+                crop=crop_factory(),
             )
     else:
         ImageAugmentationParams(
-            random_crop=random_crop_factory(),
+            crop=crop_factory(),
         )  # Should not raise
 
 
@@ -111,41 +111,41 @@ def test_image_augmentation_params_color_jitter_validation(color_jitter_factory,
 
 
 @pytest.mark.parametrize(
-    "random_crop_factory,color_jitter_factory,should_raise",
+    "crop_factory,color_jitter_factory,should_raise",
     [
         (
-            lambda: RandomCropParams(shape=(128, 128), enabled=True),
+            lambda: CropParams(shape=(128, 128), enabled=True),
             lambda: ColorJitterParams(brightness=0.2, contrast=0.3, saturation=0.4, hue=(-0.1, 0.1), enabled=True),
             False,
-        ),  # Valid color jitter and random crop
+        ),  # Valid color jitter and crop
         (
-            lambda: RandomCropParams(shape=(-128, 128), enabled=True),
+            lambda: CropParams(shape=(-128, 128), enabled=True),
             lambda: ColorJitterParams(brightness=0.2, contrast=0.3, saturation=0.4, hue=(-0.1, 0.1), enabled=True),
             True,
-        ),  # Invalid random_crop_shape
+        ),  # Invalid crop_shape
         (
-            lambda: RandomCropParams(shape=(128, 128), enabled=True),
+            lambda: CropParams(shape=(128, 128), enabled=True),
             lambda: ColorJitterParams(brightness=-0.2, contrast=0.3, saturation=0.4, hue=(-0.1, 0.1), enabled=True),
             True,
         ),  # Invalid color_jitter parameters
         (
-            lambda: RandomCropParams(shape=(128, 128), enabled=False),
+            lambda: CropParams(shape=(128, 128), enabled=False),
             lambda: ColorJitterParams(brightness=0.2, contrast=0.3, saturation=0.4, hue=(-0.1, 0.1), enabled=False),
             False,
         ),  # Valid when both disabled
     ],
 )
-def test_image_augmentation_params_combined_validation(random_crop_factory, color_jitter_factory, should_raise):
+def test_image_augmentation_params_combined_validation(crop_factory, color_jitter_factory, should_raise):
     """Test combined validation logic in ImageAugmentationParams."""
     if should_raise:
         with pytest.raises(ValueError):
             ImageAugmentationParams(
-                random_crop=random_crop_factory(),
+                crop=crop_factory(),
                 color_jitter=color_jitter_factory(),
             )
     else:
         ImageAugmentationParams(
-            random_crop=random_crop_factory(),
+            crop=crop_factory(),
             color_jitter=color_jitter_factory(),
         )  # Should not raise
 
@@ -165,7 +165,7 @@ def test_image_augmentation_params_combined_validation(random_crop_factory, colo
         (
             DataAugmentationParams(
                 image=ImageAugmentationParams(
-                    random_crop=RandomCropParams(shape=(128, 128), enabled=True),
+                    crop=CropParams(shape=(128, 128), enabled=True),
                 )
             ),
             True,  # Should have transforms
@@ -183,7 +183,7 @@ def test_image_augmentation_params_combined_validation(random_crop_factory, colo
         (
             DataAugmentationParams(
                 image=ImageAugmentationParams(
-                    random_crop=RandomCropParams(shape=(128, 128), enabled=True),
+                    crop=CropParams(shape=(128, 128), enabled=True),
                     color_jitter=ColorJitterParams(
                         brightness=0.2, contrast=0.3, saturation=0.4, hue=(-0.1, 0.1), enabled=True
                     ),
@@ -209,12 +209,12 @@ def test_augmentations_class_creation(augmentation_params, has_transforms):
 
 def test_augmentations_class_invalid_params():
     """Test that invalid augmentation parameters raise appropriate errors."""
-    # Invalid random_crop_shape
+    # Invalid crop_shape
     with pytest.raises(ValueError):
         Augmentations(
             DataAugmentationParams(
                 image=ImageAugmentationParams(
-                    random_crop=RandomCropParams(shape=(-128, 128), enabled=True),  # Invalid shape
+                    crop=CropParams(shape=(-128, 128), enabled=True),  # Invalid shape
                 )
             )
         )
@@ -236,13 +236,13 @@ def test_augmentations_class_invalid_params():
         )
 
 
-def test_random_crop_augmentation():
+def test_crop_augmentation():
     """
-    Test that the random crop augmentation works as expected.
+    Test that the crop augmentation works as expected.
     """
     augmentation_params = DataAugmentationParams(
         image=ImageAugmentationParams(
-            random_crop=RandomCropParams(shape=(128, 128), enabled=True),
+            crop=CropParams(shape=(128, 128), enabled=True),
         )
     )
     augmentations = Augmentations(augmentation_params)
@@ -286,11 +286,11 @@ def test_color_jitter_augmentation():
 
 def test_combined_augmentations():
     """
-    Test that the pipeline works correctly with both random crop and color jitter.
+    Test that the pipeline works correctly with both crop and color jitter.
     """
     augmentation_params = DataAugmentationParams(
         image=ImageAugmentationParams(
-            random_crop=RandomCropParams(shape=(128, 128), enabled=True),
+            crop=CropParams(shape=(128, 128), enabled=True),
             color_jitter=ColorJitterParams(brightness=0.5, contrast=0.5, saturation=0.5, hue=(-0.1, 0.1), enabled=True),
         )
     )
@@ -318,7 +318,7 @@ def test_apply_transforms_method():
     """
     augmentation_params = DataAugmentationParams(
         image=ImageAugmentationParams(
-            random_crop=RandomCropParams(shape=(128, 128), enabled=True),
+            crop=CropParams(shape=(128, 128), enabled=True),
         )
     )
     augmentations = Augmentations(augmentation_params)

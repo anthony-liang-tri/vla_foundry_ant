@@ -89,7 +89,7 @@ class PolicyDataAdapter:
         self.language_instruction = "Do the task"
 
         self.preprocessor_image_size = preprocessor_image_size
-        self.image_crop_size = self.data_config.augmentation.image.random_crop.shape
+        self.image_crop_size = self.data_config.augmentation.image.crop.shape
 
         self.total_action_timesteps = self.num_past_timesteps + 1 + self.num_future_timesteps
 

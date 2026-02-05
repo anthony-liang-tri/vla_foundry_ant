@@ -4,6 +4,7 @@ color_jitter:
   contrast: 0.4
   saturation: 0.2
   hue: [-0.05, 0.05]
-random_crop:
+crop:
   enabled: true
   shape: [224, 224]
+  mode: random
