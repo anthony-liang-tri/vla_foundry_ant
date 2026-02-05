@@ -1,3 +1,5 @@
+import json
+
 import webdataset as wds
 
 from vla_foundry.data.pipelines.base import BaseWebDatasetPipeline
@@ -7,7 +9,17 @@ from vla_foundry.params.base_data_params import DataParams
 
 
 def batch_tokenize(batch, tokenizer, seq_len):
-    texts = [item.decode("utf-8") if isinstance(item, bytes) else item for item in batch[0]]
+    texts = []
+    for item in batch[0]:
+        text = item.decode("utf-8") if isinstance(item, bytes) else item
+        # Parse JSON if the text looks like JSON with a "text" field
+        if text.startswith("{"):
+            try:
+                parsed = json.loads(text)
+                text = parsed.get("text", text)
+            except json.JSONDecodeError:
+                pass
+        texts.append(text)
     tokenized = tokenizer(
         texts,
         padding="max_length",
