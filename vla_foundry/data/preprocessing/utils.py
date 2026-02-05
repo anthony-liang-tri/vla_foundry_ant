@@ -29,9 +29,11 @@ def upload_sample_to_s3(
     resize_images_size: List[int] = None,
 ) -> None:
     """Upload sample data to S3 as tar file. (or save locally)"""
-    if resize_images_size is None:
-        resize_images_size = [224, 224]
-    s3_client = boto3.client("s3") if output_dir.startswith("s3://") else None
+    s3_client = (
+        boto3.client("s3", config=Config(retries={"max_attempts": 10, "mode": "adaptive"}))
+        if output_dir.startswith("s3://")
+        else None
+    )
     tar_buffer = io.BytesIO()
     uuid_prefix = str(uuid.uuid4())
 
@@ -43,6 +45,7 @@ def upload_sample_to_s3(
             is_depth = "depth" in img_key
 
             if not isinstance(img_data, bytes):
+                assert resize_images_size is not None
                 if is_depth:
                     # Depth images: PNG with uint16
                     image_bytes, original_image_size = depth_image_to_bytes(img_data, resize_images_size)
@@ -130,12 +133,12 @@ def upload_sample_to_s3(
 
 
 def extract_unique_id(episode_path: str) -> str:
-    """Extract a unique ID from the episode path."""
+    """Extract a deterministic unique ID from the episode path."""
     if "diffusion_spartan" in episode_path:
         # For diffusion_spartan, use the datetime as unique id
         return episode_path.split("/")[-3]
     else:
-        return str(uuid.uuid4())
+        return str(uuid.uuid5(uuid.NAMESPACE_URL, episode_path))
 
 
 def save_and_upload_dict(dict_data: Dict, output_path: str, file_name: str):
@@ -212,7 +215,7 @@ def _download_tar_from_s3(s3_key: str, s3_client, bucket_name: str, s3_prefix: s
 @ray.remote
 def create_episode_shard(shard_files: List[str], episode_key: str, output_dir: str) -> str:
     """Download tar files from S3 and create an episode-based shard."""
-    s3_config = Config(max_pool_connections=50, retries={"max_attempts": 3, "mode": "adaptive"})
+    s3_config = Config(max_pool_connections=50, retries={"max_attempts": 10, "mode": "adaptive"})
     s3_client = boto3.client("s3", config=s3_config)
 
     bucket_name, s3_prefix = output_dir.removeprefix("s3://").split("/", 1)
@@ -259,14 +262,14 @@ def create_shard(shard_files: List[str], shard_idx: int, output_dir: str) -> str
     is_s3 = output_dir.startswith("s3://")
 
     if is_s3:
-        s3_config = Config(max_pool_connections=50, retries={"max_attempts": 3, "mode": "adaptive"})
+        s3_config = Config(max_pool_connections=50, retries={"max_attempts": 10, "mode": "adaptive"})
         s3_client = boto3.client("s3", config=s3_config)
         bucket_name, s3_prefix = output_dir.removeprefix("s3://").split("/", 1)
 
         def read_tar(tar_key):
             """Download a single tar file from S3."""
             obj_buffer = io.BytesIO()
-            full_key = f"{s3_prefix.rstrip('/')}/episodes/{tar_key}"
+            full_key = f"{s3_prefix.rstrip('/')}/frames/{tar_key}"
             s3_client.download_fileobj(bucket_name, full_key, obj_buffer)
             obj_buffer.seek(0)
             return (tar_key, obj_buffer)

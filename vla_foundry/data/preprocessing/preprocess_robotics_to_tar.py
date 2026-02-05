@@ -4,6 +4,7 @@ import os
 import random
 import uuid
 
+import boto3
 import draccus
 import ray
 
@@ -49,11 +50,24 @@ def main():
         )
         raise RuntimeError(error_msg)
 
-    # Initialize Ray
+    # Initialize Ray - forward AWS credentials to workers
     runtime_env = {"env_vars": {}}
     aws_profile = os.environ.get("AWS_PROFILE")
     if aws_profile:
         runtime_env["env_vars"]["AWS_PROFILE"] = aws_profile
+
+    # Explicitly forward AWS credentials from head node to workers
+    # This avoids reliance on IMDS on worker nodes, which can be flaky
+    session = boto3.Session()
+    credentials = session.get_credentials()
+    if credentials:
+        credentials = credentials.get_frozen_credentials()
+        if credentials.access_key:
+            runtime_env["env_vars"]["AWS_ACCESS_KEY_ID"] = credentials.access_key
+        if credentials.secret_key:
+            runtime_env["env_vars"]["AWS_SECRET_ACCESS_KEY"] = credentials.secret_key
+        if credentials.token:
+            runtime_env["env_vars"]["AWS_SESSION_TOKEN"] = credentials.token
 
     if cfg.ray_address:
         ray.init(address=cfg.ray_address, runtime_env=runtime_env)

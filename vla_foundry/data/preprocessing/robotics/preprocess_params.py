@@ -60,7 +60,7 @@ class PreprocessParams(draccus.ChoiceRegistry, BaseParams):
     skip_git_tagging: bool = field(default=False)  # Skip git operations for testing
 
     # Image preprocessing
-    resize_images_size: List[int] = field(default=None)
+    resize_images_size: Optional[List[int]] = field(default=None)
     jpeg_quality: int = field(default=95)
 
     # Depth and point cloud control
