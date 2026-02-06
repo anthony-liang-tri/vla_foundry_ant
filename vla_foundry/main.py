@@ -21,6 +21,7 @@ import yaml
 
 from vla_foundry.data.dataloader import get_datastring_input, get_wds_dataloader
 from vla_foundry.data.utils import load_data_chunks
+from vla_foundry.db_logger import ModelTrainingLogger
 from vla_foundry.distributed import get_model_precision, is_master, wrap_fsdp_ddp
 from vla_foundry.file_utils import (
     collect_preprocessing_configs,
@@ -81,6 +82,9 @@ def main():
     # Set path for experiment, log, checkpoints.
     experiment_name = get_experiment_name(cfg)
     experiment_uuid = str(uuid.uuid4())
+
+    # Initialize DynamoDB logger for tracking (only on master, and if enabled)
+    db_logger = ModelTrainingLogger(experiment_uuid, cfg, enabled=is_master(cfg) and cfg.db_logging)
 
     if cfg.save_path is None:
         experiment_path = os.path.join("experiments", experiment_name)
@@ -214,6 +218,7 @@ def main():
     loss = get_loss_function(cfg.hparams.loss_function, cfg.hparams)
 
     # Logging.
+    wandb_url = None
     if cfg.wandb and is_master(cfg):
         import wandb  # imported lazily to avoid hard dependency when disabled
 
@@ -226,7 +231,11 @@ def main():
             resume=None,
             config=vars(cfg),
         )
+        wandb_url = wandb.run.url if wandb.run else None
         logging.debug("Wandb initialized.")
+
+    # Log job start to DynamoDB
+    db_logger.log_job_start(experiment_name, experiment_path, wandb_url=wandb_url)
 
     done_training = global_step >= total_steps
     checkpoint_num = start_checkpoint_num
@@ -337,6 +346,9 @@ def main():
             ema_model=ema_model,
         )
 
+        # Log checkpoint progress to DynamoDB
+        db_logger.log_checkpoint(checkpoint_num, samples_seen)
+
         # Validate checkpoint.
         if do_validation and checkpoint_num % cfg.val_every_n_checkpoints == 0:
             if cfg.distributed.use_distributed:
@@ -361,6 +373,9 @@ def main():
             if is_master(cfg):
                 logging.info("Model has seen the desired number of samples. Ending training.")
             break
+
+    # Log training completion to DynamoDB
+    db_logger.log_completion(samples_seen)
 
     if cfg.wandb and is_master(cfg):
         wandb.finish()

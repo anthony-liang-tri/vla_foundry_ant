@@ -22,6 +22,7 @@ from vla_foundry.data.preprocessing.utils import (
     save_and_upload_config,
     save_and_upload_dict,
 )
+from vla_foundry.db_logger import get_git_env_vars, log_dataset_preprocessing
 from vla_foundry.file_utils import check_directory_has_files_with_substring
 
 
@@ -56,6 +57,11 @@ def main():
     if aws_profile:
         runtime_env["env_vars"]["AWS_PROFILE"] = aws_profile
 
+    # Capture git info on head node and pass to workers (since .git is excluded)
+    runtime_env["env_vars"].update(get_git_env_vars())
+    # Capture the user who launched the job (head node user, not worker node user)
+    if os.environ.get("USER"):
+        runtime_env["env_vars"]["VLA_LAUNCHED_BY"] = os.environ["USER"]
     # Explicitly forward AWS credentials from head node to workers
     # This avoids reliance on IMDS on worker nodes, which can be flaky
     session = boto3.Session()
@@ -170,6 +176,25 @@ def main():
     )
 
     # Make a copy of the ouput directory
+    dataset_uuid = str(uuid.uuid4())
+    fixed_path = f"{cfg.output_dir_fixed_path.rstrip('/')}/{dataset_uuid}"
+
+    # Log to DynamoDB
+    sample_counts = metadata["processing"]["sample_counts"]
+    log_dataset_preprocessing(
+        dataset_uuid=dataset_uuid,
+        cfg=cfg,
+        dataset_type=cfg.type,
+        source_paths=cfg.source_episodes if isinstance(cfg.source_episodes, list) else [cfg.source_episodes],
+        target_path=f"{cfg.output_dir.rstrip('/')}/shards",
+        fixed_path=f"{fixed_path}/shards",
+        episode_count=len(episodes),
+        frame_count=sample_counts.get("total_frames", 0) if sample_counts else 0,
+        samples_per_shard=cfg.samples_per_shard,
+        num_shards=len(shard_results),
+        total_samples=metadata["processing"]["total_samples_created"],
+        enabled=cfg.db_logging,
+    )
     if cfg.output_dir.startswith("s3://"):
         dataset_uuid = str(uuid.uuid4())
         recursive_s3_copy(cfg.output_dir, f"{cfg.output_dir_fixed_path.rstrip('/')}/{dataset_uuid}")

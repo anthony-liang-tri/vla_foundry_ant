@@ -17,6 +17,7 @@ data_discard_keys:
 - robot__desired__external_wrench__left::panda
 - robot__desired__joint_torque_external__right::panda
 - robot__desired__joint_torque_external__left::panda
+db_logging: true
 fail_on_nan: false
 filter_still_samples: false
 future_lowdim_steps: 14

@@ -13,6 +13,7 @@ from sagemaker.aws_batch.training_queue import TrainingQueue as Queue
 from sagemaker.pytorch import PyTorch
 
 import sagemaker
+from vla_foundry.db_logger import get_git_env_vars
 from vla_foundry.params.base_params import BaseParams
 from vla_foundry.params.train_experiment_params import TrainExperimentParams
 
@@ -83,6 +84,46 @@ def remove_old_hyperparameters(path, expiration_days=3):
             file.unlink()
 
 
+GIT_DIFF_DIR = "sagemaker/git_diffs"
+
+
+def remove_old_git_diffs(path, expiration_days=3):
+    """Remove old git diff files."""
+    for file in Path(path).glob("git_diff_*.txt"):
+        if file.stat().st_mtime < time.time() - expiration_days * 24 * 60 * 60:
+            file.unlink()
+
+
+def save_git_diff(uuid: str) -> str:
+    """Save git diff to a file that will be included in the Docker image.
+
+    Returns the path to the file (for use in SageMaker container).
+    """
+    os.makedirs(GIT_DIFF_DIR, exist_ok=True)
+    remove_old_git_diffs(GIT_DIFF_DIR, expiration_days=3)
+
+    git_diff_file = f"{GIT_DIFF_DIR}/git_diff_{uuid}.txt"
+    sagemaker_path = f"/opt/ml/code/{git_diff_file}"
+
+    def run_git(cmd):
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        return result.stdout.strip() if result.returncode == 0 else ""
+
+    changes = run_git(["git", "status", "--porcelain"])
+    if not changes:
+        return sagemaker_path  # No diff file created, but return path anyway
+
+    diff = run_git(["git", "diff", "HEAD"])
+    untracked = run_git(["git", "ls-files", "--others", "--exclude-standard"])
+    if untracked:
+        diff += "\n\n# Untracked files:\n" + untracked
+
+    with open(git_diff_file, "w") as f:
+        f.write(diff)
+    print(f"Saved git diff to {git_diff_file} ({len(diff)} bytes)")
+    return sagemaker_path
+
+
 def get_image(user, profile="default", region="us-east-1"):
     os.environ["AWS_PROFILE"] = f"{profile}"
     account = subprocess.getoutput(
@@ -98,6 +139,7 @@ def get_image(user, profile="default", region="us-east-1"):
         f"aws ecr get-login-password --region {region} --profile {profile} | "
         f"docker login --username AWS --password-stdin"
     )
+
     print("Building container")
     commands = [
         # Log in to Sagemaker account to get image.
@@ -134,6 +176,9 @@ def main():
         print(args_dict)
         draccus.cfgparsing.save_config(args_dict, f)
     remove_old_hyperparameters("sagemaker/configs", expiration_days=3)
+
+    # Save git diff to file (before docker build so it's included in image)
+    git_diff_sagemaker_path = save_git_diff(uuid)
 
     # We probably want wandb logging and S3 saving for sagemaker runs
     assert args.remote_sync is not None
@@ -215,6 +260,9 @@ def main():
         "TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS": "1",
         "SAGEMAKER_PROGRAM": "/opt/ml/code/vla_foundry/main.py",
         "FI_EFA_FORK_SAFE": "1",
+        "VLA_GIT_DIFF_FILE": git_diff_sagemaker_path,
+        "VLA_LAUNCHED_BY": args.user,
+        **get_git_env_vars(),
     }
     with open("secrets.env", "r") as f:
         for line in f:

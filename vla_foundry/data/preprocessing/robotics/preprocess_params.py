@@ -71,6 +71,9 @@ class PreprocessParams(draccus.ChoiceRegistry, BaseParams):
     ray_address: str = field(default=None)  # Ray cluster address, default to auto-detect
     ray_num_cpus: int = field(default=None)  # Number of CPUs for Ray, default to auto-detect
 
+    # Database logging
+    db_logging: bool = field(default=True)  # Whether to log preprocessing to DynamoDB
+
     def __post_init__(self):
         super().__post_init__()
 
