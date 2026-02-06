@@ -22,6 +22,10 @@ class TransformerHF(TransformerBase):
         out = self.model(*args, **kwargs)
         return out
 
+    def embeddings(self, input_ids):
+        """Get token embeddings for input_ids."""
+        return self.model.get_input_embeddings()(input_ids)
+
     @torch.jit.ignore
     def set_grad_checkpointing(self, enable=True):
         raise NotImplementedError

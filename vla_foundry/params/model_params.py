@@ -63,6 +63,23 @@ class TransformerParams(ModelParams):
 @dataclass(frozen=True)
 class TransformerHFParams(ModelParams):
     hf_pretrained: str = field(default=None)
+    _hf_config = None
+
+    @property
+    def hidden_dim(self):
+        if self._hf_config is None:
+            from transformers import AutoConfig
+
+            object.__setattr__(self, "_hf_config", AutoConfig.from_pretrained(self.hf_pretrained))
+        return self._hf_config.hidden_size
+
+    @property
+    def vocab_size(self):
+        if self._hf_config is None:
+            from transformers import AutoConfig
+
+            object.__setattr__(self, "_hf_config", AutoConfig.from_pretrained(self.hf_pretrained))
+        return self._hf_config.vocab_size
 
 
 @register_model_params("vit")
