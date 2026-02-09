@@ -23,7 +23,7 @@ data:
     image:
       color_jitter:
         enabled: true
-      random_crop:
+      crop:
         enabled: true
   camera_names:
     - scene_right_0
