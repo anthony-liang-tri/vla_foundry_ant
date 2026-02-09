@@ -1,0 +1,71 @@
+(
+    "stage3_singletask_sim_BimanualPutRedBellPepperInBin_float32",
+    "BimanualPutRedBellPepperInBin",
+    f"s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/ablations/BimanualPutRedBellPepperInBin/float32/2025_12_06-10_56_29-model_diffusion_policy-lr_5e-05-bsz_1024/",
+),
+
+(
+    "stage3_singletask_sim_BimanualPutRedBellPepperInBin_scale_1p5",
+    "BimanualPutRedBellPepperInBin",
+    f"s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/ablations/BimanualPutRedBellPepperInBin/scale_1p5/2025_12_05-21_29_33-model_diffusion_policy-lr_5e-05-bsz_1024/",
+),
+
+(
+    "stage3_singletask_sim_BimanualPutSpatulaOnPlateFromTable_float32",
+    "BimanualPutSpatulaOnPlateFromTable",
+    f"s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/ablations/BimanualPutSpatulaOnPlateFromTable/float32/2025_12_06-10_55_56-model_diffusion_policy-lr_5e-05-bsz_1024/",
+),
+
+(
+    "stage3_singletask_sim_BimanualPutSpatulaOnPlateFromTable_scale_1p5",
+    "BimanualPutSpatulaOnPlateFromTable",
+    f"s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/ablations/BimanualPutSpatulaOnPlateFromTable/scale_1p5/2025_12_05-21_29_41-model_diffusion_policy-lr_5e-05-bsz_1024/",
+),
+
+(
+    "stage3_singletask_sim_PlaceCupByCoaster_float32",
+    "PlaceCupByCoaster",
+    f"s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/ablations/PlaceCupByCoaster/float32/2025_12_06-11_58_14-model_diffusion_policy-lr_5e-05-bsz_1024/",
+),
+
+(
+    "stage3_singletask_sim_PlaceCupByCoaster_image_0",
+    "PlaceCupByCoaster",
+    f"s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/ablations/PlaceCupByCoaster/image_0/2025_12_05-20_15_39-model_diffusion_policy-lr_5e-05-bsz_1024/",
+),
+
+(
+    "stage3_singletask_sim_PlaceCupByCoaster_lr_1e-4",
+    "PlaceCupByCoaster",
+    f"s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/ablations/PlaceCupByCoaster/lr_1e-4/2025_12_05-20_11_53-model_diffusion_policy-lr_0.0001-bsz_1024/",
+),
+
+(
+    "stage3_singletask_sim_PlaceCupByCoaster_scale_1p5",
+    "PlaceCupByCoaster",
+    f"s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/ablations/PlaceCupByCoaster/scale_1p5/2025_12_05-21_31_02-model_diffusion_policy-lr_5e-05-bsz_1024/",
+),
+
+(
+    "stage3_singletask_sim_TurnCupUpsideDown_float32",
+    "TurnCupUpsideDown",
+    f"s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/ablations/TurnCupUpsideDown/float32/2025_12_06-12_31_21-model_diffusion_policy-lr_5e-05-bsz_1024/",
+),
+
+(
+    "stage3_singletask_sim_TurnCupUpsideDown_image_0",
+    "TurnCupUpsideDown",
+    f"s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/ablations/TurnCupUpsideDown/image_0/2025_12_05-20_16_56-model_diffusion_policy-lr_5e-05-bsz_1024/",
+),
+
+(
+    "stage3_singletask_sim_TurnCupUpsideDown_lr_1e-4",
+    "TurnCupUpsideDown",
+    f"s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/ablations/TurnCupUpsideDown/lr_1e-4/2025_12_05-20_12_21-model_diffusion_policy-lr_0.0001-bsz_1024/",
+),
+
+(
+    "stage3_singletask_sim_TurnCupUpsideDown_scale_1p5",
+    "TurnCupUpsideDown",
+    f"s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/ablations/TurnCupUpsideDown/scale_1p5/2025_12_05-21_31_38-model_diffusion_policy-lr_5e-05-bsz_1024/",
+),

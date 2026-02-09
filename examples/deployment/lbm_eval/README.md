@@ -7,7 +7,7 @@ reuse the repository's managed environment.
 ### (Optional) Set up Anzu using Docker
 Since Anzu’s `lbm_eval_0_5` branch only supports Ubuntu 22.04, you need to run it in Docker when using Ubuntu 24.04. Note that you can run the inference policy outside of Docker.
 
-1. Log in to Docker with your ECR credentials
+1. Log in to Docker with your ECR credentials (you need the manip-cluster profile to access the ECR repository)
 
 ```bash
 aws ecr get-login-password --region us-east-1 --profile manip-cluster | docker login \

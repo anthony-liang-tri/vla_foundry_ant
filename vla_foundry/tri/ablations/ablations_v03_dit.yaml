@@ -1,0 +1,29 @@
+# Ablation experiment definitions
+# Each ablation can override base_args from nominal_config.yaml
+#
+# Sweep syntax:
+#   - List: [value1, value2, value3]
+#   - Linear range: linspace(start, end, n_steps)
+#   - Log range: logspace(start, end, n_steps)
+#
+# Sweeps generate multiple ablations with auto-naming:
+#   ablation_name + "_" + param_short_name + "_" + value
+
+ablations:
+
+  nominal:
+    {}
+
+  30m:
+    total_train_samples: 30_000_000
+
+  freeze_text:
+    model.clip.freeze_text_encoder: true
+
+  lr_sweep:
+    hparams.lr: [1e-4, 2e-5]
+
+  ema:
+    ema.enabled: true
+
+  

@@ -1,0 +1,256 @@
+# Pre-computed task metadata for evaluation campaigns
+# This file is generated from intuitive/lbm_eval_dev/evaluate.py
+# to avoid parsing that file during job validation.
+#
+# Format: TaskName (CamelCase) -> {skill_name (snake_case), t_max, station}
+
+tasks:
+  # Scenario 0 - Cabot
+  PickAndPlaceBox:
+    skill_name: "pick_and_place_box"
+    t_max: 15.0
+    station: "cabot"
+
+  # Scenario 1 - Riverway
+  BimanualHangMugsOnMugHolderFromDryingRack:
+    skill_name: "bimanual_hang_mugs_on_mug_holder_from_drying_rack"
+    t_max: 70.0
+    station: "riverway"
+
+  BimanualHangMugsOnMugHolderFromTable:
+    skill_name: "bimanual_hang_mugs_on_mug_holder_from_table"
+    t_max: 30.0
+    station: "riverway"
+
+  BimanualPutMugsOnPlatesFromDryingRack:
+    skill_name: "bimanual_put_mugs_on_plates_from_drying_rack"
+    t_max: 55.0
+    station: "riverway"
+
+  BimanualPutMugsOnPlatesFromTable:
+    skill_name: "bimanual_put_mugs_on_plates_from_table"
+    t_max: 50.0
+    station: "riverway"
+
+  BimanualPutSpatulaOnPlateFromDryingRack:
+    skill_name: "bimanual_put_spatula_on_plate_from_drying_rack"
+    t_max: 30.0
+    station: "riverway"
+
+  BimanualPutSpatulaOnPlateFromTable:
+    skill_name: "bimanual_put_spatula_on_plate_from_table"
+    t_max: 25.0
+    station: "riverway"
+
+  BimanualPutSpatulaOnPlateFromUtensilCrock:
+    skill_name: "bimanual_put_spatula_on_plate_from_utensil_crock"
+    t_max: 25.0
+    station: "riverway"
+
+  BimanualPutSpatulaOnTableFromDryingRack:
+    skill_name: "bimanual_put_spatula_on_table_from_drying_rack"
+    t_max: 25.0
+    station: "riverway"
+
+  BimanualPutSpatulaOnTableFromUtensilCrock:
+    skill_name: "bimanual_put_spatula_on_table_from_utensil_crock"
+    t_max: 40.0
+    station: "riverway"
+
+  BimanualStackPlatesOnTableFromDryingRack:
+    skill_name: "bimanual_stack_plates_on_table_from_drying_rack"
+    t_max: 60.0
+    station: "riverway"
+
+  BimanualStackPlatesOnTableFromTable:
+    skill_name: "bimanual_stack_plates_on_table_from_table"
+    t_max: 45.0
+    station: "riverway"
+
+  PutSpatulaInUtensilCrock:
+    skill_name: "put_spatula_in_utensil_crock"
+    t_max: 45.0
+    station: "riverway"
+
+  PutSpatulaInUtensilCrockFromDryingRack:
+    skill_name: "put_spatula_in_utensil_crock_from_drying_rack"
+    t_max: 25.0
+    station: "riverway"
+
+  # Scenario 2 - Riverway
+  BimanualLayCerealBoxOnCuttingBoardFromTopShelf:
+    skill_name: "bimanual_lay_cereal_box_on_cutting_board_from_top_shelf"
+    t_max: 40.0
+    station: "riverway"
+
+  BimanualLayCerealBoxOnCuttingBoardFromUnderShelf:
+    skill_name: "bimanual_lay_cereal_box_on_cutting_board_from_under_shelf"
+    t_max: 50.0
+    station: "riverway"
+
+  BimanualPlaceAppleFromBowlIntoBin:
+    skill_name: "bimanual_place_apple_from_bowl_into_bin"
+    t_max: 55.0
+    station: "riverway"
+
+  BimanualPlaceAppleFromBowlOnCuttingBoard:
+    skill_name: "bimanual_place_apple_from_bowl_on_cutting_board"
+    t_max: 55.0
+    station: "riverway"
+
+  BimanualPlaceAvocadoFromBowlIntoBin:
+    skill_name: "bimanual_place_avocado_from_bowl_into_bin"
+    t_max: 55.0
+    station: "riverway"
+
+  BimanualPlaceAvocadoFromBowlOnCuttingBoard:
+    skill_name: "bimanual_place_avocado_from_bowl_on_cutting_board"
+    t_max: 55.0
+    station: "riverway"
+
+  BimanualPlaceFruitFromBowlIntoBin:
+    skill_name: "bimanual_place_fruit_from_bowl_into_bin"
+    t_max: 75.0
+    station: "riverway"
+
+  BimanualPlaceFruitFromBowlOnCuttingBoard:
+    skill_name: "bimanual_place_fruit_from_bowl_on_cutting_board"
+    t_max: 100.0
+    station: "riverway"
+
+  BimanualPlacePearFromBowlIntoBin:
+    skill_name: "bimanual_place_pear_from_bowl_into_bin"
+    t_max: 55.0
+    station: "riverway"
+
+  BimanualPlacePearFromBowlOnCuttingBoard:
+    skill_name: "bimanual_place_pear_from_bowl_on_cutting_board"
+    t_max: 55.0
+    station: "riverway"
+
+  BimanualPutRedBellPepperInBin:
+    skill_name: "bimanual_put_red_bell_pepper_in_bin"
+    t_max: 45.0
+    station: "riverway"
+
+  BimanualStoreCerealBoxUnderShelf:
+    skill_name: "bimanual_store_cereal_box_under_shelf"
+    t_max: 55.0
+    station: "riverway"
+
+  # Scenario 3 - Cabot
+  PlaceCupByCoaster:
+    skill_name: "place_cup_by_coaster"
+    t_max: 30.0
+    station: "cabot"
+
+  PlaceCupOnCoaster:
+    skill_name: "place_cup_on_coaster"
+    t_max: 55.0
+    station: "cabot"
+
+  PushCoasterToCenterOfTable:
+    skill_name: "push_coaster_to_center_of_table"
+    t_max: 45.0
+    station: "cabot"
+
+  PushCoasterToMug:
+    skill_name: "push_coaster_to_mug"
+    t_max: 50.0
+    station: "cabot"
+
+  PutBananaInCenterOfTable:
+    skill_name: "put_banana_in_center_of_table"
+    t_max: 15.0
+    station: "cabot"
+
+  PutBananaOnSaucer:
+    skill_name: "put_banana_on_saucer"
+    t_max: 20.0
+    station: "cabot"
+
+  PutCupInCenterOfTable:
+    skill_name: "put_cup_in_center_of_table"
+    t_max: 20.0
+    station: "cabot"
+
+  PutCupOnSaucer:
+    skill_name: "put_cup_on_saucer"
+    t_max: 60.0
+    station: "cabot"
+
+  PutGreenAppleInCenterOfTable:
+    skill_name: "put_green_apple_in_center_of_table"
+    t_max: 50.0
+    station: "cabot"
+
+  PutGreenAppleOnSaucer:
+    skill_name: "put_green_apple_on_saucer"
+    t_max: 20.0
+    station: "cabot"
+
+  PutKiwiInCenterOfTable:
+    skill_name: "put_kiwi_in_center_of_table"
+    t_max: 15.0
+    station: "cabot"
+
+  PutKiwiOnSaucer:
+    skill_name: "put_kiwi_on_saucer"
+    t_max: 30.0
+    station: "cabot"
+
+  PutMugInCenterOfTable:
+    skill_name: "put_mug_in_center_of_table"
+    t_max: 15.0
+    station: "cabot"
+
+  PutMugOnSaucer:
+    skill_name: "put_mug_on_saucer"
+    t_max: 40.0
+    station: "cabot"
+
+  PutOrangeInCenterOfTable:
+    skill_name: "put_orange_in_center_of_table"
+    t_max: 50.0
+    station: "cabot"
+
+  PutOrangeOnSaucer:
+    skill_name: "put_orange_on_saucer"
+    t_max: 20.0
+    station: "cabot"
+
+  TurnCupUpsideDown:
+    skill_name: "turn_cup_upside_down"
+    t_max: 35.0
+    station: "cabot"
+
+  TurnMugRightsideUp:
+    skill_name: "turn_mug_rightside_up"
+    t_max: 25.0
+    station: "cabot"
+
+  # Scenario 4 - Cabot
+  DumpVegetablesFromSmallToLargeContainer:
+    skill_name: "dump_vegetables_from_small_to_large_container"
+    t_max: 60.0
+    station: "cabot"
+
+  PutContainersOnPlate:
+    skill_name: "put_containers_on_plate"
+    t_max: 50.0
+    station: "cabot"
+
+  PutFruitInLargeContainerAndCoverWithPlate:
+    skill_name: "put_fruit_in_large_container_and_cover_with_plate"
+    t_max: 55.0
+    station: "cabot"
+
+  SeparateFruitsVegetablesIntoContainers:
+    skill_name: "separate_fruits_vegetables_into_containers"
+    t_max: 45.0
+    station: "cabot"
+
+  TurnLargeContainerUpsideDown:
+    skill_name: "turn_large_container_upside_down"
+    t_max: 40.0
+    station: "cabot"

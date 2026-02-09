@@ -10,6 +10,8 @@ results
 sagemaker/configs/
 tmp/
 debug_logs/
+downloaded_results/
+
 
 # System files
 **/.DS_Store

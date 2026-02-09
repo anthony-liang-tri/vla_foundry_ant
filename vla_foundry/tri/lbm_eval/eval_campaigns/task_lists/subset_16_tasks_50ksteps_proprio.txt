@@ -1,0 +1,17 @@
+(
+    "stage3_singletask_sim_PutSpatulaInUtensilCrock",
+    "PutSpatulaInUtensilCrock",
+    f"s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/PutSpatulaInUtensilCrock/2025_11_24-07_57_41-model_diffusion_policy-lr_0.0001-bsz_1024/",
+),
+
+(
+    "stage3_singletask_sim_TurnCupUpsideDown",
+    "TurnCupUpsideDown",
+    f"s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/TurnCupUpsideDown/2025_11_24-08_09_17-model_diffusion_policy-lr_0.0001-bsz_1024/",
+),
+
+(
+    "stage3_singletask_sim_TurnMugRightsideUp",
+    "TurnMugRightsideUp",
+    f"s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/TurnMugRightsideUp/2025_11_24-08_20_47-model_diffusion_policy-lr_0.0001-bsz_1024/",
+),

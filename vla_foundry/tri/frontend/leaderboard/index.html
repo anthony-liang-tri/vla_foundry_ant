@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VLA Foundry Evaluation Leaderboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <link rel="stylesheet" href="/leaderboard/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div style="display: flex; align-items: center; gap: 24px; margin-bottom: 16px;">
+                <a href="/" style="color: var(--primary); text-decoration: none; font-size: 0.875rem;">&larr; Back to Dashboard</a>
+            </div>
+            <h1>VLA Foundry Evaluation Leaderboard</h1>
+            <div id="stats-bar" class="stats-bar">
+                <div class="stat">
+                    <span class="stat-value" id="total-runs">-</span>
+                    <span class="stat-label">Runs</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-value" id="total-rollouts">-</span>
+                    <span class="stat-label">Rollouts</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-value" id="avg-success">-</span>
+                    <span class="stat-label">Avg Success</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-value" id="total-tasks">-</span>
+                    <span class="stat-label">Tasks</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="controls">
+            <div class="filters">
+                <div class="filter-group filter-group-chips">
+                    <label>
+                        Campaigns
+                        <span class="filter-actions">
+                            <button type="button" id="campaign-all-btn" class="filter-action-btn">All</button>
+                            <button type="button" id="campaign-clear-btn" class="filter-action-btn">Clear</button>
+                        </span>
+                    </label>
+                    <input type="text" id="campaign-search" class="chip-search" placeholder="Search campaigns...">
+                    <div id="campaign-chips" class="chip-container-compact"></div>
+                </div>
+                <div class="filter-group filter-group-chips">
+                    <label>
+                        Ablations
+                        <span class="filter-actions">
+                            <button type="button" id="ablation-all-btn" class="filter-action-btn">All</button>
+                            <button type="button" id="ablation-clear-btn" class="filter-action-btn">Clear</button>
+                        </span>
+                    </label>
+                    <input type="text" id="ablation-search" class="chip-search" placeholder="Search ablations...">
+                    <div id="ablation-chips" class="chip-container-compact"></div>
+                </div>
+                <div class="filter-group filter-group-chips">
+                    <label>
+                        Tasks
+                        <span class="filter-actions">
+                            <button type="button" id="task-all-btn" class="filter-action-btn">All</button>
+                            <button type="button" id="task-clear-btn" class="filter-action-btn">Clear</button>
+                        </span>
+                    </label>
+                    <input type="text" id="task-search" class="chip-search" placeholder="Search tasks...">
+                    <div id="task-chips" class="chip-container-compact"></div>
+                </div>
+                <div class="filter-group filter-group-small">
+                    <label for="min-rollouts">Min Rollouts</label>
+                    <input type="number" id="min-rollouts" value="0" min="0">
+                </div>
+                <div class="filter-group filter-group-small">
+                    <label for="reference-select">Reference Ablation</label>
+                    <input type="text" id="reference-select" list="reference-datalist" placeholder="Select reference...">
+                    <datalist id="reference-datalist"></datalist>
+                </div>
+                <button id="refresh-btn" class="btn btn-primary">Refresh</button>
+            </div>
+
+            <!-- Config Query Builder -->
+            <div class="config-filters">
+                <div class="config-filters-header">
+                    <span>Config Filters</span>
+                    <button id="add-config-filter-btn" class="btn btn-small btn-outline">+ Add Filter</button>
+                </div>
+                <div id="config-filter-rows"></div>
+            </div>
+
+            <div class="actions">
+                <button id="compare-btn" class="btn btn-secondary" disabled>
+                    Compare Selected (<span id="selected-count">0</span>)
+                </button>
+                <button id="clear-selection-btn" class="btn btn-outline">Clear Selection</button>
+                <button id="export-btn" class="btn btn-outline">Export JSON</button>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="table-container">
+                <table id="leaderboard-table">
+                    <thead>
+                        <tr>
+                            <th class="checkbox-col">
+                                <input type="checkbox" id="select-all">
+                            </th>
+                            <th class="sortable" data-sort="success_rate">Success Rate</th>
+                            <th class="sortable" data-sort="task_name">Task</th>
+                            <th>Ablation</th>
+                            <th class="sortable" data-sort="campaign_name">Campaign</th>
+                            <th class="sortable" data-sort="total_rollouts">Rollouts</th>
+                            <th class="sortable" data-sort="evaluated_at">Date Added</th>
+                            <th>Links</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leaderboard-body">
+                        <tr>
+                            <td colspan="8" class="loading">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Comparison Modal -->
+        <div id="compare-modal" class="modal hidden">
+            <div class="modal-content modal-large">
+                <div class="modal-header">
+                    <h2>Compare Runs</h2>
+                    <button class="close-btn" id="close-compare">&times;</button>
+                </div>
+                <div class="modal-tabs">
+                    <button class="tab-btn active" data-tab="chart">Bar Chart</button>
+                    <button class="tab-btn" data-tab="spider">Spider Chart</button>
+                    <button class="tab-btn" data-tab="violin">Violin Plot</button>
+                    <button class="tab-btn" data-tab="scatter">Scatter</button>
+                    <button class="tab-btn" data-tab="diff">Config Diff</button>
+                </div>
+                <div class="modal-body">
+                    <div id="tab-chart" class="tab-content active">
+                        <div class="chart-container">
+                            <canvas id="comparison-chart"></canvas>
+                        </div>
+                        <div id="comparison-table-container"></div>
+                    </div>
+                    <div id="tab-spider" class="tab-content">
+                        <div class="chart-container">
+                            <canvas id="spider-chart"></canvas>
+                        </div>
+                    </div>
+                    <div id="tab-violin" class="tab-content">
+                        <div class="plotly-container">
+                            <div id="violin-chart" style="width: 100%; height: 550px;"></div>
+                            <div id="aggregate-violin-chart"></div>
+                        </div>
+                        <div class="violin-legend" id="violin-legend"></div>
+                    </div>
+                    <div id="tab-scatter" class="tab-content">
+                        <div class="scatter-controls" style="margin-bottom: 10px;">
+                            <label>X-axis: <select id="scatter-x-ablation"></select></label>
+                            <label style="margin-left: 20px;">Y-axis: <select id="scatter-y-ablation"></select></label>
+                        </div>
+                        <div id="scatter-chart" style="height: 600px;"></div>
+                    </div>
+                    <div id="tab-diff" class="tab-content">
+                        <div id="config-diff-container">
+                            <p class="loading">Loading config differences...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Config Modal -->
+        <div id="config-modal" class="modal hidden">
+            <div class="modal-content modal-large">
+                <div class="modal-header">
+                    <h2>Run Configuration</h2>
+                    <button class="close-btn" id="close-config">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <pre id="config-content"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/leaderboard/app.js"></script>
+</body>
+</html>

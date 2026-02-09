@@ -1,0 +1,7 @@
+# Core dependencies for standalone evaluation campaign system
+boto3>=1.26.0
+ray[default]>=2.0.0
+pyyaml>=6.0
+requests>=2.28.0
+numpy>=1.21.0
+scipy>=1.9.0

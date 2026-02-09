@@ -1,0 +1,91 @@
+# Nominal (base) configuration for ablation experiments
+# These are the default parameters that ablations will modify
+
+# Tasks to run ablations on
+tasks:
+  - BimanualPlaceAppleFromBowlIntoBin
+  - BimanualPlaceFruitFromBowlIntoBin
+  - BimanualPutRedBellPepperInBin
+  - BimanualPutSpatulaOnPlateFromDryingRack
+  - BimanualPutSpatulaOnPlateFromTable
+  - BimanualStackPlatesOnTableFromDryingRack
+  - BimanualStoreCerealBoxUnderShelf
+  - PlaceCupByCoaster
+  - PushCoasterToCenterOfTable
+  - PushCoasterToMug
+  - PutBananaOnSaucer
+  - PutKiwiInCenterOfTable
+  - PutMugOnSaucer
+  - PutSpatulaInUtensilCrock
+  - TurnCupUpsideDown
+  - TurnMugRightsideUp
+
+# S3 paths
+base_s3_path: s3://tri-ml-datasets-uw2/vla_foundry_datasets/v0.3/stage3_singletask_sim
+checkpoint_base: s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/ablations
+
+# Output directory
+output_base: vla_foundry/tri/ablations/ablation_configs_v03_16_dit
+
+# Base arguments for all experiments
+base_args:
+  # Model configuration
+  model: include vla_foundry/config_presets/models/diffusion_policy_dit.yaml
+  model.clip.hf_pretrained: openai/clip-vit-base-patch32
+  model.clip.freeze_text_encoder: false
+  model.clip.freeze_image_encoder: false
+  model.noise_scheduler.num_timesteps: 1000
+  model.noise_scheduler.clamp_range: "[-1.5, 1.5]"
+
+  # Data configuration
+  data: include vla_foundry/config_presets/data/lbm/lbm_data_params.yaml
+  data.normalization.scope: per_timestep
+  data.normalization.method: percentile_1_99
+  data.normalization.centered_norm: true
+  data.normalization.epsilon: 0.01
+  data.augmentation.enabled: true
+  data.augmentation.image.color_jitter.enabled: true
+  data.augmentation.image.color_jitter.brightness: 0.2
+  data.augmentation.image.color_jitter.contrast: 0.4
+  data.augmentation.image.color_jitter.saturation: 0.2
+  data.augmentation.image.color_jitter.hue: "[-0.05, 0.05]"
+  data.augmentation.image.random_crop.enabled: true
+  data.augmentation.image.random_crop.shape: "[224, 224]"
+  data.dataset_weighting: "[1.0]"
+  data.dataset_modality: '["robotics"]'
+  data.action_fields: '["robot__action__poses__left::panda__xyz_relative", "robot__action__poses__right::panda__xyz_relative", "robot__action__poses__left::panda__rot_6d_relative", "robot__action__poses__right::panda__rot_6d_relative", "robot__action__grippers__left::panda_hand", "robot__action__grippers__right::panda_hand"]'
+  data.proprioception_fields: '["robot__actual__poses__left::panda__xyz", "robot__actual__poses__right::panda__xyz", "robot__actual__poses__left::panda__rot_6d", "robot__actual__poses__right::panda__rot_6d"]'
+  data.camera_names: '["scene_right_0", "scene_left_0", "wrist_left_plus", "wrist_right_minus"]'
+  data.image_indices: "[-1, 0]"
+  data.lowdim_past_timesteps: 1
+  data.lowdim_future_timesteps: 8
+  data.image_size: 224
+  data.processor: openai/clip-vit-base-patch32
+  data.allow_multiple_epochs: true
+  data.num_workers: 8
+  data.prefetch_factor: 16
+  data.seq_len: 2048
+
+  # Distributed configuration
+  distributed.fsdp: false
+  distributed.use_distributed: false
+
+  # Hyperparameters
+  hparams.loss_function: mse
+  hparams.torchcompile: false
+  hparams.precision: float32
+  hparams.per_gpu_batch_size: 128
+  hparams.global_batch_size: 1024
+  hparams.grad_clip_norm: 1.0
+  hparams.lr: 0.00005
+  hparams.lr_cooldown_end: 0.000001
+  hparams.wd: 0.00000001
+
+  # Other
+  total_train_samples: 100_000_000
+  wandb: false
+  wandb_entity: tri
+  wandb_tags:
+    - "dit"
+    - "100m"
+  num_checkpoints: 2

@@ -1,0 +1,103 @@
+# LBM Ablation Evaluation Campaign Configuration
+# This file demonstrates using a different policy repo (LBM) with custom inference commands.
+#
+# The key differences from vla_foundry campaigns:
+# 1. Uses a different git repo (jean-mercat/lbm.git instead of TRI-ML/vla_foundry.git)
+# 2. Uses a different inference script (grpc_workspace/diffusion_policy_server.py)
+# 3. Uses different checkpoint format (.ckpt files instead of directories)
+
+# Campaign metadata
+campaign_name: "lbm_ablation_test"
+description: "Ablation study of LBM policy checkpoints"
+
+# Cluster configuration
+cluster:
+  # Path to Ray cluster config file
+  config_file: "vla_foundry/tri/lbm_eval/eval_campaigns/ray_policy_runner_cluster.yaml"
+  
+  # Number of workers to use
+  num_workers: 256
+  
+  # AWS profile for cluster operations
+  aws_profile: "manip-cluster"
+  
+  # Owner email for AWS resource tagging (REQUIRED)
+  owner_email: ""
+  
+  # Cluster name (optional) - derived from owner_email if not specified
+  # Each user gets their own isolated cluster (e.g., lbm_eval_jean_mercat)
+  # This prevents multiple users from interfering with each other's clusters
+  # cluster_name: "lbm_eval_my_custom_name"
+
+  # Whether to tear down cluster after completion
+  teardown_on_completion: false
+  
+  # Whether to tear down cluster on failure
+  teardown_on_failure: false
+
+# Evaluation configuration
+evaluation:
+  # Number of jobs per GPU
+  jobs_per_gpu: 1
+
+  # Tasks file with job definitions
+  # Format per line: ("job_name", "TaskName", "s3://path/to/checkpoint.ckpt")
+  tasks_file: "vla_foundry/tri/lbm_eval/eval_campaigns/task_lists/lbm_multitasks.txt"
+  
+  # Number of evaluation samples per task
+  num_samples: 200
+  
+  # Starting demonstration index
+  start_index: 0
+  
+  # Launch configuration (same as vla_foundry - simulation side unchanged)
+  launch_scenario: "GrpcServerToSim"
+  launch_script: "launch_sim.sh"
+  
+  # Inference parameters (used by the bundle script)
+  num_flow_steps: 8
+  open_loop_steps: 8
+  device: "cuda"
+  
+  # Resource allocation
+  entrypoint_num_gpus: 1
+  entrypoint_memory: 62277025792
+  
+  # AWS profile for S3 checkpoint access
+  inference_aws_profile: "sagemaker"
+
+# Docker configuration
+docker:
+  # Use the same anzu-vla-foundry image (has simulation environment)
+  image: "682769330988.dkr.ecr.us-east-1.amazonaws.com/anzu-vla-foundry:latest"
+
+# Policy repository configuration (LBM instead of vla_foundry)
+# This determines what code runs the inference
+vla_foundry:
+  repo_url: "git@github.shared-services.aws.tri.global:jean-mercat/lbm.git"
+  ref: "jean/compatible_with_anzu_vla_foundry"
+  local_dir: "~/.cache/lbm/ray_mount"
+  use_remote_repo: true
+  remote_dir: "/home/ubuntu/lbm_mount"
+  mount_target: "/opt/lbm"  # Different mount target to avoid confusion
+
+# Custom inference command configuration
+# This replaces the default vla_foundry inference_policy.py with LBM's server
+inference:
+  # Option 1: Use cmd_override for complete control
+  # Placeholders available: {checkpoint}, {num_flow_steps}, {open_loop_steps}, {device}
+  cmd_override: >-
+    uv run python grpc_workspace/diffusion_policy_server.py
+    --checkpoint-file {checkpoint}
+    --server-uri 0.0.0.0:50051
+
+  # Option 2 (alternative): Use script + args for simpler cases
+  # script: "grpc_workspace/diffusion_policy_server.py"
+  # args: "--server-uri 0.0.0.0:50051"
+
+# Output configuration
+output:
+  # Directory to save results
+  results_dir: "results/lbm_ablation_test"
+  # Set to true to download Ray job logs
+  save_job_logs: true

@@ -1,0 +1,83 @@
+(
+    "stage3_singletask_sim_BimanualPutRedBellPepperInBin_mask_padding",
+    "BimanualPutRedBellPepperInBin",
+    f"s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/ablations/BimanualPutRedBellPepperInBin/mask_padding/2025_12_05-20_38_39-model_diffusion_policy-lr_5e-05-bsz_1024/",
+    "jean/mask_padding",
+),
+
+(
+    "stage3_singletask_sim_BimanualPutRedBellPepperInBin_predict_past",
+    "BimanualPutRedBellPepperInBin",
+    f"s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/ablations/BimanualPutRedBellPepperInBin/predict_past/2025_12_05-21_11_39-model_diffusion_policy-lr_5e-05-bsz_1024/",
+    "jean/predict_past",
+),
+
+(
+    "stage3_singletask_sim_BimanualPutRedBellPepperInBin_scale_1p5",
+    "BimanualPutRedBellPepperInBin",
+    f"s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/ablations/BimanualPutRedBellPepperInBin/scale_1p5/2025_12_05-21_29_33-model_diffusion_policy-lr_5e-05-bsz_1024/",
+    "jean/normalizer_scale",
+),
+
+(
+    "stage3_singletask_sim_BimanualPutSpatulaOnPlateFromTable_mask_padding",
+    "BimanualPutSpatulaOnPlateFromTable",
+    f"s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/ablations/BimanualPutSpatulaOnPlateFromTable/mask_padding/2025_12_05-20_38_46-model_diffusion_policy-lr_5e-05-bsz_1024/",
+    "jean/mask_padding",
+),
+
+(
+    "stage3_singletask_sim_BimanualPutSpatulaOnPlateFromTable_predict_past",
+    "BimanualPutSpatulaOnPlateFromTable",
+    f"s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/ablations/BimanualPutSpatulaOnPlateFromTable/predict_past/2025_12_05-21_11_44-model_diffusion_policy-lr_5e-05-bsz_1024/",
+    "jean/predict_past",
+),
+
+(
+    "stage3_singletask_sim_BimanualPutSpatulaOnPlateFromTable_scale_1p5",
+    "BimanualPutSpatulaOnPlateFromTable",
+    f"s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/ablations/BimanualPutSpatulaOnPlateFromTable/scale_1p5/2025_12_05-21_29_41-model_diffusion_policy-lr_5e-05-bsz_1024/",
+    "jean/normalizer_scale",
+),
+
+(
+    "stage3_singletask_sim_PlaceCupByCoaster_mask_padding",
+    "PlaceCupByCoaster",
+    f"s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/ablations/PlaceCupByCoaster/mask_padding/2025_12_05-20_39_09-model_diffusion_policy-lr_5e-05-bsz_1024/",
+    "jean/mask_padding",
+),
+
+(
+    "stage3_singletask_sim_PlaceCupByCoaster_predict_past",
+    "PlaceCupByCoaster",
+    f"s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/ablations/PlaceCupByCoaster/predict_past/2025_12_05-21_13_01-model_diffusion_policy-lr_5e-05-bsz_1024/",
+    "jean/predict_past",
+),
+
+(
+    "stage3_singletask_sim_PlaceCupByCoaster_scale_1p5",
+    "PlaceCupByCoaster",
+    f"s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/ablations/PlaceCupByCoaster/scale_1p5/2025_12_05-21_31_02-model_diffusion_policy-lr_5e-05-bsz_1024/",
+    "jean/normalizer_scale",
+),
+
+(
+    "stage3_singletask_sim_TurnCupUpsideDown_mask_padding",
+    "TurnCupUpsideDown",
+    f"s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/ablations/TurnCupUpsideDown/mask_padding/2025_12_05-20_39_56-model_diffusion_policy-lr_5e-05-bsz_1024/",
+    "jean/mask_padding",
+),
+
+(
+    "stage3_singletask_sim_TurnCupUpsideDown_predict_past",
+    "TurnCupUpsideDown",
+    f"s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/ablations/TurnCupUpsideDown/predict_past/2025_12_05-21_13_59-model_diffusion_policy-lr_5e-05-bsz_1024/",
+    "jean/predict_past",
+),
+
+(
+    "stage3_singletask_sim_TurnCupUpsideDown_scale_1p5",
+    "TurnCupUpsideDown",
+    f"s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/ablations/TurnCupUpsideDown/scale_1p5/2025_12_05-21_31_38-model_diffusion_policy-lr_5e-05-bsz_1024/",
+    "jean/normalizer_scale",
+),

@@ -1,0 +1,359 @@
+# Ray autoscaler configuration tailored for `ray_policy_runner.py`.
+# This file uses placeholders that are automatically expanded by run_evaluation_campaign.py:
+#   ${CLUSTER_NAME} - Unique cluster name derived from owner_email (e.g., lbm_eval_jean_mercat)
+#   ${OWNER_EMAIL}  - Owner email for AWS cost attribution tags
+#
+# To run manually (not recommended):
+#   CLUSTER_NAME=my_cluster OWNER_EMAIL=you@tri.global ray up ray_policy_runner_cluster.yaml
+
+cluster_name: ${CLUSTER_NAME}
+max_workers: 1024
+upscaling_speed: 1.0
+# 30 minutes of idle before node is stopped (not terminated, see cache_stopped_nodes)
+idle_timeout_minutes: 30
+
+provider:
+  type: aws
+  region: us-east-1
+  availability_zone: us-east-1a,us-east-1b,us-east-1c,us-east-1d,us-east-1e,us-east-1f
+  # Stop nodes instead of terminating - faster restart on relaunch
+  cache_stopped_nodes: true
+  aws_profile: manip-cluster
+  use_internal_ips: true
+
+auth:
+  ssh_user: ubuntu
+  ssh_private_key: ~/.ssh/manip-perception.pem
+
+available_node_types:
+  ray.head.default:
+    min_workers: 0
+    max_workers: 0
+    # Reserve a portion of the head node resources for diagnostics/monitoring.
+    # Do not advertise GPUs so inference jobs land on dedicated workers.
+    resources: {"CPU": 0, "GPU": 0}
+    node_config: &head_node_config
+      InstanceType: g4dn.2xlarge
+      ImageId: ami-0208a79203986ca98  # robotics-anzu-ami-lbm-eval-0-5-1
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 500
+            VolumeType: gp3
+      TagSpecifications:
+        - ResourceType: instance
+          Tags:
+            - Key: tri.owner.email
+              Value: ${OWNER_EMAIL}
+            - Key: tri.project
+              Value: LBM:PJ-0109
+      SecurityGroupIds:
+        - sg-0ccd4ebaa290ef67b
+        - sg-03d931ad906a3c63e
+      SubnetIds:
+        - subnet-0f72fa2dd404e8a1b
+        - subnet-076ea44bbe5b04780
+        - subnet-08504ad0624833b61
+        - subnet-061b8c531b13bd862
+        - subnet-0f9b062323aab5634
+        - subnet-0d76b84386cd2d69c
+      IamInstanceProfile:
+        Arn: arn:aws:iam::682769330988:instance-profile/dev-ecs-instance-role
+      KeyName: manip-perception
+
+  ray.worker.gpu.small:
+    min_workers: 0
+    max_workers: 256
+    resources:
+      CPU: 16  # g5.4xlarge has 16 vCPUs
+      GPU: 1   # 1 GPU per instance (~64 GB RAM per GPU)
+    node_config:
+      <<: *head_node_config
+      InstanceType: g5.4xlarge
+
+  ray.worker.gpu.large:
+    min_workers: 0
+    max_workers: 128
+    resources:
+      CPU: 96  # g5.24xlarge has 96 vCPUs
+      GPU: 4   # 4 GPUs per instance (~96 GB RAM per GPU)
+    node_config:
+      <<: *head_node_config
+      InstanceType: g5.24xlarge
+
+head_node_type: ray.head.default
+
+file_mounts:
+  # Cluster scripts - mounted directly from repo (run_evaluation_campaign.py runs from repo root)
+  "/home/ubuntu/anzu_vla_foundry/run_inference_bundle.sh": "vla_foundry/tri/lbm_eval/eval_campaigns/cluster_scripts/run_inference_bundle.sh"
+  "/home/ubuntu/anzu_vla_foundry/launch_sim.sh": "vla_foundry/tri/lbm_eval/eval_campaigns/cluster_scripts/launch_sim.sh"
+  # Secrets from repo root (gitignored)
+  "/home/ubuntu/anzu_vla_foundry/secrets.env": "secrets.env"
+  "/home/ubuntu/vla_foundry_mount": "~/.cache/vla_foundry/ray_mount"
+  # LBM repo mount (different from vla_foundry for LBM-specific campaigns)
+  "/home/ubuntu/lbm_mount": "~/.cache/lbm/ray_mount"
+file_mounts_sync_continuously: false # upload only once, don't sync continuously
+rsync_exclude:
+  - "**/.git"
+  - "**/.git/**"
+  - "**/anzu/bazel-*"
+  - "**/anzu/bazel-*/**"
+  - "**/bazel-*"
+  - "**/bazel-*/**"
+  - "bazel-workspace"
+  - "bazel-workspace/**"
+  - "_solib_k8"
+  - "_solib_k8/**"
+  - "**/_solib_k8"
+  - "**/_solib_k8/**"
+  - "**/__pycache__"
+  - "**/__pycache__/**"
+  - "**/.venv"
+  - "**/.venv/**"
+  - "**/node_modules"
+  - "**/node_modules/**"
+
+# initialization_commands run on EVERY node start (not cached like setup_commands)
+initialization_commands:
+  # Fix pyopenssl/cryptography - must use sudo to override system packages in /usr/lib/python3/dist-packages/
+  - sudo pip3 install --upgrade pyopenssl cryptography
+
+setup_commands:
+  - |
+    set -e
+
+    # Helper function to wait for apt lock (cloud-init often holds it on fresh instances)
+    wait_for_apt_lock() {
+      local max_wait=300  # 5 minutes max
+      local waited=0
+      while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || \
+            sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || \
+            sudo fuser /var/cache/apt/archives/lock >/dev/null 2>&1; do
+        echo "Waiting for apt lock to be released... (${waited}s)"
+        sleep 10
+        waited=$((waited + 10))
+        if [ $waited -ge $max_wait ]; then
+          echo "WARNING: Timed out waiting for apt lock after ${max_wait}s"
+          break
+        fi
+      done
+    }
+
+    # Check what's already installed in the AMI
+    NEED_DOCKER=false
+    NEED_AWSCLI=false
+    NEED_NVIDIA_CTK=false
+
+    command -v docker &> /dev/null || NEED_DOCKER=true
+    command -v aws &> /dev/null || NEED_AWSCLI=true
+    command -v nvidia-ctk &> /dev/null || NEED_NVIDIA_CTK=true
+
+    echo "AMI check: NEED_DOCKER=$NEED_DOCKER, NEED_AWSCLI=$NEED_AWSCLI, NEED_NVIDIA_CTK=$NEED_NVIDIA_CTK"
+
+    # Only run apt if we need to install something
+    if [ "$NEED_DOCKER" = true ] || [ "$NEED_AWSCLI" = true ] || [ "$NEED_NVIDIA_CTK" = true ]; then
+      wait_for_apt_lock
+      sudo apt-get update || true  # Don't fail on ROS2 GPG warnings
+      if [ "$NEED_DOCKER" = true ] || [ "$NEED_AWSCLI" = true ]; then
+        wait_for_apt_lock
+        PACKAGES=""
+        [ "$NEED_DOCKER" = true ] && PACKAGES="$PACKAGES docker.io"
+        [ "$NEED_AWSCLI" = true ] && PACKAGES="$PACKAGES awscli"
+        sudo apt-get install -y $PACKAGES
+      fi
+      if [ "$NEED_NVIDIA_CTK" = true ]; then
+        distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+        sudo rm -f /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+        curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+        curl -s -L https://nvidia.github.io/libnvidia-container/$distribution/libnvidia-container.list | \
+          sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+          sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+        wait_for_apt_lock
+        sudo apt-get update
+        sudo apt-get install -y nvidia-container-toolkit
+        sudo nvidia-ctk runtime configure --runtime=docker
+      fi
+    fi
+    # Ensure docker service is running
+    if command -v docker &> /dev/null; then
+      sudo systemctl enable docker
+      sudo systemctl start docker
+      sudo usermod -aG docker ubuntu || true
+    else
+      echo "ERROR: Docker not available!"
+      exit 1
+    fi
+    # Always configure NVIDIA runtime for Docker (idempotent, needed for --gpus flag)
+    if command -v nvidia-ctk &> /dev/null; then
+      echo "Configuring NVIDIA runtime for Docker..."
+      sudo nvidia-ctk runtime configure --runtime=docker
+      sudo systemctl restart docker
+    fi
+    # Clean up any broken symlinks that might have been synced from Bazel runfiles
+    find /home/ubuntu/anzu_vla_foundry -type l -xtype l -delete 2>/dev/null || true
+    # Create symlink for backward compatibility and to ensure imports work if needed
+    ln -sfn /home/ubuntu/anzu_vla_foundry /home/ubuntu/anzu
+    # Install ray on the host for cluster management (if not already available)
+    if ! command -v ray &> /dev/null; then
+      pip3 install --user 'ray[default]'
+      echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+      export PATH="$HOME/.local/bin:$PATH"
+    fi
+    # Fix pyOpenSSL/cryptography incompatibility that crashes the autoscaler
+    # Error: AttributeError: module 'lib' has no attribute 'X509_V_FLAG_NOTIFY_POLICY'
+    sudo pip3 install --upgrade pyopenssl cryptography
+    # Install Redis for GCS fault tolerance (head node only will start it)
+    if ! command -v redis-server &> /dev/null; then
+      wait_for_apt_lock
+      sudo apt-get install -y redis-server
+    fi
+    # Set up SSH key access for private repos.
+    container_ssh_dir="$HOME/.ssh_container"
+    sudo rm -rf "${container_ssh_dir}"
+    install -d -m 0700 "${container_ssh_dir}"
+    if [ -f ~/.ssh/known_hosts ]; then
+      install -m 0644 ~/.ssh/known_hosts "${container_ssh_dir}/known_hosts"
+    else
+      ssh-keyscan github.shared-services.aws.tri.global >> "${container_ssh_dir}/known_hosts" 2>/dev/null || true
+      ssh-keyscan github.com >> "${container_ssh_dir}/known_hosts" 2>/dev/null || true
+    fi
+    sudo chown -R 1001 "${container_ssh_dir}" 2>/dev/null || true
+
+worker_setup_commands:
+  - |
+    # Fix pyOpenSSL/cryptography incompatibility that crashes the autoscaler
+    # Error: AttributeError: module 'lib' has no attribute 'X509_V_FLAG_NOTIFY_POLICY'
+    sudo pip3 install --upgrade pyopenssl cryptography
+
+    # Mount NVMe SSD for local storage (g5 instances have NVMe instance storage)
+    # This provides fast local storage for caching and prevents root partition from filling up
+    if ! mountpoint -q /mnt/local_storage; then
+      # Find NVMe instance storage devices (exclude root device and its partitions)
+      # Instance storage is typically nvme1n1 or higher, never nvme0n1 which is root
+      nvme_device=$(lsblk -d -n -o NAME,TYPE,MOUNTPOINT | \
+        awk '$2=="disk" && $1~/nvme[1-9]/ && $3=="" {print "/dev/"$1; exit}')
+      
+      if [ -n "$nvme_device" ]; then
+        echo "Found NVMe instance storage: $nvme_device"
+        # Format if not already formatted (check if it has a filesystem)
+        if ! sudo blkid "$nvme_device" 2>/dev/null | grep -q "TYPE="; then
+          echo "Formatting $nvme_device as ext4..."
+          sudo mkfs.ext4 -F "$nvme_device" || {
+            echo "Warning: Failed to format $nvme_device, using root partition for cache"
+            sudo mkdir -p /mnt/local_storage
+            sudo chown -R ubuntu:ubuntu /mnt/local_storage
+            continue
+          }
+        fi
+        # Create mount point and mount
+        sudo mkdir -p /mnt/local_storage
+        sudo mount "$nvme_device" /mnt/local_storage || {
+          echo "Warning: Failed to mount $nvme_device, using root partition for cache"
+          sudo chown -R ubuntu:ubuntu /mnt/local_storage
+          continue
+        }
+        sudo chown -R ubuntu:ubuntu /mnt/local_storage
+        echo "Successfully mounted $nvme_device to /mnt/local_storage"
+      else
+        echo "No NVMe instance storage found, using root partition for cache"
+        sudo mkdir -p /mnt/local_storage
+        sudo chown -R ubuntu:ubuntu /mnt/local_storage
+      fi
+    fi
+    
+    # Create cache directory on local storage
+    sudo mkdir -p /mnt/local_storage/cache/huggingface
+    sudo chown -R 1001:1001 /mnt/local_storage/cache
+    
+    container_ssh_dir="$HOME/.ssh_container"
+    sudo rm -rf "${container_ssh_dir}"
+    install -d -m 0700 "${container_ssh_dir}"
+    if [ -f ~/.ssh/known_hosts ]; then
+      install -m 0644 ~/.ssh/known_hosts "${container_ssh_dir}/known_hosts"
+    else
+      ssh-keyscan github.shared-services.aws.tri.global >> "${container_ssh_dir}/known_hosts" 2>/dev/null || true
+      ssh-keyscan github.com >> "${container_ssh_dir}/known_hosts" 2>/dev/null || true
+    fi
+    sudo chown -R 1001 "${container_ssh_dir}" 2>/dev/null || true
+    
+    # Ensure NVIDIA runtime is configured for Docker (needed for --gpus flag)
+    # Run here in worker_setup_commands in case setup_commands was cached
+    if command -v nvidia-ctk &> /dev/null; then
+      echo "Ensuring NVIDIA runtime is configured for Docker..."
+      sudo nvidia-ctk runtime configure --runtime=docker
+      sudo systemctl restart docker
+    fi
+    
+    aws ecr get-login-password --region us-east-1 \
+      | sudo docker login --username AWS --password-stdin 682769330988.dkr.ecr.us-east-1.amazonaws.com
+    
+    # Clean up stale data from previous runs (safe operations only - no pkill)
+    # This enables reusing stopped instances without filling up disk
+    echo "Cleaning up stale data from previous runs..."
+
+    # Clean up stopped containers and dangling images (keep the base image cached)
+    sudo docker container prune -f || true
+    sudo docker image prune -f || true
+
+    # Remove eval containers from previous runs (they have the anzu_lbm_eval label)
+    sudo docker ps -aq --filter "label=anzu_lbm_eval=1" | xargs -r sudo docker rm -f || true
+
+    # Clean up host-level temp directories (these accumulate across runs)
+    sudo rm -rf /tmp/vla_foundry_checkpoints/* 2>/dev/null || true
+    sudo rm -rf /tmp/vla_foundry_runtime* 2>/dev/null || true
+    sudo rm -rf /tmp/pip-* 2>/dev/null || true
+    find /tmp -maxdepth 1 -name "core.*" -delete 2>/dev/null || true
+
+    # NOTE: pkill commands removed - they were killing Ray or other critical processes
+    # If you need to kill orphaned processes, do it manually before ray up
+
+    echo "Disk usage after startup cleanup:"
+    df -h / /tmp 2>/dev/null || df -h /
+    
+    # Pull Docker image from ECR (only workers need this, not head node)
+    sudo docker pull 682769330988.dkr.ecr.us-east-1.amazonaws.com/anzu-vla-foundry:latest
+
+    # Extract venv from Docker image to host cache for reuse with custom branches
+    # This allows mounting different code versions while reusing the pre-built venv
+    VENV_CACHE="/home/ubuntu/vla_foundry_venv_cache"
+    if [ ! -d "$VENV_CACHE/.venv" ]; then
+      echo "Extracting venv from Docker image to $VENV_CACHE..."
+      sudo rm -rf "$VENV_CACHE"
+      mkdir -p "$VENV_CACHE"
+      sudo docker run --rm \
+        -v "$VENV_CACHE:/host_cache" \
+        682769330988.dkr.ecr.us-east-1.amazonaws.com/anzu-vla-foundry:latest \
+        cp -r /opt/vla_foundry/.venv /host_cache/.venv
+      sudo chown -R ubuntu:ubuntu "$VENV_CACHE"
+      echo "Venv extracted successfully"
+    else
+      echo "Venv cache already exists at $VENV_CACHE"
+    fi
+
+    # Prepare log volume shared across jobs
+    sudo docker volume rm anzu_vla_foundry_logs 2>/dev/null || true
+    sudo docker volume create anzu_vla_foundry_logs
+    sudo docker run --rm --entrypoint /bin/bash --user root \
+      -v anzu_vla_foundry_logs:/tmp/lbm \
+      682769330988.dkr.ecr.us-east-1.amazonaws.com/anzu-vla-foundry:latest \
+      -c 'mkdir -p /tmp/lbm/logs && chown -R anzu:anzu /tmp/lbm'
+
+head_start_ray_commands:
+  - export PATH="$HOME/.local/bin:$PATH" && ray stop || true
+  # Start Redis for GCS fault tolerance (runs on port 6380 to avoid conflict with Ray's default port)
+  - sudo systemctl stop redis-server 2>/dev/null || true; sudo sed -i 's/^port .*/port 6380/' /etc/redis/redis.conf; sudo sed -i 's/^bind .*/bind 0.0.0.0/' /etc/redis/redis.conf; sudo systemctl start redis-server; sleep 2; redis-cli -p 6380 ping
+  - >-
+    export PATH="$HOME/.local/bin:$PATH" &&
+    export RAY_JOB_START_TIMEOUT_SECONDS=86400 &&
+    export RAY_REDIS_ADDRESS=localhost:6380 &&
+    export RAY_GCS_FT_ENABLED=1 &&
+    ulimit -n 65536 &&
+    ray start --head --port=6379 --object-manager-port=8076
+    --autoscaling-config=~/ray_bootstrap_config.yaml
+    --dashboard-host=0.0.0.0 --include-dashboard=True
+    --num-gpus=0
+
+worker_start_ray_commands:
+  - export PATH="$HOME/.local/bin:$PATH" && ray stop || true
+  - export PATH="$HOME/.local/bin:$PATH" && ulimit -n 65536 && ray start --address=${RAY_HEAD_IP}:6379 --object-manager-port=8076
+

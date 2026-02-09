@@ -1,0 +1,103 @@
+# Evaluation Campaign Configuration
+# This file defines a complete evaluation campaign that will:
+# 1. Spin up a Ray cluster
+# 2. Run evaluations across multiple tasks/checkpoints
+# 3. Collect and report results
+# 4. Optionally tear down the cluster
+
+# Campaign metadata
+campaign_name: "ablation_singletask_diffusion_policy_rot_fix"
+description: "Evaluation of 4 single-task diffusion policy tasks with ablated models"
+
+# Cluster configuration
+cluster:
+  # Path to Ray cluster config file
+  config_file: "vla_foundry/tri/lbm_eval/eval_campaigns/ray_policy_runner_cluster.yaml"
+
+  # Number of workers to use
+  num_workers: 256
+
+  # AWS profile for cluster operations
+  aws_profile: "manip-cluster"
+
+  # Owner email for AWS resource tagging (REQUIRED)
+  # This is used for cost attribution - must be your @tri.global email
+  owner_email: ""
+
+  # Cluster name (optional) - derived from owner_email if not specified
+  # Each user gets their own isolated cluster (e.g., lbm_eval_jean_mercat)
+  # This prevents multiple users from interfering with each other's clusters
+  # cluster_name: "lbm_eval_my_custom_name"
+
+  # Whether to tear down cluster after completion
+  teardown_on_completion: true
+
+  # Whether to tear down cluster on failure
+  teardown_on_failure: true
+
+# Evaluation configuration
+evaluation:
+
+  # Number of jobs per GPU, allows to share one GPU between multiple eval runs in parallel
+  jobs_per_gpu: 1
+
+  # Option 1: Use a tasks file (each line is job_name, task_name, checkpoint)
+  # tasks_file: "eval_campaigns/task_lists/new_batch_subset_16.txt"
+  tasks_file: "vla_foundry/tri/lbm_eval/eval_campaigns/task_lists/ablation_subset.txt"
+  
+  # Option 2: Use a single task with multiple checkpoints (comment out tasks_file above)
+  # task: "BimanualPutRedBellPepperInBin"
+  # checkpoints:
+  #   - "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/2025_11_20-08_58_22-model_diffusion_policy-lr_0.0001-bsz_1024/" # 30k new data, absolute, 80%
+  #   - "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/2025_11_20-09_09_22-model_diffusion_policy-lr_0.0001-bsz_1024/" # 30k new data, absolute, 0%
+  #   - "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/2025_11_20-10_32_46-model_diffusion_policy-lr_0.0001-bsz_1024/" # 30k new data, absolute, 76%
+  #   - "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/2025_11_20-17_40_19-model_diffusion_policy-lr_0.0001-bsz_1024/" # 30k new data, absolute, 71%
+  #   - "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/2025_11_20-18_41_37-model_diffusion_policy-lr_0.0001-bsz_1024/" # 30k new data, absolute, 
+  #   - "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/2025_11_21-03_03_52-model_diffusion_policy-lr_0.0001-bsz_1024/" # 30k new data, absolute, 
+  
+  # Number of evaluation samples per task
+  num_samples: 200
+  
+  # Starting demonstration index
+  start_index: 0
+  
+  # Launch configuration (launch_sim derives config from task name)
+  launch_scenario: "GrpcServerToSim"
+  launch_script: "launch_sim.sh"
+  
+  # Inference parameters
+  num_flow_steps: 8
+  open_loop_steps: 8
+  device: "cuda"
+  # Reserve 1 GPU per job to ensure jobs distribute across GPUs without contention
+  # Workers may take time to join (large Docker image pull), but this guarantees proper distribution
+  entrypoint_num_gpus: 1
+  # Reserve memory per job to prevent OOM (bytes). This throttles concurrent jobs.
+  # 58GB (62277025792) is the default used in cluster_resources.py
+  entrypoint_memory: 62277025792
+  # AWS profile to use inside inference containers (e.g., for vla_foundry checkpoints)
+  # Credentials are exported from your LOCAL machine using this profile, then passed to workers
+  inference_aws_profile: "sagemaker"
+
+# Docker configuration
+docker:
+  # Full ECR image URI
+  image: "682769330988.dkr.ecr.us-east-1.amazonaws.com/anzu-vla-foundry:latest"
+  # image: "682769330988.dkr.ecr.us-east-1.amazonaws.com/anzu-vla-foundry:stage3"
+
+# vla_foundry source management (cloned locally and mounted into ray worker containers)
+# Jobs can be set to a specific branch but not a different source repo, you should set that correctly here
+vla_found
+  repo_url: "git@github.com:TRI-ML/vla_foundry_internal.git"
+  ref: "main"
+  local_dir: "~/.cache/vla_foundry/ray_mount"
+  use_remote_repo: true
+  remote_dir: "/home/ubuntu/vla_foundry_mount"
+  mount_target: "/opt/vla_foundry"
+
+# Output configuration
+output:
+  # Directory to save results
+  results_dir: "results/stage3_singletask_rot_fix"
+  # Set to true to always download Ray job logs (stdout/stderr) for each submission
+  save_job_logs: true

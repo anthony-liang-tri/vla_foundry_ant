@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VLA Foundry Dashboard</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+            padding: 1rem;
+            font-size: 13px;
+        }
+        .container {
+            max-width: 1900px;
+            margin: 0 auto;
+        }
+        h1 {
+            font-size: 1.4rem;
+            color: #f8fafc;
+        }
+        .tabs {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .tab {
+            padding: 0.4rem 1rem;
+            background: #1e293b;
+            border: none;
+            border-radius: 0.4rem;
+            color: #94a3b8;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+        .tab:hover {
+            background: #334155;
+        }
+        .tab.active {
+            background: #3b82f6;
+            color: white;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+        }
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        .refresh-btn {
+            padding: 0.4rem 0.8rem;
+            background: #334155;
+            border: none;
+            border-radius: 0.4rem;
+            color: #e2e8f0;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+        .refresh-btn:hover {
+            background: #475569;
+        }
+
+        /* Filter bar */
+        .filter-bar {
+            display: flex;
+            gap: 0.75rem;
+            margin-bottom: 0.75rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .search-input {
+            padding: 0.4rem 0.8rem;
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 0.4rem;
+            color: #e2e8f0;
+            font-size: 0.85rem;
+            width: 250px;
+        }
+        .search-input::placeholder {
+            color: #64748b;
+        }
+        .search-input:focus {
+            outline: none;
+            border-color: #3b82f6;
+        }
+        .filter-select {
+            padding: 0.4rem 0.8rem;
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 0.4rem;
+            color: #e2e8f0;
+            font-size: 0.85rem;
+        }
+        .filter-select:focus {
+            outline: none;
+            border-color: #3b82f6;
+        }
+        .auto-refresh-toggle {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.85rem;
+            color: #94a3b8;
+        }
+        .auto-refresh-toggle input {
+            cursor: pointer;
+        }
+
+        /* Table styles */
+        .table-wrapper {
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #1e293b;
+            border-radius: 0.5rem;
+            overflow: hidden;
+            min-width: 1400px;
+        }
+        th {
+            background: #334155;
+            padding: 0.5rem 0.6rem;
+            text-align: left;
+            font-weight: 500;
+            color: #94a3b8;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            white-space: nowrap;
+            position: sticky;
+            top: 0;
+        }
+        td {
+            padding: 0.4rem 0.6rem;
+            border-top: 1px solid #334155;
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+        tr:hover {
+            background: #253449;
+        }
+
+        /* Status badges */
+        .badge {
+            padding: 0.1rem 0.4rem;
+            border-radius: 9999px;
+            font-size: 0.65rem;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+        .badge-success {
+            background: #166534;
+            color: #86efac;
+        }
+        .badge-running {
+            background: #1e40af;
+            color: #93c5fd;
+        }
+        .badge-warn {
+            background: #854d0e;
+            color: #fde047;
+        }
+        .badge-error {
+            background: #7f1d1d;
+            color: #fca5a5;
+        }
+
+        /* Progress bar */
+        .progress-cell {
+            min-width: 80px;
+        }
+        .progress-bar {
+            background: #334155;
+            height: 5px;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 2px;
+        }
+        .progress-fill {
+            background: #3b82f6;
+            height: 100%;
+            transition: width 0.3s;
+        }
+        .progress-fill.complete {
+            background: #22c55e;
+        }
+        .progress-fill.crashed {
+            background: #dc2626;
+        }
+        .progress-text {
+            font-size: 0.7rem;
+            color: #94a3b8;
+        }
+
+        /* Links */
+        a {
+            color: #60a5fa;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+
+        /* Mono text for IDs/paths */
+        .mono {
+            font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+            font-size: 0.75rem;
+        }
+
+        /* Truncate long text */
+        .truncate {
+            max-width: 120px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .truncate-path {
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* Secondary text */
+        .muted {
+            color: #64748b;
+        }
+        .small {
+            font-size: 0.7rem;
+        }
+
+        .loading, .empty {
+            text-align: center;
+            padding: 3rem;
+            color: #64748b;
+        }
+        .error {
+            background: #7f1d1d;
+            color: #fecaca;
+            padding: 0.8rem;
+            border-radius: 0.4rem;
+            margin-bottom: 1rem;
+        }
+
+        /* Sortable headers */
+        th.sortable {
+            cursor: pointer;
+            user-select: none;
+        }
+        th.sortable:hover {
+            background: #3d4f63;
+        }
+        th.sortable::after {
+            content: ' \2195';
+            opacity: 0.4;
+        }
+        th.sort-asc::after {
+            content: ' \2191';
+            opacity: 1;
+        }
+        th.sort-desc::after {
+            content: ' \2193';
+            opacity: 1;
+        }
+
+        /* Git info tooltip */
+        .git-info {
+            position: relative;
+            cursor: help;
+        }
+        .git-info:hover .git-tooltip {
+            display: block;
+        }
+        .git-tooltip {
+            display: none;
+            position: absolute;
+            background: #1e293b;
+            border: 1px solid #334155;
+            padding: 0.5rem;
+            border-radius: 0.4rem;
+            z-index: 100;
+            white-space: pre;
+            font-size: 0.75rem;
+            left: 0;
+            top: 100%;
+            min-width: 200px;
+        }
+
+        /* Count badge */
+        .count-badge {
+            background: #334155;
+            color: #94a3b8;
+            padding: 0.1rem 0.4rem;
+            border-radius: 0.25rem;
+            font-size: 0.7rem;
+            margin-left: 0.5rem;
+        }
+
+        /* Config button */
+        .config-btn {
+            padding: 0.15rem 0.4rem;
+            background: #334155;
+            border: none;
+            border-radius: 0.25rem;
+            color: #94a3b8;
+            cursor: pointer;
+            font-size: 0.7rem;
+        }
+        .config-btn:hover {
+            background: #475569;
+            color: #e2e8f0;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+        }
+        .modal.show {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-content {
+            background: #1e293b;
+            border-radius: 0.5rem;
+            width: 90%;
+            max-width: 900px;
+            max-height: 85vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            border-bottom: 1px solid #334155;
+        }
+        .modal-header h2 {
+            font-size: 1rem;
+            color: #f8fafc;
+        }
+        .modal-close {
+            background: none;
+            border: none;
+            color: #94a3b8;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+        }
+        .modal-close:hover {
+            color: #e2e8f0;
+        }
+        .modal-body {
+            padding: 1rem;
+            overflow-y: auto;
+            flex: 1;
+        }
+        .config-pre {
+            background: #0f172a;
+            padding: 1rem;
+            border-radius: 0.4rem;
+            overflow-x: auto;
+            font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+            font-size: 0.75rem;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            color: #e2e8f0;
+        }
+        /* YAML Syntax Highlighting */
+        .yaml-key { color: #f472b6; }
+        .yaml-string { color: #a5d6ff; }
+        .yaml-number { color: #79c0ff; }
+        .yaml-boolean { color: #ff7b72; }
+        .yaml-null { color: #8b949e; }
+        .yaml-comment { color: #6b7280; font-style: italic; }
+        .config-meta {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+            padding: 0.75rem;
+            background: #0f172a;
+            border-radius: 0.4rem;
+        }
+        .config-meta-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+        }
+        .config-meta-label {
+            font-size: 0.65rem;
+            color: #64748b;
+            text-transform: uppercase;
+        }
+        .config-meta-value {
+            font-size: 0.8rem;
+            color: #e2e8f0;
+            font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-left">
+                <h1>VLA Foundry Dashboard</h1>
+                <div class="tabs">
+                    <button class="tab active" onclick="showTab('models')">Training Runs <span id="models-count" class="count-badge">0</span></button>
+                    <button class="tab" onclick="showTab('datasets')">Datasets <span id="datasets-count" class="count-badge">0</span></button>
+                    <a href="/leaderboard" class="tab" style="text-decoration: none;">Evaluation Leaderboard</a>
+                </div>
+            </div>
+            <div class="header-right">
+                <label class="auto-refresh-toggle">
+                    <input type="checkbox" id="auto-refresh" onchange="toggleAutoRefresh()">
+                    Auto-refresh (30s)
+                </label>
+                <button class="refresh-btn" onclick="refresh()">Refresh</button>
+            </div>
+        </div>
+
+        <div id="models-tab">
+            <div class="filter-bar">
+                <input type="text" class="search-input" id="models-search" placeholder="Search runs..." oninput="filterModels()">
+                <select class="filter-select" id="status-filter" onchange="filterModels()">
+                    <option value="">All Status</option>
+                    <option value="running">Running</option>
+                    <option value="completed">Completed</option>
+                    <option value="crashed">Crashed</option>
+                </select>
+                <select class="filter-select" id="user-filter" onchange="filterModels()">
+                    <option value="">All Users</option>
+                </select>
+                <select class="filter-select" id="branch-filter" onchange="filterModels()">
+                    <option value="">All Branches</option>
+                </select>
+            </div>
+            <div class="table-wrapper">
+                <div id="models-content" class="loading">Loading...</div>
+            </div>
+        </div>
+
+        <div id="datasets-tab" style="display: none;">
+            <div class="filter-bar">
+                <input type="text" class="search-input" id="datasets-search" placeholder="Search datasets..." oninput="filterDatasets()">
+                <select class="filter-select" id="dataset-user-filter" onchange="filterDatasets()">
+                    <option value="">All Users</option>
+                </select>
+            </div>
+            <div class="table-wrapper">
+                <div id="datasets-content" class="loading">Loading...</div>
+            </div>
+        </div>
+
+        <!-- Config Modal -->
+        <div id="config-modal" class="modal" onclick="if(event.target === this) closeConfigModal()">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 id="config-modal-title">Configuration</h2>
+                    <button class="modal-close" onclick="closeConfigModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div id="config-meta" class="config-meta"></div>
+                    <pre id="config-content" class="config-pre"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = window.location.origin;
+        let currentSort = { field: 'datetime_job_started', dir: 'desc' };
+        let allRuns = [];
+        let filteredRuns = [];
+        let allDatasets = [];
+        let filteredDatasets = [];
+        let autoRefreshInterval = null;
+
+        async function fetchModels() {
+            const response = await fetch(`${API_URL}/api/models`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return response.json();
+        }
+
+        async function fetchDatasets() {
+            const response = await fetch(`${API_URL}/api/datasets`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return response.json();
+        }
+
+        function groupByRunId(models) {
+            const runs = {};
+            models.forEach(m => {
+                const runId = m.run_id || m.uuid;
+                if (!runs[runId]) {
+                    runs[runId] = {
+                        run_id: runId,
+                        checkpoints: [],
+                        ...m
+                    };
+                }
+                runs[runId].checkpoints.push(m);
+            });
+
+            Object.values(runs).forEach(run => {
+                run.checkpoints.sort((a, b) => (a.checkpoint_number_current || 0) - (b.checkpoint_number_current || 0));
+                const latest = run.checkpoints[run.checkpoints.length - 1];
+                Object.assign(run, latest);
+                const samples_current = run.sample_number_current || run.samples_number_current || 0;
+                const samples_total = run.sample_number_total || run.samples_number_total || 0;
+                run.progress = samples_total
+                    ? Math.min(100, samples_current / samples_total * 100)
+                    : 0;
+            });
+
+            return Object.values(runs);
+        }
+
+        function sortRuns(runs, field, dir) {
+            return [...runs].sort((a, b) => {
+                let aVal = a[field];
+                let bVal = b[field];
+
+                if (field === 'datetime_job_started' || field === 'datetime') {
+                    aVal = new Date(aVal || 0);
+                    bVal = new Date(bVal || 0);
+                }
+
+                if (aVal < bVal) return dir === 'asc' ? -1 : 1;
+                if (aVal > bVal) return dir === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+
+        function handleSort(field) {
+            if (currentSort.field === field) {
+                currentSort.dir = currentSort.dir === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort.field = field;
+                currentSort.dir = 'desc';
+            }
+            renderModelsTable();
+        }
+
+        function populateFilters() {
+            // Users
+            const users = [...new Set(allRuns.map(r => r.created_by).filter(Boolean))].sort();
+            const userFilter = document.getElementById('user-filter');
+            userFilter.innerHTML = '<option value="">All Users</option>' +
+                users.map(u => `<option value="${u}">${u}</option>`).join('');
+
+            // Branches
+            const branches = [...new Set(allRuns.map(r => r.git_branch).filter(Boolean))].sort();
+            const branchFilter = document.getElementById('branch-filter');
+            branchFilter.innerHTML = '<option value="">All Branches</option>' +
+                branches.map(b => `<option value="${b}">${b}</option>`).join('');
+
+            // Dataset users
+            const dsUsers = [...new Set(allDatasets.map(d => d.created_by).filter(Boolean))].sort();
+            const dsUserFilter = document.getElementById('dataset-user-filter');
+            dsUserFilter.innerHTML = '<option value="">All Users</option>' +
+                dsUsers.map(u => `<option value="${u}">${u}</option>`).join('');
+        }
+
+        // Check if a run is likely crashed (not completed and no update for > 30 minutes)
+        // Used as fallback for older runs without explicit status field
+        function isRunCrashedHeuristic(run) {
+            if (run.completed) return false;
+            if (!run.datetime) return false;
+            const lastUpdate = new Date(run.datetime);
+            const now = new Date();
+            const minutesSinceUpdate = (now - lastUpdate) / (1000 * 60);
+            return minutesSinceUpdate > 30;  // Consider crashed if no update for 30+ minutes
+        }
+
+        // Get run status: 'completed', 'running', or 'crashed'
+        // Uses explicit status field if available, otherwise falls back to heuristic
+        function getRunStatus(run) {
+            // Use explicit status field if present (new runs)
+            if (run.status) {
+                return run.status;  // 'running', 'completed', or 'crashed'
+            }
+            // Fallback for older runs without status field
+            if (run.completed) return 'completed';
+            if (isRunCrashedHeuristic(run)) return 'crashed';
+            return 'running';
+        }
+
+        function filterModels() {
+            const search = document.getElementById('models-search').value.toLowerCase();
+            const status = document.getElementById('status-filter').value;
+            const user = document.getElementById('user-filter').value;
+            const branch = document.getElementById('branch-filter').value;
+
+            filteredRuns = allRuns.filter(run => {
+                const runStatus = getRunStatus(run);
+                if (status === 'running' && runStatus !== 'running') return false;
+                if (status === 'completed' && runStatus !== 'completed') return false;
+                if (status === 'crashed' && runStatus !== 'crashed') return false;
+                if (user && run.created_by !== user) return false;
+                if (branch && run.git_branch !== branch) return false;
+                if (search) {
+                    const searchStr = JSON.stringify(run).toLowerCase();
+                    if (!searchStr.includes(search)) return false;
+                }
+                return true;
+            });
+
+            renderModelsTable();
+        }
+
+        function filterDatasets() {
+            const search = document.getElementById('datasets-search').value.toLowerCase();
+            const user = document.getElementById('dataset-user-filter').value;
+
+            filteredDatasets = allDatasets.filter(ds => {
+                if (user && ds.created_by !== user) return false;
+                if (search) {
+                    const searchStr = JSON.stringify(ds).toLowerCase();
+                    if (!searchStr.includes(search)) return false;
+                }
+                return true;
+            });
+
+            renderDatasetsTable();
+        }
+
+        function renderModelsTable() {
+            const container = document.getElementById('models-content');
+            document.getElementById('models-count').textContent = filteredRuns.length;
+
+            if (filteredRuns.length === 0) {
+                container.innerHTML = '<div class="empty">No training runs found</div>';
+                return;
+            }
+
+            const sorted = sortRuns(filteredRuns, currentSort.field, currentSort.dir);
+
+            const sortClass = (field) => {
+                if (currentSort.field !== field) return 'sortable';
+                return `sortable sort-${currentSort.dir}`;
+            };
+
+            // Store runs for modal access
+            window._modelRuns = sorted;
+
+            container.innerHTML = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Status</th>
+                            <th class="${sortClass('run_id')}" onclick="handleSort('run_id')">Run ID</th>
+                            <th>Progress</th>
+                            <th>Ckpt</th>
+                            <th>Samples</th>
+                            <th class="${sortClass('created_by')}" onclick="handleSort('created_by')">User</th>
+                            <th class="${sortClass('hostname')}" onclick="handleSort('hostname')">Host</th>
+                            <th class="${sortClass('git_branch')}" onclick="handleSort('git_branch')">Branch</th>
+                            <th>Commit</th>
+                            <th>W&B</th>
+                            <th class="${sortClass('datetime_job_started')}" onclick="handleSort('datetime_job_started')">Started</th>
+                            <th>Checkpoints Path</th>
+                            <th>Fixed Model</th>
+                            <th>Cfg</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${sorted.map((run, idx) => {
+                            const progress = (run.progress || 0).toFixed(0);
+                            const runStatus = getRunStatus(run);
+                            let badgeClass, statusLabel;
+                            if (runStatus === 'completed') {
+                                badgeClass = 'success';
+                                statusLabel = 'Done';
+                            } else if (runStatus === 'crashed') {
+                                badgeClass = 'error';
+                                statusLabel = 'Crashed';
+                            } else {
+                                badgeClass = 'running';
+                                statusLabel = 'Running';
+                            }
+                            const startDate = run.datetime_job_started
+                                ? new Date(run.datetime_job_started).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                                : '-';
+
+                            const hasLocalChanges = run.git_has_local_changes;
+                            const commitDisplay = run.git_commit_hash
+                                ? `<span class="mono">${run.git_commit_hash.substring(0, 7)}</span>${hasLocalChanges ? ' <span class="badge badge-warn">dirty</span>' : ''}`
+                                : '-';
+
+                            const hostShort = run.hostname ? run.hostname.split('.')[0].substring(0, 12) : '-';
+
+                            return `
+                                <tr>
+                                    <td><span class="badge badge-${badgeClass}">${statusLabel}</span></td>
+                                    <td class="mono" title="${run.run_id || run.uuid || ''}">${(run.run_id || run.uuid || '-').substring(0, 8)}</td>
+                                    <td class="progress-cell">
+                                        <span class="progress-text">${progress}%</span>
+                                        <div class="progress-bar">
+                                            <div class="progress-fill ${runStatus === 'completed' ? 'complete' : runStatus === 'crashed' ? 'crashed' : ''}" style="width: ${progress}%"></div>
+                                        </div>
+                                    </td>
+                                    <td class="small">${run.checkpoint_number_current || 0}/${run.checkpoint_number_total || '?'}</td>
+                                    <td class="small">${formatNumber(run.samples_number_current || run.sample_number_current)}/${formatNumber(run.samples_number_total || run.sample_number_total)}</td>
+                                    <td>${run.created_by || '-'}</td>
+                                    <td class="truncate small" title="${run.hostname || ''}">${hostShort}</td>
+                                    <td class="truncate" title="${run.git_branch || ''}">${run.git_branch || '-'}</td>
+                                    <td>${commitDisplay}</td>
+                                    <td>${run.wandb_url ? `<a href="${run.wandb_url}" target="_blank">View</a>` : '-'}</td>
+                                    <td class="muted small">${startDate}</td>
+                                    <td class="mono truncate-path" title="${run.model_checkpoints_path || ''}">${formatS3Link(run.model_checkpoints_path)}</td>
+                                    <td class="mono truncate-path" title="${run.fixed_model_path || ''}">${formatS3Link(run.fixed_model_path)}</td>
+                                    <td><button class="config-btn" onclick="showConfigModal(window._modelRuns[${idx}], 'model')">View</button></td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        function renderModels(models) {
+            allRuns = groupByRunId(models);
+            filteredRuns = allRuns;
+            populateFilters();
+            renderModelsTable();
+        }
+
+        function renderDatasetsTable() {
+            const container = document.getElementById('datasets-content');
+            document.getElementById('datasets-count').textContent = filteredDatasets.length;
+
+            if (filteredDatasets.length === 0) {
+                container.innerHTML = '<div class="empty">No datasets found</div>';
+                return;
+            }
+
+            // Store datasets for modal access
+            window._datasets = filteredDatasets;
+
+            container.innerHTML = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>UUID</th>
+                            <th>Episodes</th>
+                            <th>Frames</th>
+                            <th>Samp/Shard</th>
+                            <th>Shards</th>
+                            <th>Total Samples</th>
+                            <th>User</th>
+                            <th>Host</th>
+                            <th>Branch</th>
+                            <th>Commit</th>
+                            <th>Created</th>
+                            <th>Target Path</th>
+                            <th>Fixed Path</th>
+                            <th>Cfg</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${filteredDatasets.map((ds, idx) => {
+                            const date = ds.datetime
+                                ? new Date(ds.datetime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                                : '-';
+
+                            const hasLocalChanges = ds.git_has_local_changes;
+                            const commitDisplay = ds.git_commit_hash
+                                ? `<span class="mono">${ds.git_commit_hash.substring(0, 7)}</span>${hasLocalChanges ? ' <span class="badge badge-warn">dirty</span>' : ''}`
+                                : '-';
+
+                            const hostShort = ds.hostname ? ds.hostname.split('.')[0].substring(0, 12) : '-';
+
+                            return `
+                                <tr>
+                                    <td>${ds.dataset_type || '-'}</td>
+                                    <td class="mono" title="${ds.uuid || ''}">${(ds.uuid || '').substring(0, 8)}</td>
+                                    <td>${formatNumber(ds.episode_count)}</td>
+                                    <td>${formatNumber(ds.frame_count)}</td>
+                                    <td>${formatNumber(ds.samples_per_shard)}</td>
+                                    <td>${ds.num_shards || '-'}</td>
+                                    <td>${formatNumber(ds.total_samples_created)}</td>
+                                    <td>${ds.created_by || '-'}</td>
+                                    <td class="truncate small" title="${ds.hostname || ''}">${hostShort}</td>
+                                    <td class="truncate" title="${ds.git_branch || ''}">${ds.git_branch || '-'}</td>
+                                    <td>${commitDisplay}</td>
+                                    <td class="muted small">${date}</td>
+                                    <td class="mono truncate-path" title="${ds.dataset_target_path || ''}">${formatS3Link(ds.dataset_target_path)}</td>
+                                    <td class="mono truncate-path" title="${ds.dataset_fixed_path || ''}">${formatS3Link(ds.dataset_fixed_path)}</td>
+                                    <td><button class="config-btn" onclick="showConfigModal(window._datasets[${idx}], 'dataset')">View</button></td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        function renderDatasets(datasets) {
+            allDatasets = datasets.sort((a, b) => new Date(b.datetime) - new Date(a.datetime));
+            filteredDatasets = allDatasets;
+            populateFilters();
+            renderDatasetsTable();
+        }
+
+        function formatNumber(n) {
+            if (n === null || n === undefined) return '-';
+            if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+            if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+            return n.toString();
+        }
+
+        function formatS3Link(path) {
+            if (!path) return '-';
+            if (path.startsWith('s3://')) {
+                const url = `https://anyfile.us-west-2.awsinternal.tri.global/browse/${path}`;
+                return `<a href="${url}" target="_blank">${path}</a>`;
+            }
+            return path;
+        }
+
+        function highlightYAML(yaml) {
+            if (!yaml) return '<span class="yaml-null">No configuration available</span>';
+
+            // Escape HTML first
+            yaml = yaml.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+            // Process line by line for YAML
+            return yaml.split('\n').map(line => {
+                // Comments
+                if (line.trim().startsWith('#')) {
+                    return '<span class="yaml-comment">' + line + '</span>';
+                }
+
+                // List items (check before key-value to avoid breaking URLs like s3://)
+                if (line.trim().startsWith('- ') || line.trim() === '-') {
+                    return line;
+                }
+
+                // Key-value pairs - only match colon followed by space (not :// in URLs)
+                const colonMatch = line.match(/^(\s*)([\w_.-]+):\s(.*)$/);
+                if (colonMatch) {
+                    const indent = colonMatch[1];
+                    const key = colonMatch[2];
+                    let value = colonMatch[3];
+
+                    // Highlight the value
+                    if (value === '' || value === '~' || value === 'null') {
+                        value = value ? '<span class="yaml-null">' + value + '</span>' : '';
+                    } else if (value === 'true' || value === 'false') {
+                        value = '<span class="yaml-boolean">' + value + '</span>';
+                    } else if (/^-?\d+\.?\d*([eE][-+]?\d+)?$/.test(value)) {
+                        value = '<span class="yaml-number">' + value + '</span>';
+                    } else if (value.startsWith("'") || value.startsWith('"')) {
+                        value = '<span class="yaml-string">' + value + '</span>';
+                    } else if (value && !value.startsWith('[') && !value.startsWith('{')) {
+                        value = '<span class="yaml-string">' + value + '</span>';
+                    }
+
+                    return indent + '<span class="yaml-key">' + key + '</span>: ' + value;
+                }
+
+                return line;
+            }).join('\n');
+        }
+
+        function showConfigModal(item, type = 'model') {
+            const modal = document.getElementById('config-modal');
+            const title = document.getElementById('config-modal-title');
+            const metaContainer = document.getElementById('config-meta');
+            const configContent = document.getElementById('config-content');
+
+            title.textContent = type === 'model'
+                ? `Training Run: ${item.experiment_name || item.uuid?.substring(0, 8) || 'Unknown'}`
+                : `Dataset: ${item.dataset_type || 'Unknown'} - ${item.uuid?.substring(0, 8) || 'Unknown'}`;
+
+            // Build metadata display
+            const metaFields = type === 'model' ? [
+                { label: 'UUID', value: item.uuid },
+                { label: 'User', value: item.created_by },
+                { label: 'Started', value: item.datetime_job_started ? new Date(item.datetime_job_started).toLocaleString() : '-' },
+                { label: 'Hostname', value: item.hostname },
+                { label: 'Python', value: item.python_version },
+                { label: 'Platform', value: item.platform },
+                { label: 'Git Branch', value: item.git_branch },
+                { label: 'Git Commit', value: item.git_commit_hash },
+                { label: 'Dirty', value: item.git_has_local_changes ? 'Yes' : 'No' },
+            ] : [
+                { label: 'UUID', value: item.uuid },
+                { label: 'Type', value: item.dataset_type },
+                { label: 'User', value: item.created_by },
+                { label: 'Created', value: item.datetime ? new Date(item.datetime).toLocaleString() : '-' },
+                { label: 'Hostname', value: item.hostname },
+                { label: 'Python', value: item.python_version },
+                { label: 'Platform', value: item.platform },
+                { label: 'Git Branch', value: item.git_branch },
+                { label: 'Git Commit', value: item.git_commit_hash },
+            ];
+
+            metaContainer.innerHTML = metaFields.map(f => `
+                <div class="config-meta-item">
+                    <span class="config-meta-label">${f.label}</span>
+                    <span class="config-meta-value">${f.value || '-'}</span>
+                </div>
+            `).join('');
+
+            // Display config YAML with syntax highlighting
+            configContent.innerHTML = highlightYAML(item.cfg);
+
+            modal.classList.add('show');
+        }
+
+        function closeConfigModal() {
+            document.getElementById('config-modal').classList.remove('show');
+        }
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeConfigModal();
+        });
+
+        function showTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelector(`.tab:nth-child(${tab === 'models' ? 1 : 2})`).classList.add('active');
+
+            document.getElementById('models-tab').style.display = tab === 'models' ? 'block' : 'none';
+            document.getElementById('datasets-tab').style.display = tab === 'datasets' ? 'block' : 'none';
+        }
+
+        function toggleAutoRefresh() {
+            const enabled = document.getElementById('auto-refresh').checked;
+            if (enabled) {
+                autoRefreshInterval = setInterval(refresh, 30000);
+            } else if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+            }
+        }
+
+        async function refresh() {
+            try {
+                const [models, datasets] = await Promise.all([fetchModels(), fetchDatasets()]);
+                renderModels(models);
+                renderDatasets(datasets);
+            } catch (e) {
+                const errorHtml = `<div class="error">Error: ${e.message}</div>`;
+                document.getElementById('models-content').innerHTML = errorHtml;
+                document.getElementById('datasets-content').innerHTML = errorHtml;
+            }
+        }
+
+        refresh();
+    </script>
+</body>
+</html>

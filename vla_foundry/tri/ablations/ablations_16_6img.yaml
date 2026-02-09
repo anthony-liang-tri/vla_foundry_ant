@@ -1,0 +1,27 @@
+# Ablation experiment definitions
+# Each ablation can override base_args from nominal_config.yaml
+#
+# Sweep syntax:
+#   - List: [value1, value2, value3]
+#   - Linear range: linspace(start, end, n_steps)
+#   - Log range: logspace(start, end, n_steps)
+#
+# Sweeps generate multiple ablations with auto-naming:
+#   ablation_name + "_" + param_short_name + "_" + value
+
+ablations:
+
+  6cam_ema_std_0p05:
+    ema.enabled: true
+    data.dataset_statistics: '["s3://tri-ml-datasets-uw2/vla_foundry_datasets/v0.3/stage3_singletask_sim/stats.json"]'
+    model.input_noise_std: 0.05
+    data.camera_names: '["scene_right_0", "scene_left_0", "wrist_left_plus", "wrist_left_minus", "wrist_right_plus", "wrist_right_minus"]'
+
+
+  6cam_ema_std_0p05_past_timesteps_2:
+    ema.enabled: true
+    data.dataset_statistics: '["s3://tri-ml-datasets-uw2/vla_foundry_datasets/v0.3/stage3_singletask_sim/stats.json"]'
+    model.input_noise_std: 0.05
+    data.lowdim_past_timesteps: 2
+    data.dataset_statistics: '["s3://tri-ml-datasets-uw2/vla_foundry_datasets/v0.3/stage3_singletask_sim/stats.json"]'
+    data.camera_names: '["scene_right_0", "scene_left_0", "wrist_left_plus", "wrist_left_minus", "wrist_right_plus", "wrist_right_minus"]'

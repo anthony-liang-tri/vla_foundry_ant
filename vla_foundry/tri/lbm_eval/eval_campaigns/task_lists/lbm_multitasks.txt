@@ -1,0 +1,19 @@
+# Task list generated for checkpoint: s3://robotics-manip-lbm-us-west-2/sagemaker_outputs/chenxu-lbm/chenxu-lbm-training-2025-04-11-13-15-57/epoch_0-step_48000/checkpoint.ckpt
+# Total tasks: 16
+
+("BimanualPlaceAppleFromBowlIntoBin", "BimanualPlaceAppleFromBowlIntoBin", "s3://robotics-manip-lbm-us-west-2/sagemaker_outputs/chenxu-lbm/chenxu-lbm-training-2025-04-11-13-15-57/epoch_0-step_48000/checkpoint.ckpt"),
+("BimanualPlaceFruitFromBowlIntoBin", "BimanualPlaceFruitFromBowlIntoBin", "s3://robotics-manip-lbm-us-west-2/sagemaker_outputs/chenxu-lbm/chenxu-lbm-training-2025-04-11-13-15-57/epoch_0-step_48000/checkpoint.ckpt"),
+("BimanualPutRedBellPepperInBin", "BimanualPutRedBellPepperInBin", "s3://robotics-manip-lbm-us-west-2/sagemaker_outputs/chenxu-lbm/chenxu-lbm-training-2025-04-11-13-15-57/epoch_0-step_48000/checkpoint.ckpt"),
+("BimanualPutSpatulaOnPlateFromDryingRack", "BimanualPutSpatulaOnPlateFromDryingRack", "s3://robotics-manip-lbm-us-west-2/sagemaker_outputs/chenxu-lbm/chenxu-lbm-training-2025-04-11-13-15-57/epoch_0-step_48000/checkpoint.ckpt"),
+("BimanualPutSpatulaOnPlateFromTable", "BimanualPutSpatulaOnPlateFromTable", "s3://robotics-manip-lbm-us-west-2/sagemaker_outputs/chenxu-lbm/chenxu-lbm-training-2025-04-11-13-15-57/epoch_0-step_48000/checkpoint.ckpt"),
+("BimanualStackPlatesOnTableFromDryingRack", "BimanualStackPlatesOnTableFromDryingRack", "s3://robotics-manip-lbm-us-west-2/sagemaker_outputs/chenxu-lbm/chenxu-lbm-training-2025-04-11-13-15-57/epoch_0-step_48000/checkpoint.ckpt"),
+("BimanualStoreCerealBoxUnderShelf", "BimanualStoreCerealBoxUnderShelf", "s3://robotics-manip-lbm-us-west-2/sagemaker_outputs/chenxu-lbm/chenxu-lbm-training-2025-04-11-13-15-57/epoch_0-step_48000/checkpoint.ckpt"),
+("PlaceCupByCoaster", "PlaceCupByCoaster", "s3://robotics-manip-lbm-us-west-2/sagemaker_outputs/chenxu-lbm/chenxu-lbm-training-2025-04-11-13-15-57/epoch_0-step_48000/checkpoint.ckpt"),
+("PushCoasterToCenterOfTable", "PushCoasterToCenterOfTable", "s3://robotics-manip-lbm-us-west-2/sagemaker_outputs/chenxu-lbm/chenxu-lbm-training-2025-04-11-13-15-57/epoch_0-step_48000/checkpoint.ckpt"),
+("PushCoasterToMug", "PushCoasterToMug", "s3://robotics-manip-lbm-us-west-2/sagemaker_outputs/chenxu-lbm/chenxu-lbm-training-2025-04-11-13-15-57/epoch_0-step_48000/checkpoint.ckpt"),
+("PutBananaOnSaucer", "PutBananaOnSaucer", "s3://robotics-manip-lbm-us-west-2/sagemaker_outputs/chenxu-lbm/chenxu-lbm-training-2025-04-11-13-15-57/epoch_0-step_48000/checkpoint.ckpt"),
+("PutKiwiInCenterOfTable", "PutKiwiInCenterOfTable", "s3://robotics-manip-lbm-us-west-2/sagemaker_outputs/chenxu-lbm/chenxu-lbm-training-2025-04-11-13-15-57/epoch_0-step_48000/checkpoint.ckpt"),
+("PutMugOnSaucer", "PutMugOnSaucer", "s3://robotics-manip-lbm-us-west-2/sagemaker_outputs/chenxu-lbm/chenxu-lbm-training-2025-04-11-13-15-57/epoch_0-step_48000/checkpoint.ckpt"),
+("PutSpatulaInUtensilCrock", "PutSpatulaInUtensilCrock", "s3://robotics-manip-lbm-us-west-2/sagemaker_outputs/chenxu-lbm/chenxu-lbm-training-2025-04-11-13-15-57/epoch_0-step_48000/checkpoint.ckpt"),
+("TurnCupUpsideDown", "TurnCupUpsideDown", "s3://robotics-manip-lbm-us-west-2/sagemaker_outputs/chenxu-lbm/chenxu-lbm-training-2025-04-11-13-15-57/epoch_0-step_48000/checkpoint.ckpt"),
+("TurnMugRightsideUp", "TurnMugRightsideUp", "s3://robotics-manip-lbm-us-west-2/sagemaker_outputs/chenxu-lbm/chenxu-lbm-training-2025-04-11-13-15-57/epoch_0-step_48000/checkpoint.ckpt"),

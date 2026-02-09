@@ -67,3 +67,13 @@ config.local.*
 build/
 dist/
 *.egg-info/
+
+# Ignore local results
+downloaded_results/
+vla_foundry/tri/
+
+# Ignore ray things
+ray_mount/
+
+# Ignore wandb logs
+wandb/
