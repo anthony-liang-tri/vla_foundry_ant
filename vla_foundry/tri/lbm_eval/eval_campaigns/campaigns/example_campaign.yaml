@@ -87,7 +87,7 @@ docker:
 
 # vla_foundry source management (cloned locally and mounted into ray worker containers)
 # Jobs can be set to a specific branch but not a different source repo, you should set that correctly here
-vla_found
+vla_foundry:
   repo_url: "git@github.com:TRI-ML/vla_foundry_internal.git"
   ref: "main"
   local_dir: "~/.cache/vla_foundry/ray_mount"
