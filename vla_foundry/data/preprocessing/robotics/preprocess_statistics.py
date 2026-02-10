@@ -234,14 +234,15 @@ class StreamingDatasetStatistics:
             return
 
         with self.lock:
-            mask = sample_lowdim["mask"][..., None]
+            mask_base = sample_lowdim["mask"][..., None]
             for key, data in sample_lowdim.items():
                 if not np.issubdtype(data.dtype, np.number):
                     continue
+                mask = mask_base
                 if data.ndim == 2:
                     # Add a batch dimension, assume there is only time and channel dimensions
                     data = data[None, ...]
-                    mask = mask[None, ...]
+                    mask = mask_base[None, ...]
                 elif data.ndim != 3:
                     raise ValueError(f"Data must have 2 or 3 dimensions, got {data.ndim} for key {key}")
 
@@ -350,6 +351,8 @@ class StreamingDatasetStatistics:
 
         for sample in samples_batch:
             for key, data in sample["lowdim"].items():
+                if data.ndim == 1:
+                    data = data[..., None]  # (T,) -> (T, 1) — ensure channel dim for scalar-per-timestep data
                 if key not in sample_lowdim:
                     sample_lowdim[key] = data[None, ...]
                 else:
