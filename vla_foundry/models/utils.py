@@ -15,7 +15,7 @@ def get_hidden_dim_hf(hf_config):
         # Fallback by probing last lm head weight if available
     if hasattr(hf_config, "lm_head") and hasattr(hf_config.lm_head, "weight"):
         return hf_config.lm_head.weight.shape[1]
-        raise AttributeError("Could not infer hidden_dim from HF transformer config")
+    raise AttributeError("Could not infer hidden_dim from HF transformer config")
 
 
 def get_num_hidden_layers_hf(hf_config):
