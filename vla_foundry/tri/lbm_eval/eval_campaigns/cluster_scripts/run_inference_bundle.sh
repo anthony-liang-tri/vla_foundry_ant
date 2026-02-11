@@ -1049,7 +1049,12 @@ fi
 # Wrap the built command in an array for execution.
 # NOTE: This must happen AFTER INFERENCE_WORKDIR_RUNTIME is finalized so uv runs
 # from a writable workspace (otherwise it may try to create /opt/vla_foundry/.venv).
-inference_cmd=(bash -c "cd '${INFERENCE_WORKDIR_RUNTIME}' && ${BUILT_INFERENCE_CMD}")
+inference_cmd=(bash -c "
+  cd '${INFERENCE_WORKDIR_RUNTIME}'
+  TORCH_LIB_PATH=\"${INFERENCE_WORKDIR_RUNTIME}/.venv/lib/python3.10/site-packages/torch/lib\"
+  export LD_LIBRARY_PATH=\"\${TORCH_LIB_PATH}:\${LD_LIBRARY_PATH:-}\"
+  ${BUILT_INFERENCE_CMD}"
+)
 
 # Debug: Show which vla_foundry code is being used
 echo "===== vla_foundry code verification ====="
