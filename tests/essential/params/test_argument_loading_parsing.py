@@ -459,6 +459,23 @@ def test_preprocess_params_no_infinite_recursion(type):
     assert result.resize_images_size == [384, 384]
 
 
+@pytest.mark.parametrize("type", ["spartan", "lerobot"])
+def test_preprocess_params_missing_resize_images_size(type):
+    """Test that when resize_images_size is not set, then it defaults to None."""
+    config_dict = {
+        "type": "spartan",
+        "source_episodes": ["s3://test/episode1/", "s3://test/episode2/"],
+        "output_dir": "s3://test/output/",
+        "past_lowdim_steps": 1,
+        "future_lowdim_steps": 14,
+        # "resize_images_size": [384, 384],  # Intentionally omitted
+        "samples_per_shard": 100,
+    }
+
+    result = PreprocessParams.from_dict(config_dict)
+    assert result.resize_images_size is None
+
+
 def test_preprocess_params_unknown_source_type():
     """Test that unknown source_type raises an error."""
     from draccus.utils import DecodingError

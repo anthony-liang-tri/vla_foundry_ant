@@ -28,6 +28,7 @@ class BaseRoboticsConverter:
     def __init__(self, cfg):
         self.cfg = cfg
         self.resize_images_size = cfg.resize_images_size
+        self.image_resizing_method = cfg.image_resizing_method
         self.image_indices = sorted(cfg.image_indices) if cfg.image_indices is not None else [-1, 0]
 
         # Initialize JPEG encoder
@@ -255,6 +256,7 @@ class BaseRoboticsConverter:
                         frame_idx=anchor_timestep,
                         jpeg_quality=self.cfg.jpeg_quality,
                         resize_images_size=self.resize_images_size,
+                        image_resizing_method=self.image_resizing_method,
                     )
                     futures.add(future)
 

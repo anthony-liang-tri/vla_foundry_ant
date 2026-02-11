@@ -27,6 +27,7 @@ from robot_gym.multiarm_spaces import MultiarmObservation, PosesAndGrippers
 from robot_gym.policy import Policy, PolicyMetadata
 
 import vla_foundry.visualizers.visualizer as vz
+from vla_foundry.data.preprocessing.image_utils import ImageResizingMethod
 from vla_foundry.data.processor.robotics_processor import RoboticsProcessor
 from vla_foundry.file_utils import (
     get_latest_checkpoint,
@@ -130,7 +131,17 @@ class InferenceDiffusionPolicy(Policy):
         else:
             preprocessing_config_path = os.path.join(checkpoint_directory, "preprocessing_configs.yaml")
         preprocessing_config = yaml_load(preprocessing_config_path)
-        self.preprocessor_image_size = preprocessing_config["resize_images_size"]
+        self.preprocessor_image_size = preprocessing_config.get("resize_images_size")
+        # Validate that resize_images_size is configured
+        if self.preprocessor_image_size is None:
+            raise ValueError(
+                f"resize_images_size not found in preprocessing config at {preprocessing_config_path}. "
+                "Image resizing is required for inference. Please ensure the model was trained with "
+                "resize_images_size configured in the preprocessing parameters."
+            )
+        self.preprocessor_image_resize_method = preprocessing_config.get(
+            "preprocessor_image_resize_method", ImageResizingMethod.CENTER_CROP
+        )
         total_timesteps = self.num_past_timesteps + 1 + self.future_timesteps
         logging.info(
             f"Timestep configuration: total={total_timesteps}, "
@@ -248,6 +259,7 @@ class InferenceDiffusionPolicy(Policy):
                     field_mapping_path=self.field_mapping_path,
                     image_names=self.image_names,
                     preprocessor_image_size=self.preprocessor_image_size,
+                    preprocessor_image_resize_method=self.preprocessor_image_resize_method,
                     num_past_timesteps=self.num_past_timesteps,
                     num_future_timesteps=self.future_timesteps,
                     image_indices=self.cfg.data.image_indices,

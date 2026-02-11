@@ -13,6 +13,7 @@ jpeg_quality: 95
 max_episodes_to_process: -1 
 fail_on_nan: True 
 skip_git_tagging: False 
+image_resizing_method: center_crop
 resize_images_size:
 - 384
 - 384

@@ -16,7 +16,7 @@ import torch
 from PIL import Image
 
 import vla_foundry.visualizers.visualizer as vz
-from vla_foundry.data.preprocessing.image_utils import resize_image
+from vla_foundry.data.preprocessing.image_utils import ImageResizingMethod, resize_image
 from vla_foundry.data.preprocessing.utils import depth_images_to_point_cloud
 from vla_foundry.data.robotics.utils import (
     calculate_relative_pose,
@@ -55,6 +55,7 @@ class PolicyDataAdapter:
         field_mapping_path: str,
         image_names: List[str],
         preprocessor_image_size: Tuple[int, int],
+        preprocessor_image_resize_method: ImageResizingMethod = ImageResizingMethod.CENTER_CROP,
         num_past_timesteps: int = 1,
         num_future_timesteps: int = 14,
         image_indices: Tuple[int, ...] = (-1, 0),
@@ -90,6 +91,7 @@ class PolicyDataAdapter:
         self.language_instruction = "Do the task"
 
         self.preprocessor_image_size = preprocessor_image_size
+        self.preprocessor_image_resize_method = preprocessor_image_resize_method
         self.image_crop_size = self.data_config.augmentation.image.crop.shape
 
         self.total_action_timesteps = self.num_past_timesteps + 1 + self.num_future_timesteps
@@ -231,7 +233,11 @@ class PolicyDataAdapter:
         logging.debug(f"Preprocessing images resize {self.preprocessor_image_size} crop {self.image_crop_size}")
         processed: Dict[str, np.ndarray] = {}
         for camera_name, image in images.items():
-            resized = resize_image(image, self.preprocessor_image_size)
+            resized = resize_image(
+                image,
+                target_size=self.preprocessor_image_size,
+                resize_method=self.preprocessor_image_resize_method,
+            )
             cropped = center_crop(resized, self.image_crop_size[0], self.image_crop_size[1])
             if isinstance(cropped, Image.Image):
                 cropped = np.array(cropped)

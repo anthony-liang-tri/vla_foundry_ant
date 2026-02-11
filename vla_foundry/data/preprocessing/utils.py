@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
 from functools import partial
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import boto3
 import numpy as np
@@ -17,7 +17,7 @@ import torch
 from botocore.config import Config
 from PIL import Image
 
-from vla_foundry.data.preprocessing.image_utils import depth_image_to_bytes, image_to_bytes
+from vla_foundry.data.preprocessing.image_utils import ImageResizingMethod, depth_image_to_bytes, image_to_bytes
 
 
 def upload_sample_to_s3(
@@ -27,7 +27,8 @@ def upload_sample_to_s3(
     episode_id: str,
     frame_idx: int,
     jpeg_quality: int = 95,
-    resize_images_size: List[int] = None,
+    resize_images_size: Optional[List[int]] = None,
+    image_resizing_method: ImageResizingMethod = ImageResizingMethod.CENTER_CROP,
 ) -> None:
     """Upload sample data to S3 as tar file. (or save locally)"""
     s3_client = (
@@ -46,14 +47,24 @@ def upload_sample_to_s3(
             is_depth = "depth" in img_key
 
             if not isinstance(img_data, bytes):
-                assert resize_images_size is not None
+                if resize_images_size is None:
+                    raise ValueError(
+                        f"Image '{img_key}' is a numpy array but resize_images_size is not configured. "
+                        "resize_images_size must be specified in preprocessing config when using numpy array images. "
+                        "Set resize_images_size to your desired [width, height], e.g., [384, 384]."
+                    )
                 if is_depth:
                     # Depth images: PNG with uint16
-                    image_bytes, original_image_size = depth_image_to_bytes(img_data, resize_images_size)
+                    image_bytes, original_image_size = depth_image_to_bytes(img_data, target_size=resize_images_size)
                     file_extension = "png"
                 else:
                     # RGB images: JPEG
-                    image_bytes, original_image_size = image_to_bytes(img_data, jpeg_quality, resize_images_size)
+                    image_bytes, original_image_size = image_to_bytes(
+                        img_data,
+                        quality=jpeg_quality,
+                        target_size=resize_images_size,
+                        resize_method=image_resizing_method,
+                    )
                     file_extension = "jpg"
             else:
                 # Bytes passed directly - resize cannot be applied

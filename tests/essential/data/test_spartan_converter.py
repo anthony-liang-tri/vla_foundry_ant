@@ -10,6 +10,8 @@ import numpy as np
 import pytest
 import yaml
 
+from vla_foundry.data.preprocessing.robotics.converters.spartan import SpartanConverter
+
 
 # Helper functions for testing (non-Ray versions)
 def check_episode_validity(episode_path: str) -> bool:
@@ -194,8 +196,6 @@ def test_discover_episodes_integration(temp_spartan_episodes, mock_config):
                 "vla_foundry.data.preprocessing.robotics.converters.spartan.discover_and_validate_episodes_in_directory"
             ),
         ):
-            from vla_foundry.data.preprocessing.robotics.converters.spartan import SpartanConverter
-
             # Set up mock to return valid episodes
             valid_episodes = [os.path.join(temp_spartan_episodes, f"episode_{i:04d}") for i in range(3)]
             mock_ray_get.return_value = [valid_episodes]
@@ -226,8 +226,6 @@ def test_discover_episodes_with_max_episodes_to_process(temp_spartan_episodes, m
                 "vla_foundry.data.preprocessing.robotics.converters.spartan.discover_and_validate_episodes_in_directory"
             ),
         ):
-            from vla_foundry.data.preprocessing.robotics.converters.spartan import SpartanConverter
-
             # Set up mock to return 3 valid episodes
             valid_episodes = [os.path.join(temp_spartan_episodes, f"episode_{i:04d}") for i in range(3)]
             mock_ray_get.return_value = [valid_episodes]
@@ -261,8 +259,6 @@ def test_discover_episodes_empty_directory(mock_config):
                     "vla_foundry.data.preprocessing.robotics.converters.spartan.discover_and_validate_episodes_in_directory"
                 ),
             ):
-                from vla_foundry.data.preprocessing.robotics.converters.spartan import SpartanConverter
-
                 mock_ray_get.return_value = [[]]
 
                 converter = SpartanConverter(mock_config)
@@ -324,8 +320,6 @@ class TestPointCloudGeneration:
                 "vla_foundry.data.robotics.utils.load_action_field_config",
                 return_value={"action_key_fields": ["action"], "action_index_fields": [7], "pose_groups": []},
             ):
-                from vla_foundry.data.preprocessing.robotics.converters.spartan import SpartanConverter
-
                 converter = SpartanConverter(mock_config)
 
                 # Mock logger actor
@@ -382,8 +376,6 @@ class TestPointCloudGeneration:
                 "vla_foundry.data.robotics.utils.load_action_field_config",
                 return_value={"action_key_fields": ["action"], "action_index_fields": [7], "pose_groups": []},
             ):
-                from vla_foundry.data.preprocessing.robotics.converters.spartan import SpartanConverter
-
                 converter = SpartanConverter(mock_config)
 
                 # Mock logger actor
@@ -434,8 +426,6 @@ class TestPointCloudGeneration:
                 "vla_foundry.data.robotics.utils.load_action_field_config",
                 return_value={"action_key_fields": ["action"], "action_index_fields": [7], "pose_groups": []},
             ):
-                from vla_foundry.data.preprocessing.robotics.converters.spartan import SpartanConverter
-
                 converter = SpartanConverter(mock_config)
 
                 # Mock logger actor

@@ -3,6 +3,7 @@ from typing import Dict, List, Optional, Union
 
 import draccus
 
+from vla_foundry.data.preprocessing.image_utils import ImageResizingMethod
 from vla_foundry.params.base_params import BaseParams
 
 
@@ -61,6 +62,7 @@ class PreprocessParams(draccus.ChoiceRegistry, BaseParams):
 
     # Image preprocessing
     resize_images_size: Optional[List[int]] = field(default=None)
+    image_resizing_method: ImageResizingMethod = ImageResizingMethod.CENTER_CROP
     jpeg_quality: int = field(default=95)
 
     # Depth and point cloud control
@@ -86,6 +88,14 @@ class PreprocessParams(draccus.ChoiceRegistry, BaseParams):
         # Validate required paths
         assert self.source_episodes is not None, "--source_episodes is required (or set in config_path)"
         assert self.output_dir is not None, "--output_dir is required (or set in config_path)"
+
+        # Validate image resizing method (not a strictly necessary check due to enum)
+        allowed_image_resizing_methods = set(ImageResizingMethod)
+        if self.image_resizing_method not in allowed_image_resizing_methods:
+            raise ValueError(
+                f"image_resizing_method must be one of {[m.value for m in allowed_image_resizing_methods]}, "
+                f"got {self.image_resizing_method.value}"
+            )
 
 
 @register_preprocess_params("spartan")
