@@ -26,8 +26,13 @@ from matplotlib_wds_vis import list_s3_targets, open_s3
 from PIL import Image
 from tqdm import tqdm
 
+from vla_foundry.data.robotics.cv_utils import (
+    create_images_with_projected_trace,
+    scale_intrinsics_for_resize_and_crop,
+    transform_points_to_camera_frame,
+)
 from vla_foundry.data.robotics.normalization import RoboticsNormalizer
-from vla_foundry.data.robotics.utils import xyzrpy_to_T
+from vla_foundry.data.robotics.utils import invert_homogeneous_transform, xyzrpy_to_T
 from vla_foundry.params.robotics.normalization_params import NormalizationParams
 from vla_foundry.visualizers import visualizer as vz
 
@@ -100,7 +105,6 @@ class NormalizerBundle:
         fs, _ = fsspec.core.url_to_fs(stats_json_uri)
         with fs.open(stats_json_uri, "r") as f:
             norm_dict = json.load(f)
-
         normalization_params = NormalizationParams(**(data_params.get("normalization", {}) or {}))
         normalizer = RoboticsNormalizer(normalization_params=normalization_params, statistics_data=[norm_dict])
         return cls(norm_dict=norm_dict, normalizer=normalizer)
@@ -229,6 +233,7 @@ class FrameAssembler:
 
         chest_T_left = xyzrpy_to_T(chest_T_eef[:, 1:7]) @ xyzrpy_to_T([0, 0, 0, 0, np.pi, 0])
         chest_T_right = xyzrpy_to_T(chest_T_eef[:, 8:14]) @ xyzrpy_to_T([0, 0, 0, 0, np.pi, 0])
+
         chassis_T_chest_T = xyzrpy_to_T(chassis_T_chest[:, :6])
         chest_T_head_T = xyzrpy_to_T(chest_T_head[:, :6])
         chassis_T_head_T = chassis_T_chest_T @ chest_T_head_T
@@ -246,8 +251,8 @@ class Plotter:
     """Logging helpers that call into the visualization backend."""
 
     @staticmethod
-    def log_images(img_data: Mapping[str, NDArray]) -> None:
-        vz.log_images("", img_data)
+    def log_images(path: str, img_data: Mapping[str, NDArray]) -> None:
+        vz.log_images(path, img_data)
 
     @staticmethod
     def log_coordinate_frames(frame_poses: Mapping[str, NDArray], axis_length: float = 0.3) -> None:
@@ -338,7 +343,7 @@ class RerunSampleVisualizer:
         metadata: Optional[Mapping[str, object]] = payload.get("metadata")  # type: ignore[assignment]
 
         if img_data:
-            self._plot.log_images(img_data)
+            self._plot.log_images("", img_data)
 
         if lowdim is not None:
             frame_poses = self._frames.chassis_frame_poses(lowdim)
@@ -366,9 +371,34 @@ class RerunSampleVisualizer:
             depth_scale,
             color_image,
             intrinsics[0][0],
-            payload["metadata"]["original_image_sizes"]["rgb"],  # type: ignore[index]
+            # type: ignore[index]
+            payload["metadata"]["original_image_sizes"]["rgb"],
         )
         logging.info("Plotted point cloud for sample %s", sample_id)
+
+        # Apply transformation of 3D left and right arm trajectories into camera frame.
+        left_pts = frame_poses["chassis/left_eef"][:, :3, 3]
+        right_pts = frame_poses["chassis/right_eef"][:, :3, 3]
+        head_camera_T_chassis = invert_homogeneous_transform(frame_poses["chassis/head_camera"][0])
+        head_camera_t_left_pts = transform_points_to_camera_frame(head_camera_T_chassis, left_pts)
+        head_camera_t_right_pts = transform_points_to_camera_frame(head_camera_T_chassis, right_pts)
+
+        # Scale intrinsics to handle processing on original image (resize then square crop).
+        H, W, C = color_image.shape
+        W0, H0 = payload["metadata"]["original_image_sizes"]["rgb"]
+        scaled_intrinsics = scale_intrinsics_for_resize_and_crop(
+            intrinsics[0][0],
+            (W0, H0),
+            (W, H),
+        )
+
+        # Currently visualizing the same trajectories for both t-1 and t0 images.
+        img_data_with_traces = create_images_with_projected_trace(
+            img_data,
+            scaled_intrinsics,
+            [head_camera_t_left_pts, head_camera_t_right_pts],
+        )
+        self._plot.log_images("projected_trajectories", img_data_with_traces)
 
     def run(self, s3_prefix: str) -> None:
         """Run the visualizer over all TAR files beneath the given S3 prefix."""

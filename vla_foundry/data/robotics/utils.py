@@ -191,6 +191,35 @@ def to_pose_matrix(xyz: np.ndarray, rot_6d: np.ndarray) -> np.ndarray:
     return pose_matrices
 
 
+def invert_homogeneous_transform(T: np.ndarray) -> np.ndarray:
+    """
+    Invert one or more 4x4 rigid homogeneous transforms (SE3).
+
+    Args:
+        T: shape (4,4) or (...,4,4)
+
+    Returns:
+        T_inv: shape (4,4) or (...,4,4)
+    """
+    T = np.asarray(T)
+
+    if T.shape[-2:] != (4, 4):
+        raise ValueError(f"Expected shape (...,4,4), got {T.shape}")
+
+    # Validate homogeneous bottom row
+    if not np.allclose(T[..., 3, :], np.array([0, 0, 0, 1])):
+        raise ValueError("Not a standard homogeneous transform (bottom row not [0,0,0,1])")
+
+    R = T[..., :3, :3]  # (...,3,3)
+    t = T[..., :3, 3]  # (...,3)
+
+    T_inv = np.broadcast_to(np.eye(4, dtype=T.dtype), T.shape).copy()
+    T_inv[..., :3, :3] = np.swapaxes(R, -1, -2)  # Rᵀ
+    T_inv[..., :3, 3] = -np.einsum("...ij,...j->...i", T_inv[..., :3, :3], t)
+
+    return T_inv
+
+
 def calculate_relative_pose(pose_matrix: np.ndarray, reference_pose_matrix: np.ndarray) -> np.ndarray:
     """Calculate relative pose matrix/matrices given pose(s) and a reference pose.
 
