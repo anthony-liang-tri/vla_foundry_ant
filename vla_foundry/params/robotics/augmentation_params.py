@@ -70,6 +70,20 @@ class ImageAugmentationParams(BaseParams):
 
 
 @dataclass(frozen=True)
+class PointCloudAugmentationParams(BaseParams):
+    """
+    Configuration for point cloud augmentation
+    """
+
+    color_jitter: ColorJitterParams = field(default_factory=ColorJitterParams)
+
+    @property
+    def augmentations(self):
+        # Get all fields that are enabled
+        return [k for k, v in self.__dataclass_fields__.items() if getattr(self, k).enabled]
+
+
+@dataclass(frozen=True)
 class DataAugmentationParams(BaseParams):
     """
     Configuration for data augmentation at dataloading time
@@ -78,4 +92,5 @@ class DataAugmentationParams(BaseParams):
     enabled: bool = field(default=True)
 
     image: ImageAugmentationParams = field(default_factory=ImageAugmentationParams)
+    point_cloud: PointCloudAugmentationParams = field(default_factory=PointCloudAugmentationParams)
     # ... eventually add more types of augmentation for other modalities as necessary

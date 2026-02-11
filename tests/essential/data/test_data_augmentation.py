@@ -199,12 +199,12 @@ def test_augmentations_class_creation(augmentation_params, has_transforms):
 
     # Check that transforms are created appropriately
     if has_transforms:
-        assert isinstance(augmentations.transforms, transforms.Compose)
-        assert len(augmentations.transforms.transforms) > 0
+        assert isinstance(augmentations.image_transforms, transforms.Compose)
+        assert len(augmentations.image_transforms.transforms) > 0
     else:
         # Should either be empty Compose or have no transforms
-        if isinstance(augmentations.transforms, transforms.Compose):
-            assert len(augmentations.transforms.transforms) == 0
+        if isinstance(augmentations.image_transforms, transforms.Compose):
+            assert len(augmentations.image_transforms.transforms) == 0
 
 
 def test_augmentations_class_invalid_params():
@@ -248,12 +248,12 @@ def test_crop_augmentation():
     augmentations = Augmentations(augmentation_params)
 
     # Check that transforms were created
-    assert isinstance(augmentations.transforms, transforms.Compose)
-    assert len(augmentations.transforms.transforms) > 0
+    assert isinstance(augmentations.image_transforms, transforms.Compose)
+    assert len(augmentations.image_transforms.transforms) > 0
 
     # Test the random crop augmentation
     img = create_dummy_image(size=(256, 256))
-    cropped_img = augmentations.transforms(img)
+    cropped_img = augmentations.image_transforms(img)
 
     # Verify that the cropped image has the correct size
     assert cropped_img.size == (128, 128)
@@ -271,12 +271,12 @@ def test_color_jitter_augmentation():
     augmentations = Augmentations(augmentation_params)
 
     # Check that transforms were created
-    assert isinstance(augmentations.transforms, transforms.Compose)
-    assert len(augmentations.transforms.transforms) > 0
+    assert isinstance(augmentations.image_transforms, transforms.Compose)
+    assert len(augmentations.image_transforms.transforms) > 0
 
     # Test the color jitter augmentation
     img = create_dummy_image()
-    jittered_img = augmentations.transforms(img)
+    jittered_img = augmentations.image_transforms(img)
 
     # Verify that the jittered image is different from the original
     original_array = np.array(img)
@@ -297,12 +297,12 @@ def test_combined_augmentations():
     augmentations = Augmentations(augmentation_params)
 
     # Check that transforms were created
-    assert isinstance(augmentations.transforms, transforms.Compose)
-    assert len(augmentations.transforms.transforms) == 2  # Should have both transforms
+    assert isinstance(augmentations.image_transforms, transforms.Compose)
+    assert len(augmentations.image_transforms.transforms) == 2  # Should have both transforms
 
     # Test the combined augmentation pipeline
     img = create_dummy_image(size=(256, 256))
-    transformed_img = augmentations.transforms(img)
+    transformed_img = augmentations.image_transforms(img)
 
     # Verify that the transformed image has the correct size (cropped)
     assert transformed_img.size == (128, 128)

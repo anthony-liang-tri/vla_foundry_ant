@@ -17,6 +17,7 @@ from PIL import Image
 
 import vla_foundry.visualizers.visualizer as vz
 from vla_foundry.data.preprocessing.image_utils import resize_image
+from vla_foundry.data.preprocessing.utils import depth_images_to_point_cloud
 from vla_foundry.data.robotics.utils import (
     calculate_relative_pose,
     pose_to_9d,
@@ -96,6 +97,7 @@ class PolicyDataAdapter:
         self.action_buffer = []
         self.proprioception_buffer = []
         self.image_buffer = []
+        self.raw_obs_buffer = []  # Store raw observations for generating point clouds
         self.reference = {}
         self.reference_initialized = False
 
@@ -148,15 +150,33 @@ class PolicyDataAdapter:
         for _ in range(range_images):
             self.image_buffer.append(copy.deepcopy(images))
 
+    def initialize_raw_obs_buffer(self, observation) -> None:
+        logging.debug("Initializing raw observation buffer")
+        # Store observations for generating point clouds from depth images
+        # Buffer size matches image buffer size
+        max_time = -np.inf
+        min_time = np.inf
+        for image_name in self.image_names:
+            _, timestep_str = image_name.rsplit("_t", 1)
+            timestep = int(timestep_str)
+            max_time = max(max_time, timestep)
+            min_time = min(min_time, timestep)
+
+        range_obs = int(max_time - min_time + 1)
+        for _ in range(range_obs):
+            self.raw_obs_buffer.append(observation)
+
     def reset(self, initial_observation):
         logging.debug("Resetting data adapter")
         self.action_buffer = []
         self.proprioception_buffer = []
         self.image_buffer = []
+        self.raw_obs_buffer = []
         self.reference_initialized = False
         self.initialize_action_buffer(initial_observation)
         self.initialize_proprioception_buffer(initial_observation)
         self.initialize_image_buffer(initial_observation)
+        self.initialize_raw_obs_buffer(initial_observation)
         self.update_reference(initial_observation)
         self.past_mask = torch.zeros(1, self.num_past_timesteps + 1 + self.num_future_timesteps, dtype=torch.bool)
 
@@ -226,6 +246,12 @@ class PolicyDataAdapter:
         self.image_buffer.append(processed_images)
         self.image_buffer.pop(0)
 
+    def step_raw_obs_buffer(self, observation) -> None:
+        logging.debug("Stepping raw observation buffer")
+        self.raw_obs_buffer.append(observation)
+        if len(self.raw_obs_buffer) > len(self.image_buffer):
+            self.raw_obs_buffer.pop(0)
+
     def step_task(self, observation) -> None:
         logging.debug(f"Stepping task to instruction {observation.language_instruction}")
         self.language_instruction = observation.language_instruction
@@ -247,6 +273,7 @@ class PolicyDataAdapter:
     ):
         self.step_proprioception(observation)
         self.step_image(observation)
+        self.step_raw_obs_buffer(observation)
         self.step_task(observation)
         self.step_past_mask()
         vz.log_robot_gym_poses_and_grippers("current_pose", observation.robot.actual)
@@ -429,9 +456,77 @@ class PolicyDataAdapter:
     def _wrap_to_pi(delta: np.ndarray) -> np.ndarray:
         return (delta + np.pi) % (2 * np.pi) - np.pi
 
+    def get_point_cloud_for_processor(self) -> np.ndarray:
+        """
+        Generate point clouds from depth images in the observation buffer.
+        Returns: (T, N, C) point cloud array where T=timesteps, N=num_points, C=6 (xyzrgb)
+        """
+        logging.debug("Generating point clouds for processor")
+        if not self.data_config.use_point_cloud or not self.raw_obs_buffer:
+            return None
+
+        point_clouds_timesteps = []
+        # Generate point cloud for each unique timestep needed
+        # Note: image_names can have multiple cameras at the same timestep
+        # Example: ["cam0_t-1", "cam1_t-1", "cam0_t0", "cam1_t0"]
+        # We only need to generate point clouds once per unique timestep
+        for obs_idx, image_name in enumerate(self.image_names):
+            _, timestep_str = image_name.rsplit("_t", 1)
+            timestep = int(timestep_str)
+
+            # Skip if we already processed this timestep (handles multiple cameras)
+            if obs_idx > 0:
+                _, prev_timestep_str = self.image_names[obs_idx - 1].rsplit("_t", 1)
+                prev_timestep = int(prev_timestep_str)
+                if timestep == prev_timestep:
+                    continue
+
+            # Get observation for this timestep from buffer
+            # raw_obs_buffer stores one entry per unique timestep, not per camera
+            # Convert relative timestep (e.g., -1, 0) to absolute buffer index
+            # Formula: buffer_idx = len(buffer) - 1 + relative_timestep
+            # Example: buffer_len=2, timestep=-1 → buffer_idx=0, timestep=0 → buffer_idx=1
+            buffer_idx = len(self.raw_obs_buffer) - 1 + timestep
+            if buffer_idx < 0 or buffer_idx >= len(self.raw_obs_buffer):
+                logging.warning(
+                    f"Buffer index {buffer_idx} out of range for raw_obs_buffer length "
+                    f"{len(self.raw_obs_buffer)} (timestep={timestep})"
+                )
+                buffer_idx = max(0, min(buffer_idx, len(self.raw_obs_buffer) - 1))
+            observation = self.raw_obs_buffer[buffer_idx]
+
+            # Extract depth, RGB, intrinsics, extrinsics for all cameras
+            depth_images = self.field_mapping.get_all_depth_images(observation)
+            if depth_images is None:
+                logging.warning("No depth images available in observation, cannot generate point clouds")
+                return None
+
+            rgb_images = self.field_mapping.get_all_images(observation)
+            intrinsics = self.field_mapping.get_all_intrinsics(observation)
+            extrinsics = self.field_mapping.get_all_extrinsics(observation)
+
+            # Generate point cloud for this timestep
+            point_cloud = depth_images_to_point_cloud(
+                depth_images=depth_images,
+                rgb_images=rgb_images,
+                intrinsics=intrinsics,
+                extrinsics=extrinsics,
+                num_points=self.data_config.point_cloud_num_points,
+                filter_ground_plane=True,
+            )
+            if point_cloud is None:
+                logging.warning("Failed to generate point cloud for timestep")
+                return None
+
+            point_clouds_timesteps.append(point_cloud)
+
+        # Stack along time dimension: (T, N, C)
+        stacked_point_cloud = np.stack(point_clouds_timesteps, axis=0)
+        return stacked_point_cloud
+
     def get_processor_input(self) -> Dict[str, Any]:
         logging.debug("Getting processor input")
-        return {
+        processor_input = {
             "images": [self.get_images_for_processor()],
             "lowdim": [self.get_lowdim_for_processor()],
             "metadata": [
@@ -442,6 +537,13 @@ class PolicyDataAdapter:
             ],
             "language_instruction": [self.language_instruction],
         }
+
+        # Add point cloud if enabled
+        if self.data_config.use_point_cloud:
+            point_cloud = self.get_point_cloud_for_processor()
+            processor_input["point_cloud"] = [point_cloud] if point_cloud is not None else None
+
+        return processor_input
 
     def get_model_input(self, observation) -> Dict[str, torch.Tensor]:
         logging.debug("Getting model input")

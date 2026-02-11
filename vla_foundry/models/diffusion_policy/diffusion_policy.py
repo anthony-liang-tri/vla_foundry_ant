@@ -133,6 +133,7 @@ class DiffusionPolicy(BaseModel):
         num_inference_steps=None,
         past_mask=None,
         proprioception=None,
+        **kwargs,  # Ignore extra params like point_cloud (used by other models)
     ):
         """
         Generate actions using iterative denoising through the diffusion process.

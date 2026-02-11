@@ -267,6 +267,7 @@ def mock_data_config():
         augmentation=augmentation,
         image_size=224,
         proprioception_fields=[],
+        use_point_cloud=False,
         pose_groups=[],
     )
 
@@ -487,6 +488,7 @@ def test_policy_data_adapter_end_to_end_flow(field_mapping_file):
         image_names=image_names,
         augmentation=augmentation,
         proprioception_fields=[],
+        use_point_cloud=False,
         pose_groups=pose_groups,
     )
 
@@ -758,6 +760,7 @@ def test_policy_data_adapter_open_loop_cycle(field_mapping_file):
         image_names=image_names,
         augmentation=augmentation,
         proprioception_fields=[],
+        use_point_cloud=False,
         pose_groups=pose_groups,
     )
 
@@ -982,6 +985,7 @@ def test_policy_data_adapter_proprioception_integration(field_mapping_file, crea
         image_names=image_names,
         augmentation=augmentation,
         proprioception_fields=proprioception_fields,
+        use_point_cloud=False,
         pose_groups=pose_groups,
     )
 

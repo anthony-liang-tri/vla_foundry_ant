@@ -576,9 +576,9 @@ class SpartanConverter(BaseRoboticsConverter):
         )
 
         # Generate point clouds from depth and RGB images (T, N, 6) format
-        sample_point_clouds = None
+        sample_point_cloud = None
         if self.cfg.use_depth_data and self.cfg.point_cloud_num_points > 0:
-            point_clouds_list = []
+            point_cloud_list = []
 
             for idx, img_offset in enumerate(self.cfg.image_indices):
                 img_timestep = actual_image_timesteps[idx]
@@ -621,6 +621,8 @@ class SpartanConverter(BaseRoboticsConverter):
                         extrinsics=extrinsics,
                         num_points=self.cfg.point_cloud_num_points,
                         filter_ground_plane=True,
+                        min_depth=self.cfg.min_depth,
+                        max_depth=self.cfg.max_depth,
                     )
 
                     if point_cloud is None:
@@ -629,11 +631,11 @@ class SpartanConverter(BaseRoboticsConverter):
                             f"in episode {episode_path}. No valid points available after filtering. "
                             f"This could be due to: (1) all depth values being invalid/out of range, "
                             f"(2) ground plane filtering removing all points, or (3) insufficient points "
-                            f"after downsampling. Consider adjusting max_depth_mm, filter_ground_plane, "
+                            f"after downsampling. Consider adjusting min_depth, max_depth, filter_ground_plane, "
                             f"or voxel_size parameters."
                         )
 
-                    point_clouds_list.append(point_cloud)
+                    point_cloud_list.append(point_cloud)
                 else:
                     # Raise error if required data is missing for point cloud generation
                     missing_data = []
@@ -655,8 +657,8 @@ class SpartanConverter(BaseRoboticsConverter):
                     )
 
             # Stack into (T, N, 6) array
-            if point_clouds_list:
-                sample_point_clouds = np.stack(point_clouds_list, axis=0)  # (T, N, 6)
+            if point_cloud_list:
+                sample_point_cloud = np.stack(point_cloud_list, axis=0)  # (T, N, 6)
 
         # Create metadata
         episode_id = self.get_episode_id(episode_path)
@@ -684,9 +686,9 @@ class SpartanConverter(BaseRoboticsConverter):
                 "past_mask": past_mask,
                 "future_mask": future_mask,
             }
-            # Add point clouds to statistics if available (no past/future masks needed)
-            if sample_point_clouds is not None:
-                stats_sample["point_clouds"] = sample_point_clouds
+            # Add point cloud to statistics if available (no past/future masks needed)
+            if sample_point_cloud is not None:
+                stats_sample["point_cloud"] = sample_point_cloud
 
         # Add intrinsics, extrinsics, past_mask, future_mask to lowdim (after building stats_sample)
         for key, value in sample_intrinsics.items():
@@ -698,4 +700,4 @@ class SpartanConverter(BaseRoboticsConverter):
 
         language_instructions = self.get_language_instructions(episode_path)
 
-        return sample_images, sample_lowdim, sample_metadata, language_instructions, sample_point_clouds, stats_sample
+        return sample_images, sample_lowdim, sample_metadata, language_instructions, sample_point_cloud, stats_sample

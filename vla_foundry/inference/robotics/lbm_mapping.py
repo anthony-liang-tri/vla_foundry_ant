@@ -172,6 +172,49 @@ class ObservationMapping:
                 images[camera_name] = observation.visuo[camera_name].rgb.array.copy()
         return images
 
+    def get_all_depth_images(self, observation: MultiarmObservation) -> Dict[str, Any]:
+        """
+        Get all the depth images of the observation.
+        Args:
+            observation: The observation of the robot.
+        Returns:
+            Dictionary mapping camera names to depth arrays (H, W) uint16.
+        """
+        depth_images: Dict[str, Any] = {}
+        for camera_name in self._camera_names:
+            if camera_name in observation.visuo and observation.visuo[camera_name].depth is not None:
+                depth_images[camera_name] = observation.visuo[camera_name].depth.array.copy()
+        return depth_images if depth_images else None
+
+    def get_all_intrinsics(self, observation: MultiarmObservation) -> Dict[str, np.ndarray]:
+        """
+        Get intrinsics matrices for all cameras.
+        Args:
+            observation: The observation of the robot.
+        Returns:
+            Dictionary mapping camera names to intrinsics matrices (3, 3).
+        """
+        intrinsics: Dict[str, np.ndarray] = {}
+        for camera_name in self._camera_names:
+            if camera_name in observation.visuo:
+                intrinsics[camera_name] = observation.visuo[camera_name].rgb.K.copy()
+        return intrinsics
+
+    def get_all_extrinsics(self, observation: MultiarmObservation) -> Dict[str, np.ndarray]:
+        """
+        Get extrinsics transforms for all cameras.
+        Args:
+            observation: The observation of the robot.
+        Returns:
+            Dictionary mapping camera names to extrinsics matrices (4, 4).
+        """
+        extrinsics: Dict[str, np.ndarray] = {}
+        for camera_name in self._camera_names:
+            if camera_name in observation.visuo:
+                X_TC: RigidTransform = observation.visuo[camera_name].rgb.X_TC
+                extrinsics[camera_name] = X_TC.GetAsMatrix4()
+        return extrinsics
+
     def create_pose_and_gripper(
         self,
         data_dict: dict,

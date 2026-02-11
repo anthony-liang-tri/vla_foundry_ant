@@ -13,6 +13,7 @@ from typing import Any, Dict, List
 import boto3
 import numpy as np
 import ray
+import torch
 from botocore.config import Config
 from PIL import Image
 
@@ -372,46 +373,6 @@ def transform_points_to_world(points: np.ndarray, extrinsics: np.ndarray) -> np.
     return world_points
 
 
-def voxel_downsample(points: np.ndarray, voxel_size: float, return_indices: bool = False):
-    """
-    Downsample point cloud using voxel grid filtering.
-    Much faster than FPS for initial downsampling.
-
-    Args:
-        points: Point cloud (N, 3)
-        voxel_size: Size of voxel grid in meters
-        return_indices: If True, return (downsampled_points, indices) instead of just points
-
-    Returns:
-        downsampled_points: Downsampled point cloud (M, 3) where M <= N
-        indices: (optional) Indices of kept points in original array
-    """
-    if len(points) == 0:
-        return (points, np.array([], dtype=np.int32)) if return_indices else points
-
-    # Compute voxel indices for each point
-    voxel_indices = np.floor(points / voxel_size).astype(np.int32)
-
-    # Shift to avoid negative indices
-    min_indices = voxel_indices.min(axis=0)
-    voxel_indices = voxel_indices - min_indices
-
-    # Use lexsort + unique trick (much faster than dict for large arrays)
-    # Sort by z, then y, then x
-    sorted_indices = np.lexsort((voxel_indices[:, 2], voxel_indices[:, 1], voxel_indices[:, 0]))
-    sorted_voxels = voxel_indices[sorted_indices]
-
-    # Find unique consecutive voxels (much faster than full unique)
-    unique_mask = np.ones(len(sorted_voxels), dtype=bool)
-    unique_mask[1:] = np.any(sorted_voxels[1:] != sorted_voxels[:-1], axis=1)
-
-    unique_indices = sorted_indices[unique_mask]
-
-    if return_indices:
-        return points[unique_indices], unique_indices
-    return points[unique_indices]
-
-
 @ray.remote
 def copy_s3_object(source_bucket: str, source_key: str, dest_bucket: str, dest_key: str) -> str:
     """Copy a single S3 object from source to destination."""
@@ -460,36 +421,46 @@ def depth_images_to_point_cloud(
     rgb_images: dict,
     intrinsics: dict,
     extrinsics: dict,
-    num_points: int = 50000,
-    voxel_size: float = 0.0025,
+    num_points: int = 4096,
     depth_scale: float = 1000.0,
     filter_ground_plane: bool = False,
     depth_subsample_factor: int = 2,
     normalize_colors: bool = True,
+    min_depth: float = 0.001,
+    max_depth: float = 3.0,
 ) -> np.ndarray | None:
     """
-    Convert multi-view depth images to a single downsampled colored point cloud.
+    Convert multi-view depth images to a single downsampled colored point cloud using CUDA FPS.
 
     Args:
         depth_images: Dict of depth images {camera_name: (H, W) array in units specified by depth_scale}
         rgb_images: Dict of RGB images {camera_name: (H, W, 3) uint8 array}
         intrinsics: Dict of intrinsic matrices {camera_name: (3, 3) array}
         extrinsics: Dict of extrinsic matrices {camera_name: (4, 4) array}
-        num_points: Number of points to downsample to
-        voxel_size: Voxel size in meters for initial downsampling (default: 2.5mm)
+        num_points: Total number of points in output (default: 4096).
+                    Divided evenly across views: each view contributes num_points // num_views points via FPS.
+                    If a view has insufficient valid points, the output is zero-padded to maintain num_points.
         depth_scale: Scale factor to convert depth values to meters (default: 1000.0 for mm→m).
                      Similar to Open3D's depth_scale parameter.
         filter_ground_plane: Whether to filter out points below z=0 (default: False).
                              Set to True for datasets where z=0 represents ground plane.
         depth_subsample_factor: Subsample depth images by this factor before processing (default: 2).
                                Higher values = faster but lower quality. Set to 1 to disable.
+        normalize_colors: Whether to normalize RGB values to [0, 1] range (default: True).
+        min_depth: Minimum valid depth in meters (default: 0.001m = 1mm). Filters out invalid/too-close points.
+        max_depth: Maximum valid depth in meters (default: 3.0m). Filters out too-far/unreliable points.
 
     Returns:
-        point_cloud: Downsampled world-space colored point cloud (num_points, 6) with [x,y,z,r,g,b],
+        point_cloud: World-space colored point cloud (num_points, 6) with [x,y,z,r,g,b],
                      or None if no valid points are available
     """
-    all_points = []
-    all_colors = []
+    import cuda_fps
+
+    all_point_clouds = []
+
+    # Compute points per view (divide total evenly across views)
+    num_views = len(depth_images)
+    points_per_view = num_points // num_views
 
     # Process each camera view
     for camera_name, depth_img in depth_images.items():
@@ -530,6 +501,13 @@ def depth_images_to_point_cloud(
         if normalize_colors:
             colors = colors / 255.0
 
+        # Filter invalid depths (0 values, too close, or too far)
+        valid_depth_mask = (depths > min_depth) & (depths < max_depth)
+        x = x[valid_depth_mask]
+        y = y[valid_depth_mask]
+        depths = depths[valid_depth_mask]
+        colors = colors[valid_depth_mask]
+
         # Generate 3D points from depth
         ones = np.ones_like(x, dtype=np.float32)
         pixels = np.stack([x, y, ones], axis=-1)
@@ -543,47 +521,47 @@ def depth_images_to_point_cloud(
         cam_colors = colors
 
         if len(cam_points) == 0:
+            # No valid points for this camera, add zero-padded placeholder
+            sampled_points = np.zeros((points_per_view, 6), dtype=np.float32)
+            all_point_clouds.append(sampled_points)
             continue
 
         # Transform to world space
         world_points = transform_points_to_world(cam_points, Rt)
 
-        # Aggressive per-camera voxel downsampling (reduces data before concatenation)
-        # This is the main bottleneck reduction - voxel per camera instead of after concatenation
-        world_points, voxel_indices = voxel_downsample(world_points, voxel_size, return_indices=True)
-        cam_colors = cam_colors[voxel_indices]
+        # Filter ground plane if requested (before FPS)
+        if filter_ground_plane:
+            valid_z_mask = world_points[:, 2] >= 0
+            world_points = world_points[valid_z_mask]
+            cam_colors = cam_colors[valid_z_mask]
 
-        all_points.append(world_points)
-        all_colors.append(cam_colors)
+        if len(world_points) == 0:
+            # No valid points after filtering, add zero-padded placeholder
+            sampled_points = np.zeros((points_per_view, 6), dtype=np.float32)
+            all_point_clouds.append(sampled_points)
+            continue
 
-    if len(all_points) == 0:
-        # No valid points available
-        return None
+        # Apply FPS to sample points_per_view points from this camera view
+        # Use CUDA if available, otherwise CPU
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        points_tensor = torch.from_numpy(world_points).float().to(device)
+        colors_tensor = torch.from_numpy(cam_colors).float().to(device)
+        points_with_colors = torch.cat([points_tensor, colors_tensor], dim=1)  # (N, 6)
 
-    # Combine all views
-    combined_points = np.concatenate(all_points, axis=0)
-    combined_colors = np.concatenate(all_colors, axis=0) if all_colors else None
+        if len(points_with_colors) >= points_per_view:
+            # Enough points, apply FPS to downsample
+            offsets = torch.tensor([0, len(points_with_colors)], dtype=torch.int32, device=points_with_colors.device)
+            # distance_dim=3: compute FPS distances using only XYZ coordinates (first 3 dims), ignoring RGB channels
+            sampled = cuda_fps.fps(points_with_colors, offsets, points_per_view, distance_dim=3)
+            sampled_points = sampled.cpu().numpy()  # (points_per_view, 6)
+        else:
+            # Not enough points, keep all and pad with zeros
+            sampled_points = points_with_colors.cpu().numpy()
+            padding = np.zeros((points_per_view - len(sampled_points), 6), dtype=np.float32)
+            sampled_points = np.concatenate([sampled_points, padding], axis=0)
 
-    # Filter out points below ground plane (z < 0) if requested
-    if filter_ground_plane:
-        valid_z_mask = combined_points[:, 2] >= 0
-        combined_points = combined_points[valid_z_mask]
-        if combined_colors is not None:
-            combined_colors = combined_colors[valid_z_mask]
+        all_point_clouds.append(sampled_points)
 
-    # Check if we have enough points
-    if len(combined_points) < num_points:
-        # Not enough valid points
-        return None
-
-    # Random downsampling to exact num_points
-    # Use simpler random permutation + slicing (faster than np.random.choice without replacement)
-    # Skip final voxel pass since we already voxeled per-camera
-    random_indices = np.random.permutation(len(combined_points))[:num_points]
-    point_cloud_xyz = combined_points[random_indices]
-    point_cloud_rgb = combined_colors[random_indices] if combined_colors is not None else None
-
-    # Concatenate XYZ and RGB into single array (N, 6)
-    point_cloud = np.concatenate([point_cloud_xyz, point_cloud_rgb], axis=1)  # (N, 6)
+    point_cloud = np.concatenate(all_point_clouds, axis=0)  # (num_views * points_per_view, 6)
 
     return point_cloud.astype(np.float16)

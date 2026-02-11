@@ -194,6 +194,9 @@ class InferenceDiffusionPolicy(Policy):
             proprioception = None
             if "proprioception" in model_input and model_input["proprioception"] is not None:
                 proprioception = model_input["proprioception"].to(self.device)
+            point_cloud = None
+            if "point_cloud" in model_input and model_input["point_cloud"] is not None:
+                point_cloud = model_input["point_cloud"].to(self.device)
             # Generate the next chunk of actions using the model
             with torch.no_grad():
                 # Use the model's generate_actions method (DiffusionPolicy interface)
@@ -205,6 +208,7 @@ class InferenceDiffusionPolicy(Policy):
                     num_inference_steps=self.num_flow_steps,
                     past_mask=model_input["past_mask"].to(self.device),
                     proprioception=proprioception,
+                    point_cloud=point_cloud,
                 )
 
                 # The model outputs need to be interpreted in context to have denormalized absolute actions

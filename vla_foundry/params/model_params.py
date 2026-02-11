@@ -262,3 +262,116 @@ class DiffusionPolicyParams(ModelParams):
         super().init_shared_attributes(cfg)
         object.__setattr__(self, "action_dim", cfg.data.action_dim)
         object.__setattr__(self, "proprioception_dim", cfg.data.proprioception_dim)
+
+
+@register_model_params("dp3_encoder")
+@dataclass(frozen=True)
+class DP3EncoderParams(ModelParams):
+    """DP3 point cloud encoder parameters."""
+
+    num_fps_points: int = field(default=1024)
+    use_pc_color: bool = field(default=False)
+    pointnet_type: str = field(default="pointnet")
+    out_channel: int = field(default=256)
+    pointcloud_encoder_cfg: dict = field(default_factory=dict)
+
+    # Shared attributes
+    proprioception_dim: int = field(default=0)
+
+    @property
+    def point_cloud_shape(self) -> Tuple[int, int]:
+        """Computed point cloud shape based on configuration."""
+        point_dim = 6 if self.use_pc_color else 3
+        return (self.num_fps_points, point_dim)
+
+    def init_shared_attributes(self, cfg):
+        super().init_shared_attributes(cfg)
+        object.__setattr__(self, "proprioception_dim", cfg.data.proprioception_dim)
+
+
+@register_model_params("ditx")
+@dataclass(frozen=True)
+class DiTXParams(ModelParams):
+    """DiTX transformer backbone parameters."""
+
+    n_layer: int = field(default=3)
+    n_head: int = field(default=4)
+    n_emb: int = field(default=256)
+    qkv_bias: bool = field(default=False)
+    qk_norm: bool = field(default=False)
+    diffusion_timestep_embed_dim: int = field(default=256)
+    diffusion_target_t_embed_dim: int = field(default=256)
+    visual_cond_len: int = field(default=1024)
+    pre_norm_modality: bool = field(default=False)
+    language_conditioned: bool = field(default=False)
+
+    # Shared attributes
+    action_dim: int = field(default=None)
+    lowdim_past_timesteps: int = field(default=2)
+    horizon: int = field(default=None)  # Set from ManiFlowParams
+    cond_dim: int = field(default=256)
+
+    def init_shared_attributes(self, cfg):
+        super().init_shared_attributes(cfg)
+        object.__setattr__(self, "action_dim", cfg.data.action_dim)
+
+
+@register_model_params("maniflow")
+@dataclass(frozen=True)
+class ManiFlowParams(ModelParams):
+    """ManiFlow consistency flow training model parameters."""
+
+    # Sub-components
+    encoder: DP3EncoderParams = field(default_factory=DP3EncoderParams)
+    action_predictor: DiTXParams = field(default_factory=DiTXParams)
+
+    # Shared attributes - set from DataParams during init_shared_attributes
+    lowdim_past_timesteps: int = field(default=None)
+    lowdim_future_timesteps: int = field(default=None)
+
+    @property
+    def horizon(self) -> int:
+        """Horizon is computed as past + anchor + future timesteps.
+
+        Following Diffusion Policy convention:
+        - past: lowdim_past_timesteps observations
+        - anchor: 1 current timestep
+        - future: lowdim_future_timesteps actions to execute
+        Total: past + 1 + future
+        """
+        return self.lowdim_past_timesteps + 1 + self.lowdim_future_timesteps
+
+    # Flow and consistency training parameters
+    num_inference_steps: int = field(default=10)
+    flow_batch_ratio: float = field(default=0.75)
+    consistency_batch_ratio: float = field(default=0.25)
+    denoise_timesteps: int = field(default=10)
+    sample_t_mode_flow: str = field(default="beta")
+    sample_t_mode_consistency: str = field(default="discrete")
+    sample_dt_mode_consistency: str = field(default="uniform")
+    sample_target_t_mode: str = field(default="relative")  # "relative" or "absolute"
+
+    # Shared attributes
+    action_dim: int = field(default=None)
+    proprioception_dim: int = field(default=0)
+
+    def init_shared_attributes(self, cfg):
+        super().init_shared_attributes(cfg)
+        object.__setattr__(self, "action_dim", cfg.data.action_dim)
+        object.__setattr__(self, "proprioception_dim", cfg.data.proprioception_dim)
+
+        # Get temporal parameters from DataParams (single source of truth)
+        object.__setattr__(self, "lowdim_past_timesteps", cfg.data.lowdim_past_timesteps)
+        object.__setattr__(self, "lowdim_future_timesteps", cfg.data.lowdim_future_timesteps)
+
+        # Propagate shared attributes to sub-components
+        object.__setattr__(self.encoder, "proprioception_dim", cfg.data.proprioception_dim)
+        object.__setattr__(self.action_predictor, "action_dim", cfg.data.action_dim)
+        object.__setattr__(self.action_predictor, "horizon", self.horizon)
+        object.__setattr__(self.action_predictor, "lowdim_past_timesteps", self.lowdim_past_timesteps)
+
+        # Calculate actual encoder output dimension: point cloud features + state MLP features
+        # Default matches DP3Encoder line 206
+        state_mlp_size = self.encoder.pointcloud_encoder_cfg.get("state_mlp_size", (64, 64))
+        encoder_output_dim = self.encoder.out_channel + state_mlp_size[-1]
+        object.__setattr__(self.action_predictor, "cond_dim", encoder_output_dim)

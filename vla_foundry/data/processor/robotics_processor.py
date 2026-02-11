@@ -156,6 +156,33 @@ class RoboticsProcessor:
             values = [sample_lowdim[k] for sample_lowdim in batch["lowdim"]]
             processed_batch["lowdim"][k] = torch.stack([torch.as_tensor(v, dtype=torch.float32) for v in values])
 
+        if self.data_params.use_point_cloud:
+            # Point clouds are FPS-sampled either:
+            # - During preprocessing (training): pre-generated in tar files
+            # - During inference: generated from depth images in PolicyDataAdapter
+            point_cloud_list = [sample_pc for sample_pc in batch["point_cloud"]]
+            processed_batch["point_cloud"] = torch.stack(
+                [torch.as_tensor(pc, dtype=torch.float32) for pc in point_cloud_list]
+            )
+
+            # Apply CLIP normalization to RGB channels (channels 3-5) for consistency with images
+            # This is applied in both training and inference
+            if processed_batch["point_cloud"].shape[-1] == 6:  # Only if RGB channels exist
+                pc = processed_batch["point_cloud"]  # (B, T, N, 6)
+                xyz = pc[..., :3]  # XYZ coordinates
+                rgb = pc[..., 3:]  # RGB colors in [0, 1]
+
+                # Apply CLIP normalization to RGB
+                # CLIP normalization: mean=[0.48145466, 0.4578275, 0.40821073], std=[0.26862954, 0.26130258, 0.27577711]
+                clip_mean = torch.tensor([0.48145466, 0.4578275, 0.40821073], device=rgb.device)
+                clip_std = torch.tensor([0.26862954, 0.26130258, 0.27577711], device=rgb.device)
+                rgb = (rgb - clip_mean) / clip_std
+
+                # Concatenate normalized RGB with XYZ
+                processed_batch["point_cloud"] = torch.cat([xyz, rgb], dim=-1)
+        else:
+            processed_batch["point_cloud"] = None
+
         # Normalize each field individually
         if self.normalizer and self.data_params.normalization.enabled:
             anchor_timestep = self.data_params.lowdim_past_timesteps
@@ -165,5 +192,13 @@ class RoboticsProcessor:
                     processed_batch["lowdim"][field_name] = self.normalizer.normalize_tensor(
                         tensor, field_name, anchor_timestep=anchor_timestep
                     )
+
+            # Normalize point cloud if enabled
+            # Note: RGB is already normalized with CLIP normalization above (line 168-182)
+            # The normalizer will handle 6-channel (XYZRGB) tensors by only normalizing XYZ
+            if processed_batch["point_cloud"] is not None and "point_cloud" in self.normalizer.include_fields:
+                processed_batch["point_cloud"] = self.normalizer.normalize_tensor(
+                    processed_batch["point_cloud"], "point_cloud", anchor_timestep=anchor_timestep
+                )
 
         return processed_batch

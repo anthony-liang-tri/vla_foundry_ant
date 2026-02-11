@@ -115,9 +115,37 @@ def main():
     else:
         statistics_ray_actor = None
     logger_actor = LoggerActor.remote()
-    futures = [
-        streaming_episode_worker.remote(episode, converter, statistics_ray_actor, logger_actor) for episode in episodes
-    ]
+
+    # Conditionally request GPUs based on whether we're processing depth data for point clouds
+    if cfg.use_depth_data:
+        # Check if GPUs are available
+        available_gpus = ray.cluster_resources().get("GPU", 0)
+        if available_gpus == 0:
+            raise RuntimeError(
+                "❌ ERROR: use_depth_data=True requires GPUs for CUDA FPS point cloud processing, "
+                "but no GPUs are available in the Ray cluster. "
+                "Either provide GPUs or set use_depth_data=False."
+            )
+
+        # Calculate expected number of parallel workers
+        expected_workers = int(available_gpus / cfg.ray_num_gpus_per_worker)
+        print(
+            f"🎮 GPU mode: Requesting {cfg.ray_num_gpus_per_worker} GPU per worker for CUDA FPS point cloud processing"
+        )
+        print(f"   📊 Cluster resources: {available_gpus} GPUs → {expected_workers} parallel workers")
+
+        futures = [
+            streaming_episode_worker.options(num_gpus=cfg.ray_num_gpus_per_worker).remote(
+                episode, converter, statistics_ray_actor, logger_actor
+            )
+            for episode in episodes
+        ]
+    else:
+        print("💻 CPU mode: Processing without point clouds")
+        futures = [
+            streaming_episode_worker.remote(episode, converter, statistics_ray_actor, logger_actor)
+            for episode in episodes
+        ]
     results = ray.get(futures)
     results = [result for result in results if result is not None]  # Remove None results
     results = [i for result in results for i in result]  # Result is a list of lists, flatten it

@@ -290,3 +290,77 @@ class DiffusionPolicyBatchHandler(BatchHandler):
             mask = mask[:, -seq_len:]
 
         return loss_fn(input=predicted_direction, target=target_direction, mask=mask)
+
+
+@register_batch_handler("maniflow")
+class ManiFlowBatchHandler(BatchHandler):
+    """Handles batch preparation for ManiFlow consistency flow models."""
+
+    def prepare_inputs(self, batch, device, model_dtype, cfg):
+        """Prepare inputs for ManiFlow inference."""
+        # Load point cloud if available and enabled
+        if batch.get("point_cloud") is not None and cfg.data.use_point_cloud:
+            point_cloud = batch["point_cloud"].to(device, non_blocking=True, dtype=model_dtype)
+        else:
+            point_cloud = None
+
+        proprioception = batch["proprioception"].to(device, non_blocking=True, dtype=model_dtype)
+
+        inputs = {
+            "point_cloud": point_cloud,
+            "proprioception": proprioception,
+        }
+
+        # Add language conditioning if present
+        if "task_name" in batch and batch["task_name"] is not None:
+            inputs["task_name"] = batch["task_name"]
+
+        return inputs
+
+    def prepare_inputs_and_targets(self, batch, device, model_dtype, cfg):
+        """Prepare inputs and targets for ManiFlow training.
+
+        ManiFlow computes its own loss internally with flow and consistency objectives.
+        We structure the inputs so ManiFlow.forward() receives batch= kwargs.
+        EMA model should be set via model.set_ema_model() before training.
+        """
+        # Load point cloud if available and enabled
+        if batch.get("point_cloud") is not None and cfg.data.use_point_cloud:
+            point_cloud = batch["point_cloud"].to(device, non_blocking=True, dtype=model_dtype)
+        else:
+            point_cloud = None
+
+        proprioception = batch["proprioception"].to(device, non_blocking=True, dtype=model_dtype)
+        actions = batch["actions"].to(device, non_blocking=True, dtype=model_dtype)
+        input_ids = batch["input_ids"].to(device, non_blocking=True, dtype=torch.long)
+
+        # Prepare inputs for ManiFlow.forward() - flat structure for gradient accumulation compatibility
+        model_inputs = {
+            "point_cloud": point_cloud,
+            "proprioception": proprioception,
+            "actions": actions,
+            "input_ids": input_ids,
+        }
+
+        # Add language conditioning if present
+        if "task_name" in batch and batch["task_name"] is not None:
+            model_inputs["task_name"] = batch["task_name"]
+
+        # Create dummy targets tensor for training loop compatibility (not actually used)
+        # Training loop expects targets to be sliceable, but ManiFlow computes loss internally
+        dummy_targets = torch.zeros((actions.shape[0],), device=actions.device)
+
+        return model_inputs, dummy_targets, None
+
+    def compute_loss(self, outputs, targets, loss_fn, cfg, mask=None):
+        """Compute loss for ManiFlow.
+
+        Since ManiFlow.compute_loss returns (loss, loss_dict), we need to extract just the loss.
+        The outputs here should be the (loss, loss_dict) tuple from model.compute_loss.
+        """
+        if isinstance(outputs, tuple) and len(outputs) == 2:
+            loss, loss_dict = outputs
+            return loss
+        else:
+            # If just a scalar loss is returned
+            return outputs

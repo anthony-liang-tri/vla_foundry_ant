@@ -259,6 +259,17 @@ class RoboticsNormalizer:
         center, scale = self._get_normalization_params(field_name)
         center = center.to(tensor.device)
         scale = scale.to(tensor.device)
+
+        # For point_cloud with 6 channels (XYZ + RGB), only normalize XYZ
+        # RGB channels (last 3) are already CLIP-normalized and should not be normalized again
+        is_point_cloud_6ch = field_name == "point_cloud" and tensor.shape[-1] == 6
+        if is_point_cloud_6ch:
+            xyz = tensor[..., :3]  # Extract XYZ channels
+            rgb = tensor[..., 3:]  # Extract RGB channels (already CLIP-normalized)
+            center = center[:3]  # Use only XYZ statistics
+            scale = scale[:3]
+            tensor = xyz  # Normalize only XYZ, will concatenate RGB back at the end
+
         if scope == "global" or len(tensor.shape) == 2:
             # Global normalization or no time dimension
             # Broadcast to match tensor dimensions - add singleton dims for all but last
@@ -319,6 +330,10 @@ class RoboticsNormalizer:
             logging.warning(f"Unsupported tensor shape for normalization: {tensor.shape}")
             normalized = tensor
 
+        # For 6-channel point clouds, concatenate RGB back (RGB was not normalized)
+        if is_point_cloud_6ch:
+            normalized = torch.cat([normalized, rgb], dim=-1)
+
         return normalized
 
     def denormalize_tensor(
@@ -345,6 +360,28 @@ class RoboticsNormalizer:
         center, scale = self._get_normalization_params(field_name)
         center = center.to(normalized_tensor.device)
         scale = scale.to(normalized_tensor.device)
+
+        # For point_cloud with 6 channels (XYZ + RGB), only denormalize XYZ
+        # RGB channels (last 3) are already CLIP-normalized and should not be denormalized
+        is_point_cloud_6ch = field_name == "point_cloud" and normalized_tensor.shape[-1] == 6
+        if is_point_cloud_6ch:
+            xyz_normalized = normalized_tensor[..., :3]  # Extract normalized XYZ channels
+            rgb = normalized_tensor[..., 3:]  # Extract RGB channels (already CLIP-normalized)
+            center = center[:3]  # Use only XYZ statistics
+            scale = scale[:3]
+
+            # Denormalize only XYZ
+            if scope == "global" or len(normalized_tensor.shape) == 2:
+                # Global denormalization or no time dimension
+                target_shape = [1] * (len(xyz_normalized.shape) - 1) + [-1]
+                center = center.view(target_shape)
+                scale = scale.view(target_shape)
+                xyz_denormalized = xyz_normalized * scale + center
+                # Concatenate denormalized XYZ with unchanged RGB and return early
+                return torch.cat([xyz_denormalized, rgb], dim=-1)
+
+            # For per-timestep, continue with the regular flow using xyz_normalized only, then concat rgb at the end
+            normalized_tensor = xyz_normalized
 
         if scope == "global" or len(normalized_tensor.shape) == 2:
             # Global denormalization or no time dimension
@@ -409,5 +446,9 @@ class RoboticsNormalizer:
             # Unsupported tensor shape
             logging.warning(f"Unsupported tensor shape for denormalization: {normalized_tensor.shape}")
             denormalized = normalized_tensor
+
+        # For 6-channel point clouds with per-timestep denormalization, concatenate RGB back
+        if is_point_cloud_6ch and scope == "per_timestep":
+            denormalized = torch.cat([denormalized, rgb], dim=-1)
 
         return denormalized

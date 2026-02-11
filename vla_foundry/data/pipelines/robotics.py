@@ -18,6 +18,7 @@ def filter_robotics_sample(sample):
     has_lowdim = any(k.endswith("lowdim.npz") for k in sample)
     has_metadata = any(k.endswith("metadata.json") for k in sample)
     has_images = any(k.endswith(".jpg") for k in sample)
+    # Point clouds are optional
     return has_lowdim and has_metadata and has_images
 
 
@@ -45,6 +46,7 @@ def extract_robotics_fields(
     extrinsics_fields=None,
     lowdim_past_timesteps=None,
     lowdim_future_timesteps=None,
+    use_point_cloud=False,
 ):
     """Extract robotics fields from sample."""
     if extrinsics_fields is None:
@@ -63,7 +65,7 @@ def extract_robotics_fields(
             img_key = key.split(".")[-2]  # e.g., "wrist_camera_t-1"
             images[img_key] = np.array(value)
         else:
-            suffix_map = ["lowdim.npz", "metadata.json", "language_instructions.json"]
+            suffix_map = ["lowdim.npz", "metadata.json", "language_instructions.json", "point_cloud.npz"]
             for suffix in suffix_map:
                 if key.endswith(suffix):
                     data[suffix] = value
@@ -71,6 +73,7 @@ def extract_robotics_fields(
     instruction = select_language_instruction(data.get("language_instructions.json"), language_instruction_types)
 
     lowdim_data = data.get("lowdim.npz")
+    point_cloud_data = data.get("point_cloud.npz")
     metadata = data.get("metadata.json", {})
 
     # Get the anchor index from metadata (where the current timestep is in the sequence)
@@ -110,9 +113,17 @@ def extract_robotics_fields(
         # Store original anchor for alignment with normalization statistics
         metadata["original_anchor_relative_idx"] = original_anchor_idx
 
+    # Extract point cloud if enabled
+    point_cloud = None
+    if use_point_cloud and point_cloud_data is not None:
+        # Point cloud is stored in point_cloud.npz file with key "data"
+        # It is already pre-cropped during preprocessing, so no need to crop again
+        point_cloud = point_cloud_data.get("data")
+
     return {
         "images": images,
         "lowdim": extracted_lowdim,
+        "point_cloud": point_cloud,
         "past_mask": past_mask,
         "future_mask": future_mask,
         "metadata": metadata,
@@ -168,6 +179,7 @@ class RoboticsPipeline(BaseWebDatasetPipeline):
                     extrinsics_fields=self.data_params.extrinsics_fields,
                     lowdim_past_timesteps=self.data_params.lowdim_past_timesteps,
                     lowdim_future_timesteps=self.data_params.lowdim_future_timesteps,
+                    use_point_cloud=self.data_params.use_point_cloud,
                 ),
                 handler=log_and_continue,
             ),

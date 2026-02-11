@@ -93,6 +93,8 @@ def mock_config():
     cfg.stride = 1
     cfg.num_workers = 1
     cfg.output_dir = "/tmp/test_output"
+    cfg.min_depth = 0.001
+    cfg.max_depth = 3.0
     cfg.jpeg_quality = 90
     cfg.fail_on_nan = False
     return cfg

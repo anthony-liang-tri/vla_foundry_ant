@@ -1,0 +1,40 @@
+type: robotics
+
+image_size: 224
+allow_multiple_epochs: true
+seq_len: 2048
+lowdim_past_timesteps: 1  # number of past observation timesteps
+lowdim_future_timesteps: 14  # number of future action timesteps to execute
+prefetch_factor: 4
+num_workers: 32
+
+processor: "openai/clip-vit-base-patch32"
+
+use_point_cloud: true
+point_cloud_num_points: 4096
+
+augmentation:
+  enabled: true
+  image:
+    color_jitter:
+      enabled: false
+  point_cloud:
+    color_jitter:
+      enabled: true
+      brightness: 0.2
+      contrast: 0.4
+      saturation: 0.2
+      hue: [-0.05, 0.05]
+
+normalization:
+  enabled: true
+  method: percentile_1_99
+  scope: global
+  epsilon: 1e-2
+  centered_norm: true
+  field_configs:
+    point_cloud:
+      method: min_max
+      scope: global
+      epsilon: 1e-8
+      enabled: true

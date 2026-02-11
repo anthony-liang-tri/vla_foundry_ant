@@ -1,0 +1,52 @@
+type: maniflow
+action_dim: 20
+action_predictor:
+  action_dim: 20
+  cond_dim: 320
+  diffusion_target_t_embed_dim: 128
+  diffusion_timestep_embed_dim: 128
+  freeze: false
+  horizon: 16
+  language_conditioned: false
+  lowdim_past_timesteps: 1
+  n_emb: 768
+  n_head: 8
+  n_layer: 12
+  pre_norm_modality: false
+  qk_norm: true
+  qkv_bias: true
+  resume_from_checkpoint: null
+  resume_weights_only: false
+  type: ditx
+  visual_cond_len: 4096
+consistency_batch_ratio: 0.25
+denoise_timesteps: 10
+encoder:
+  freeze: false
+  num_fps_points: 4096
+  out_channel: 256
+  use_pc_color: true
+  pointcloud_encoder_cfg:
+    final_norm: layernorm
+    in_channels: 3
+    normal_channel: false
+    num_points: 4096
+    out_channels: 256
+    pointwise: true
+    use_layernorm: true
+  pointnet_type: pointnet
+  proprioception_dim: 20
+  resume_from_checkpoint: null
+  resume_weights_only: false
+  type: dp3_encoder
+flow_batch_ratio: 0.75
+freeze: false
+lowdim_future_timesteps: 14
+lowdim_past_timesteps: 1
+num_inference_steps: 10
+proprioception_dim: 20
+resume_weights_only: false
+sample_dt_mode_consistency: uniform
+sample_t_mode_consistency: discrete
+sample_t_mode_flow: beta
+sample_target_t_mode: relative

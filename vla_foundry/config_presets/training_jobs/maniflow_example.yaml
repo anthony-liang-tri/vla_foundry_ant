@@ -1,0 +1,63 @@
+model:
+  <<: !include ../models/maniflow.yaml
+
+data:
+  <<: !include ../data/lbm/lbm_data_params.yaml
+  <<: !include ../data/maniflow.yaml
+  # Update these paths for your specific dataset
+  dataset_manifest:
+    - s3://your-bucket/your-dataset/manifest.jsonl
+  dataset_statistics:
+    - s3://your-bucket/your-dataset/stats.json
+  dataset_modality:
+    - robotics
+  dataset_weighting:
+    - 1.0
+  # Camera configuration - adjust based on your dataset
+  camera_names:
+    - scene_right_0
+    - scene_left_0
+    - wrist_left_minus
+    - wrist_left_plus
+    - wrist_right_minus
+    - wrist_right_plus
+  image_indices:
+    - -1
+    - 0
+
+distributed:
+  fsdp: false  # Set to true for large models
+  use_distributed: true
+
+hparams:
+  <<: !include ../hparams/maniflow.yaml
+  per_gpu_batch_size: 64
+  global_batch_size: 512
+  lr: 1e-4
+  warmup: "0.025"
+  wd: 1e-3
+  optimizer: adamw
+  lr_scheduler: cosine
+
+ema:
+  enabled: true
+  alpha: 0.999
+  type: ema
+
+# Training configuration
+total_train_samples: 30000000  # Adjust based on your dataset size
+log_every_n_steps: 20
+max_checkpoint_limit: 5
+val_every_n_checkpoints: 1
+
+# Weights & Biases logging (optional)
+wandb: true
+wandb_entity: your-entity  # Update with your W&B entity
+wandb_project_name: vla_foundry_maniflow
+wandb_tags:
+  - maniflow
+  - your-task-name
+
+# Remote sync (optional) - for saving checkpoints to S3
+# remote_sync: s3://your-bucket/model_checkpoints/maniflow
+# save_path: /tmp

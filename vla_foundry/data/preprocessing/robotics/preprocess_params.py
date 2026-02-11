@@ -65,12 +65,15 @@ class PreprocessParams(draccus.ChoiceRegistry, BaseParams):
 
     # Depth and point cloud control
     use_depth_data: bool = field(default=False)  # Whether to use depth data (depth images + point clouds)
-    point_cloud_num_points: int = field(default=50000)  # Number of points for downsampling
+    point_cloud_num_points: int = field(default=4096)  # Total number of points (divided evenly across views)
 
     # Ray configuration
     ray_address: str = field(default=None)  # Ray cluster address, default to auto-detect
     ray_num_cpus: int = field(default=None)  # Number of CPUs for Ray, default to auto-detect
 
+    # GPU allocation per worker when use_depth_data=True (for CUDA FPS point cloud processing)
+    # Default: 0.25 GPU per worker (allows 4 workers per GPU)
+    ray_num_gpus_per_worker: float = field(default=0.25)
     # Database logging
     db_logging: bool = field(default=True)  # Whether to log preprocessing to DynamoDB
 
@@ -97,6 +100,10 @@ class SpartanPreprocessParams(PreprocessParams):
         default="vla_foundry/config_presets/data/lbm/lbm_action_fields.yaml",
     )
     validation_episodes_path: Optional[str] = field(default=None)
+
+    # Depth filtering parameters
+    min_depth: float = field(default=0.001)  # Minimum valid depth in meters (filters invalid/too-close points)
+    max_depth: float = field(default=3.0)  # Maximum valid depth in meters (filters too-far/unreliable points)
 
 
 @register_preprocess_params("lerobot")

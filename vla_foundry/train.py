@@ -66,6 +66,11 @@ def train_one_checkpoint(
     model.train()
     model_dtype = next(model.parameters()).dtype
 
+    # Set EMA model if provided (for models that support it)
+    if ema_model is not None:
+        unwrapped_model = get_unwrapped_model(model)
+        unwrapped_model.set_ema_model(ema_model)
+
     # Let the dataloader know which window/checkpoint it's on.
     dataloader.set_checkpoint_num(checkpoint_num)
     num_batches_per_checkpoint = dataloader.dataloader.num_batches

@@ -124,7 +124,7 @@ class BaseRoboticsConverter:
         - sample_lowdim: a dictionary with lowdim keys as keys and lowdim data as values.
         - sample_metadata: a dictionary or a SampleMetadata object (some fields can be blank).
         - language_instructions: a dictionary with keys "original", etc. and language instructions as values.
-        - sample_point_clouds (optional): point cloud array (T, N, 6) with [x,y,z,r,g,b] or None
+        - sample_point_cloud (optional): point cloud array (T, N, 6) with [x,y,z,r,g,b] or None
         IMPORTANT: Make sure to also update statistics data in this function, as well as the sample counts.
         You can use the statistics_ray_actor and the logger_actor to update the statistics and sample counts.
         """
@@ -223,7 +223,7 @@ class BaseRoboticsConverter:
 
                     # Handle 4+ tuple returns (sample_point_clouds and stats_sample are optional 5th and 6th elements)
                     sample_images, sample_lowdim, sample_metadata, language_instructions, *extra = result
-                    sample_point_clouds = extra[0] if len(extra) >= 1 else None
+                    sample_point_cloud = extra[0] if len(extra) >= 1 else None
                     stats_sample = extra[1] if len(extra) >= 2 else None
 
                     if sample_images is None and sample_lowdim is None:
@@ -241,9 +241,9 @@ class BaseRoboticsConverter:
                         "language_instructions": language_instructions,
                     }
 
-                    # Add point clouds to sample data if provided
-                    if sample_point_clouds is not None:
-                        sample_data["point_clouds"] = sample_point_clouds
+                    # Add point cloud to sample data if provided
+                    if sample_point_cloud is not None:
+                        sample_data["point_cloud"] = sample_point_cloud
 
                     # Submit upload task
                     future = executor.submit(

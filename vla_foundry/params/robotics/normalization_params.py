@@ -99,6 +99,9 @@ class NormalizationParams(BaseParams):
     def init_shared_attributes(self, cfg):
         super().init_shared_attributes(cfg)
         include_fields = list(cfg.data.proprioception_fields + cfg.data.action_fields)
+        # Add point_cloud if enabled
+        if cfg.data.use_point_cloud:
+            include_fields.append("point_cloud")
         # Currently we don't support normalization of intrinsics and extrinsics fields
         object.__setattr__(self, "include_fields", include_fields)
 
@@ -111,6 +114,20 @@ class NormalizationParams(BaseParams):
                     epsilon=self.epsilon,
                     enabled=self.enabled,
                 )
+
+        # Validate that point_cloud normalization uses min_max method
+        if (
+            cfg.data.use_point_cloud
+            and "point_cloud" in field_configs
+            and field_configs["point_cloud"].method != "min_max"
+        ):
+            pc_method = field_configs["point_cloud"].method
+            raise ValueError(
+                f"Point cloud normalization must use 'min_max' method, but got '{pc_method}'. "
+                "Point clouds require min_max normalization to work correctly. "
+                "Please set normalization.field_configs.point_cloud.method to 'min_max' in your config."
+            )
+
         object.__setattr__(self, "field_configs", field_configs)
 
         dataset_manifest = cfg.data.dataset_manifest

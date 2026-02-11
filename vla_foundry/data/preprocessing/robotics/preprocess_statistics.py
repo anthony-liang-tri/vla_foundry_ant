@@ -273,7 +273,7 @@ class StreamingDatasetStatistics:
                     self.maxs[key] = np.where(sum_mask > 0, np.max(data_max, axis=0), float("-inf"))
 
                     # Initialize T-Digest estimators
-                    if key != "point_clouds":
+                    if key != "point_cloud":
                         self.quantile_estimators[key] = TDigestEstimator(
                             self.running_means[key].shape,
                             self.max_samples_for_percentiles,
@@ -347,7 +347,7 @@ class StreamingDatasetStatistics:
 
         # Process samples in batch for better performance, first concatenate all the samples in a single dict
         sample_lowdim = {}
-        sample_point_clouds = {}
+        sample_point_cloud = {}
 
         for sample in samples_batch:
             for key, data in sample["lowdim"].items():
@@ -364,14 +364,14 @@ class StreamingDatasetStatistics:
                 else:
                     sample_lowdim["mask"] = np.concatenate([sample_lowdim["mask"], mask[None, ...]], axis=0)
 
-            # Process point clouds separately (no masks needed as they're already sliced by image_indices)
-            if "point_clouds" in sample:
-                pc_data = sample["point_clouds"]  # Shape: (T, N, 6)
-                if "point_clouds" not in sample_point_clouds:
-                    sample_point_clouds["point_clouds"] = pc_data[None, ...]  # (1, T, N, 6)
+            # Process point cloud separately (no masks needed as they're already sliced by image_indices)
+            if "point_cloud" in sample:
+                pc_data = sample["point_cloud"]  # Shape: (T, N, 6)
+                if "point_cloud" not in sample_point_cloud:
+                    sample_point_cloud["point_cloud"] = pc_data[None, ...]  # (1, T, N, 6)
                 else:
-                    sample_point_clouds["point_clouds"] = np.concatenate(
-                        [sample_point_clouds["point_clouds"], pc_data[None, ...]], axis=0
+                    sample_point_cloud["point_cloud"] = np.concatenate(
+                        [sample_point_cloud["point_cloud"], pc_data[None, ...]], axis=0
                     )
 
         # Update statistics for lowdim data (with masks)
@@ -379,9 +379,9 @@ class StreamingDatasetStatistics:
 
         # Update statistics for point clouds (without masks)
         # Point clouds have shape (B, T, N, 6) - reshape to (B*N, T, 6) to get stats per timestep
-        if sample_point_clouds:
+        if sample_point_cloud:
             pc_stats = {}
-            for key, pc_data in sample_point_clouds.items():
+            for key, pc_data in sample_point_cloud.items():
                 # Reshape: (B, T, N, 6) -> (B*N, T, 6)
                 # Treat N (num_points) as part of batch dimension to compute stats of shape (T, 6)
                 B, T, N, C = pc_data.shape
@@ -435,29 +435,46 @@ class StreamingDatasetStatistics:
                     "max_per_timestep": self.maxs[key].tolist(),
                 }
 
-                # Get estimates from T-Digest estimators
-                estimates = {
-                    p: self.global_quantile_estimators[key].get_quantile(p).tolist() for p in self.quantiles_to_track
-                }
-                stats[key].update({f"percentile_{int(p * 100)}": estimates[p] for p in self.quantiles_to_track})
-                estimates_per_timestep = {
-                    p: self.quantile_estimators[key].get_quantile(p).tolist() for p in self.quantiles_to_track
-                }
-                stats[key].update(
-                    {
-                        f"percentile_{int(p * 100)}_per_timestep": estimates_per_timestep[p]
+                # Get estimates from T-Digest estimators (if available)
+                # Point clouds and some other fields may not have percentile estimators
+                if key in self.global_quantile_estimators:
+                    estimates = {
+                        p: self.global_quantile_estimators[key].get_quantile(p).tolist()
                         for p in self.quantiles_to_track
                     }
-                )
+                    stats[key].update({f"percentile_{int(p * 100)}": estimates[p] for p in self.quantiles_to_track})
 
-                stats[key].update(
-                    {
-                        "count": self.counts[key][..., 0].tolist(),
-                        "percentile_sample_count": self.counts[key][..., 0].tolist(),
-                        "tdigest_state": self.global_quantile_estimators[key].get_state(),
-                        "tdigest_state_per_timestep": self.quantile_estimators[key].get_state(),
+                    stats[key].update(
+                        {
+                            "percentile_sample_count": self.counts[key][..., 0].tolist(),
+                            "tdigest_state": self.global_quantile_estimators[key].get_state(),
+                        }
+                    )
+                else:
+                    # No percentile estimation available for this field
+                    for p in self.quantiles_to_track:
+                        stats[key][f"percentile_{int(p * 100)}"] = None
+                    stats[key]["percentile_sample_count"] = 0
+                    stats[key]["tdigest_state"] = None
+
+                if key in self.quantile_estimators:
+                    estimates_per_timestep = {
+                        p: self.quantile_estimators[key].get_quantile(p).tolist() for p in self.quantiles_to_track
                     }
-                )
+                    stats[key].update(
+                        {
+                            f"percentile_{int(p * 100)}_per_timestep": estimates_per_timestep[p]
+                            for p in self.quantiles_to_track
+                        }
+                    )
+                    stats[key]["tdigest_state_per_timestep"] = self.quantile_estimators[key].get_state()
+                else:
+                    # No per-timestep percentile estimation available
+                    for p in self.quantiles_to_track:
+                        stats[key][f"percentile_{int(p * 100)}_per_timestep"] = None
+                    stats[key]["tdigest_state_per_timestep"] = None
+
+                stats[key]["count"] = self.counts[key][..., 0].tolist()
 
         return stats
 

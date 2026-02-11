@@ -105,6 +105,8 @@ class RoboticsDataParams(DataParams):
     pose_groups: list[Dict[str, str]] = field(default_factory=list)
     intrinsics_fields: list[str] = field(default_factory=list)
     extrinsics_fields: list[str] = field(default_factory=list)
+    use_point_cloud: bool = field(default=False)
+    point_cloud_num_points: int = field(default=4096)  # Total number of points for FPS sampling
     normalization: NormalizationParams = field(default_factory=NormalizationParams)
     augmentation: DataAugmentationParams = field(default_factory=DataAugmentationParams)
 
@@ -176,6 +178,10 @@ class RoboticsDataParams(DataParams):
         if self.image_names is None or len(self.image_names) == 0:
             image_names = [f"{cname}_t{idx}" for idx in self.image_indices for cname in self.camera_names]
             object.__setattr__(self, "image_names", image_names)
+
+        # Load point_cloud_num_points from preprocessing config if available
+        if self.use_point_cloud and processing_configs and "point_cloud_num_points" in processing_configs[0]:
+            object.__setattr__(self, "point_cloud_num_points", processing_configs[0]["point_cloud_num_points"])
 
         # For all used fields (proprioception and action), add default normalization parameters if not specified
         normalization_fields = self.normalization.field_configs
