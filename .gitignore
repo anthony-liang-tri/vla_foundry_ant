@@ -8,6 +8,7 @@ experiments
 outputs
 results
 sagemaker/configs/
+sagemaker/git_diffs/
 tmp/
 debug_logs/
 downloaded_results/
