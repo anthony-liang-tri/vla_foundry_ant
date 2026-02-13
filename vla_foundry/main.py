@@ -79,6 +79,21 @@ def main():
     # Seed rank-0 before any object creation for reproducibility.
     set_random_seed(cfg.hparams.seed, 0)
 
+    # Early validation: check checkpoint path exists if provided
+    if cfg.model.resume_from_checkpoint is not None:
+        from vla_foundry.file_utils import file_exists
+
+        if not file_exists(cfg.model.resume_from_checkpoint):
+            raise FileNotFoundError(
+                f"Checkpoint not found at '{cfg.model.resume_from_checkpoint}'. "
+                "Please verify the path is correct and accessible."
+            )
+        else:
+            logging.info(
+                f"Checkpoint validation passed. Will load weights from '{cfg.model.resume_from_checkpoint}' for "
+                f"{'finetuning' if cfg.model.resume_weights_only else 'resuming training'}."
+            )
+
     # Set path for experiment, log, checkpoints.
     experiment_name = get_experiment_name(cfg)
     experiment_uuid = str(uuid.uuid4())
@@ -171,12 +186,13 @@ def main():
     else:
         model = model.to(device, dtype=get_model_precision(cfg))
 
-    # Optionally resume model from a checkpoint.
+    # Optionally resume model from a checkpoint or finetune from pretrained weights.
     start_checkpoint_num, global_step = 0, 0
     total_steps = cfg.total_train_samples // cfg.hparams.global_batch_size
     shard_shuffle_seed_per_dataset = None
     if cfg.model.resume_from_checkpoint is not None:
         if cfg.model.resume_weights_only:
+            logging.info(f"Finetuning: Loading pretrained weights from '{cfg.model.resume_from_checkpoint}'")
             load_model_checkpoint(model, cfg.model.resume_from_checkpoint)
         else:
             start_checkpoint_num, global_step, shard_shuffle_seed_per_dataset = load_model_checkpoint(

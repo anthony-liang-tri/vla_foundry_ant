@@ -65,5 +65,25 @@ uv run --group=sagemaker sagemaker/launch_training.py \
 
 Note: We use `uv run --group=sagemaker` to launch this script. No need for torchrun here.
 
+## Finetuning from Pretrained Weights
+
+To finetune a model from a pretrained checkpoint instead of training from scratch, use the `--model.resume_from_checkpoint` and `--model.resume_weights_only` flags. This loads only the model weights without resuming optimizer state or training progress. For example:
+
+```bash
+uv run --group=sagemaker sagemaker/launch_training.py \
+--sagemaker.user firstname.lastname \
+--sagemaker.instance_count 1 \
+--sagemaker.instance_type p4de \
+--sagemaker.queue_name vla \
+--config_path vla_foundry/config_presets/training_jobs/diffusion_policy_bellpepper.yaml \
+--remote_sync s3://tri-ml-datasets-uw2/lbm2_vla/model_checkpoints/finetuned \
+--model.resume_from_checkpoint s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/ablations/multitask/100m/2026_01_07-23_38_39-model_diffusion_policy-lr_5e-05-bsz_1024/checkpoints/checkpoint_3.pt \
+--model.resume_weights_only True
+```
+Note that it is usually preferable to put the `resume_from_checkpoint` and `resume_weights_only` into the config located at `--config_path`.
+
+- The checkpoint path is validated early in training to fail fast with a clear error if the path is invalid
+- Use `--model.resume_weights_only=False` (default) to fully resume training including optimizer state
+
 ## Inference
 (todo)
