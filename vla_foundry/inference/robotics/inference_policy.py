@@ -39,6 +39,7 @@ from vla_foundry.inference.robotics.data_adapter import PolicyDataAdapter
 from vla_foundry.logger import setup_logging
 from vla_foundry.models import create_model
 from vla_foundry.params.train_experiment_params import load_experiment_params_from_yaml
+from vla_foundry.precision import get_autocast
 from vla_foundry.visualizers import visualizer
 
 
@@ -209,7 +210,8 @@ class InferenceDiffusionPolicy(Policy):
             if "point_cloud" in model_input and model_input["point_cloud"] is not None:
                 point_cloud = model_input["point_cloud"].to(self.device)
             # Generate the next chunk of actions using the model
-            with torch.no_grad():
+            autocast = get_autocast(self.cfg.hparams.precision)
+            with torch.no_grad(), autocast():
                 # Use the model's generate_actions method (DiffusionPolicy interface)
                 model_output = self.model.generate_actions(
                     input_ids=input_ids,
