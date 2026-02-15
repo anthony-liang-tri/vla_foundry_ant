@@ -1,0 +1,71 @@
+# Nominal (base) configuration for VLA ablation experiments
+# These are the default parameters that ablations will modify
+# Uses VLA diffusion model with PaliGemma2 backbone instead of CLIP
+
+# Tasks to run ablations on
+tasks:
+  - BimanualPutRedBellPepperInBin
+  - BimanualPutSpatulaOnPlateFromTable
+  - TurnCupUpsideDown
+  - PlaceCupByCoaster
+
+# S3 paths
+base_s3_path: s3://tri-ml-datasets-uw2/vla_foundry_datasets/v0.4.1
+checkpoint_base: s3://tri-ml-datasets-uw2/lbm2_vla/model_checkpoints/vla_diffusion/ablations
+
+# Output directory
+output_base: vla_foundry/tri/ablations/vla/ablation_configs
+
+# Base arguments for all experiments
+# NOTE: Uses config_path to load VLA model config, then overrides specific fields.
+# The --model include syntax doesn't work for VLA because the argparser needs
+# the model type to be known before it can register VLM backbone fields.
+base_args:
+  config_path: vla_foundry/config_presets/training_jobs/vla_diffusion_bellpepper.yaml
+
+  # Override data normalization
+  data.normalization.scope: global
+  data.normalization.method: percentile_1_99
+  data.normalization.centered_norm: true
+  data.normalization.epsilon: 0.01
+
+  # Override data augmentation
+  data.augmentation.enabled: true
+  data.augmentation.image.color_jitter.enabled: true
+  data.augmentation.image.color_jitter.brightness: 0.2
+  data.augmentation.image.color_jitter.contrast: 0.4
+  data.augmentation.image.color_jitter.saturation: 0.2
+  data.augmentation.image.color_jitter.hue: "[-0.05, 0.05]"
+  data.augmentation.image.crop.enabled: true
+  data.augmentation.image.crop.shape: "[224, 224]"
+
+  # Override data fields
+  data.dataset_weighting: "[1.0]"
+  data.dataset_modality: '["robotics"]'
+  data.action_fields: '["robot__action__poses__left::panda__xyz", "robot__action__poses__right::panda__xyz", "robot__action__poses__left::panda__rot_6d", "robot__action__poses__right::panda__rot_6d", "robot__action__grippers__left::panda_hand", "robot__action__grippers__right::panda_hand"]'
+  data.proprioception_fields: "[]"
+  data.camera_names: '["scene_right_0", "scene_left_0", "wrist_left_minus", "wrist_left_plus", "wrist_right_minus", "wrist_right_plus"]'
+  data.image_indices: "[-1, 0]"
+  data.lowdim_past_timesteps: 1
+  data.lowdim_future_timesteps: 14
+
+  # Distributed configuration (VLA uses FSDP)
+  distributed.fsdp: true
+  distributed.use_distributed: false
+
+  # Hyperparameters
+  hparams.loss_function: mse
+  hparams.torchcompile: false
+  hparams.precision: amp_bf16
+  hparams.per_gpu_batch_size: 4
+  hparams.global_batch_size: 32
+  hparams.grad_clip_norm: 1.0
+  hparams.lr: 0.0005
+  hparams.lr_cooldown_end: 0.00001
+  hparams.wd: 0.00000001
+
+  # Other
+  total_train_samples: 10_000_000
+  wandb: false
+  wandb_tags: '["vla"]'
+  num_checkpoints: 5
