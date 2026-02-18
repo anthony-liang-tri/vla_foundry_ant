@@ -16,7 +16,6 @@ RUN \
     sed -E -i '/^[[:space:]]*inference[[:space:]]*=[[:space:]]*\[/,/^[[:space:]]*\][[:space:]]*$/d' /opt/ml/code/pyproject.toml \
     && sed -E -i '/^[[:space:]]*robot-gym[[:space:]]*=[[:space:]]*\{[[:space:]]*workspace[[:space:]]*=[[:space:]]*true[[:space:]]*\}/d' /opt/ml/code/pyproject.toml \
     && sed -E -i '/^[[:space:]]*grpc_workspace[[:space:]]*=[[:space:]]*\{[[:space:]]*workspace[[:space:]]*=[[:space:]]*true[[:space:]]*\}/d' /opt/ml/code/pyproject.toml \
-    && sed -i 's/cp310-cp310/cp312-cp312/g' /opt/ml/code/pyproject.toml \
     && uv pip install --python /usr/local/bin/python --no-cache-dir -r /opt/ml/code/pyproject.toml \
     && uv pip uninstall --python /usr/local/bin/python flash-attn \
     && uv pip install --python /usr/local/bin/python flash-attn --no-build-isolation --no-cache-dir \

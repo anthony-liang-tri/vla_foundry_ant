@@ -40,7 +40,7 @@ VLA Foundry is a framework for training Vision-Language-Action models. We suppor
 - [Acknowledgements](#acknowledgements)
 
 ## Installation
-We recommend using [uv](https://docs.astral.sh/uv/getting-started/installation/) for environment management. Please follow the uv documentation for installation. Once uv is installed, create a Python 3.10 virtual environment using uv and install the project dependencies with the command below:
+We recommend using [uv](https://docs.astral.sh/uv/getting-started/installation/) for environment management. Please follow the uv documentation for installation. Once uv is installed, create a Python 3.12 virtual environment using uv and install the project dependencies with the command below:
 ```bash
 uv sync
 uv pip install -e .

@@ -9,7 +9,7 @@ unset VIRTUAL_ENV
 
 source ./venv/bin/activate
 touch ./venv/COLCON_IGNORE
-export PYTHONPATH=`pwd`/venv/lib/python3.10/site-packages
+export PYTHONPATH=`pwd`/venv/lib/python3.12/site-packages
 
 export ROS_LOCALHOST_ONLY=1
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp

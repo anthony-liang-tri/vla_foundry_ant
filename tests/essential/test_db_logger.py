@@ -291,7 +291,7 @@ class TestGetEnvInfo:
         """Test that Python version is returned."""
         info = _get_env_info()
         assert "python_version" in info
-        assert "." in info["python_version"]  # e.g., "3.10.0"
+        assert "." in info["python_version"]  # e.g., "3.12.0"
 
     def test_returns_platform(self):
         """Test that platform info is returned."""

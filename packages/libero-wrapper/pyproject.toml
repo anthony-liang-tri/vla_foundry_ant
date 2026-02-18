@@ -2,7 +2,7 @@
 name = "libero-wrapper"
 version = "0.1.0"
 description = "Wrapper package to properly install LIBERO"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
     "hydra-core==1.2.0",
     "easydict==1.9",

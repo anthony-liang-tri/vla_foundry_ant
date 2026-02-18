@@ -2,7 +2,7 @@
 name = "robot_gym"
 version = "0.1.0"
 description = "Robot Gym package for VLA Foundry project."
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
     "numpy",
     "drake"

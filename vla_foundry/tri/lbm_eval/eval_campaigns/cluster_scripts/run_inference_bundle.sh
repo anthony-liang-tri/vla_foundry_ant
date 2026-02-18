@@ -1051,7 +1051,7 @@ fi
 # from a writable workspace (otherwise it may try to create /opt/vla_foundry/.venv).
 inference_cmd=(bash -c "
   cd '${INFERENCE_WORKDIR_RUNTIME}'
-  TORCH_LIB_PATH=\"${INFERENCE_WORKDIR_RUNTIME}/.venv/lib/python3.10/site-packages/torch/lib\"
+  TORCH_LIB_PATH=\"${INFERENCE_WORKDIR_RUNTIME}/.venv/lib/python3.12/site-packages/torch/lib\"
   export LD_LIBRARY_PATH=\"\${TORCH_LIB_PATH}:\${LD_LIBRARY_PATH:-}\"
   ${BUILT_INFERENCE_CMD}"
 )

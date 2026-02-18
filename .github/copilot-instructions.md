@@ -5,7 +5,7 @@
 **VLA Foundry** is a Python codebase for training Large Behavior Models, combining MBM and nanoVLM architectures. The repository supports:
 - **Model Types**: Transformers, Vision-Language Models (VLMs), Diffusion models, UNets
 - **Size**: ~7000+ lines of Python across 50+ files, medium-large ML research codebase
-- **Runtime**: Python 3.10, PyTorch 2.7.0, uses `uv` for dependency management
+- **Runtime**: Python 3.12, PyTorch 2.7.0, uses `uv` for dependency management
 - **Key Dependencies**: transformers, webdataset, draccus, wandb, s3fs, timm, accelerate
 
 ## Environment Setup & Dependencies
@@ -30,7 +30,7 @@ uv run python -c "import vla_foundry; print('vla_foundry loaded successfully')"
 
 **Environment Notes:**
 - Virtual environment created at `.venv/`
-- Python 3.10.18 required (auto-installed by uv)
+- Python 3.12 required (auto-installed by uv)
 - Uses uv workspace structure with packages in `packages/` (robot-gym, grpc-workspace)
 - SageMaker group: Use `uv run --group sagemaker` for SageMaker-related commands
 - Two optional dependency groups: `--group sagemaker` and `--group inference`
@@ -70,7 +70,7 @@ uv run pytest tests/essential/ --verbose
 ### 3. GitHub Workflows
 - **Lint workflow**: Runs `uvx ruff check .`
 - **Test workflow**: Runs `uv sync --frozen && uv run pytest --verbose tests/essential`
-- Both require Python 3.10 and use uv
+- Both require Python 3.12 and use uv
 
 ## Key Architecture & File Locations
 
