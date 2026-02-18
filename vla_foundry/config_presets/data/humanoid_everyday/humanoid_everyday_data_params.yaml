@@ -1,0 +1,40 @@
+type: robotics
+
+language_instruction_types:
+  - original
+  - alternative
+
+# Only head_rgb is included. Depth (head_rgb_depth) is stored as .png in the
+# webdataset but the training pipeline only loads .jpg images, so depth is not
+# usable as a training input without pipeline changes.
+# To include head_rgb_depth, fix https://github.com/tim-chu-tri/vla_foundry_internal/blob/main/vla_foundry/data/pipelines/robotics.py#L60-L69
+camera_names:
+  - head_rgb
+
+image_indices:
+  - -1
+  - 0
+
+proprioception_fields:
+  - humanoid__state__arm                # 14D - arm joint angles
+  - humanoid__state__leg                # 15D - leg joint angles
+  - humanoid__state__hand               # 14D - hand joint states
+  - humanoid__state__imu_quaternion     # 4D  - IMU orientation quaternion
+  - humanoid__state__imu_accelerometer  # 3D  - IMU linear acceleration
+  - humanoid__state__imu_gyroscope      # 3D  - IMU angular velocity
+  - humanoid__state__imu_rpy            # 3D  - IMU roll/pitch/yaw
+  - humanoid__state__odometry_position  # 3D  - base position
+  - humanoid__state__odometry_velocity  # 3D  - base linear velocity
+  - humanoid__state__odometry_rpy       # 3D  - base orientation (RPY)
+  - humanoid__state__odometry_quat      # 4D  - base orientation (quaternion)
+
+action_fields:
+  - humanoid__action__left_pose    # 16D - left end-effector pose (4x4 matrix, flattened)
+  - humanoid__action__right_pose   # 16D - right end-effector pose (4x4 matrix, flattened)
+
+normalization:
+  enabled: true
+  method: percentile_1_99
+  scope: global
+  epsilon: 1e-2
+  centered_norm: true

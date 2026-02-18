@@ -175,8 +175,35 @@ class MMTPreprocessParams(PreprocessParams):
             object.__setattr__(self, "mmt_lowdim_flatten_indices_selection", selections)
 
 
+@register_preprocess_params("humanoid_everyday")
+@dataclass(frozen=True)
+class HumanoidEverydayPreprocessParams(PreprocessParams):
+    """Dataclass for HumanoidEveryday (Unitree G1) dataset preprocessing configuration."""
+
+    # Required fields — must be set via YAML config.
+    use_depth_data: bool = field(default=None)
+    resize_images_size: List[int] = field(default=None)
+    depth_resolution: List[int] = field(default=None)  # Raw depth sensor resolution (H, W)
+
+    # Filtering: restrict to specific tasks and/or episodes
+    # e.g. task_filter: ["drag_a_white_board"] to only process that task
+    task_filter: Optional[List[str]] = field(default=None)
+    # e.g. episode_filter: ["episode_0", "episode_1"] to only process those episodes
+    episode_filter: Optional[List[str]] = field(default=None)
+    # e.g. embodiment_filter: ["h1"] to only process episodes with robot_type "h1"
+    embodiment_filter: Optional[List[str]] = field(default=None)
+
+    _REQUIRED_FIELDS = ("use_depth_data", "resize_images_size", "depth_resolution")
+
+    def __post_init__(self):
+        super().__post_init__()
+        for field_name in self._REQUIRED_FIELDS:
+            assert getattr(self, field_name) is not None, f"--{field_name} is required (or set in config_path)"
+
+
 TYPE_MAPPER = {
     "spartan": SpartanPreprocessParams,
     "lerobot": LeRobotPreprocessParams,
     "mmt_npz": MMTPreprocessParams,
+    "humanoid_everyday": HumanoidEverydayPreprocessParams,
 }

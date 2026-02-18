@@ -1,0 +1,26 @@
+model:
+  <<: !include ../models/diffusion_policy.yaml
+  clip:
+    hf_pretrained: openai/clip-vit-base-patch32
+    freeze_text_encoder: True
+  transformer:
+    <<: !include ../models/transformer_100m.yaml
+    is_causal: True
+data:
+  <<: !include ../data/humanoid_everyday/humanoid_everyday_data_params.yaml
+  <<: !include ../data/diffusion_policy.yaml
+  dataset_manifest:
+    - /data/webdataset/shards/manifest.jsonl
+  dataset_statistics:
+    - /data/webdataset/shards/stats.json
+  dataset_modality:
+    - robotics
+  dataset_weighting:
+    - 1.0
+total_train_samples: 1000
+distributed:
+  fsdp: True
+hparams:
+  <<: !include ../hparams/diffusion_policy.yaml
+  per_gpu_batch_size: 4
+  global_batch_size: 4

@@ -17,5 +17,9 @@ def get_converter(cfg: PreprocessParams) -> BaseRoboticsConverter:
         from vla_foundry.data.preprocessing.robotics.converters.mmt_npz import MMTNPZConverter
 
         return MMTNPZConverter(cfg)
+    elif cfg.type == "humanoid_everyday":
+        from vla_foundry.data.preprocessing.robotics.converters.humanoid_everyday import HumanoidEverydayConverter
+
+        return HumanoidEverydayConverter(cfg)
     else:
         raise ValueError(f"Unsupported source type: {cfg.type}")

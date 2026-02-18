@@ -226,15 +226,25 @@ def _download_tar_from_s3(s3_key: str, s3_client, bucket_name: str, s3_prefix: s
 
 @ray.remote
 def create_episode_shard(shard_files: List[str], episode_key: str, output_dir: str) -> str:
-    """Download tar files from S3 and create an episode-based shard."""
-    s3_config = Config(max_pool_connections=50, retries={"max_attempts": 10, "mode": "adaptive"})
-    s3_client = boto3.client("s3", config=s3_config)
+    """Download/read tar files and create an episode-based shard. Supports both S3 and local filesystem."""
+    is_s3 = output_dir.startswith("s3://")
 
-    bucket_name, s3_prefix = output_dir.removeprefix("s3://").split("/", 1)
+    if is_s3:
+        s3_config = Config(max_pool_connections=50, retries={"max_attempts": 10, "mode": "adaptive"})
+        s3_client = boto3.client("s3", config=s3_config)
+        bucket_name, s3_prefix = output_dir.removeprefix("s3://").split("/", 1)
+        download_tar = partial(_download_tar_from_s3, s3_client=s3_client, bucket_name=bucket_name, s3_prefix=s3_prefix)
+    else:
+        frames_dir = Path(output_dir) / "frames"
 
-    download_tar = partial(_download_tar_from_s3, s3_client=s3_client, bucket_name=bucket_name, s3_prefix=s3_prefix)
+        def download_tar(tar_key):
+            """Read a single tar file from local filesystem."""
+            tar_path = frames_dir / tar_key
+            with open(tar_path, "rb") as f:
+                obj_buffer = io.BytesIO(f.read())
+            return (tar_key, obj_buffer)
 
-    # Download all tars in parallel
+    # Download/read all tars in parallel
     downloaded_tars = {}
     with ThreadPoolExecutor(max_workers=20) as executor:
         futures = [executor.submit(download_tar, s3_key) for s3_key in shard_files]
@@ -260,11 +270,21 @@ def create_episode_shard(shard_files: List[str], episode_key: str, output_dir: s
                 for member in tar.getmembers():
                     shard_tar.addfile(member, tar.extractfile(member))
 
-    # Upload shard back to S3
+    # Save shard
     shard_buffer.seek(0)
     shard_key = f"episode_{episode_key}.tar"
-    s3_client.upload_fileobj(shard_buffer, bucket_name, f"{s3_prefix.rstrip('/')}/episodes/{shard_key}")
-    print(f"Uploaded episode shard {shard_key} to s3://{bucket_name}/{s3_prefix.rstrip('/')}/episodes/{shard_key}")
+
+    if is_s3:
+        s3_client.upload_fileobj(shard_buffer, bucket_name, f"{s3_prefix.rstrip('/')}/episodes/{shard_key}")
+        print(f"Uploaded episode shard {shard_key} to s3://{bucket_name}/{s3_prefix.rstrip('/')}/episodes/{shard_key}")
+    else:
+        episodes_dir = Path(output_dir) / "episodes"
+        episodes_dir.mkdir(parents=True, exist_ok=True)
+        shard_path = episodes_dir / shard_key
+        with open(shard_path, "wb") as f:
+            f.write(shard_buffer.getvalue())
+        print(f"Saved episode shard {shard_key} to {shard_path}")
+
     return (shard_key.rstrip(".tar"), len(shard_files))
 
 
@@ -286,11 +306,11 @@ def create_shard(shard_files: List[str], shard_idx: int, output_dir: str) -> str
             obj_buffer.seek(0)
             return (tar_key, obj_buffer)
     else:
-        episodes_dir = Path(output_dir) / "episodes"
+        frames_dir = Path(output_dir) / "frames"
 
         def read_tar(tar_key):
             """Read a single tar file from local filesystem."""
-            tar_path = episodes_dir / tar_key
+            tar_path = frames_dir / tar_key
             with open(tar_path, "rb") as f:
                 obj_buffer = io.BytesIO(f.read())
             return (tar_key, obj_buffer)
