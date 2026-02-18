@@ -2,8 +2,10 @@ type: diffusion_policy
 transformer: 
   <<: !include transformer_100m.yaml
   is_causal: false
-clip:
+vision_language_backbone:
+  type: clip_backbone
   hf_pretrained: openai/clip-vit-base-patch32
+  disable_text: false
 noise_scheduler:
   num_timesteps: 1000
   beta_start: 0.0001

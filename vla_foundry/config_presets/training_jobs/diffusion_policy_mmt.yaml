@@ -1,6 +1,6 @@
 model:
   <<: !include ../models/diffusion_policy.yaml
-  clip:
+  vision_language_backbone:
     hf_pretrained: openai/clip-vit-base-patch32
     freeze_text_encoder: True
   # NOTE: The following block overrides fields from the included diffusion_policy.yaml.

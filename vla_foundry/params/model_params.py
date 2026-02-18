@@ -101,8 +101,7 @@ class ViTParams(ModelParams):
 
 @register_model_params("vit_hf")
 @dataclass(frozen=True)
-class ViTHFParams(ModelParams):
-    hf_pretrained: str = field(default=None)
+class ViTHFParams(TransformerHFParams):
     hidden_dim: int = field(default=768)
     projector_pixel_shuffle_factor: int = field(default=1)
 
@@ -205,8 +204,7 @@ class NoiseSchedulerParams(ModelParams):
 
 @register_model_params("clip_hf")
 @dataclass(frozen=True)
-class CLIPHFParams(ModelParams):
-    hf_pretrained: str = field(default=None)
+class CLIPHFParams(TransformerHFParams):
     freeze_text_encoder: bool = field(default=False)
     freeze_image_encoder: bool = field(default=False)
 
@@ -218,6 +216,19 @@ class CLIP_OpenCLIPParams(ModelParams):
     pretrained_weights: str = field(default=None)
     freeze_text_encoder: bool = field(default=False)
     freeze_image_encoder: bool = field(default=False)
+
+
+@dataclass(frozen=True)
+class BackboneParams(ModelParams):
+    """Marker base class for vision-language backbone configurations."""
+
+    pass
+
+
+@register_model_params("clip_backbone")
+@dataclass(frozen=True)
+class CLIPBackboneParams(BackboneParams, CLIPHFParams):
+    disable_text: bool = field(default=False)
 
 
 @register_model_params("stable_diffusion")
@@ -245,14 +256,13 @@ class StableDiffusionParams(ModelParams):
 @register_model_params("diffusion_policy")
 @dataclass(frozen=True)
 class DiffusionPolicyParams(ModelParams):
-    clip: Union[CLIPHFParams, CLIP_OpenCLIPParams] = field(default_factory=CLIPHFParams)
+    vision_language_backbone: CLIPBackboneParams = field(default_factory=CLIPBackboneParams)
     transformer: Union[TransformerParams, TransformerHFParams] = field(default_factory=ModelParams)
     noise_scheduler: NoiseSchedulerParams = field(default_factory=NoiseSchedulerParams)
 
     use_diffusers_scheduler: bool = field(default=False)
     use_flow_matching_scheduler: bool = field(default=False)
     input_noise_std: float = field(default=0.0)
-    disable_text: bool = field(default=False)
 
     # Shared attributes. Overwritten in init_shared_attributes.
     action_dim: int = field(default=None)

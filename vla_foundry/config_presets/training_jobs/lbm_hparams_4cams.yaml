@@ -4,7 +4,7 @@
 model:
   <<: !include ../models/diffusion_policy.yaml
   input_noise_std: 0.05
-  clip:
+  vision_language_backbone:
     hf_pretrained: openai/clip-vit-base-patch32
     freeze_text_encoder: false
     freeze_image_encoder: false

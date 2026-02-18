@@ -5,9 +5,9 @@ import torch
 from vla_foundry.models.base_model import BaseModel
 from vla_foundry.models.diffusion.noise_scheduler import NoiseScheduler
 from vla_foundry.models.diffusion.unet import SinusoidalPositionEmbeddings
-from vla_foundry.models.diffusion_policy.clip_hf import CLIPHF
 from vla_foundry.models.transformer import Transformer
 from vla_foundry.models.transformer_hf import TransformerHF
+from vla_foundry.models.vision_language_backbones import BaseBackboneWrapper
 from vla_foundry.params.model_params import DiffusionPolicyParams
 
 
@@ -15,25 +15,26 @@ class DiffusionPolicy(BaseModel):
     def __init__(
         self,
         model_params: DiffusionPolicyParams,
-        clip: CLIPHF,
+        vision_language_backbone: BaseBackboneWrapper,
         transformer: Union[Transformer, TransformerHF],
         noise_scheduler: NoiseScheduler,
     ):
         super().__init__(model_params)
-        self.clip = clip
+        self.vision_language_backbone = vision_language_backbone
         self.transformer = transformer
         self.scheduler = noise_scheduler
         self.proprioception_dim = model_params.proprioception_dim
-        self.time_encoding = torch.nn.Embedding(noise_scheduler.num_timesteps, clip.get_projection_dim())
-        self.sinusoidal_position_embeddings = SinusoidalPositionEmbeddings(clip.get_projection_dim())
+
+        backbone_dim = vision_language_backbone.get_conditioning_embeddings_dim()
+        self.time_encoding = torch.nn.Embedding(noise_scheduler.num_timesteps, backbone_dim)
+        self.sinusoidal_position_embeddings = SinusoidalPositionEmbeddings(backbone_dim)
         self.output_layer = torch.nn.Linear(transformer.hidden_dim, model_params.action_dim)
         self.action_encode = torch.nn.Linear(model_params.action_dim, transformer.hidden_dim)
-        self.condition_encode = torch.nn.Linear(clip.get_projection_dim(), transformer.hidden_dim)
+        self.condition_encode = torch.nn.Linear(backbone_dim, transformer.hidden_dim)
         self.proprioception_encode = (
             torch.nn.Linear(self.proprioception_dim, transformer.hidden_dim) if self.proprioception_dim > 0 else None
         )
         self.input_noise_std = model_params.input_noise_std
-        self.disable_text = model_params.disable_text
         self.initialize_weights()
 
     def initialize_weights(self):
@@ -58,6 +59,7 @@ class DiffusionPolicy(BaseModel):
         past_mask,
         future_mask,
         proprioception=None,
+        **kwargs,
     ):
         # Sample random timesteps
         timesteps = torch.randint(0, self.scheduler.num_timesteps, (actions.shape[0],)).to(actions.device)  # [bsz]
@@ -69,36 +71,24 @@ class DiffusionPolicy(BaseModel):
             noisy_action = noisy_action + torch.randn_like(noisy_action) * self.input_noise_std
         noisy_action = self.action_encode(noisy_action)
 
-        # Create condition embeddings
-        ## Image and text embeddings
-        out_clip = self.clip(
+        # Get backbone embeddings (handles text+image concatenation)
+        backbone_output = self.vision_language_backbone.get_action_conditioning(
             input_ids=input_ids,
             pixel_values=pixel_values,
             attention_mask=attention_mask,
             attention_mask_images=attention_mask_images,
+            **kwargs,
         )
-        text_embeddings = out_clip.text_embeds
-        image_embeddings = out_clip.image_embeds
-        ## Time embeddings (B, 1, D)
-        time_embeddings = self.time_encoding(timesteps).unsqueeze(1)
-        conditional_embeddings = [time_embeddings]
 
-        # Create conditional embeddings sequence
-        if not self.disable_text and text_embeddings is not None:
-            # (B, D) -> (B, 1, D)
-            text_embeddings = text_embeddings.unsqueeze(1)
-            conditional_embeddings.append(text_embeddings)
-        if image_embeddings is not None:
-            # if multiple images per sample, (B, N, D) else (B, D) -> (B, 1, D)
-            if image_embeddings.ndim == 2:
-                image_embeddings = image_embeddings.unsqueeze(1)
-            conditional_embeddings.append(image_embeddings)
-        # (B, 1 + 1 + N, D)
-        conditional_embeddings = torch.cat(conditional_embeddings, dim=1)
-        # [B, 1 + 1 + N, C] -> [B, 1 + 1 + N, transformer.hidden_dim]
+        # Time embeddings (B, 1, backbone_dim)
+        time_embeddings = self.time_encoding(timesteps).unsqueeze(1)
+
+        # Concatenate time + backbone embeddings, then project to transformer dim
+        # [B, 1, D] + [B, N, D] -> [B, 1+N, D] -> [B, 1+N, transformer_dim]
+        conditional_embeddings = torch.cat([time_embeddings, backbone_output.embeddings], dim=1)
         conditional_embeddings = self.condition_encode(conditional_embeddings)
 
-        # Create transformer input (B, 1 + 1 + N + T, D)
+        # Create transformer input (B, 1+N + P + T, transformer_dim)
         transformer_input_parts = [conditional_embeddings]
         if self.proprioception_encode is not None and proprioception is not None:
             proprio_embeddings = self.proprioception_encode(proprioception)
@@ -115,9 +105,8 @@ class DiffusionPolicy(BaseModel):
             use_cache=False,
         )
 
-        # Extract predicted direction to denoise the action (B, 1 + 1 + N + T, D) -> (B, T, D)
+        # Extract predicted direction to denoise the action (B, 1+N+P+T, D) -> (B, T, D)
         action_seq_len = noise.shape[1]
-        # [B, 1 + 1 + N + action_seq_len, transformer.hidden_dim] -> [B, action_seq_len, transformer.hidden_dim]
         predicted_direction = self.output_layer(transformer_output.hidden_states[-1][:, -action_seq_len:, :])
 
         return predicted_direction
@@ -146,6 +135,8 @@ class DiffusionPolicy(BaseModel):
             attention_mask_images: Optional attention mask for camera images
             num_inference_steps: Number of denoising steps (defaults to scheduler.num_timesteps)
             past_mask: Optional mask indicating which actions are from past (1) vs future (0)
+            proprioception: Optional proprioception input
+            **kwargs: Model-specific args
 
         Returns:
             Generated actions
@@ -156,15 +147,14 @@ class DiffusionPolicy(BaseModel):
         batch_size = actions.shape[0]
         device = actions.device
 
-        # Create condition embeddings (same as in forward)
-        out_clip = self.clip(
+        # Precompute backbone embeddings (reused across all denoising steps)
+        backbone_output = self.vision_language_backbone.get_action_conditioning(
             input_ids=input_ids,
             pixel_values=pixel_values,
             attention_mask=attention_mask,
             attention_mask_images=attention_mask_images,
+            **kwargs,
         )
-        text_embeddings = out_clip.text_embeds
-        image_embeddings = out_clip.image_embeds
 
         # Initialize actions with noise (preserve past actions if past_mask provided)
         if past_mask is not None:
@@ -177,36 +167,26 @@ class DiffusionPolicy(BaseModel):
             # All actions are noise
             actions = torch.randn_like(actions)
 
-        # Iterative denoising - similar to flow VLM approach
-        step_size = max(1, self.scheduler.num_timesteps // num_inference_steps)
-        if not self.disable_text and text_embeddings is not None:
-            # (B, D) -> (B, 1, D)
-            text_embeddings = text_embeddings.unsqueeze(1)
-        if image_embeddings is not None and image_embeddings.ndim == 2:
-            # if multiple images per sample, (B, N, D) else (B, D) -> (B, 1, D)
-            image_embeddings = image_embeddings.unsqueeze(1)
+        # Precompute proprioception embedding
         proprio_embeddings = None
         if self.proprioception_encode is not None and proprioception is not None:
             proprio_embeddings = self.proprioception_encode(proprioception)
+
+        # Iterative denoising loop
+        step_size = max(1, self.scheduler.num_timesteps // num_inference_steps)
         for step in range(self.scheduler.num_timesteps - 1, 0, -step_size):
-            # Create time embeddings for current timestep (B, 1, D)
+            # Create timesteps for current step
             timesteps = torch.tensor([step] * batch_size, device=device)
             time_embeddings = self.time_encoding(timesteps).unsqueeze(1)
-            conditional_embeddings = [time_embeddings]
 
-            if not self.disable_text and text_embeddings is not None:
-                conditional_embeddings.append(text_embeddings)
-            if image_embeddings is not None:
-                conditional_embeddings.append(image_embeddings)
-
-            # Create conditional embeddings sequence (B, 1 + 1 + N, D)
-            conditional_embeddings = torch.cat(conditional_embeddings, dim=1)
+            # Concatenate time + backbone embeddings
+            conditional_embeddings = torch.cat([time_embeddings, backbone_output.embeddings], dim=1)
             conditional_embeddings = self.condition_encode(conditional_embeddings)
 
             # Encode current actions
             action_encoding = self.action_encode(actions)
 
-            # Create transformer input (B, 1 + 1 + N + T, D)
+            # Create transformer input
             transformer_input_parts = [conditional_embeddings]
             if proprio_embeddings is not None:
                 transformer_input_parts.append(proprio_embeddings)
@@ -220,7 +200,7 @@ class DiffusionPolicy(BaseModel):
                 use_cache=False,
             )
 
-            # Extract predicted direction to denoise the action (B, 1 + 1 + N + T, D) -> (B, T, D)
+            # Extract predicted direction to denoise the action
             action_seq_len = actions.shape[1]
             predicted_direction = self.output_layer(transformer_output.hidden_states[-1][:, -action_seq_len:, :])
 
@@ -229,8 +209,6 @@ class DiffusionPolicy(BaseModel):
 
             # Preserve past actions if mask provided
             if past_mask is not None:
-                # Keep original past actions, update only future actions
-                # (B, T) -> (B, T, 1)
                 past_mask_expanded = past_mask[:, :, None].to(actions.dtype)
                 actions = original_past_actions + predicted_actions * (1 - past_mask_expanded)
             else:

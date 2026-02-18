@@ -1,6 +1,6 @@
 .venv/bin/torchrun --master_port 29502 --nproc_per_node=2 --nnodes=1 vla_foundry/main.py \
   --model "include vla_foundry/config_presets/models/diffusion_policy.yaml" \
-  --model.clip.freeze_text_encoder True \
+  --model.vision_language_backbone.freeze_text_encoder True \
   --model.transformer.is_causal True \
   --data "include vla_foundry/config_presets/data/lbm/lbm_data_params.yaml" \
   --data.dataset_manifest ["s3://tri-ml-datasets-uw2/vla_foundry_datasets/v0.4.1/BimanualPutRedBellPepperInBin/shards/manifest.jsonl"] \

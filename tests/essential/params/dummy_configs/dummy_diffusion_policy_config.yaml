@@ -1,7 +1,8 @@
 type: diffusion_policy
-clip:
-  type: clip_hf
+vision_language_backbone:
+  type: clip_backbone
   hf_pretrained: openai/clip-vit-base-patch32
+  disable_text: false
 transformer:
   type: transformer
   vocab_size: 1000
@@ -24,4 +25,5 @@ noise_scheduler:
   beta_start: 0.0001
   beta_end: 0.02
 use_flow_matching_scheduler: true
+time_conditioning: concat
 action_dim: 7

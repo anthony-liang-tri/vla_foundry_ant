@@ -1,6 +1,7 @@
 model:
   type: diffusion_policy
-  clip:
+  vision_language_backbone:
+    type: clip_backbone
     hf_pretrained: openai/clip-vit-base-patch32
     freeze_text_encoder: True
   #TODO: change this to use the DiT model when it lands.
@@ -23,7 +24,6 @@ model:
   use_flow_matching_scheduler: true
   use_diffusers_scheduler: false
   input_noise_std: 0.0
-  disable_text: false
 data:
   type: robotics
   language_instruction_types:

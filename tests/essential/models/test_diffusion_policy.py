@@ -50,7 +50,11 @@ class TestDiffusionPolicy:
         future_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
         # Mock the CLIP forward call
-        with patch.object(diffusion_policy.clip, "forward", return_value=self._mock_clip_output(batch_size)):
+        with patch.object(
+            diffusion_policy.vision_language_backbone._model,
+            "forward",
+            return_value=self._mock_clip_output(batch_size),
+        ):
             # Forward pass
             output = diffusion_policy(
                 input_ids=input_ids,
@@ -83,7 +87,7 @@ class TestDiffusionPolicy:
 
         mock_clip_output = self._mock_clip_output(batch_size, with_text=True, with_image=False)
 
-        with patch.object(diffusion_policy.clip, "forward", return_value=mock_clip_output):
+        with patch.object(diffusion_policy.vision_language_backbone._model, "forward", return_value=mock_clip_output):
             output = diffusion_policy(
                 input_ids=input_ids,
                 pixel_values=pixel_values,
@@ -114,7 +118,7 @@ class TestDiffusionPolicy:
 
         mock_clip_output = self._mock_clip_output(batch_size, with_text=False, with_image=True)
 
-        with patch.object(diffusion_policy.clip, "forward", return_value=mock_clip_output):
+        with patch.object(diffusion_policy.vision_language_backbone._model, "forward", return_value=mock_clip_output):
             output = diffusion_policy(
                 input_ids=input_ids,
                 pixel_values=pixel_values,
@@ -148,7 +152,11 @@ class TestDiffusionPolicy:
         future_mask = ~past_mask
 
         # Mock the CLIP forward call
-        with patch.object(diffusion_policy.clip, "forward", return_value=self._mock_clip_output(batch_size)):
+        with patch.object(
+            diffusion_policy.vision_language_backbone._model,
+            "forward",
+            return_value=self._mock_clip_output(batch_size),
+        ):
             # Forward pass
             output = diffusion_policy(
                 input_ids=input_ids,
@@ -185,7 +193,11 @@ class TestDiffusionPolicy:
         )
 
         # Mock the CLIP forward call
-        with patch.object(diffusion_policy.clip, "forward", return_value=self._mock_clip_output(batch_size)):
+        with patch.object(
+            diffusion_policy.vision_language_backbone._model,
+            "forward",
+            return_value=self._mock_clip_output(batch_size),
+        ):
             # Generate actions with fewer inference steps for speed
             generated_actions = diffusion_policy.generate_actions(
                 input_ids=input_ids,
@@ -217,7 +229,11 @@ class TestDiffusionPolicy:
         actions = torch.randn(batch_size, seq_len, action_dim)
 
         # Mock the CLIP forward call
-        with patch.object(diffusion_policy.clip, "forward", return_value=self._mock_clip_output(batch_size)):
+        with patch.object(
+            diffusion_policy.vision_language_backbone._model,
+            "forward",
+            return_value=self._mock_clip_output(batch_size),
+        ):
             # Generate actions without past mask
             generated_actions = diffusion_policy.generate_actions(
                 input_ids=input_ids,
@@ -251,7 +267,7 @@ class TestDiffusionPolicy:
 
         mock_clip_output = self._mock_clip_output(batch_size, with_text=True, with_image=False)
 
-        with patch.object(diffusion_policy.clip, "forward", return_value=mock_clip_output):
+        with patch.object(diffusion_policy.vision_language_backbone._model, "forward", return_value=mock_clip_output):
             generated_actions = diffusion_policy.generate_actions(
                 input_ids=input_ids,
                 pixel_values=pixel_values,
@@ -287,7 +303,7 @@ class TestDiffusionPolicy:
 
         mock_clip_output = self._mock_clip_output(batch_size, with_text=False, with_image=True)
 
-        with patch.object(diffusion_policy.clip, "forward", return_value=mock_clip_output):
+        with patch.object(diffusion_policy.vision_language_backbone._model, "forward", return_value=mock_clip_output):
             generated_actions = diffusion_policy.generate_actions(
                 input_ids=input_ids,
                 pixel_values=pixel_values,
@@ -323,7 +339,7 @@ class TestDiffusionPolicy:
     def test_diffusion_policy_model_components(self, diffusion_policy):
         """Test that all model components are properly initialized"""
         # Check that all components exist
-        assert hasattr(diffusion_policy, "clip")
+        assert hasattr(diffusion_policy, "vision_language_backbone")
         assert hasattr(diffusion_policy, "transformer")
         assert hasattr(diffusion_policy, "scheduler")
         assert hasattr(diffusion_policy, "time_encoding")
@@ -347,7 +363,11 @@ class TestDiffusionPolicy:
         batch_size = 2
 
         # Mock the CLIP forward call
-        with patch.object(diffusion_policy.clip, "forward", return_value=self._mock_clip_output(batch_size)):
+        with patch.object(
+            diffusion_policy.vision_language_backbone._model,
+            "forward",
+            return_value=self._mock_clip_output(batch_size),
+        ):
             # Test time embeddings
             timesteps = torch.randint(0, 100, (batch_size,))
             time_embeddings = diffusion_policy.time_encoding(timesteps)
@@ -425,7 +445,11 @@ class TestDiffusionPolicy:
         future_mask = torch.ones(batch_size, 1, dtype=torch.bool)
 
         # Mock the CLIP forward call
-        with patch.object(diffusion_policy.clip, "forward", return_value=self._mock_clip_output(batch_size)):
+        with patch.object(
+            diffusion_policy.vision_language_backbone._model,
+            "forward",
+            return_value=self._mock_clip_output(batch_size),
+        ):
             # Should not raise error with minimal input
             output = diffusion_policy(
                 input_ids=input_ids,
@@ -455,7 +479,11 @@ class TestDiffusionPolicy:
         future_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
         # Mock the CLIP forward call
-        with patch.object(diffusion_policy.clip, "forward", return_value=self._mock_clip_output(batch_size)):
+        with patch.object(
+            diffusion_policy.vision_language_backbone._model,
+            "forward",
+            return_value=self._mock_clip_output(batch_size),
+        ):
             # Test that timesteps are moved to correct device
             output = diffusion_policy(
                 input_ids=input_ids,
@@ -487,7 +515,11 @@ class TestDiffusionPolicy:
         future_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
         # Mock the CLIP forward call
-        with patch.object(diffusion_policy.clip, "forward", return_value=self._mock_clip_output(batch_size)):
+        with patch.object(
+            diffusion_policy.vision_language_backbone._model,
+            "forward",
+            return_value=self._mock_clip_output(batch_size),
+        ):
             # Forward pass
             output = diffusion_policy(
                 input_ids=input_ids,
@@ -526,18 +558,18 @@ class TestDiffusionPolicy:
         future_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
         # Create a mock that properly handles attention_mask_images
-        def mock_clip_forward(input_ids, pixel_values, attention_mask, attention_mask_images):
+        def mock_clip_forward(**kwargs):
             mock_output = Mock()
             mock_output.text_embeds = torch.randn(batch_size, 512)
             # Simulate masking in image embeddings
             image_embeds = torch.randn(batch_size, 512)
-            if attention_mask_images is not None:
+            if kwargs.get("attention_mask_images") is not None:
                 # Zero out embeddings where mask is False
-                image_embeds = image_embeds * attention_mask_images.squeeze(-1).unsqueeze(-1)
+                image_embeds = image_embeds * kwargs["attention_mask_images"].squeeze(-1).unsqueeze(-1)
             mock_output.image_embeds = image_embeds
             return mock_output
 
-        with patch.object(diffusion_policy.clip, "forward", side_effect=mock_clip_forward):
+        with patch.object(diffusion_policy.vision_language_backbone._model, "forward", side_effect=mock_clip_forward):
             # Forward pass
             output = diffusion_policy(
                 input_ids=input_ids,
@@ -572,18 +604,18 @@ class TestDiffusionPolicy:
         future_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
         # Create a mock that properly handles multiple images and attention_mask_images
-        def mock_clip_forward(input_ids, pixel_values, attention_mask, attention_mask_images):
+        def mock_clip_forward(**kwargs):
             mock_output = Mock()
             mock_output.text_embeds = torch.randn(batch_size, 512)
             # Simulate multiple image embeddings [B, N, D]
             image_embeds = torch.randn(batch_size, num_images, 512)
-            if attention_mask_images is not None:
+            if kwargs.get("attention_mask_images") is not None:
                 # Zero out embeddings where mask is False
-                image_embeds = image_embeds * attention_mask_images.unsqueeze(-1)
+                image_embeds = image_embeds * kwargs["attention_mask_images"].unsqueeze(-1)
             mock_output.image_embeds = image_embeds
             return mock_output
 
-        with patch.object(diffusion_policy.clip, "forward", side_effect=mock_clip_forward):
+        with patch.object(diffusion_policy.vision_language_backbone._model, "forward", side_effect=mock_clip_forward):
             # Forward pass
             output = diffusion_policy(
                 input_ids=input_ids,
@@ -618,18 +650,18 @@ class TestDiffusionPolicy:
         future_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
         # Create a mock that properly handles all masked images
-        def mock_clip_forward(input_ids, pixel_values, attention_mask, attention_mask_images):
+        def mock_clip_forward(**kwargs):
             mock_output = Mock()
             mock_output.text_embeds = torch.randn(batch_size, 512)
             # Simulate multiple image embeddings [B, N, D] - all zeros after masking
             image_embeds = torch.randn(batch_size, num_images, 512)
-            if attention_mask_images is not None:
+            if kwargs.get("attention_mask_images") is not None:
                 # Zero out embeddings where mask is False (all of them)
-                image_embeds = image_embeds * attention_mask_images.unsqueeze(-1)
+                image_embeds = image_embeds * kwargs["attention_mask_images"].unsqueeze(-1)
             mock_output.image_embeds = image_embeds
             return mock_output
 
-        with patch.object(diffusion_policy.clip, "forward", side_effect=mock_clip_forward):
+        with patch.object(diffusion_policy.vision_language_backbone._model, "forward", side_effect=mock_clip_forward):
             # Forward pass should work even when all images are masked
             output = diffusion_policy(
                 input_ids=input_ids,
@@ -668,18 +700,18 @@ class TestDiffusionPolicy:
         )
 
         # Create a mock that properly handles multiple images and attention_mask_images
-        def mock_clip_forward(input_ids, pixel_values, attention_mask, attention_mask_images):
+        def mock_clip_forward(**kwargs):
             mock_output = Mock()
             mock_output.text_embeds = torch.randn(batch_size, 512)
             # Simulate multiple image embeddings [B, N, D]
             image_embeds = torch.randn(batch_size, num_images, 512)
-            if attention_mask_images is not None:
+            if kwargs.get("attention_mask_images") is not None:
                 # Zero out embeddings where mask is False
-                image_embeds = image_embeds * attention_mask_images.unsqueeze(-1)
+                image_embeds = image_embeds * kwargs["attention_mask_images"].unsqueeze(-1)
             mock_output.image_embeds = image_embeds
             return mock_output
 
-        with patch.object(diffusion_policy.clip, "forward", side_effect=mock_clip_forward):
+        with patch.object(diffusion_policy.vision_language_backbone._model, "forward", side_effect=mock_clip_forward):
             # Generate actions with attention_mask_images
             generated_actions = diffusion_policy.generate_actions(
                 input_ids=input_ids,
@@ -696,3 +728,52 @@ class TestDiffusionPolicy:
             torch.testing.assert_close(
                 generated_actions[:, : seq_len // 2], actions[:, : seq_len // 2], rtol=1e-5, atol=1e-5
             )
+
+
+class TestVisionLanguageBackbones:
+    """Test the backbone wrapper interface."""
+
+    @pytest.fixture
+    def clip_backbone(self):
+        from vla_foundry.models.vision_language_backbones import CLIPBackboneWrapper
+        from vla_foundry.params.model_params import CLIPBackboneParams
+
+        clip_params = CLIPBackboneParams(type="clip_backbone", hf_pretrained="openai/clip-vit-base-patch32")
+        with patch("vla_foundry.models.diffusion_policy.clip_hf.CLIPModel.from_pretrained") as mock_pretrained:
+            mock_hf_clip_model = Mock()
+            mock_hf_clip_model.projection_dim = 512
+            mock_pretrained.return_value = mock_hf_clip_model
+            return CLIPBackboneWrapper(clip_params, load_pretrained=True)
+
+    def test_clip_backbone_get_action_conditioning(self, clip_backbone):
+        """Test that CLIP backbone returns correct conditioning embeddings."""
+        batch_size = 2
+        mock_output = Mock()
+        mock_output.text_embeds = torch.randn(batch_size, 512)
+        mock_output.image_embeds = torch.randn(batch_size, 512)
+
+        with patch.object(clip_backbone._model, "forward", return_value=mock_output):
+            result = clip_backbone.get_action_conditioning(
+                input_ids=torch.randint(0, 100, (batch_size, 5)),
+                pixel_values=torch.randn(batch_size, 3, 224, 224),
+            )
+
+            # With text+image: [B, 2, D] (text token + image token)
+            assert result.embeddings.shape == (batch_size, 2, 512)
+
+    def test_clip_backbone_disable_text(self, clip_backbone):
+        """Test that disable_text removes text from conditioning."""
+        clip_backbone.disable_text = True
+        batch_size = 2
+        mock_output = Mock()
+        mock_output.text_embeds = torch.randn(batch_size, 512)
+        mock_output.image_embeds = torch.randn(batch_size, 512)
+
+        with patch.object(clip_backbone._model, "forward", return_value=mock_output):
+            result = clip_backbone.get_action_conditioning(
+                input_ids=torch.randint(0, 100, (batch_size, 5)),
+                pixel_values=torch.randn(batch_size, 3, 224, 224),
+            )
+
+            # With disable_text: [B, 1, D] (image token only)
+            assert result.embeddings.shape == (batch_size, 1, 512)

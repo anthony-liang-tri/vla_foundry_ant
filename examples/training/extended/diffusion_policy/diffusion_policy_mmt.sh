@@ -1,9 +1,9 @@
 .venv/bin/torchrun --master_port 29506 --nproc_per_node=2 --nnodes=1 vla_foundry/main.py \
   --model "include vla_foundry/config_presets/models/diffusion_policy.yaml" \
-  --model.clip.freeze_text_encoder True \
+  --model.vision_language_backbone.freeze_text_encoder True \
+  --model.vision_language_backbone.disable_text True \
   --model.transformer.is_causal True \
   --model.noise_scheduler.num_timesteps 100 \
-  --model.disable_text True \
   --data "include vla_foundry/config_presets/data/mmt_data_params.yaml" \
   --data.dataset_manifest ["s3://tri-mmt-data/richard/diffusion_policy/robosuite/cube/lift_right_discrete_with_cube_state_0-8_uniform_noise_processed/lift_right_discrete_with_cube_state_0-8_uniform_noise_800/shards/manifest.jsonl"] \
   --data.dataset_statistics ["s3://tri-mmt-data/richard/diffusion_policy/robosuite/cube/lift_right_discrete_with_cube_state_0-8_uniform_noise_processed/lift_right_discrete_with_cube_state_0-8_uniform_noise_800/shards/stats.json"] \
