@@ -7,11 +7,74 @@ import sys
 from pathlib import Path
 
 
-def extract_task_name(tags_str):
-    """Extract task name from tags string (first tag)."""
-    if not tags_str:
+def _looks_like_task_name(value):
+    """Heuristic: stage-3 tasks are typically PascalCase identifiers."""
+    if not value:
+        return False
+    token = value.strip()
+    return bool(re.fullmatch(r"[A-Z][A-Za-z0-9]+", token))
+
+
+def infer_task_name_from_s3_path(s3_path):
+    """Infer task name from an S3 checkpoint path by scanning path segments."""
+    if not s3_path:
         return None
+
+    path = s3_path.strip().rstrip("/")
+    parts = [p for p in path.split("/") if p]
+    for part in parts:
+        if _looks_like_task_name(part):
+            return part
+    return None
+
+
+def infer_task_name_from_manifest_text(text):
+    """Infer task name from a manifest-like text field."""
+    if not text:
+        return None
+    # Prefer path segments under common dataset roots.
+    for marker in ("/stage3_singletask_sim/", "/v0.4.1/", "/vla_foundry_datasets/"):
+        if marker in text:
+            tail = text.split(marker, 1)[1]
+            segment = tail.split("/", 1)[0].strip().strip("\"'[]")
+            if _looks_like_task_name(segment):
+                return segment
+
+    # Fallback: pick the first PascalCase token found in the text.
+    match = re.search(r"\b([A-Z][A-Za-z0-9]+)\b", text)
+    if match and _looks_like_task_name(match.group(1)):
+        return match.group(1)
+
+    return None
+
+
+def extract_task_name(tags_str, s3_path=None, manifest_text=None):
+    """Extract task name from tags or S3 path.
+
+    Priority:
+    1) First tag that looks like a concrete task name.
+    2) Fallback to inferred task name from S3 path segments.
+    3) Fallback to dataset-manifest text.
+    4) Legacy fallback to first tag.
+    """
+    if not tags_str:
+        inferred = infer_task_name_from_s3_path(s3_path)
+        if inferred:
+            return inferred
+        return infer_task_name_from_manifest_text(manifest_text)
     tags = [tag.strip() for tag in tags_str.split(",")]
+    for tag in tags:
+        if _looks_like_task_name(tag):
+            return tag
+
+    inferred = infer_task_name_from_s3_path(s3_path)
+    if inferred:
+        return inferred
+
+    inferred = infer_task_name_from_manifest_text(manifest_text)
+    if inferred:
+        return inferred
+
     return tags[0] if tags else None
 
 
@@ -216,6 +279,14 @@ def csv_to_tuples(csv_path, output_path=None, task_filter=None, exclude_runs=Non
         tags_idx = header.index("Tags")
         remote_sync_idx = header.index("remote_sync")
 
+        manifest_col_names = [
+            "data.dataset_manifest",
+            "dataset_manifest",
+            "data.val_dataset_manifest",
+            "val_dataset_manifest",
+        ]
+        manifest_indices = [header.index(col) for col in manifest_col_names if col in header]
+
         for row in reader:
             if len(row) <= max(name_idx, tags_idx, remote_sync_idx):
                 continue
@@ -231,7 +302,13 @@ def csv_to_tuples(csv_path, output_path=None, task_filter=None, exclude_runs=Non
             tags = row[tags_idx].strip('"')
             s3_base = row[remote_sync_idx].strip('"')
 
-            task_name = extract_task_name(tags)
+            manifest_text = ""
+            for idx in manifest_indices:
+                if idx < len(row) and row[idx]:
+                    manifest_text = row[idx].strip('"')
+                    break
+
+            task_name = extract_task_name(tags, s3_base, manifest_text)
             if not task_name:
                 continue
 
