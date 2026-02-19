@@ -5,16 +5,95 @@ Script to compare two stats.json files and generate a detailed report.
 Differences are reported as absolute values and as a percentage of the
 tensor's range (max - min from the reference) so that near-zero values
 don't produce misleadingly large relative numbers.
+
+Run with --no-interactive to skip the curses TUI.
 """
 
+import argparse
 import contextlib
 import json
 import subprocess
 import sys
 import tempfile
+from dataclasses import dataclass
 from typing import Any, Dict
 
 import numpy as np
+
+# ---------------------------------------------------------------------------
+# Tensor name parsing
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class TensorInfo:
+    """Parsed components of a tensor name."""
+
+    name: str  # Full original name
+    group: str  # actual, action, desired, or "" for special
+    category: str  # poses, grippers, joint_torque, etc.
+    limb: str  # left, right, or ""
+    robot: str  # panda, panda_hand, or ""
+    representation: str  # xyz, rot_6d, xyz_relative, rot_6d_relative, or ""
+
+
+def parse_tensor_name(name: str) -> TensorInfo:
+    """Parse a tensor name into its component axes.
+
+    Handles:
+      robot__<group>__<cat>__<limb>::<robot>__<repr>  (poses)
+      robot__<group>__<cat>__<limb>::<robot>           (grippers, torques)
+      robot__<group>__<cat>                            (timestamps)
+      robot__version, timestamp_packaged               (special)
+    """
+    info = TensorInfo(name=name, group="", category="", limb="", robot="", representation="")
+
+    if not name.startswith("robot__"):
+        info.category = name
+        return info
+
+    remainder = name[len("robot__") :]
+
+    if "::" in remainder:
+        left_of_colons, right_of_colons = remainder.split("::", 1)
+        left_parts = left_of_colons.split("__")
+        info.group = left_parts[0] if len(left_parts) > 0 else ""
+        info.category = left_parts[1] if len(left_parts) > 1 else ""
+        info.limb = left_parts[2] if len(left_parts) > 2 else ""
+
+        right_parts = right_of_colons.split("__", 1)
+        info.robot = right_parts[0]
+        info.representation = right_parts[1] if len(right_parts) > 1 else ""
+    else:
+        parts = remainder.split("__")
+        info.group = parts[0] if len(parts) > 0 else ""
+        info.category = parts[1] if len(parts) > 1 else ""
+
+    return info
+
+
+def extract_filter_axes(tensor_names: list) -> dict:
+    """Extract all unique values for each filter axis from tensor names."""
+    axes: dict[str, set] = {
+        "group": set(),
+        "category": set(),
+        "representation": set(),
+        "limb": set(),
+        "robot": set(),
+    }
+    for name in tensor_names:
+        info = parse_tensor_name(name)
+        if info.group:
+            axes["group"].add(info.group)
+        if info.category:
+            axes["category"].add(info.category)
+        if info.representation:
+            axes["representation"].add(info.representation)
+        if info.limb:
+            axes["limb"].add(info.limb)
+        if info.robot:
+            axes["robot"].add(info.robot)
+    return axes
 
 
 def load_json(path: str) -> dict:
@@ -115,6 +194,8 @@ def compare_stats(
     ref_stats: dict,
     our_anchor: int | None = None,
     ref_anchor: int | None = None,
+    our_anchor_source: str = "unknown",
+    ref_anchor_source: str = "unknown",
 ) -> Dict[str, Any]:
     """Compare two stats dictionaries and return detailed comparison."""
     our_tensors = set(our_stats.keys())
@@ -131,6 +212,13 @@ def compare_stats(
         "field_differences": {},
         "none_values": {"our": {}, "ref": {}},
         "timestep_info": {},
+        "anchor_info": {
+            "our_anchor": our_anchor,
+            "ref_anchor": ref_anchor,
+            "our_source": our_anchor_source,
+            "ref_source": ref_anchor_source,
+        },
+        "sample_counts": {},
     }
 
     for tensor in common_tensors:
@@ -161,6 +249,16 @@ def compare_stats(
                     "our_anchor": tensor_our_anchor,
                     "ref_anchor": tensor_ref_anchor,
                 }
+                # Record sample count at anchor (max-count timestep)
+                with contextlib.suppress(IndexError, TypeError):
+                    our_count_at_anchor = int(our_count[tensor_our_anchor])
+                    ref_count_at_anchor = int(ref_count[tensor_ref_anchor])
+                    comparison["sample_counts"][tensor] = {
+                        "our_count": our_count_at_anchor,
+                        "ref_count": ref_count_at_anchor,
+                        "our_count_array": [int(c) for c in our_count],
+                        "ref_count_array": [int(c) for c in ref_count],
+                    }
 
         tensor_range = get_tensor_range(ref_tensor_stats)
 
@@ -225,108 +323,94 @@ def compare_stats(
     return comparison
 
 
+def _short_tensor(name: str, width: int = 40) -> str:
+    """Shorten a tensor name to fit *width*, keeping the most informative suffix."""
+    if len(name) <= width:
+        return name
+    return "..." + name[-(width - 3) :]
+
+
 def print_report(our_path: str, ref_path: str, our_stats: dict, ref_stats: dict, comparison: dict):
-    """Print detailed comparison report."""
+    """Print compact comparison report."""
 
-    print("=" * 110)
-    print("STATISTICS COMPARISON REPORT")
-    print("=" * 110)
+    W = 100  # total report width
 
-    print(f"\nOur stats file:   {our_path}")
-    print(f"Reference file:   {ref_path}")
+    print(f"\n{'  STATS COMPARISON  ':=^{W}}")
+    print(f"Ours: {our_path}")
+    print(f"Ref:  {ref_path}")
 
-    print(f"\n{'SUMMARY':-^110}")
-    print(f"Our tensors:              {len(our_stats)}")
-    print(f"Reference tensors:        {len(ref_stats)}")
-    print(f"Common tensors:           {len(comparison['common_tensors'])}")
-    print(f"Only in our stats:        {len(comparison['only_in_ours'])}")
-    print(f"Only in reference:        {len(comparison['only_in_ref'])}")
+    # ── Dataset composition (compact) ──
+    anchor_info = comparison.get("anchor_info", {})
+    our_src = anchor_info.get("our_source", "?")
+    ref_src = anchor_info.get("ref_source", "?")
 
-    # Timestep alignment info
+    n_common = len(comparison["common_tensors"])
+    n_only_ours = len(comparison["only_in_ours"])
+    n_only_ref = len(comparison["only_in_ref"])
+
+    print(f"\n{'  COMPOSITION  ':-^{W}}")
+    print(f"{'':25s} {'Ours':>15s}   {'Reference':>15s}")
+    print(f"{'Tensors':<25s} {len(our_stats):>15d}   {len(ref_stats):>15d}")
+    print(f"{'Common / only here':<25s} {n_common:>8d} / {n_only_ours:<5d}  {n_common:>8d} / {n_only_ref:<5d}")
+
     ts_info = comparison.get("timestep_info", {})
-    mismatched = {t: v for t, v in ts_info.items() if v["our_len"] != v["ref_len"]}
-    if mismatched:
-        example = next(iter(mismatched.values()))
-        common_past = min(example["our_anchor"], example["ref_anchor"])
-        our_future = example["our_len"] - example["our_anchor"] - 1
-        ref_future = example["ref_len"] - example["ref_anchor"] - 1
+    if ts_info:
+        ex = next(iter(ts_info.values()))
+        our_past, our_future = ex["our_anchor"], ex["our_len"] - ex["our_anchor"] - 1
+        ref_past, ref_future = ex["ref_anchor"], ex["ref_len"] - ex["ref_anchor"] - 1
+        common_past = min(our_past, ref_past)
         common_future = min(our_future, ref_future)
-        print("\nTimestep alignment (per-timestep arrays differ in length):")
-        print(f"  Our window:  {example['our_len']} steps (anchor at {example['our_anchor']})")
-        print(f"  Ref window:  {example['ref_len']} steps (anchor at {example['ref_anchor']})")
-        print(f"  Overlap:     {common_past + common_future + 1} steps (past={common_past}, future={common_future})")
+        overlap = common_past + common_future + 1
 
-    if comparison["only_in_ours"]:
-        print("\nTensors only in our stats:")
-        for t in sorted(comparison["only_in_ours"])[:10]:
-            print(f"  - {t}")
-        if len(comparison["only_in_ours"]) > 10:
-            print(f"  ... and {len(comparison['only_in_ours']) - 10} more")
+        our_anc, ref_anc = ex["our_anchor"], ex["ref_anchor"]
+        print(f"{'Anchor (source)':<25s} {our_anc:>10d} ({our_src:>8s})   {ref_anc:>10d} ({ref_src:>8s})")
+        print(f"{'Window (past/future)':<25s} {our_past:>6d} / {our_future:<7d}   {ref_past:>6d} / {ref_future:<7d}")
+        print(f"{'Compared overlap':<25s} {overlap:>15d} timesteps (past={common_past}, future={common_future})")
 
-    if comparison["only_in_ref"]:
-        print("\nTensors only in reference:")
-        for t in sorted(comparison["only_in_ref"])[:10]:
-            print(f"  - {t}")
-        if len(comparison["only_in_ref"]) > 10:
-            print(f"  ... and {len(comparison['only_in_ref']) - 10} more")
+    sample_counts = comparison.get("sample_counts", {})
+    if sample_counts:
+        sc = next(iter(sample_counts.values()))
+        our_c, ref_c = sc["our_count"], sc["ref_count"]
+        diff = our_c - ref_c
+        print(f"{'Samples (at anchor)':<25s} {our_c:>15,d}   {ref_c:>15,d}", end="")
+        if diff != 0:
+            pct = abs(diff) / ref_c * 100 if ref_c > 0 else float("inf")
+            sign = "+" if diff > 0 else ""
+            print(f"   ({sign}{diff:,d}, {sign}{pct:.1f}%)")
+        else:
+            print("   (identical)")
 
-    # Report None values
-    if comparison["none_values"]["our"] or comparison["none_values"]["ref"]:
-        print(f"\n{'NONE VALUES DETECTED':-^110}")
-        if comparison["none_values"]["our"]:
-            print(f"\nNone values in our stats ({len(comparison['none_values']['our'])} tensors):")
-            for tensor, fields in sorted(comparison["none_values"]["our"].items())[:5]:
-                print(f"  {tensor}: {len(fields)} fields are None")
-                print(f"    Fields: {', '.join(sorted(fields)[:5])}{'...' if len(fields) > 5 else ''}")
-            if len(comparison["none_values"]["our"]) > 5:
-                print(f"  ... and {len(comparison['none_values']['our']) - 5} more tensors")
+        our_cs = {v["our_count"] for v in sample_counts.values()}
+        ref_cs = {v["ref_count"] for v in sample_counts.values()}
+        if len(our_cs) > 1 or len(ref_cs) > 1:
+            print(
+                f"  !! Sample counts vary across tensors:"
+                f" ours {min(our_cs):,d}-{max(our_cs):,d},"
+                f" ref {min(ref_cs):,d}-{max(ref_cs):,d}"
+            )
 
-        if comparison["none_values"]["ref"]:
-            print(f"\nNone values in reference ({len(comparison['none_values']['ref'])} tensors):")
-            for tensor, fields in sorted(comparison["none_values"]["ref"].items())[:5]:
-                print(f"  {tensor}: {len(fields)} fields are None")
+    # Tensor mismatches (compact)
+    if n_only_ours or n_only_ref:
+        if n_only_ours:
+            tensors_str = ", ".join(sorted(comparison["only_in_ours"]))
+            print(f"Only in ours ({n_only_ours}): {tensors_str}")
+        if n_only_ref:
+            tensors_str = ", ".join(sorted(comparison["only_in_ref"]))
+            print(f"Only in ref ({n_only_ref}):  {tensors_str}")
 
-    # Separate value diffs from count diffs
-    value_diffs = []
-    count_diffs = []
-    for tensor, field_diffs in comparison["field_differences"].items():
-        for diff_info in field_diffs:
-            entry = {"tensor": tensor, **diff_info}
-            if diff_info["field"] in COUNT_FIELDS:
-                count_diffs.append(entry)
-            else:
-                value_diffs.append(entry)
+    # None values (compact)
+    n_none_ours = len(comparison["none_values"]["our"])
+    n_none_ref = len(comparison["none_values"]["ref"])
+    if n_none_ours or n_none_ref:
+        parts = []
+        if n_none_ours:
+            parts.append(f"ours: {n_none_ours} tensors")
+        if n_none_ref:
+            parts.append(f"ref: {n_none_ref} tensors")
+        print(f"None fields: {', '.join(parts)}")
 
-    # Top value field differences
-    print(f"\n{'TOP VALUE DIFFERENCES (by % of tensor range)':-^110}")
-
-    if value_diffs:
-        value_diffs.sort(key=lambda x: x["norm_diff"], reverse=True)
-
-        print(f"\n{'Tensor':<50} {'Field':<25} {'Max Abs Diff':>14} {'% of Range':>12}")
-        print(f"{'-' * 50} {'-' * 25} {'-' * 14} {'-' * 12}")
-
-        for diff in value_diffs[:30]:
-            tensor_short = diff["tensor"][-47:] if len(diff["tensor"]) > 47 else diff["tensor"]
-            field_short = diff["field"][-22:] if len(diff["field"]) > 22 else diff["field"]
-            print(f"{tensor_short:<50} {field_short:<25} {diff['max_abs_diff']:>14.6f} {diff['norm_diff']:>11.2f}%")
-
-    # Count differences
-    print(f"\n{'COUNT DIFFERENCES (by % of ref count)':-^110}")
-
-    if count_diffs:
-        count_diffs.sort(key=lambda x: x["norm_diff"], reverse=True)
-
-        print(f"\n{'Tensor':<50} {'Field':<25} {'Max Abs Diff':>14} {'% of Ref':>12}")
-        print(f"{'-' * 50} {'-' * 25} {'-' * 14} {'-' * 12}")
-
-        for diff in count_diffs[:10]:
-            tensor_short = diff["tensor"][-47:] if len(diff["tensor"]) > 47 else diff["tensor"]
-            field_short = diff["field"][-22:] if len(diff["field"]) > 22 else diff["field"]
-            print(f"{tensor_short:<50} {field_short:<25} {diff['max_abs_diff']:>14.0f} {diff['norm_diff']:>11.2f}%")
-
-    # Tensor-wise summary (value fields only)
-    print(f"\n{'TENSOR-WISE SUMMARY (value fields only)':-^110}")
+    # ── Tensor-level overview (main table) ──
+    print(f"\n{'  PER-TENSOR OVERVIEW (value fields, sorted by max % of range)  ':-^{W}}")
 
     tensor_summary = []
     for tensor in sorted(comparison["common_tensors"]):
@@ -335,40 +419,68 @@ def print_report(our_path: str, ref_path: str, our_stats: dict, ref_stats: dict,
         diffs = [d for d in comparison["field_differences"][tensor] if d["field"] not in COUNT_FIELDS]
         if not diffs:
             continue
-        max_norm = max(d["norm_diff"] for d in diffs)
-        avg_norm = np.mean([d["norm_diff"] for d in diffs])
-        max_abs = max(d["max_abs_diff"] for d in diffs)
+        worst = max(diffs, key=lambda d: d["norm_diff"])
+        max_norm = worst["norm_diff"]
+        avg_norm = float(np.mean([d["norm_diff"] for d in diffs]))
         tensor_summary.append(
             {
                 "tensor": tensor,
-                "num_fields": len(diffs),
-                "avg_norm": avg_norm,
-                "max_norm": max_norm,
-                "max_abs": max_abs,
+                "n": len(diffs),
+                "avg_pct": avg_norm,
+                "max_pct": max_norm,
+                "max_abs": worst["max_abs_diff"],
+                "worst_field": worst["field"],
             }
         )
 
     if tensor_summary:
-        tensor_summary.sort(key=lambda x: x["max_norm"], reverse=True)
-
-        print(f"\n{'Tensor':<50} {'Fields':>7} {'Max Abs Diff':>14} {'Avg % Range':>13} {'Max % Range':>13}")
-        print(f"{'-' * 50} {'-' * 7} {'-' * 14} {'-' * 13} {'-' * 13}")
-
-        for item in tensor_summary[:20]:
-            tensor_short = item["tensor"][-47:] if len(item["tensor"]) > 47 else item["tensor"]
+        tensor_summary.sort(key=lambda x: x["max_pct"], reverse=True)
+        TW = 40
+        print(f"{'Tensor':<{TW}s} {'#':>3s} {'Worst field':<22s} {'MaxAbs':>12s} {'Avg%':>7s} {'Max%':>7s}")
+        print(f"{'-' * TW} {'-' * 3} {'-' * 22} {'-' * 12} {'-' * 7} {'-' * 7}")
+        for item in tensor_summary:
+            t = _short_tensor(item["tensor"], TW)
+            f = item["worst_field"][-22:] if len(item["worst_field"]) > 22 else item["worst_field"]
             print(
-                f"{tensor_short:<50} {item['num_fields']:>7} "
-                f"{item['max_abs']:>14.6f} {item['avg_norm']:>12.2f}% {item['max_norm']:>12.2f}%"
+                f"{t:<{TW}s} {item['n']:>3d} {f:<22s} "
+                f"{item['max_abs']:>12.6f} {item['avg_pct']:>6.2f}% {item['max_pct']:>6.2f}%"
             )
+    else:
+        print("(no value differences)")
+
+    # ── Count overview (compact) ──
+    count_diffs = []
+    for tensor, field_diffs in comparison["field_differences"].items():
+        for d in field_diffs:
+            if d["field"] in COUNT_FIELDS:
+                count_diffs.append({"tensor": tensor, **d})
+
+    if count_diffs:
+        count_diffs.sort(key=lambda x: x["norm_diff"], reverse=True)
+        print(f"\n{'  COUNT DIFFERENCES (% of ref count)  ':-^{W}}")
+        TW = 40
+        print(f"{'Tensor':<{TW}s} {'Field':<20s} {'MaxAbsDiff':>12s} {'%Ref':>7s}")
+        print(f"{'-' * TW} {'-' * 20} {'-' * 12} {'-' * 7}")
+        for d in count_diffs[:10]:
+            t = _short_tensor(d["tensor"], TW)
+            print(f"{t:<{TW}s} {d['field']:<20s} {d['max_abs_diff']:>12.0f} {d['norm_diff']:>6.2f}%")
+
+    print(f"\n{'':=^{W}}")
 
 
 def main():
-    if len(sys.argv) < 3:
-        print("Usage: python compare_stats.py <our_stats.json> <reference_stats.json>")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description="Compare two stats.json files and generate a detailed report.")
+    parser.add_argument("our_stats", help="Path to our stats.json (local or s3://)")
+    parser.add_argument("ref_stats", help="Path to reference stats.json (local or s3://)")
+    parser.add_argument(
+        "--no-interactive",
+        action="store_true",
+        help="Skip the interactive curses TUI (print report only)",
+    )
+    args = parser.parse_args()
 
-    our_path = sys.argv[1]
-    ref_path = sys.argv[2]
+    our_path = args.our_stats
+    ref_path = args.ref_stats
 
     print(f"Loading {our_path}...", end="", flush=True)
     our_stats = load_json(our_path)
@@ -381,16 +493,47 @@ def main():
     # Load anchor indices from processing_metadata.json
     our_anchor = load_anchor(our_path)
     ref_anchor = load_anchor(ref_path)
+    our_anchor_source = "metadata" if our_anchor is not None else "heuristic"
+    ref_anchor_source = "metadata" if ref_anchor is not None else "heuristic"
     if our_anchor is not None:
         print(f"Our anchor_relative_idx: {our_anchor} (from metadata)")
+    else:
+        print("Our anchor: will use count-plateau heuristic (no metadata found)")
     if ref_anchor is not None:
         print(f"Ref anchor_relative_idx: {ref_anchor} (from metadata)")
+    else:
+        print("Ref anchor: will use count-plateau heuristic (no metadata found)")
 
     print("Comparing...", end="", flush=True)
-    comparison = compare_stats(our_stats, ref_stats, our_anchor, ref_anchor)
+    comparison = compare_stats(our_stats, ref_stats, our_anchor, ref_anchor, our_anchor_source, ref_anchor_source)
     print(" done")
 
     print_report(our_path, ref_path, our_stats, ref_stats, comparison)
+
+    # Launch interactive TUI if conditions are met
+    is_tty = hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
+    if not args.no_interactive and is_tty:
+        try:
+            import curses
+
+            # Try package import first, fall back to relative import for script execution
+            try:
+                from vla_foundry.tri.utils.compare_stats_tui import StatsComparisonViewer
+            except ImportError:
+                from compare_stats_tui import StatsComparisonViewer
+
+            viewer = StatsComparisonViewer(
+                our_path=our_path,
+                ref_path=ref_path,
+                our_stats=our_stats,
+                ref_stats=ref_stats,
+                comparison=comparison,
+            )
+            curses.wrapper(viewer.run)
+        except ImportError as exc:
+            print(f"\nCould not launch TUI (missing dependency): {exc}")
+        except Exception as exc:
+            print(f"\nTUI failed to launch: {exc}")
 
 
 if __name__ == "__main__":
