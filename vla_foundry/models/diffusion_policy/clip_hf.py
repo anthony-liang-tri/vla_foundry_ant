@@ -39,7 +39,7 @@ class CLIPHF(BaseModel):
     def get_projection_dim(self):
         return self.model.projection_dim
 
-    def forward(self, input_ids, pixel_values, attention_mask, attention_mask_images):
+    def forward(self, input_ids, pixel_values, attention_mask, attention_mask_images, **kwargs):
         if input_ids is not None:
             text_output = self.model.text_model(input_ids).pooler_output
             text_embeds = F.normalize(text_output, dim=-1)

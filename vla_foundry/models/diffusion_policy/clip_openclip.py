@@ -29,7 +29,7 @@ class CLIP_OpenCLIP(BaseModel):
     def get_projection_dim(self):
         return self.model.visual.output_dim
 
-    def forward(self, input_ids, pixel_values, attention_mask, attention_mask_images):
+    def forward(self, input_ids, pixel_values, attention_mask, attention_mask_images, **kwargs):
         if pixel_values.ndim == 5:
             # Handle multiple images per sample
             # [B, N, C, H, W] -> [B*N, C, H, W]
