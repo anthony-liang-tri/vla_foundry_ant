@@ -1,0 +1,133 @@
+# Unitree G1 MCAP Topics Configuration
+# Config-driven sub-field extraction of state / action topics
+#
+# Usage: Preprocess once, select fields at training time
+#
+# Field path syntax:
+#   "field"              - Simple attribute
+#   "field.nested"       - Nested attribute
+#   "field[*]"           - Iterate list, flatten
+#   "field[*].attr"      - Extract attr from each list item
+#   "field[*].attr[*]"   - Nested iteration (flattened)
+#
+# Some fields (IMU, motor torques etc) have been commented out for simplicity 
+# of rendered tarfiles, They can be added back once the data/training pipeline 
+# is stabilized.
+target_hz: 30.0
+output_mode: separate
+
+# =============================================================================
+# ACTION TOPICS
+# =============================================================================
+
+action_topics:
+  - /ee_target_left
+  - /ee_target_right
+  - /joint_cmd_whole_body
+  # - /joint_cmd_whole_body_torque
+  - /joint_cmd_hand_left
+  - /joint_cmd_hand_right
+  - /joint_cmd_all # (86D whole body pos / velocity)
+
+action_field_names:
+  /ee_target_left: action_ee_pose_left
+  /ee_target_right: action_ee_pose_right
+  /joint_cmd_whole_body: action_joint_whole_body
+  # /joint_cmd_whole_body_torque: action_joint_torque (Mostly unnecessary)
+  /joint_cmd_hand_left: action_joint_left_joints
+  /joint_cmd_hand_right: action_joint_right_joints
+  # /joint_cmd_all: action_joint_all (Simplified action space 43D)
+
+reference_field_prefixes:
+  action_joint_hand_left__: actual_joint_states__
+  action_joint_hand_right__: actual_joint_states__
+  action_: obs_
+  desired_: actual_
+
+pose_groups:
+  - name: "left_ee_action"
+    position_key: "action_ee_pose_left__xyz"   
+    rotation_key: "action_ee_pose_left__rot_6d" 
+  - name: "right_ee_action"
+    position_key: "action_ee_pose_right__xyz"
+    rotation_key: "action_ee_pose_right__rot_6d"
+
+# =============================================================================
+# STATE TOPICS
+# =============================================================================
+
+state_topics:
+  - /joint_states
+  - /current_left_hand_ee_link
+  - /current_right_hand_ee_link
+  # - /imu
+  # - /livox/imu_192_168_123_120
+  - /dex3/left/state
+  - /dex3/right/state
+  # - /lowstate (Motor level torque, position, velocity)
+
+state_field_names:
+  /joint_states: obs_joint_states
+  /current_left_hand_ee_link: obs_ee_pose_left
+  /current_right_hand_ee_link: obs_ee_pose_right
+  # /imu: obs_imu
+  # /livox/imu_192_168_123_120: obs_imu_livox
+
+# =============================================================================
+# SUB-FIELD EXTRACTION
+# =============================================================================
+# For complex messages, extract specific fields into separate arrays.
+# Each entry creates a virtual subtopic: {topic}.{output_name}
+
+state_field_extraction:
+  /dex3/left/state:
+    joints: "motor_state[*].q"
+    joints_vel: "motor_state[*].dq"
+    joints_tau: "motor_state[*].tau_est"
+    tactile: "press_sensor_state[*].pressure"
+    # imu: "imu_state"
+
+  /dex3/right/state:
+    joints: "motor_state[*].q"
+    joints_vel: "motor_state[*].dq"
+    joints_tau: "motor_state[*].tau_est"
+    tactile: "press_sensor_state[*].pressure"
+    # imu: "imu_state"
+
+  /lowstate:
+    motor_q: "motor_state[*].q"
+    motor_dq: "motor_state[*].dq"
+    motor_tau: "motor_state[*].tau_est"
+    # imu: "imu_state"
+
+# Map extracted sub-fields to clean output names
+state_subfield_names:
+  # Left hand
+  /dex3/left/state.joints: obs_hand_left_joints
+  /dex3/left/state.joints_vel: obs_hand_left_joints_vel
+  /dex3/left/state.joints_tau: obs_hand_left_joints_tau
+  /dex3/left/state.tactile: obs_hand_left_tactile
+  # /dex3/left/state.imu: obs_hand_left_imu
+  # Right hand
+  /dex3/right/state.joints: obs_hand_right_joints
+  /dex3/right/state.joints_vel: obs_hand_right_joints_vel
+  /dex3/right/state.joints_tau: obs_hand_right_joints_tau
+  /dex3/right/state.tactile: obs_hand_right_tactile
+  # /dex3/right/state.imu: obs_hand_right_imu
+  # Motor state
+  # /lowstate.motor_q: obs_motor_positions
+  # /lowstate.motor_dq: obs_motor_velocities
+  # /lowstate.motor_tau: obs_motor_torques
+  # /lowstate.imu: obs_lowstate_imu
+
+# =============================================================================
+# CAMERA TOPICS
+# =============================================================================
+
+camera_topics:
+  head: /head_camera/color/image_raw/compressed
+  left_wrist: /left_wrist_camera/color/image_rect_raw/compressed
+  right_wrist: /right_wrist_camera/color/image_rect_raw/compressed
+
+# Default task name (can be overloaded)
+default_task_name: "perform manipulation task"

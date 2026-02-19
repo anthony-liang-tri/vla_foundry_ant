@@ -21,5 +21,9 @@ def get_converter(cfg: PreprocessParams) -> BaseRoboticsConverter:
         from vla_foundry.data.preprocessing.robotics.converters.humanoid_everyday import HumanoidEverydayConverter
 
         return HumanoidEverydayConverter(cfg)
+    elif cfg.type == "mcap":
+        from vla_foundry.data.preprocessing.robotics.converters.mcap import MCAPConverter
+
+        return MCAPConverter(cfg)
     else:
         raise ValueError(f"Unsupported source type: {cfg.type}")

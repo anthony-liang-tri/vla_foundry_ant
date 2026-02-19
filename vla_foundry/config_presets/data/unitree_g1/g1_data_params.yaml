@@ -1,16 +1,52 @@
 type: robotics
 
-language_instruction_types:
-  - original
-  - randomized
-  - verbose
-  - alternative
-
 proprioception_fields:
-  - state # 28
+  - actual_ee_pose_left__xyz # 3
+  - actual_ee_pose_left__rot_6d # 6
+  - actual_joint_states__left_hand_thumb_0_joint # 1
+  - actual_joint_states__left_hand_thumb_1_joint # 1
+  - actual_joint_states__left_hand_thumb_2_joint # 1
+  - actual_joint_states__left_hand_middle_0_joint # 1
+  - actual_joint_states__left_hand_middle_1_joint # 1
+  - actual_joint_states__left_hand_index_0_joint # 1
+  - actual_joint_states__left_hand_index_1_joint # 1
+  - actual_ee_pose_right__xyz # 3
+  - actual_ee_pose_right__rot_6d # 6
+  - actual_joint_states__right_hand_thumb_0_joint # 1
+  - actual_joint_states__right_hand_thumb_1_joint # 1
+  - actual_joint_states__right_hand_thumb_2_joint # 1
+  - actual_joint_states__right_hand_middle_0_joint # 1
+  - actual_joint_states__right_hand_middle_1_joint # 1
+  - actual_joint_states__right_hand_index_0_joint # 1
+  - actual_joint_states__right_hand_index_1_joint # 1
 
 action_fields:
-  - actions # 28
+  - action_ee_pose_left__xyz # 3
+  - action_ee_pose_left__rot_6d # 6
+  - action_joint_hand_left__left_hand_thumb_0_joint # 1
+  - action_joint_hand_left__left_hand_thumb_1_joint # 1
+  - action_joint_hand_left__left_hand_thumb_2_joint # 1
+  - action_joint_hand_left__left_hand_middle_0_joint # 1
+  - action_joint_hand_left__left_hand_middle_1_joint # 1
+  - action_joint_hand_left__left_hand_index_0_joint # 1
+  - action_joint_hand_left__left_hand_index_1_joint # 1
+  - action_ee_pose_right__xyz # 3
+  - action_ee_pose_right__rot_6d # 6
+  - action_joint_hand_right__right_hand_thumb_0_joint # 1
+  - action_joint_hand_right__right_hand_thumb_1_joint # 1
+  - action_joint_hand_right__right_hand_thumb_2_joint # 1
+  - action_joint_hand_right__right_hand_middle_0_joint # 1
+  - action_joint_hand_right__right_hand_middle_1_joint # 1
+  - action_joint_hand_right__right_hand_index_0_joint # 1
+  - action_joint_hand_right__right_hand_index_1_joint # 1
+
+pose_groups:
+  - name: "left_ee_pose_action"
+    position_key: "action_ee_pose_left__xyz"
+    rotation_key: "action_ee_pose_left__rot_6d"
+  - name: "right_ee_pose_action"
+    position_key: "action_ee_pose_right__xyz"
+    rotation_key: "action_ee_pose_right__rot_6d"
 
 normalization:
   enabled: true

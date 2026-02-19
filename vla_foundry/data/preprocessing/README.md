@@ -115,3 +115,41 @@ Data ripped from MMT robots is stored as npz files, named as `ep\d{4}_t\d{4}\.np
 --samples_per_shard 100
 --config_path "vla_foundry/config_presets/data/mmt_preprocessing_params_1past_14future.yaml"
 ```
+
+# Converting CAM mcaps to tar shards
+For robots such as the Unitree G1, or the CAM TZK, or even vendor-sourced UMI data, teleop / trainable data is available as a ROS 2 MCAP. To convert this data you can use the `type` argument as `mcap` and specify a `--action_fields_config_path` to a yaml config file listing topics. Eg. For the unitree g1 you can run something like this:
+```
+python vla_foundry/data/preprocessing/preprocess_robotics_to_tar.py \
+    --type mcap \
+    --source_episodes <s3 or local/path/to/episodes> \
+    --output_dir s3://<path_to_bucket>/ \
+    --config_path vla_foundry/config_presets/data/unitree_g1/robotics_preprocessing_params_1past_47future_30hz.yaml \
+    --action_fields_config_path vla_foundry/config_presets/data/unitree_g1/g1_mcap_topics.yaml \
+    --camera_names "include vla_foundry/config_presets/data/unitree_g1/g1_data_camera_names.yaml" \
+    --task_name "do_the_task"
+```
+For convenience, wrapper scripts have been provided for the Unitree G1:
+```
+./examples/preprocessing/extended/preprocess_robotics_data_mcap_g1.sh \
+    --source <s3:/src/s3/path> \
+    --output <s3:/dest/s3/path> \
+    --task-name <task name>
+```
+
+##### Supported ROS 2 Message Types
+
+The MCAP converter uses attribute inspection for message type detection (avoiding direct ROS 2 dependencies). The following message types are currently supported:
+
+| Extraction Method | Message Type | Output |
+|-------------------|--------------|--------|
+| Structured | `sensor_msgs/JointState` | `__<joint_name>` per joint |
+| Structured | `geometry_msgs/PoseStamped` | `__xyz`, `__rot_6d` |
+| Structured | `geometry_msgs/Pose` | `__xyz`, `__rot_6d` |
+| Flat | `sensor_msgs/Imu` | `[quat(4), angular_vel(3), linear_accel(3)]` |
+| Flat | `geometry_msgs/WrenchStamped` | `[force(3), torque(3)]` |
+| Flat | `geometry_msgs/Wrench` | `[force(3), torque(3)]` |
+| Field Path | Custom messages | Config-driven via `field_extraction` in topics YAML |
+| Image | `sensor_msgs/CompressedImage` | JPEG bytes (jpeg, png) |
+| Image | `sensor_msgs/Image` | JPEG bytes (rgb8, bgr8, mono8) |
+
+For custom messages (Dex3 tactile, lowstate, PolicyKeyframe), use `field_extraction` config in the topics YAML to specify dot-separated field paths.

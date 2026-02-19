@@ -366,16 +366,18 @@ def create_shard(shard_files: List[str], shard_idx: int, output_dir: str) -> str
 
 
 def is_still_sample(lowdim_data: Dict[str, np.ndarray], start_idx: int, end_idx: int, still_threshold: float) -> bool:
-    """Check if sample is still."""
-    movement_keys = [k for k in lowdim_data if any(x in k.lower() for x in ["joint_position", "poses", "xyz"])]
+    """Check if sample is still by looking at action/position/pose keys."""
+    recognized_patterns = ["action", "joint", "poses", "xyz", "actual"]
+    movement_keys = [k for k in lowdim_data if any(x in k.lower() for x in recognized_patterns)]
 
-    # If no movement keys found, don't filter the sample
+    # If no recognized keys found, we can't determine stillness; don't filter
     if not movement_keys:
         return False
 
     for key in movement_keys:
         data = lowdim_data[key][start_idx : end_idx + 1]
         if len(data) > 1:
+            # max() handles multi-dimensional arrays (e.g. 7-DoF joints)
             movement = np.std(data, axis=0).max()
             if movement > still_threshold:
                 return False

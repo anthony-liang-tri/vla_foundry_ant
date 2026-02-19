@@ -26,8 +26,9 @@ def any_to_actual_key(field: str) -> str:
         return None
 
 
-def normalize(x):
-    return x / np.linalg.norm(x, axis=-1, keepdims=True)
+def normalize(x, eps=1e-12):
+    norm = np.linalg.norm(x, axis=-1, keepdims=True)
+    return x / np.maximum(norm, eps)
 
 
 def load_action_field_config(config_path: str) -> Dict[str, List[Any]]:

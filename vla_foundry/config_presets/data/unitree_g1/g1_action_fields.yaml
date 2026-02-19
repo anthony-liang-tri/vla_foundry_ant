@@ -1,4 +1,57 @@
+# action field specifications for the Lerobot training pipeline.
+
 action_key_fields:
-  - actions # 28
+  - action_ee_pose_left__xyz # 3
+  - action_ee_pose_left__rot_6d # 6
+  - action_ee_pose_right__xyz # 3
+  - action_ee_pose_right__rot_6d # 6
+  - action_joint_hand_left__left_hand_thumb_0_joint # 1
+  - action_joint_hand_left__left_hand_thumb_1_joint # 1
+  - action_joint_hand_left__left_hand_thumb_2_joint # 1
+  - action_joint_hand_left__left_hand_middle_0_joint # 1
+  - action_joint_hand_left__left_hand_middle_1_joint # 1
+  - action_joint_hand_left__left_hand_index_0_joint # 1
+  - action_joint_hand_left__left_hand_index_1_joint # 1
+  - action_joint_hand_right__right_hand_thumb_0_joint # 1
+  - action_joint_hand_right__right_hand_thumb_1_joint # 1
+  - action_joint_hand_right__right_hand_thumb_2_joint # 1
+  - action_joint_hand_right__right_hand_middle_0_joint # 1
+  - action_joint_hand_right__right_hand_middle_1_joint # 1
+  - action_joint_hand_right__right_hand_index_0_joint # 1
+  - action_joint_hand_right__right_hand_index_1_joint # 1
+
 action_index_fields:
+  - 3
+  - 9
+  - 12
+  - 18
+  - 19
+  - 20
+  - 21
+  - 22
+  - 23
+  - 24
+  - 25
+  - 26
+  - 27
   - 28
+  - 29
+  - 30
+  - 31
+  - 32
+
+# TODO: Add a field for what field should be used as a reference field
+# this will be useful for supporting left w.r.t. right or vice versa
+pose_groups:
+  - name: "left_ee_pose_action"
+    position_key: "action_ee_pose_left__xyz"
+    rotation_key: "action_ee_pose_left__rot_6d"
+  - name: "right_ee_pose_action"
+    position_key: "action_ee_pose_right__xyz"
+    rotation_key: "action_ee_pose_right__rot_6d"
+  - name: "left_ee_pose_actual"
+    position_key: "actual_ee_pose_left__xyz"
+    rotation_key: "actual_ee_pose_left__rot_6d"
+  - name: "right_ee_pose_actual"
+    position_key: "actual_ee_pose_right__xyz"
+    rotation_key: "actual_ee_pose_right__rot_6d"
