@@ -1,6 +1,6 @@
 import logging
 from dataclasses import dataclass, field
-from typing import List, Tuple, Union
+from typing import List, Literal, Tuple, Union
 
 import draccus
 
@@ -263,6 +263,7 @@ class DiffusionPolicyParams(ModelParams):
     use_diffusers_scheduler: bool = field(default=False)
     use_flow_matching_scheduler: bool = field(default=False)
     input_noise_std: float = field(default=0.0)
+    diffusion_step_conditioning: Literal["add", "concat"] = field(default="concat")
 
     # Shared attributes. Overwritten in init_shared_attributes.
     action_dim: int = field(default=None)

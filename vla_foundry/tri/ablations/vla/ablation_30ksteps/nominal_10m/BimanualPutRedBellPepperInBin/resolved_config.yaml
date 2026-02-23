@@ -224,7 +224,7 @@ model:
   proprioception_dim: 0
   resume_from_checkpoint: null
   resume_weights_only: false
-  time_conditioning: concat
+  diffusion_step_conditioning: concat
   transformer:
     attn_name: torch_attn
     cast_output_to_float32: false

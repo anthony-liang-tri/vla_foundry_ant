@@ -730,6 +730,188 @@ class TestDiffusionPolicy:
             )
 
 
+class TestBuildTransformerInput:
+    """Test _build_transformer_input with different time conditioning strategies."""
+
+    @pytest.fixture
+    def diffusion_policy_concat(self):
+        config = load_params_from_yaml(
+            DiffusionPolicyParams, "tests/essential/params/dummy_configs/dummy_diffusion_policy_config.yaml"
+        )
+        assert config.diffusion_step_conditioning == "concat"
+        with patch("vla_foundry.models.diffusion_policy.clip_hf.CLIPModel.from_pretrained") as mock_clip:
+            mock_hf_clip_model = Mock()
+            mock_hf_clip_model.projection_dim = 512
+            mock_clip.return_value = mock_hf_clip_model
+            return create_model(config)
+
+    @pytest.fixture
+    def diffusion_policy_add(self):
+        config = load_params_from_yaml(
+            DiffusionPolicyParams, "tests/essential/params/dummy_configs/dummy_diffusion_policy_config.yaml"
+        )
+        object.__setattr__(config, "diffusion_step_conditioning", "add")
+        with patch("vla_foundry.models.diffusion_policy.clip_hf.CLIPModel.from_pretrained") as mock_clip:
+            mock_hf_clip_model = Mock()
+            mock_hf_clip_model.projection_dim = 512
+            mock_clip.return_value = mock_hf_clip_model
+            return create_model(config)
+
+    def test_concat_prepends_time_token(self, diffusion_policy_concat):
+        """CONCAT strategy: time is prepended as a separate token, increasing sequence length by 1."""
+        model = diffusion_policy_concat
+        batch_size, num_backbone_tokens, backbone_dim = 2, 3, 512
+        action_seq_len, transformer_dim = 5, 128
+
+        backbone_embeddings = torch.randn(batch_size, num_backbone_tokens, backbone_dim)
+        time_embeddings = torch.randn(batch_size, 1, backbone_dim)
+        noisy_action = torch.randn(batch_size, action_seq_len, transformer_dim)
+
+        result = model._build_transformer_input(backbone_embeddings, time_embeddings, noisy_action)
+
+        # CONCAT: (1 + N) conditioning tokens + T action tokens
+        expected_seq_len = 1 + num_backbone_tokens + action_seq_len
+        assert result.shape == (batch_size, expected_seq_len, transformer_dim)
+
+    def test_add_broadcasts_time(self, diffusion_policy_add):
+        """ADD strategy: time is added element-wise, preserving backbone sequence length."""
+        model = diffusion_policy_add
+        batch_size, num_backbone_tokens, backbone_dim = 2, 3, 512
+        action_seq_len, transformer_dim = 5, 128
+
+        backbone_embeddings = torch.randn(batch_size, num_backbone_tokens, backbone_dim)
+        time_embeddings = torch.randn(batch_size, 1, backbone_dim)
+        noisy_action = torch.randn(batch_size, action_seq_len, transformer_dim)
+
+        result = model._build_transformer_input(backbone_embeddings, time_embeddings, noisy_action)
+
+        # ADD: N conditioning tokens + T action tokens (no extra time token)
+        expected_seq_len = num_backbone_tokens + action_seq_len
+        assert result.shape == (batch_size, expected_seq_len, transformer_dim)
+
+    def test_concat_with_proprioception(self, diffusion_policy_concat):
+        """CONCAT with proprioception: (1+N) conditioning + P proprio + T action tokens."""
+        model = diffusion_policy_concat
+        batch_size, num_backbone_tokens, backbone_dim = 2, 2, 512
+        proprio_seq_len, action_seq_len, transformer_dim = 3, 5, 128
+
+        backbone_embeddings = torch.randn(batch_size, num_backbone_tokens, backbone_dim)
+        time_embeddings = torch.randn(batch_size, 1, backbone_dim)
+        noisy_action = torch.randn(batch_size, action_seq_len, transformer_dim)
+        proprio_embeddings = torch.randn(batch_size, proprio_seq_len, transformer_dim)
+
+        result = model._build_transformer_input(
+            backbone_embeddings, time_embeddings, noisy_action, proprio_embeddings=proprio_embeddings
+        )
+
+        expected_seq_len = 1 + num_backbone_tokens + proprio_seq_len + action_seq_len
+        assert result.shape == (batch_size, expected_seq_len, transformer_dim)
+
+    def test_add_with_proprioception(self, diffusion_policy_add):
+        """ADD with proprioception: N conditioning + P proprio + T action tokens."""
+        model = diffusion_policy_add
+        batch_size, num_backbone_tokens, backbone_dim = 2, 2, 512
+        proprio_seq_len, action_seq_len, transformer_dim = 3, 5, 128
+
+        backbone_embeddings = torch.randn(batch_size, num_backbone_tokens, backbone_dim)
+        time_embeddings = torch.randn(batch_size, 1, backbone_dim)
+        noisy_action = torch.randn(batch_size, action_seq_len, transformer_dim)
+        proprio_embeddings = torch.randn(batch_size, proprio_seq_len, transformer_dim)
+
+        result = model._build_transformer_input(
+            backbone_embeddings, time_embeddings, noisy_action, proprio_embeddings=proprio_embeddings
+        )
+
+        expected_seq_len = num_backbone_tokens + proprio_seq_len + action_seq_len
+        assert result.shape == (batch_size, expected_seq_len, transformer_dim)
+
+    def test_add_single_token_backbone(self, diffusion_policy_add):
+        """ADD with single-token backbone (typical VLM case): time adds to single embedding."""
+        model = diffusion_policy_add
+        batch_size, backbone_dim = 2, 512
+        action_seq_len, transformer_dim = 5, 128
+
+        backbone_embeddings = torch.randn(batch_size, 1, backbone_dim)
+        time_embeddings = torch.randn(batch_size, 1, backbone_dim)
+        noisy_action = torch.randn(batch_size, action_seq_len, transformer_dim)
+
+        result = model._build_transformer_input(backbone_embeddings, time_embeddings, noisy_action)
+
+        # ADD with 1 backbone token: 1 conditioning + T action tokens
+        expected_seq_len = 1 + action_seq_len
+        assert result.shape == (batch_size, expected_seq_len, transformer_dim)
+
+    def test_add_forward_pass(self, diffusion_policy_add):
+        """Test full forward pass with ADD time conditioning."""
+        model = diffusion_policy_add
+        batch_size, seq_len = 2, 10
+        action_dim = model.model_params.action_dim
+
+        input_ids = torch.randint(0, 1000, (batch_size, seq_len))
+        pixel_values = torch.randn(batch_size, 3, 224, 224)
+        attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+        actions = torch.randn(batch_size, seq_len, action_dim)
+        noise = torch.randn(batch_size, seq_len, action_dim)
+        past_mask = torch.zeros(batch_size, seq_len, dtype=torch.bool)
+        future_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+
+        mock_output = Mock()
+        mock_output.text_embeds = torch.randn(batch_size, 512)
+        mock_output.image_embeds = torch.randn(batch_size, 512)
+
+        with patch.object(model.vision_language_backbone._model, "forward", return_value=mock_output):
+            output = model(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                attention_mask=attention_mask,
+                attention_mask_images=None,
+                actions=actions,
+                noise=noise,
+                past_mask=past_mask,
+                future_mask=future_mask,
+            )
+
+            assert output.shape == (batch_size, seq_len, action_dim)
+
+    def test_add_generate_actions(self, diffusion_policy_add):
+        """Test action generation with ADD time conditioning."""
+        model = diffusion_policy_add
+        batch_size, seq_len = 2, 8
+        action_dim = model.model_params.action_dim
+
+        input_ids = torch.randint(0, 1000, (batch_size, seq_len))
+        pixel_values = torch.randn(batch_size, 3, 224, 224)
+        attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+        actions = torch.randn(batch_size, seq_len, action_dim)
+        past_mask = torch.cat(
+            [
+                torch.ones(batch_size, seq_len // 2, dtype=torch.bool),
+                torch.zeros(batch_size, seq_len // 2, dtype=torch.bool),
+            ],
+            dim=1,
+        )
+
+        mock_output = Mock()
+        mock_output.text_embeds = torch.randn(batch_size, 512)
+        mock_output.image_embeds = torch.randn(batch_size, 512)
+
+        with patch.object(model.vision_language_backbone._model, "forward", return_value=mock_output):
+            generated_actions = model.generate_actions(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                attention_mask=attention_mask,
+                attention_mask_images=None,
+                actions=actions,
+                num_inference_steps=3,
+                past_mask=past_mask,
+            )
+
+            assert generated_actions.shape == (batch_size, seq_len, action_dim)
+            torch.testing.assert_close(
+                generated_actions[:, : seq_len // 2], actions[:, : seq_len // 2], rtol=1e-5, atol=1e-5
+            )
+
+
 class TestVisionLanguageBackbones:
     """Test the backbone wrapper interface."""
 

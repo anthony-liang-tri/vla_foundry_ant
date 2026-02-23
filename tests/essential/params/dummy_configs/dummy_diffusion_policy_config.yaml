@@ -25,5 +25,5 @@ noise_scheduler:
   beta_start: 0.0001
   beta_end: 0.02
 use_flow_matching_scheduler: true
-time_conditioning: concat
+diffusion_step_conditioning: concat
 action_dim: 7

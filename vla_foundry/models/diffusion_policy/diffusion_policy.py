@@ -34,6 +34,8 @@ class DiffusionPolicy(BaseModel):
         self.proprioception_encode = (
             torch.nn.Linear(self.proprioception_dim, transformer.hidden_dim) if self.proprioception_dim > 0 else None
         )
+
+        self.diffusion_step_conditioning = model_params.diffusion_step_conditioning
         self.input_noise_std = model_params.input_noise_std
         self.initialize_weights()
 
@@ -47,6 +49,38 @@ class DiffusionPolicy(BaseModel):
         torch.nn.init.xavier_uniform_(self.output_layer.weight)
         if self.proprioception_encode is not None:
             torch.nn.init.xavier_uniform_(self.proprioception_encode.weight)
+
+    def _build_transformer_input(self, backbone_embeddings, time_embeddings, noisy_action, proprio_embeddings=None):
+        """Build transformer input by combining conditioning, time, and action embeddings.
+
+        Supports two time conditioning strategies:
+        - CONCAT: Prepend time as a separate token [time, backbone] → [B, 1+N, D]
+        - ADD: Add time to backbone embeddings element-wise → [B, N, D]
+
+        Args:
+            backbone_embeddings: [B, N, backbone_dim] from vision-language backbone
+            time_embeddings: [B, 1, backbone_dim] from time encoding
+            noisy_action: [B, T, transformer_dim] encoded noisy actions
+            proprio_embeddings: Optional [B, P, transformer_dim] encoded proprioception
+
+        Returns:
+            transformer_input: [B, C+P+T, transformer_dim]
+        """
+        if self.diffusion_step_conditioning == "add":
+            conditional_embeddings = backbone_embeddings + time_embeddings
+        elif self.diffusion_step_conditioning == "concat":
+            conditional_embeddings = torch.cat([time_embeddings, backbone_embeddings], dim=1)
+        else:
+            raise ValueError(f"Unknown diffusion_step_conditioning: {self.diffusion_step_conditioning}")
+
+        conditional_embeddings = self.condition_encode(conditional_embeddings)
+
+        parts = [conditional_embeddings]
+        if proprio_embeddings is not None:
+            parts.append(proprio_embeddings)
+        parts.append(noisy_action)
+
+        return torch.cat(parts, dim=1)
 
     def forward(
         self,
@@ -83,20 +117,20 @@ class DiffusionPolicy(BaseModel):
         # Time embeddings (B, 1, backbone_dim)
         time_embeddings = self.time_encoding(timesteps).unsqueeze(1)
 
-        # Concatenate time + backbone embeddings, then project to transformer dim
-        # [B, 1, D] + [B, N, D] -> [B, 1+N, D] -> [B, 1+N, transformer_dim]
-        conditional_embeddings = torch.cat([time_embeddings, backbone_output.embeddings], dim=1)
-        conditional_embeddings = self.condition_encode(conditional_embeddings)
-
-        # Create transformer input (B, 1+N + P + T, transformer_dim)
-        transformer_input_parts = [conditional_embeddings]
+        # Proprioception embeddings
+        proprio_embeddings = None
         if self.proprioception_encode is not None and proprioception is not None:
             proprio_embeddings = self.proprioception_encode(proprioception)
             if self.input_noise_std > 0:
                 proprio_embeddings = proprio_embeddings + torch.randn_like(proprio_embeddings) * self.input_noise_std
-            transformer_input_parts.append(proprio_embeddings)
-        transformer_input_parts.append(noisy_action)
-        transformer_input = torch.cat(transformer_input_parts, dim=1)
+
+        # Build transformer input using time conditioning strategy
+        transformer_input = self._build_transformer_input(
+            backbone_embeddings=backbone_output.embeddings,
+            time_embeddings=time_embeddings,
+            noisy_action=noisy_action,
+            proprio_embeddings=proprio_embeddings,
+        )
 
         # Pass through transformer
         transformer_output = self.transformer(
@@ -179,19 +213,16 @@ class DiffusionPolicy(BaseModel):
             timesteps = torch.tensor([step] * batch_size, device=device)
             time_embeddings = self.time_encoding(timesteps).unsqueeze(1)
 
-            # Concatenate time + backbone embeddings
-            conditional_embeddings = torch.cat([time_embeddings, backbone_output.embeddings], dim=1)
-            conditional_embeddings = self.condition_encode(conditional_embeddings)
-
             # Encode current actions
             action_encoding = self.action_encode(actions)
 
-            # Create transformer input
-            transformer_input_parts = [conditional_embeddings]
-            if proprio_embeddings is not None:
-                transformer_input_parts.append(proprio_embeddings)
-            transformer_input_parts.append(action_encoding)
-            transformer_input = torch.cat(transformer_input_parts, dim=1)
+            # Build transformer input using time conditioning strategy
+            transformer_input = self._build_transformer_input(
+                backbone_embeddings=backbone_output.embeddings,
+                time_embeddings=time_embeddings,
+                noisy_action=action_encoding,
+                proprio_embeddings=proprio_embeddings,
+            )
 
             # Pass through transformer
             transformer_output = self.transformer(
