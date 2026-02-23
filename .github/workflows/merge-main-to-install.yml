@@ -1,0 +1,49 @@
+name: Keep install = main + one commit to remove cuda-fps as a dependency
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch install branch (if it exists)
+        run: |
+          git fetch origin install || true
+
+      - name: Recreate install from main and apply the patch commit
+        env:
+          PATCH_COMMIT: "cae314ba74c60c428402be104b30ccea14e18672"
+        run: |
+          # Make sure we're on an up-to-date local main (checkout already has it, but this is explicit)
+          git checkout main
+          git pull --ff-only origin main
+
+          # Reset/install branch to exactly main
+          git checkout -B install main
+
+          # Cherry-pick the extra commit (skip if already present in main)
+          if git merge-base --is-ancestor "$PATCH_COMMIT" main; then
+            echo "Patch commit is already in main; skipping cherry-pick."
+          else
+            git cherry-pick "$PATCH_COMMIT"
+          fi
+
+          # Force-update remote install
+          git push --force-with-lease origin install
