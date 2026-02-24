@@ -29,7 +29,7 @@ jobs:
 
       - name: Recreate install from main and apply the patch commit
         env:
-          PATCH_COMMIT: "cae314ba74c60c428402be104b30ccea14e18672"
+          PATCH_COMMIT: "5590ac44d4b59da8df1325747559810995b91ef3"
         run: |
           # Make sure we're on an up-to-date local main (checkout already has it, but this is explicit)
           git checkout main
