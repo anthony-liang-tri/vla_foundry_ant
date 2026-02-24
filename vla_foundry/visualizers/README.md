@@ -2,6 +2,34 @@
 
 This directory contains the visualization tools for the VLA Foundry project. These tools allow you to log and visualize data such as images, 3D points, trajectories, and scalar values during training or debugging. The visualizers are designed to be modular and support multiple backends.
 
+## Example Usage
+
+To see an example of how to use the interface, you can run
+
+```
+VISUALIZER=rerun uv run example_usage.py
+```
+or
+```
+VISUALIZER=wandb uv run example_usage.py
+```
+
+If you run simply
+```
+uv run example_usage.py
+```
+visualization will default to `disabled` if no backend is selected.
+
+---
+
+## Notes
+- The `visualizer.py` facade automatically disables visualization if no backend is selected.
+- Use the `VISUALIZER` environment variable to control the backend selection.
+- For more advanced use cases, refer to the backend-specific files (`rerun_backend.py`, `wandb_backend.py`, etc.).
+- By default, the rerun backend is viewable view the browser at a url such as
+  ```http://localhost:9090/?url=rerun%2Bhttp://127.0.0.1:9876/proxy```. Note that
+  you must forward ports 9090 and 9876.
+
 ## Available Visualizers
 
 ### 1. **Visualizer Facade**
@@ -280,27 +308,3 @@ vz.shutdown()
 
 ---
 
-## Example Usage
-
-To see an example of how to use the interface, you can run
-
-```
-VISUALIZER=rerun uv run example_usage.py
-```
-or
-```
-VISUALIZER=wandb uv run example_usage.py
-```
-
-If you run simply
-```
-uv run example_usage.py
-```
-visualization will default to `disabled` if no backend is selected.
-
----
-
-## Notes
-- The `visualizer.py` facade automatically disables visualization if no backend is selected.
-- Use the `VISUALIZER` environment variable to control the backend selection.
-- For more advanced use cases, refer to the backend-specific files (`rerun_backend.py`, `wandb_backend.py`, etc.).

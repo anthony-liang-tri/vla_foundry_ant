@@ -130,7 +130,7 @@ class NormalizationParams(BaseParams):
 
         object.__setattr__(self, "field_configs", field_configs)
 
-        dataset_manifest = cfg.data.dataset_manifest
+        dataset_statistics = cfg.data.dataset_statistics
         requested_past_from_data_params = cfg.data.lowdim_past_timesteps
         requested_future_from_data_params = cfg.data.lowdim_future_timesteps
         requested_past = (
@@ -144,15 +144,15 @@ class NormalizationParams(BaseParams):
             else requested_future_from_data_params or self.lowdim_future_timesteps
         )
 
-        if not dataset_manifest:
-            raise ValueError("Robotics normalization requires dataset_manifest.")
+        if not dataset_statistics:
+            raise ValueError("Robotics normalization requires dataset_statistics.")
 
-        manifest_paths = [dataset_manifest] if isinstance(dataset_manifest, str) else list(dataset_manifest)
+        statistics_paths = [dataset_statistics] if isinstance(dataset_statistics, str) else list(dataset_statistics)
 
         past_lowdim_candidates = set()
         future_lowdim_candidates = set()
-        for manifest_path in manifest_paths:
-            path = os.path.dirname(manifest_path)
+        for statistics_path in statistics_paths:
+            path = os.path.dirname(statistics_path)
             processing_config = yaml_load(os.path.join(path, "preprocessing_config.yaml"))
             past_lowdim_candidates.add(processing_config["past_lowdim_steps"])
             future_lowdim_candidates.add(processing_config["future_lowdim_steps"])

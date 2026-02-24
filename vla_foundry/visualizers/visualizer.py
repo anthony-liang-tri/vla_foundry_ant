@@ -166,6 +166,7 @@ def init(
     *,
     backend: Optional[str] = None,
     spawn: bool = True,
+    open_browser: bool = False,
     allow_disabled: bool = True,
     add_rank_to_run: bool = False,
 ) -> None:
@@ -175,6 +176,7 @@ def init(
     - backend: If None, automatically detect the backend using the VISUALIZER environment variable.
     - VISUALIZER=disabled disables everything.
     - run_name: Default from VISUALIZER_RUN_NAME or basename of CWD.
+    - open_browser: Whether to automatically open the browser with the web viewer (rerun backend).
     - add_rank_to_run: Append "-r{rank}" to run name.
     """
     if _STATE.initialized:
@@ -209,7 +211,7 @@ def init(
         return
 
     # Backend init
-    be.init(rn, spawn=spawn)
+    be.init(rn, spawn=spawn, open_browser=open_browser)
     # Respect pre-init disable() calls: only enable if user hasn't explicitly disabled.
     _STATE.enabled = not _STATE.user_disabled
     _STATE.initialized = True

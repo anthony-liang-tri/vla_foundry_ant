@@ -24,17 +24,22 @@ class RerunBackend:
         self._initialized = False
         self._disable_rerun_analytics()  # Ensure analytics are disabled during initialization
 
-    def init(self, run_name: str, add_rank_to_run: bool = False, **kwargs) -> None:
+    def init(self, run_name: str, add_rank_to_run: bool = False, open_browser: bool = False, **kwargs) -> None:
         """
         Initialize the Rerun visualizer.
 
         Parameters:
         - run_name: Name of the run.
         - add_rank_to_run: Whether to add rank information to the run name.
+        - open_browser: Whether to automatically open the browser with the web viewer.
         - **kwargs: Additional arguments (ignored).
         """
         if not self._initialized:
-            rr.init(run_name, spawn=True)
+            rr.init(run_name)
+            server_uri = rr.serve_grpc()
+            rr.serve_web_viewer(open_browser=open_browser, web_port=9090, connect_to=server_uri)
+            encoded_uri = server_uri.replace("+", "%2B")
+            print(f"[rerun_backend] Open in browser: http://localhost:9090/?url={encoded_uri}")
             self._initialized = True
 
     def flush(self) -> None:
@@ -137,7 +142,6 @@ class RerunBackend:
             Transform3D(
                 translation=translation,
                 rotation=Quaternion(xyzw=rotation),
-                axis_length=axis_length,
             ),
         )
 

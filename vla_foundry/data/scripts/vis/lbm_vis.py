@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 from typing import Dict, List, Mapping, Optional
 
 import draccus
@@ -118,17 +119,23 @@ class RerunSampleVisualizer:
         intrinsics_data: Dict[str, NDArray] = {}
         camera_data: Dict[str, str] = {}
 
-        for i, image_name in enumerate(image_names):
+        num_available_images = pixel_values.shape[0]
+        if len(image_names) != num_available_images:
+            logging.warning(
+                "Image count mismatch: got %d image_names but %d image tensors; using first %d entries",
+                len(image_names),
+                num_available_images,
+                min(len(image_names), num_available_images),
+            )
+
+        extrinsics_dict = payload.get("extrinsics")[0]
+        intrinsics_dict = payload.get("intrinsics")[0]
+
+        for i, image_name in enumerate(image_names[:num_available_images]):
             # Find corresponding camera name to image name (camera name should be a substring).
             camera_name = next((x for x in payload["camera_names"] if x in image_name), None)
             if not camera_name:
                 continue
-
-            camera_data[image_name] = camera_name
-            image_data[image_name] = pixel_values[i, :, :, :]  # (H, W, C)
-
-            extrinsics_dict = payload.get("extrinsics")[0]
-            intrinsics_dict = payload.get("intrinsics")[0]
 
             extrinsics_value = extrinsics_dict.get(f"extrinsics.{camera_name}", None)
             intrinsics_value = intrinsics_dict.get(f"intrinsics.{camera_name}", None)
@@ -136,19 +143,14 @@ class RerunSampleVisualizer:
             if extrinsics_value is None or intrinsics_value is None:
                 continue
 
+            camera_data[image_name] = camera_name
+            image_data[image_name] = pixel_values[i, :, :, :]  # (H, W, C)
             extrinsics_data[image_name] = extrinsics_value.numpy()  # (N, 4, 4)
             intrinsics_data[image_name] = intrinsics_value.numpy()  # (N, 3, 3)
 
-        # Remove cameras without extrinsics or intrinsics.
-        for image_name in list(image_data.keys()):
-            if (
-                image_data[image_name] is None
-                or extrinsics_data[image_name] is None
-                or intrinsics_data[image_name] is None
-            ):
-                del image_data[image_name]
-                del extrinsics_data[image_name]
-                del intrinsics_data[image_name]
+        if not image_data:
+            logging.warning("No valid images with camera intrinsics/extrinsics found in sample %s", sample_id)
+            return
 
         # Normalize all images.
         for image_key in image_data:
@@ -156,7 +158,10 @@ class RerunSampleVisualizer:
             min_val = img_numpy.min()
             max_val = img_numpy.max()
             img_numpy = img_numpy - min_val
-            img_numpy = img_numpy / (max_val - min_val)
+            denom = max_val - min_val
+
+            img_numpy = img_numpy / denom if denom > 0 else np.zeros_like(img_numpy)
+
             img_numpy = img_numpy * 255
             img_numpy = img_numpy.astype(np.uint8)
             image_data[image_key] = img_numpy
@@ -215,8 +220,21 @@ class RerunSampleVisualizer:
 
 
 def main(argv: Optional[List[str]] = None) -> None:
+    # Parse --ordered flag before draccus processes the rest of argv.
+    ordered = "--ordered" in sys.argv
+    if ordered:
+        sys.argv = [a for a in sys.argv if a != "--ordered"]
+
     # Use dataloader to iterate through samples.
     cfg = draccus.parse(config_class=TrainExperimentParams)
+
+    # When --ordered is set, rewrite manifest paths to use episodes/ and disable shuffling.
+    if ordered:
+        new_manifests = []
+        for path in cfg.data.dataset_manifest:
+            new_manifests.append(path.replace("/shards/manifest.jsonl", "/episodes/manifest.jsonl"))
+        object.__setattr__(cfg.data, "dataset_manifest", new_manifests)
+        object.__setattr__(cfg.data, "shuffle", False)
 
     # Force batch size to 1
     object.__setattr__(cfg.hparams, "per_gpu_batch_size", 1)
@@ -238,11 +256,13 @@ def main(argv: Optional[List[str]] = None) -> None:
     os.makedirs(checkpoint_path, exist_ok=True)
 
     start_checkpoint_num = 0
-    shard_shuffle_seed_per_dataset = None
     # Per-dataset cursors and shuffle seeds allow resuming mixed datasets.
     curr_shard_idx_per_dataset = [0 for dataset in range(len(cfg.data.dataset_manifest))]
-    if shard_shuffle_seed_per_dataset is None:
+    if cfg.data.shuffle:
         shard_shuffle_seed_per_dataset = [cfg.hparams.seed for dataset in range(len(cfg.data.dataset_manifest))]
+    else:
+        # None seeds preserve original manifest order for sequential loading.
+        shard_shuffle_seed_per_dataset = [None for dataset in range(len(cfg.data.dataset_manifest))]
 
     # Partition the global sample budget into evenly-sized checkpoint chunks.
     samples_per_checkpoint = cfg.total_train_samples // cfg.num_checkpoints

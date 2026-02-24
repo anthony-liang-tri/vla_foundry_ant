@@ -225,8 +225,10 @@ def get_datastring_input(
                 curr_shard_idx_per_dataset[i] += 1
             except IndexError as e:
                 if allow_multiple_epochs:
-                    # Reshuffle and set index back to 0
-                    shard_shuffle_seed_per_dataset[i] += 1
+                    # Reload manifest and set index back to 0.
+                    # Increment seed to reshuffle, or keep None to preserve order.
+                    if shard_shuffle_seed_per_dataset[i] is not None:
+                        shard_shuffle_seed_per_dataset[i] += 1
                     manifests[i] = load_dataset_manifest(
                         manifest_paths[i], shard_shuffle_seed=shard_shuffle_seed_per_dataset[i]
                     )
@@ -256,7 +258,8 @@ def get_datastring_input(
 
         # Only add used shards. Put back unused shards.
         next_shard_idx_per_dataset[i] += len(shard_list_per_dataset[i])
-        next_shard_shuffle_seed_per_dataset[i] += next_shard_idx_per_dataset[i] // len(manifests[i])
+        if next_shard_shuffle_seed_per_dataset[i] is not None:
+            next_shard_shuffle_seed_per_dataset[i] += next_shard_idx_per_dataset[i] // len(manifests[i])
         next_shard_idx_per_dataset[i] = next_shard_idx_per_dataset[i] % len(manifests[i])
 
     # Build WebDataset datastrings per dataset from selected shard names.

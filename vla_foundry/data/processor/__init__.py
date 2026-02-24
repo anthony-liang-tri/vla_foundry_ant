@@ -1,12 +1,41 @@
 import logging
 from types import SimpleNamespace
 
+import numpy as np
 import torch
 from transformers import AutoProcessor
 
 from vla_foundry.data.processor.stable_diffusion_processor import StableDiffusionProcessor
 from vla_foundry.data.utils import text_to_seed
 from vla_foundry.params.base_data_params import DataParams
+
+
+class PassthroughProcessor:
+    """Converts images to tensors without any resizing or normalization."""
+
+    def __init__(self):
+        self.image_token_id = 0
+        self.tokenizer = SimpleNamespace(pad_token_id=0, chat_template=None)
+        self.chat_template = None
+
+    def __call__(self, images, text, return_tensors="pt", padding=True, **kwargs):
+        batch_size = len(text)
+        if images is not None:
+            pixel_values = []
+            for sample_images in images:
+                for img in sample_images:
+                    t = torch.as_tensor(np.array(img), dtype=torch.float32)
+                    if t.ndim == 3:
+                        t = t.permute(2, 0, 1)  # HWC -> CHW
+                    pixel_values.append(t)
+            pixel_values = torch.stack(pixel_values)
+        else:
+            pixel_values = torch.empty(0)
+        return {
+            "input_ids": torch.zeros(batch_size, 1, dtype=torch.long),
+            "attention_mask": torch.ones(batch_size, 1, dtype=torch.long),
+            "pixel_values": pixel_values,
+        }
 
 
 class DebugProcessor:
@@ -32,6 +61,8 @@ def get_processor(data_params: DataParams):
         )
     elif data_params.processor == "debug":
         return DebugProcessor()
+    elif data_params.processor == "none":
+        return PassthroughProcessor()
     elif data_params.processor is not None:
         processor = AutoProcessor.from_pretrained(data_params.processor)
         processor.image_seq_length = data_params.img_num_tokens
