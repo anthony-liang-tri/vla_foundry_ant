@@ -32,6 +32,7 @@ class HyperParams(BaseParams):
 
     def __post_init__(self):
         super().__post_init__()
+        assert self.lr >= self.lr_cooldown_end, "lr must be greater than lr_cooldown_end"
         if self.precision == "pure_bf16":
             object.__setattr__(self, "precision_amp", False)
             object.__setattr__(self, "precision_pure_bf16", True)
