@@ -60,7 +60,11 @@ class MMTNPZConverter(BaseRoboticsConverter):
         prefix_parts = os.path.dirname(episode_path).split(os.sep)[self.episode_id_prefix_offset :]
         basename = os.path.basename(episode_path).replace("_t0000.npz", "")
         full_parts = prefix_parts + [basename]
-        return os.path.join(*full_parts)
+        episode_id = os.path.join(*full_parts)
+        # Keep legacy naming for S3 output. For local output paths, sanitize separators.
+        if not self.cfg.output_dir.startswith("s3://"):
+            episode_id = episode_id.replace("/", "_").replace("\\", "_")
+        return episode_id
 
     def get_language_instructions(self, sample_metadata: Dict):
         # MMT datasets do not have language instructions

@@ -7,6 +7,7 @@ import uuid
 import boto3
 import draccus
 import ray
+from botocore.exceptions import UnauthorizedSSOTokenError
 
 from vla_foundry.data.preprocessing.metadata_utils import create_processing_metadata
 from vla_foundry.data.preprocessing.robotics.converters import get_converter
@@ -51,7 +52,7 @@ def main():
         )
         raise RuntimeError(error_msg)
 
-    # Initialize Ray - forward AWS credentials to workers
+    # Initialize Ray - forward AWS credentials to workers when needed for S3 I/O
     runtime_env = {"env_vars": {}}
     aws_profile = os.environ.get("AWS_PROFILE")
     if aws_profile:
@@ -62,18 +63,29 @@ def main():
     # Capture the user who launched the job (head node user, not worker node user)
     if os.environ.get("USER"):
         runtime_env["env_vars"]["VLA_LAUNCHED_BY"] = os.environ["USER"]
-    # Explicitly forward AWS credentials from head node to workers
-    # This avoids reliance on IMDS on worker nodes, which can be flaky
-    session = boto3.Session()
-    credentials = session.get_credentials()
-    if credentials:
-        credentials = credentials.get_frozen_credentials()
-        if credentials.access_key:
-            runtime_env["env_vars"]["AWS_ACCESS_KEY_ID"] = credentials.access_key
-        if credentials.secret_key:
-            runtime_env["env_vars"]["AWS_SECRET_ACCESS_KEY"] = credentials.secret_key
-        if credentials.token:
-            runtime_env["env_vars"]["AWS_SESSION_TOKEN"] = credentials.token
+    source_paths = cfg.source_episodes if isinstance(cfg.source_episodes, list) else [cfg.source_episodes]
+    paths_that_use_s3 = source_paths + [cfg.output_dir]
+    needs_s3_credentials = any(isinstance(path, str) and path.startswith("s3://") for path in paths_that_use_s3)
+
+    # Explicitly forward AWS credentials from head node to workers for S3.
+    # This avoids reliance on IMDS on worker nodes, which can be flaky.
+    if needs_s3_credentials:
+        try:
+            session = boto3.Session()
+            credentials = session.get_credentials()
+            if credentials:
+                credentials = credentials.get_frozen_credentials()
+                if credentials.access_key:
+                    runtime_env["env_vars"]["AWS_ACCESS_KEY_ID"] = credentials.access_key
+                if credentials.secret_key:
+                    runtime_env["env_vars"]["AWS_SECRET_ACCESS_KEY"] = credentials.secret_key
+                if credentials.token:
+                    runtime_env["env_vars"]["AWS_SESSION_TOKEN"] = credentials.token
+        except UnauthorizedSSOTokenError as e:
+            raise RuntimeError(
+                "AWS SSO token is expired, but this run requires S3 access. "
+                "Please run `aws sso login` (with your profile) and retry."
+            ) from e
 
     if cfg.ray_address:
         ray.init(address=cfg.ray_address, runtime_env=runtime_env)
@@ -203,7 +215,7 @@ def main():
         preprocessing_config_dict, f"{cfg.output_dir.rstrip('/')}/shards", "preprocessing_config.yaml"
     )
 
-    # Make a copy of the ouput directory
+    # Make a copy of the output directory when source/destination backends match
     dataset_uuid = str(uuid.uuid4())
     fixed_path = f"{cfg.output_dir_fixed_path.rstrip('/')}/{dataset_uuid}"
 
@@ -223,9 +235,12 @@ def main():
         total_samples=metadata["processing"]["total_samples_created"],
         enabled=cfg.db_logging,
     )
-    if cfg.output_dir.startswith("s3://"):
-        dataset_uuid = str(uuid.uuid4())
-        recursive_s3_copy(cfg.output_dir, f"{cfg.output_dir_fixed_path.rstrip('/')}/{dataset_uuid}")
+    src_is_s3 = cfg.output_dir.startswith("s3://")
+    dst_is_s3 = fixed_path.startswith("s3://")
+    if src_is_s3 and dst_is_s3:
+        recursive_s3_copy(cfg.output_dir, fixed_path)
+    else:
+        print(f"⚠️ Skipping fixed-path copy (only enabled for S3 -> S3): {cfg.output_dir} -> {fixed_path}")
 
     ray.shutdown()
     print("🎉 Complete! All samples uploaded and sharded.")

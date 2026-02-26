@@ -107,14 +107,17 @@ You can set `--use_depth_data true` if you also want to extract depth and point 
 Data ripped from MMT robots is stored as npz files, named as `ep\d{4}_t\d{4}\.npz`. Each npz file store all data from one time step.
 ```
 <AWS_PROFILE=your_profile> uv run --group=preprocessing vla_foundry/data/preprocessing/preprocess_robotics_to_tar.py \
+--type mmt_npz \
 --source_episodes "[
     # Local path also supported
     's3://tri-mmt-data/lpp_data/20251028_paper_towel/npz_head/'
     ]" \
 --output_dir s3://tri-mmt-data/lpp_data/vla_foundry/20251028_paper_towel \
---samples_per_shard 100
+--samples_per_shard 100 \
 --config_path "vla_foundry/config_presets/data/mmt_preprocessing_params_1past_14future.yaml"
 ```
+`--output_dir` can be either S3 or a local filesystem path.
+For `--type mmt_npz`, local output paths sanitize episode IDs for filesystem safety. S3 output keeps legacy naming.
 
 # Converting CAM mcaps to tar shards
 For robots such as the Unitree G1, or the CAM TZK, or even vendor-sourced UMI data, teleop / trainable data is available as a ROS 2 MCAP. To convert this data you can use the `type` argument as `mcap` and specify a `--action_fields_config_path` to a yaml config file listing topics. Eg. For the unitree g1 you can run something like this:
