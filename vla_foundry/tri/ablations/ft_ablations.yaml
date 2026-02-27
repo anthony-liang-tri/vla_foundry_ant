@@ -1,0 +1,38 @@
+# Ablation experiments configuration
+# Defines ablation variants for training experiments
+# Ported from launch_multiple_tasks.sh
+#
+# This defines two training modes:
+# 1. from_scratch - Train from scratch with task-specific stats
+# 2. finetune - Finetune from a pretrained checkpoint with unified stats
+#
+# Usage with sim_16 tasks:
+#   uv run python vla_foundry/tri/ablations/launch_ablation_sagemaker.py \
+#     vla_foundry/tri/ablations/ablations.yaml \
+#     --nominal-config vla_foundry/tri/ablations/sim_16_nominal_config.yaml
+#
+# Usage with toolhang tasks:
+#   uv run python vla_foundry/tri/ablations/launch_ablation_sagemaker.py \
+#     vla_foundry/tri/ablations/ablations.yaml \
+#     --nominal-config vla_foundry/tri/ablations/realworld_toolhang_nominal_config.yaml
+
+ablations:
+  # Training from scratch (default behavior in launch_multiple_tasks.sh)
+  from_scratch_10m:
+    total_train_samples: 10_000_000
+    hparams.lr: 0.00005
+    ema.enabled: true
+    # Per-task stats will be used automatically by generate_ablation_configs.py
+
+  # Multi-dimensional sweep: checkpoint × lr × samples
+  # 2 checkpoints × 3 lrs × 2 sample counts = 12 configs per task
+  finetune_sweep:
+    total_train_samples: [5_000_000, 10_000_000]  # Sweep over 2 sample counts
+    hparams.lr: [0.00001, 0.00002, 0.00005]  # Sweep over 3 learning rates
+    hparams.warmup: 0
+    ema.enabled: false
+    model.resume_from_checkpoint:  # Sweep over 2 checkpoints
+      - "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/ablations/multitask/50m/2026_01_06-20_12_13-model_diffusion_policy-lr_5e-05-bsz_1024/checkpoints/checkpoint_3.pt"
+      - "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/diffusion_policy/ablations/multitask/100m/2026_01_07-23_38_39-model_diffusion_policy-lr_5e-05-bsz_1024/checkpoints/checkpoint_3.pt"
+    model.resume_weights_only: true
+    data.dataset_statistics: "['s3://tri-ml-datasets-uw2/vla_foundry_datasets/v0.3/stage3_singletask_sim/stats.json']"

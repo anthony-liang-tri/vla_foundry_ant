@@ -299,15 +299,29 @@ def main():
     queue = Queue(
         queue_name=QUEUE_MAPPER[args.region][INSTANCE_MAPPER[args.instance_type]].replace("ml", args.queue_name)
     )
-    queue.map(
-        estimator,
-        inputs=[None],
-        job_names=[job_name],
-        priority=args.priority,
-        share_identifier="default",
-        timeout={"attemptDurationSeconds": args.max_run * 24 * 60 * 60},
-    )
-    print(f"Queued {job_name}")
+
+    # Validate job name before submission
+    if not job_name or len(job_name) > 63:
+        raise ValueError(f"Invalid job name length ({len(job_name)}): {job_name}")
+    invalid_chars = [c for c in job_name if not (c.isalnum() or c == "-")]
+    if invalid_chars:
+        raise ValueError(f"Job name contains invalid characters {set(invalid_chars)}: {job_name}")
+
+    try:
+        queue.map(
+            estimator,
+            inputs=[None],
+            job_names=[job_name],
+            priority=args.priority,
+            share_identifier="default",
+            timeout={"attemptDurationSeconds": args.max_run * 24 * 60 * 60},
+        )
+        # Note: queue.map() may succeed even if AWS later rejects the job
+        # Pre-validation above ensures job name is valid
+        print(f"Queued {job_name}")
+    except Exception as e:
+        print(f"Failed to queue {job_name}: {str(e)}")
+        raise
 
 
 if __name__ == "__main__":

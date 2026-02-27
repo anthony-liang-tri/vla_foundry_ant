@@ -1,0 +1,53 @@
+# Nominal configuration for sim training experiments (16 tasks)
+
+# SageMaker configuration (not saved to resolved configs, only used at launch time)
+sagemaker_args:
+  user: firstname.lastname
+  profile: sagemaker
+  queue_name: vla
+  instance_type: p5
+  instance_count: 1
+  priority: 1
+  max_run: 1
+
+# Tasks to run (v0.4.1 sim dataset - 16 tasks)
+tasks:
+  - BimanualPlaceAppleFromBowlIntoBin
+  - BimanualPlaceFruitFromBowlIntoBin
+  - BimanualPutRedBellPepperInBin
+  - BimanualPutSpatulaOnPlateFromDryingRack
+  - BimanualPutSpatulaOnPlateFromTable
+  - BimanualStackPlatesOnTableFromDryingRack
+  - BimanualStoreCerealBoxUnderShelf
+  - PlaceCupByCoaster
+  - PushCoasterToCenterOfTable
+  - PushCoasterToMug
+  - PutBananaOnSaucer
+  - PutKiwiInCenterOfTable
+  - PutMugOnSaucer
+  - PutSpatulaInUtensilCrock
+  - TurnCupUpsideDown
+  - TurnMugRightsideUp
+
+# S3 paths (different from toolhang)
+base_s3_path: s3://tri-ml-datasets-uw2/vla_foundry_datasets/v0.4.1
+checkpoint_base: s3://tri-ml-datasets-uw2/lbm2_vla/model_checkpoints/diffusion_policy
+
+# Output directory
+output_base: vla_foundry/tri/ablations/ablation_configs
+
+# Base arguments for all experiments (from launch_multiple_tasks.sh + lbm_hparams_4cams.yaml)
+base_args:
+  # Use the same config as launch_multiple_tasks.sh
+  config_path: vla_foundry/config_presets/training_jobs/lbm_hparams_4cams.yaml
+  
+  # Training parameters (required - not in lbm_hparams_4cams.yaml)
+  total_train_samples: 10_000_000
+  num_checkpoints: 5
+  
+  # Data configuration (required - not in lbm_hparams_4cams.yaml)
+  data.dataset_weighting: "[1.0]"
+  data.dataset_modality: "['robotics']"
+  
+  # Wandb disabled by default (can be overridden in ablations)
+  wandb: false

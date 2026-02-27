@@ -18,90 +18,14 @@ Dry-run (shows what would be launched, without actually launching jobs):
 from __future__ import annotations
 
 import argparse
-import math
-import re
+import secrets
 import subprocess
-from itertools import product
+from datetime import datetime
 from pathlib import Path
 
 import yaml
 
-
-def parse_sweep_value(value: str | int | float | list) -> list:
-    """Parse a value that might be a sweep specification."""
-    if isinstance(value, list):
-        return value
-    if isinstance(value, str):
-        match = re.match(r"linspace\s*\(\s*([^,]+)\s*,\s*([^,]+)\s*,\s*(\d+)\s*\)", value)
-        if match:
-            start, end, n = float(match.group(1)), float(match.group(2)), int(match.group(3))
-            if n == 1:
-                return [start]
-            step = (end - start) / (n - 1)
-            return [start + i * step for i in range(n)]
-        match = re.match(r"logspace\s*\(\s*([^,]+)\s*,\s*([^,]+)\s*,\s*(\d+)\s*\)", value)
-        if match:
-            start, end, n = float(match.group(1)), float(match.group(2)), int(match.group(3))
-            if n == 1:
-                return [start]
-            log_start, log_end = math.log10(start), math.log10(end)
-            log_step = (log_end - log_start) / (n - 1)
-            return [10 ** (log_start + i * log_step) for i in range(n)]
-    return [value]
-
-
-def format_value_for_name(value) -> str:
-    """Format a value for use in ablation name."""
-    if isinstance(value, float):
-        if abs(value) < 0.01 or abs(value) >= 1000:
-            exp = int(math.floor(math.log10(abs(value)))) if value != 0 else 0
-            mantissa = value / (10**exp)
-            if abs(mantissa - round(mantissa)) < 0.01:
-                return f"{int(round(mantissa))}e{exp}"
-            return f"{mantissa:.1f}e{exp}".replace(".", "p")
-        return f"{value:g}".replace(".", "p")
-    return str(value).replace(".", "p")
-
-
-def get_param_short_name(param: str) -> str:
-    """Get a short name for a parameter."""
-    for prefix in ["hparams.", "data.", "model.", "--"]:
-        if param.startswith(prefix):
-            param = param[len(prefix) :]
-    if "." in param:
-        param = param.split(".")[-1]
-    return param
-
-
-def expand_ablation_names(name: str, params: dict) -> list[str]:
-    """Expand an ablation definition into the list of generated ablation names."""
-    if params is None:
-        params = {}
-
-    sweep_params = {}
-    for param, value in params.items():
-        parsed = parse_sweep_value(value)
-        if len(parsed) > 1:
-            sweep_params[param] = parsed
-
-    if not sweep_params:
-        return [name]
-
-    ablation_names = []
-    param_names = list(sweep_params.keys())
-    param_values = [sweep_params[p] for p in param_names]
-    include_base_name = not name.endswith("_sweep")
-
-    for combo in product(*param_values):
-        name_parts = []
-        for param, value in zip(param_names, combo, strict=True):
-            short_name = get_param_short_name(param)
-            value_str = format_value_for_name(value)
-            name_parts.append(f"{short_name}_{value_str}")
-        ablation_name = f"{name}_" + "_".join(name_parts) if include_base_name else "_".join(name_parts)
-        ablation_names.append(ablation_name)
-
-    return ablation_names
+from vla_foundry.tri.ablations.ablation_utils import expand_ablation_names
 
 
 def find_repo_root(start: Path) -> Path:
@@ -172,6 +96,11 @@ def main() -> None:
     output_base = nominal["output_base"]
     output_base_path = resolve_path(repo_root, str(output_base))
 
+    # Generate runset hash for campaign tracking
+    runset_hash = f"runset_{datetime.now():%Y%m%d_%H%M%S}_{secrets.token_hex(4)}"
+    print(f"Runset identifier: {runset_hash}")
+    print()
+
     generate_script = resolve_path(repo_root, "vla_foundry/tri/ablations/generate_ablation_configs.py")
     generate_cmd = [
         "uv",
@@ -184,6 +113,8 @@ def main() -> None:
         str(ablations_config_path),
         "--max-parallel",
         str(args.max_parallel),
+        "--runset-hash",
+        runset_hash,
     ]
     if args.generate_dry_run:
         generate_cmd.append("--dry-run")
@@ -218,7 +149,23 @@ def main() -> None:
         launch_cmd.extend(["--task", args.task])
     launch_cmd.extend(["--ablation", ablation_filter])
 
+    # Pass SageMaker args from nominal config
+    sagemaker_args = nominal.get("sagemaker_args", {})
+    for key in ["user", "profile", "queue_name", "instance_type", "instance_count", "priority", "max_run"]:
+        value = sagemaker_args.get(key)
+        if value is not None:
+            launch_cmd.extend([f"--sagemaker.{key}", str(value)])
+
     subprocess.run(launch_cmd, cwd=repo_root, check=True)
+
+    # Print runset hash info for evaluation
+    if not args.dry_run:
+        print("\n" + "=" * 80)
+        print(f"Runset Hash: {runset_hash}")
+        print("=" * 80)
+        print("\nAll runs tagged with runset hash for evaluation tracking.")
+        print(f"Use --tags {runset_hash} when running auto_generate_campaign.py")
+        print()
 
 
 if __name__ == "__main__":

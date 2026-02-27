@@ -13,14 +13,14 @@
 
 set -e
 
-# Hardcoded SageMaker settings
-SAGEMAKER_USER="jean.mercat"
-SAGEMAKER_PROFILE="sagemaker"
-SAGEMAKER_QUEUE="vla"
-SAGEMAKER_INSTANCE_TYPE="p5"
-SAGEMAKER_INSTANCE_COUNT="2"
-SAGEMAKER_PRIORITY="1"
-SAGEMAKER_MAX_RUN="1"
+# Default SageMaker settings (can be overridden via command-line args from nominal config)
+SAGEMAKER_USER=""
+SAGEMAKER_PROFILE=""
+SAGEMAKER_QUEUE=""
+SAGEMAKER_INSTANCE_TYPE=""
+SAGEMAKER_INSTANCE_COUNT=""
+SAGEMAKER_PRIORITY=""
+SAGEMAKER_MAX_RUN=""
 
 # Parse arguments
 CONFIG_DIR=""
@@ -42,6 +42,34 @@ while [[ $# -gt 0 ]]; do
             FILTER_ABLATION="$2"
             shift 2
             ;;
+        --sagemaker.user)
+            SAGEMAKER_USER="$2"
+            shift 2
+            ;;
+        --sagemaker.profile)
+            SAGEMAKER_PROFILE="$2"
+            shift 2
+            ;;
+        --sagemaker.queue_name)
+            SAGEMAKER_QUEUE="$2"
+            shift 2
+            ;;
+        --sagemaker.instance_type)
+            SAGEMAKER_INSTANCE_TYPE="$2"
+            shift 2
+            ;;
+        --sagemaker.instance_count)
+            SAGEMAKER_INSTANCE_COUNT="$2"
+            shift 2
+            ;;
+        --sagemaker.priority)
+            SAGEMAKER_PRIORITY="$2"
+            shift 2
+            ;;
+        --sagemaker.max_run)
+            SAGEMAKER_MAX_RUN="$2"
+            shift 2
+            ;;
         *)
             if [[ -z "$CONFIG_DIR" ]]; then
                 CONFIG_DIR="$1"
@@ -51,23 +79,46 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Apply defaults for any unset SageMaker settings
+SAGEMAKER_USER="${SAGEMAKER_USER:-}"
+SAGEMAKER_PROFILE="${SAGEMAKER_PROFILE:-sagemaker}"
+SAGEMAKER_QUEUE="${SAGEMAKER_QUEUE:-vla}"
+SAGEMAKER_INSTANCE_TYPE="${SAGEMAKER_INSTANCE_TYPE:-p5}"
+SAGEMAKER_INSTANCE_COUNT="${SAGEMAKER_INSTANCE_COUNT:-2}"
+SAGEMAKER_PRIORITY="${SAGEMAKER_PRIORITY:-1}"
+SAGEMAKER_MAX_RUN="${SAGEMAKER_MAX_RUN:-1}"
+
 if [[ -z "$CONFIG_DIR" ]]; then
     echo "Error: Config directory is required"
     echo "Usage: $0 <config_dir> [options]"
     echo ""
     echo "Options:"
-    echo "  --dry-run          Show what would be launched without launching"
-    echo "  --task PATTERN     Filter configs by task name (substring match)"
-    echo "  --ablation PATTERN Filter configs by ablation name (substring match)"
+    echo "  --dry-run                         Show what would be launched without launching"
+    echo "  --task PATTERN                    Filter configs by task name (substring match)"
+    echo "  --ablation PATTERN                Filter configs by ablation name (substring match)"
+    echo "  --sagemaker.user USER             SageMaker user (required, set in nominal config or via CLI)"
+    echo "  --sagemaker.profile PROFILE       Override SageMaker profile (default: sagemaker)"
+    echo "  --sagemaker.queue_name QUEUE      Override SageMaker queue (default: vla)"
+    echo "  --sagemaker.instance_type TYPE    Override instance type (default: p5)"
+    echo "  --sagemaker.instance_count COUNT  Override instance count (default: 2)"
+    echo "  --sagemaker.priority PRIORITY     Override priority (default: 1)"
+    echo "  --sagemaker.max_run HOURS         Override max run hours (default: 1)"
     echo ""
     echo "Examples:"
     echo "  $0 vla_foundry/tri/ablation_configs/ --ablation 10k"
     echo "  $0 vla_foundry/tri/ablation_configs/ --task RedBell --dry-run"
+    echo "  $0 vla_foundry/tri/ablation_configs/ --sagemaker.instance_count 1 --sagemaker.instance_type p5"
     exit 1
 fi
 
 if [[ ! -d "$CONFIG_DIR" ]]; then
     echo "Error: Directory not found: $CONFIG_DIR"
+    exit 1
+fi
+
+if [[ -z "$SAGEMAKER_USER" ]]; then
+    echo "Error: --sagemaker.user is required"
+    echo "Set it via command line or in your nominal config's sagemaker_args.user field"
     exit 1
 fi
 
@@ -91,7 +142,7 @@ get_short_name() {
         "BimanualPutSpatulaOnPlateFromTable") short_task="Spatula" ;;
         "TurnCupUpsideDown") short_task="TurnCup" ;;
         "PlaceCupByCoaster") short_task="CupCoaster" ;;
-        *) short_task="${task:0:10}" ;;
+        *) short_task="$task" ;;  # Use full name instead of truncating
     esac
 
     # Create short ablation name
@@ -108,7 +159,7 @@ get_short_name() {
         "past_timesteps_1") short_ablation="past1" ;;
         "past_timesteps_0") short_ablation="past0" ;;
         "per_timestep_norm") short_ablation="perStep" ;;
-        *) short_ablation="${ablation:0:8}" ;;
+        *) short_ablation="$ablation" ;;  # Use full name instead of truncating
     esac
 
     echo "${short_task}_${short_ablation}"

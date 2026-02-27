@@ -78,6 +78,17 @@ def _aggregate_success_stats(
     failure_list = []
     common_subpath_len = len(_common_subpath(summary_files))
 
+    # Add handler for unknown YAML tags (e.g., !EnvMetadata)
+    def ignore_unknown_tags(loader, tag_suffix, node):
+        if isinstance(node, yaml.MappingNode):
+            return loader.construct_mapping(node)
+        elif isinstance(node, yaml.SequenceNode):
+            return loader.construct_sequence(node)
+        else:
+            return loader.construct_scalar(node)
+
+    yaml.add_multi_constructor("!", ignore_unknown_tags, Loader=yaml.SafeLoader)
+
     for filename in summary_files:
         with open(filename) as f:
             summary_data = yaml.safe_load(f)

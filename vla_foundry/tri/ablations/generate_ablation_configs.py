@@ -18,7 +18,6 @@ Usage:
 """
 
 import argparse
-import math
 import re
 import subprocess
 import sys
@@ -28,52 +27,13 @@ from pathlib import Path
 
 import yaml
 
+from vla_foundry.file_utils import copy_to_temp_file
+from vla_foundry.tri.ablations.ablation_utils import (
+    expand_ablation_names,
+    parse_sweep_value,
+)
 
-def parse_sweep_value(value: str | int | float | list) -> list:
-    """
-    Parse a value that might be a sweep specification.
-
-    Returns a list of values. For non-sweep values, returns a single-element list.
-
-    Supported sweep syntaxes:
-        - List: [v1, v2, v3] -> [v1, v2, v3]
-        - linspace(start, end, n) -> n linearly spaced values
-        - logspace(start, end, n) -> n logarithmically spaced values
-    """
-    # Already a list - treat as explicit sweep values
-    if isinstance(value, list):
-        return value
-
-    # Check for linspace/logspace syntax in strings
-    if isinstance(value, str):
-        # linspace(start, end, n)
-        match = re.match(r"linspace\s*\(\s*([^,]+)\s*,\s*([^,]+)\s*,\s*(\d+)\s*\)", value)
-        if match:
-            start = float(match.group(1))
-            end = float(match.group(2))
-            n = int(match.group(3))
-            if n == 1:
-                return [start]
-            step = (end - start) / (n - 1)
-            return [start + i * step for i in range(n)]
-
-        # logspace(start, end, n)
-        match = re.match(r"logspace\s*\(\s*([^,]+)\s*,\s*([^,]+)\s*,\s*(\d+)\s*\)", value)
-        if match:
-            start = float(match.group(1))
-            end = float(match.group(2))
-            n = int(match.group(3))
-            if n == 1:
-                return [start]
-            log_start = math.log10(start)
-            log_end = math.log10(end)
-            log_step = (log_end - log_start) / (n - 1)
-            return [10 ** (log_start + i * log_step) for i in range(n)]
-
-    # Not a sweep - return as single-element list
-    return [value]
-
-
+# Constants
 MAX_WANDB_TAG_LENGTH = 64
 
 
@@ -348,35 +308,27 @@ def _dedupe_preserve_order(items: list[str]) -> list[str]:
     return out
 
 
-def format_value_for_name(value) -> str:
-    """Format a value for use in ablation name. Short, no dots (use 'p' for decimal point)."""
-    if isinstance(value, float):
-        # Use scientific notation for very small/large numbers
-        if abs(value) < 0.01 or abs(value) >= 1000:
-            # Format like "1e-4" or "5e-5" (short, no dots)
-            exp = int(math.floor(math.log10(abs(value)))) if value != 0 else 0
-            mantissa = value / (10**exp)
-            # Round mantissa to avoid long decimals
-            if abs(mantissa - round(mantissa)) < 0.01:
-                return f"{int(round(mantissa))}e{exp}"
-            return f"{mantissa:.1f}e{exp}".replace(".", "p")
-        # For regular decimals, replace dot with 'p'
-        return f"{value:g}".replace(".", "p")
-    return str(value).replace(".", "p")
+def _format_value_for_cmdline(value) -> str:
+    """
+    Format a value for command line argument passing to draccus.
 
+    - Lists: Convert to Python list syntax with trailing comma: ['item1', 'item2',]
+    - Bools: Convert to "True" or "False" strings
+    - Other types: Convert to string with str()
 
-def get_param_short_name(param: str) -> str:
-    """Get a short name for a parameter for use in ablation names."""
-    # Remove common prefixes
-    for prefix in ["hparams.", "data.", "model.", "--"]:
-        if param.startswith(prefix):
-            param = param[len(prefix) :]
-
-    # Take last component if dotted
-    if "." in param:
-        param = param.split(".")[-1]
-
-    return param
+    Draccus expects list arguments in Python syntax when passed via subprocess.
+    The trailing comma ensures single-element lists are parsed correctly.
+    """
+    if isinstance(value, list):
+        # Format as Python list with single quotes and trailing comma
+        # This matches the format used in launch_multiple_tasks.sh
+        formatted_items = ", ".join(f"'{item}'" if isinstance(item, str) else str(item) for item in value)
+        return f"[{formatted_items},]"
+    elif isinstance(value, bool):
+        # Draccus expects boolean strings
+        return str(value)
+    else:
+        return str(value)
 
 
 def expand_ablation(name: str, params: dict) -> list[tuple[str, dict]]:
@@ -403,26 +355,18 @@ def expand_ablation(name: str, params: dict) -> list[tuple[str, dict]]:
     if not sweep_params:
         return [(name, fixed_params)]
 
-    # Generate all combinations
+    # Get the names using shared logic
+    names = expand_ablation_names(name, params)
+
+    # Generate all combinations with parameters
     ablations = []
     param_names = list(sweep_params.keys())
     param_values = [sweep_params[p] for p in param_names]
 
-    # Determine if we should include the base name as prefix
-    include_base_name = not name.endswith("_sweep")
-
-    for combo in product(*param_values):
-        # Build ablation name from sweep param values
-        name_parts = []
+    for ablation_name, combo in zip(names, product(*param_values), strict=True):
         combo_params = dict(fixed_params)
-
         for param, value in zip(param_names, combo, strict=True):
-            short_name = get_param_short_name(param)
-            value_str = format_value_for_name(value)
-            name_parts.append(f"{short_name}_{value_str}")
             combo_params[param] = value
-
-        ablation_name = f"{name}_" + "_".join(name_parts) if include_base_name else "_".join(name_parts)
         ablations.append((ablation_name, combo_params))
 
     return ablations
@@ -436,58 +380,73 @@ def generate_config(
     base_s3_path: str,
     checkpoint_base: str,
     output_base: str,
+    runset_hash: str | None = None,
 ) -> tuple[str, bool, str]:
     """
     Generate config for a specific task and ablation.
 
     Returns (ablation_name, success, message).
     """
+
     manifest_path = f"{base_s3_path}/{task}/shards/manifest.jsonl"
     output_dir = Path(output_base) / ablation_name / task
-
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Build command arguments
-    cmd = ["uv", "run", "python", "vla_foundry/main.py"]
+    # Merge base_args and ablation_args (ablation overrides base)
+    merged_args = dict(base_args)
+    merged_args.update(ablation_args)
 
-    # Add base args
-    for key, value in base_args.items():
-        if key == "wandb_tags":
-            continue
-        cmd.extend([f"--{key}", str(value)])
+    # Handle S3 config_path: download locally since draccus doesn't support S3 paths
+    if "config_path" in merged_args and merged_args["config_path"].startswith("s3://"):
+        s3_path = merged_args["config_path"]
+        local_config_path = output_dir / "checkpoint_base_config.yaml"
+        with copy_to_temp_file(s3_path) as temp_path:
+            import shutil
 
-    # Add task-specific args
-    cmd.extend(["--data.dataset_manifest", f'["{manifest_path}"]'])
-    # Only add task-specific stats_path if not already defined in base_args
-    if "data.dataset_statistics" not in base_args:
-        stats_path = f"{base_s3_path}/{task}/shards/stats.json"
-        cmd.extend(["--data.dataset_statistics", f'["{stats_path}"]'])
-    cmd.extend(["--remote_sync", f"{checkpoint_base}/{task}/{ablation_name}"])
+            shutil.copy(temp_path, local_config_path)
+        # Update merged_args to point to local copy
+        merged_args["config_path"] = str(local_config_path)
 
-    # Build wandb tags:
-    # - keep any tags defined in YAML (nominal base_args and/or ablation overrides)
-    # - add task + "ablation" + ablation_name (split to respect 64-char tag limit)
+    # Set task-specific values
+    merged_args["data.dataset_manifest"] = [manifest_path]
+    merged_args["remote_sync"] = f"{checkpoint_base}/{task}/{ablation_name}"
+
+    # Add task-specific stats if not already specified
+    if "data.dataset_statistics" not in merged_args:
+        merged_args["data.dataset_statistics"] = [f"{base_s3_path}/{task}/shards/stats.json"]
+
+    # Build wandb tags
     yaml_tags = _normalize_wandb_tags_value(base_args.get("wandb_tags")) + _normalize_wandb_tags_value(
         ablation_args.get("wandb_tags")
     )
     generated_tags = [task, "ablation"] + split_long_tag(ablation_name)
-    wandb_tags = _dedupe_preserve_order([t for t in (yaml_tags + generated_tags) if str(t) != ""])
-    validate_wandb_tags(wandb_tags)  # Fail early if any tag is still too long
-    wandb_tags_str = "[" + ", ".join('"' + t.replace('"', '\\"') + '"' for t in wandb_tags) + "]"
-    cmd.extend(["--wandb_tags", wandb_tags_str])
+    if runset_hash:
+        generated_tags.append(runset_hash)
+    merged_args["wandb_tags"] = _dedupe_preserve_order([t for t in (yaml_tags + generated_tags) if str(t) != ""])
+    validate_wandb_tags(merged_args["wandb_tags"])
 
-    # Add ablation-specific args
-    for key, value in ablation_args.items():
-        if key == "wandb_tags":
+    # Build command from merged args
+    cmd = ["uv", "run", "python", "vla_foundry/main.py"]
+
+    for key, value in merged_args.items():
+        # Skip SageMaker-specific parameters (not recognized by main.py)
+        if key.startswith("sagemaker."):
             continue
-        cmd.extend([f"--{key}", str(value)])
+        formatted_value = _format_value_for_cmdline(value)
+        # For shell execution, wrap list syntax in double quotes to protect single quotes
+        if formatted_value.startswith("["):
+            formatted_value = f'"{formatted_value}"'
+        cmd.extend([f"--{key}", formatted_value])
 
     # Add resolve config args
     cmd.extend(["--resolve_configs", "True"])
     cmd.extend(["--resolve_configs_path", str(output_dir)])
 
     try:
-        _result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        # Use shell=True and join command with proper escaping to match launch_multiple_tasks.sh behavior
+        # Draccus expects the Python list syntax to be evaluated by the shell
+        cmd_str = " ".join(cmd)
+        _result = subprocess.run(cmd_str, capture_output=True, text=True, check=True, shell=True)
 
         # Post-process: fix resolve_configs in output
         config_file = output_dir / "resolved_config.yaml"
@@ -500,7 +459,7 @@ def generate_config(
         return (f"{task}/{ablation_name}", True, "Generated successfully")
 
     except subprocess.CalledProcessError as e:
-        return (f"{task}/{ablation_name}", False, f"Failed: {e.stderr[:200]}")
+        return (f"{task}/{ablation_name}", False, f"Failed: {e.stderr}")
 
 
 def main():
@@ -527,6 +486,12 @@ def main():
         "--dry-run",
         action="store_true",
         help="Print what would be generated without running",
+    )
+    parser.add_argument(
+        "--runset-hash",
+        type=str,
+        default=None,
+        help="Optional runset hash to add to wandb tags for campaign tracking",
     )
     args = parser.parse_args()
 
@@ -583,6 +548,7 @@ def main():
                     base_s3_path,
                     checkpoint_base,
                     output_base,
+                    args.runset_hash,
                 )
                 futures[future] = (task, ablation_name)
 

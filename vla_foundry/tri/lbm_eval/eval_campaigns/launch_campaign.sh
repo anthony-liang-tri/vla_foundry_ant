@@ -26,4 +26,4 @@ export EVAL_CAMPAIGN_ROOT="${SCRIPT_DIR}/../../../.."
 
 # Run the campaign orchestrator
 cd "${EVAL_CAMPAIGN_ROOT}"
-python3 -m vla_foundry.tri.lbm_eval.eval_campaigns.run_evaluation_campaign "$CONFIG" "$@"
+uv run python -m vla_foundry.tri.lbm_eval.eval_campaigns.run_evaluation_campaign "$CONFIG" "$@"
