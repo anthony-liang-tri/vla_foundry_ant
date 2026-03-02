@@ -7,10 +7,10 @@ reuse the repository's managed environment.
 ### (Optional) Set up Anzu using Docker
 Since Anzu’s `lbm_eval_0_5` branch only supports Ubuntu 22.04, you need to run it in Docker when using Ubuntu 24.04. Note that you can run the inference policy outside of Docker.
 
-1. Log in to Docker with your ECR credentials (you need the manip-cluster profile to access the ECR repository)
+1. Log in to Docker with your ECR credentials (set `AWS_PROFILE` first, or replace it inline)
 
 ```bash
-aws ecr get-login-password --region us-east-1 --profile manip-cluster | docker login \
+AWS_PROFILE="${AWS_PROFILE:?set AWS_PROFILE}" aws ecr get-login-password --region us-east-1 --profile "$AWS_PROFILE" | docker login \
   --username AWS \
   --password-stdin 682769330988.dkr.ecr.us-east-1.amazonaws.com
 ```
@@ -85,7 +85,7 @@ Download by W&B run name:
 ```bash
 python examples/deployment/lbm_eval/download_model_from_wandb.py --run-name "<RUN_NAME>"
 ```
-Example: `2025_11_05-21_34_11-model_diffusion_policy-lr_5e-05-bsz_1024`
+Example: `2026_01_12-21_27_03-model_diffusion_policy-lr_5e-05-bsz_1024`
 
 Or use a W&B URL directly:
 ```bash

@@ -27,7 +27,7 @@ Usage:
     # List matching runs
     python download_model_from_wandb.py --search "diffusion"
 
-    # AWS profile (default: sagemaker)
+    # AWS profile (defaults to $AWS_PROFILE when set)
     python download_model_from_wandb.py --run-name "my_experiment" --aws-profile default
 """
 
@@ -286,8 +286,8 @@ def main() -> None:
     parser.add_argument(
         "--aws-profile",
         type=str,
-        default="sagemaker",
-        help="AWS profile to use (default: sagemaker)",
+        default=os.environ.get("AWS_PROFILE"),
+        help="AWS profile to use (default: $AWS_PROFILE)",
     )
 
     args = parser.parse_args()
