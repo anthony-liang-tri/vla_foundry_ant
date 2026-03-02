@@ -154,6 +154,9 @@ class NormalizationParams(BaseParams):
         for statistics_path in statistics_paths:
             path = os.path.dirname(statistics_path)
             processing_config = yaml_load(os.path.join(path, "preprocessing_config.yaml"))
+            # Handle indexed format from collect_preprocessing_configs (e.g. {0: {...}, 1: {...}})
+            if processing_config and all(isinstance(k, int) for k in processing_config.keys()):
+                processing_config = processing_config[0]
             past_lowdim_candidates.add(processing_config["past_lowdim_steps"])
             future_lowdim_candidates.add(processing_config["future_lowdim_steps"])
 

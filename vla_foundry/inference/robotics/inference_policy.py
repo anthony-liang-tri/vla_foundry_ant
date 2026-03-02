@@ -132,6 +132,9 @@ class InferenceDiffusionPolicy(Policy):
         else:
             preprocessing_config_path = os.path.join(checkpoint_directory, "preprocessing_configs.yaml")
         preprocessing_config = yaml_load(preprocessing_config_path)
+        # Handle indexed format from collect_preprocessing_configs (e.g. {0: {...}, 1: {...}})
+        if preprocessing_config and all(isinstance(k, int) for k in preprocessing_config.keys()):
+            preprocessing_config = preprocessing_config[0]
         self.preprocessor_image_size = preprocessing_config.get("resize_images_size")
         # Validate that resize_images_size is configured
         if self.preprocessor_image_size is None:
