@@ -141,7 +141,7 @@ class RoboticsDataParams(DataParams):
                 path = os.path.dirname(manifest_path)
                 processing_config = yaml_load(os.path.join(path, "preprocessing_config.yaml"))
                 # Handle indexed format from collect_preprocessing_configs (e.g. {0: {...}, 1: {...}})
-                if processing_config and all(isinstance(k, int) for k in processing_config.keys()):
+                if processing_config and all(isinstance(k, int) for k in processing_config):
                     processing_config = processing_config[0]
                 processing_configs.append(processing_config)
         else:
