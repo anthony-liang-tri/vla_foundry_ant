@@ -407,9 +407,22 @@ def save_checkpoint(
 
 
 def get_unwrapped_model(model):
-    """Get the unwrapped model from DDP wrapper if present, otherwise return the model itself."""
-    if isinstance(model, torch.nn.parallel.DistributedDataParallel):
-        return model.module
+    """Get the unwrapped model from DDP wrapper and torchcompile if present, otherwise return the model itself."""
+
+    # These wrappers can be applied in different orders:
+    # - DDP(torch.compile(model))
+    # - torch.compile(DDP(model))
+    #
+    # A single if/elif would only peel one layer and might stop too early.
+    # The while loop keeps unwrapping one layer at a time until no known wrapper
+    # is left, so we always end up at the original model regardless of order.
+    while True:
+        if hasattr(model, "_orig_mod"):
+            model = model._orig_mod
+        elif isinstance(model, torch.nn.parallel.DistributedDataParallel):
+            model = model.module
+        else:
+            break
     return model
 
 
