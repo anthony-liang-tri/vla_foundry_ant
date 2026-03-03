@@ -9,6 +9,8 @@ from vla_foundry.data.preprocessing.robotics.converters.base import BaseRobotics
 from vla_foundry.data.preprocessing.robotics.preprocess_masks import create_past_and_future_masks
 from vla_foundry.data.preprocessing.robotics.preprocess_params import MMTPreprocessParams
 from vla_foundry.data.preprocessing.utils import is_still_sample
+from vla_foundry.data.robotics.cv_utils import intrinsics_4_to_3x3
+from vla_foundry.data.robotics.utils import xyzrpy_to_T
 
 
 def downsample_with_valid_depths(depth_image: np.ndarray, target_size: tuple[int, int], mask_threshold: float):
@@ -157,6 +159,13 @@ class MMTNPZConverter(BaseRoboticsConverter):
             for t in sorted(episode_data.keys()):
                 intrinsics_frame = episode_data[t][intrinsics_cam_map[camera_name]]
                 extrinsics_frame = episode_data[t][extrinsics_cam_map[camera_name]]
+                # Data preprocessing pipeline expectes 3x3 intrinsics and 4x4 extrinsics
+                if intrinsics_frame.shape == (4,):
+                    intrinsics_frame = intrinsics_4_to_3x3(intrinsics_frame)
+                if extrinsics_frame.shape == (6,):
+                    extrinsics_frame = xyzrpy_to_T(extrinsics_frame).squeeze()
+                assert intrinsics_frame.shape == (3, 3), f"Intrinsics shape mismatch: {intrinsics_frame.shape}"
+                assert extrinsics_frame.shape == (4, 4), f"Extrinsics shape mismatch: {extrinsics_frame.shape}"
                 intrinsics_data[camera_name].append(intrinsics_frame)
                 extrinsics_data[camera_name].append(extrinsics_frame)
             intrinsics_data[camera_name] = np.stack(intrinsics_data[camera_name])
@@ -332,7 +341,7 @@ class MMTNPZConverter(BaseRoboticsConverter):
 
         # Add intrinsics, extrinsics, past_mask, future_mask to lowdim (after building stats_sample)
         for key, value in sample_intrinsics.items():
-            sample_lowdim[f"intrinsics.{key}"] = value
+            sample_lowdim[f"original_intrinsics.{key}"] = value
         for key, value in sample_extrinsics.items():
             sample_lowdim[f"extrinsics.{key}"] = value
         sample_lowdim["past_mask"] = past_mask

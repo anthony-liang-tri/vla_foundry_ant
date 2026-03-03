@@ -1,6 +1,7 @@
 import io
 import json
 import random
+import re
 import tarfile
 import time
 import uuid
@@ -18,6 +19,7 @@ from botocore.config import Config
 from PIL import Image
 
 from vla_foundry.data.preprocessing.image_utils import ImageResizingMethod, depth_image_to_bytes, image_to_bytes
+from vla_foundry.data.robotics.cv_utils import scale_intrinsics_3x3_for_resize_and_crop
 
 
 def upload_sample_to_s3(
@@ -94,6 +96,29 @@ def upload_sample_to_s3(
             sample_data["metadata"]["original_image_sizes"] = original_image_sizes
         else:
             sample_data["metadata"].original_image_sizes = original_image_sizes
+
+        # Add the rescaled intrinsics into the sample_data
+        sample_lowdim_data_with_rescaled_intrinsics = dict()
+        if "lowdim" in sample_data and sample_data["lowdim"] is not None:
+            for lowdim_key in sample_data["lowdim"]:
+                # Check if the lowdim_key is of the form "original_intrinsics.{camera_name}"
+                if bool(re.fullmatch(r"original_intrinsics\.[A-Za-z0-9_-]+", lowdim_key)):
+                    camera_name = lowdim_key.split(".", 1)[1]
+                    original_intrinsics = sample_data["lowdim"][lowdim_key]
+                    assert camera_name in original_image_sizes, (
+                        f"Camera name {camera_name} not found in original_image_sizes"
+                    )
+
+                    original_image_size = original_image_sizes[camera_name]
+                    scaled_intrinsics = scale_intrinsics_3x3_for_resize_and_crop(
+                        original_intrinsics, original_image_size, resize_images_size, image_resizing_method
+                    )
+
+                    # Add rescaled intrinsics.
+                    sample_lowdim_data_with_rescaled_intrinsics[f"rescaled_intrinsics.{camera_name}"] = (
+                        scaled_intrinsics
+                    )
+            sample_data["lowdim"].update(sample_lowdim_data_with_rescaled_intrinsics)
 
         for key, value in sample_data.items():
             data_buffer = io.BytesIO()
@@ -503,7 +528,8 @@ def depth_images_to_point_cloud(
 
         # Estimate max possible points after subsampling
         h, w = depth_img.shape
-        estimated_points_per_cam = (h * w) // (depth_subsample_factor**2) // 4  # Rough estimate after filtering
+        # Rough estimate after filtering
+        estimated_points_per_cam = (h * w) // (depth_subsample_factor**2) // 4
 
         # Only subsample if we'll still have enough points
         should_subsample = (

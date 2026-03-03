@@ -16,7 +16,7 @@ import torch
 from PIL import Image
 
 import vla_foundry.visualizers.visualizer as vz
-from vla_foundry.data.preprocessing.image_utils import ImageResizingMethod, resize_image
+from vla_foundry.data.preprocessing.image_utils import ImageResizingMethod, resize_and_crop_image
 from vla_foundry.data.preprocessing.utils import depth_images_to_point_cloud
 from vla_foundry.data.robotics.utils import (
     calculate_relative_pose,
@@ -233,7 +233,7 @@ class PolicyDataAdapter:
         logging.debug(f"Preprocessing images resize {self.preprocessor_image_size} crop {self.image_crop_size}")
         processed: dict[str, np.ndarray] = {}
         for camera_name, image in images.items():
-            resized = resize_image(
+            resized = resize_and_crop_image(
                 image,
                 target_size=self.preprocessor_image_size,
                 resize_method=self.preprocessor_image_resize_method,

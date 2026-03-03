@@ -26,7 +26,7 @@ from tqdm import tqdm
 
 from vla_foundry.data.robotics.cv_utils import (
     create_images_with_projected_trace,
-    scale_intrinsics_for_resize_and_crop,
+    scale_intrinsics_4_for_resize_and_crop,
     transform_points_to_camera_frame,
 )
 from vla_foundry.data.robotics.normalization import RoboticsNormalizer
@@ -381,10 +381,10 @@ class RerunSampleVisualizer:
         head_camera_t_left_pts = transform_points_to_camera_frame(head_camera_T_chassis, left_pts)
         head_camera_t_right_pts = transform_points_to_camera_frame(head_camera_T_chassis, right_pts)
 
-        # Scale intrinsics to handle processing on original image (resize then square crop).
+        # Scale intrinsics to handle processing on original image (resize then crop).
         H, W, C = color_image.shape
         W0, H0 = payload["metadata"]["original_image_sizes"]["rgb"]
-        scaled_intrinsics = scale_intrinsics_for_resize_and_crop(
+        scaled_intrinsics = scale_intrinsics_4_for_resize_and_crop(
             intrinsics[0][0],
             (W0, H0),
             (W, H),

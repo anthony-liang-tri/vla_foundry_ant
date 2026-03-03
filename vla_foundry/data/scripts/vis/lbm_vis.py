@@ -21,7 +21,7 @@ from vla_foundry.data.dataloader import get_datastring_input, get_wds_dataloader
 from vla_foundry.data.robotics.cv_utils import (
     create_images_with_projected_trace,
     intrinsics_3x3_to_4,
-    scale_intrinsics_for_resize_and_crop,
+    scale_intrinsics_4_for_resize_and_crop,
     transform_points_to_camera_frame,
 )
 from vla_foundry.data.robotics.normalization import RoboticsNormalizer
@@ -136,7 +136,9 @@ class RerunSampleVisualizer:
                 continue
 
             extrinsics_value = extrinsics_dict.get(f"extrinsics.{camera_name}", None)
-            intrinsics_value = intrinsics_dict.get(f"intrinsics.{camera_name}", None)
+            intrinsics_value = intrinsics_dict.get(f"original_intrinsics.{camera_name}", None)
+            if intrinsics_value is None:
+                intrinsics_value = intrinsics_dict.get(f"intrinsics.{camera_name}", None)
 
             if extrinsics_value is None or intrinsics_value is None:
                 continue
@@ -168,13 +170,13 @@ class RerunSampleVisualizer:
         if image_data is not None:
             self._plot.log_images("", image_data)
 
-        # Scale intrinsics to handle processing on original image (resize then square crop).
+        # Scale intrinsics to handle processing on original image (resize then crop).
         scaled_intrinsics_data = {}
         for image_key in intrinsics_data:
             H, W, C = image_data[image_key].shape
             W0, H0 = metadata["original_image_sizes"][f"{camera_data[image_key]}"]
             intrinsics_4 = intrinsics_3x3_to_4(intrinsics_data[image_key])
-            scaled_intrinsics = scale_intrinsics_for_resize_and_crop(
+            scaled_intrinsics = scale_intrinsics_4_for_resize_and_crop(
                 intrinsics_4,
                 (W0, H0),
                 (W, H),

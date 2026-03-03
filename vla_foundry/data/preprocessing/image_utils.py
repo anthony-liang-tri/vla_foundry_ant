@@ -20,13 +20,18 @@ class ImageResizingMethod(Enum):
     RESIZE_FIT = "resize_fit"
 
 
+<<<<<<< save_resized_intrinsics_to_wds
+def resize_and_crop_image(
+    image: Union[np.ndarray, Image.Image],
+=======
 def resize_image(
     image: np.ndarray | Image.Image,
+>>>>>>> main
     target_size: tuple,
     resize_method=ImageResizingMethod.CENTER_CROP,
     fill_color: tuple = (0, 0, 0),
 ) -> np.ndarray:
-    """Resize image to target size according to the given `resize_method`."""
+    """Resize and crop image to target size according to the given `resize_method`."""
     # Calculate aspect-ratio-preserving dimensions
     is_pil = isinstance(image, Image.Image)
 
@@ -85,8 +90,8 @@ def depth_image_to_bytes(
     original_image_size = pil_image.size
 
     # Resize if needed
-    if target_size is not None and pil_image.size != target_size:
-        pil_image = resize_image(pil_image, target_size=target_size)
+    if target_size and pil_image.size != target_size:
+        pil_image = resize_and_crop_image(pil_image, target_size)
 
     buf = io.BytesIO()
     pil_image.save(buf, format="PNG")
@@ -111,7 +116,7 @@ def image_to_bytes(
     pil_image = Image.fromarray(image)
     original_image_size = pil_image.size
     if target_size is not None and pil_image.size != target_size:
-        pil_image = resize_image(pil_image, resize_method=resize_method, target_size=target_size)
+        pil_image = resize_and_crop_image(pil_image, resize_method=resize_method, target_size=target_size)
 
     buf = io.BytesIO()
     pil_image.save(buf, format="JPEG", quality=quality, optimize=True)

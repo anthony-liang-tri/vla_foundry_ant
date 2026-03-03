@@ -690,9 +690,9 @@ class SpartanConverter(BaseRoboticsConverter):
             if sample_point_cloud is not None:
                 stats_sample["point_cloud"] = sample_point_cloud
 
-        # Add intrinsics, extrinsics, past_mask, future_mask to lowdim (after building stats_sample)
+        # Add original_intrinsics, extrinsics, past_mask, future_mask to lowdim (after building stats_sample)
         for key, value in sample_intrinsics.items():
-            sample_lowdim[f"intrinsics.{key}"] = value
+            sample_lowdim[f"original_intrinsics.{key}"] = value
         for key, value in sample_extrinsics.items():
             sample_lowdim[f"extrinsics.{key}"] = value
         sample_lowdim["past_mask"] = past_mask

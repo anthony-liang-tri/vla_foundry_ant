@@ -106,6 +106,8 @@ You can set `--use_depth_data true` if you also want to extract depth and point 
 # Converting MMT NPZ data to tar shards
 Data ripped from MMT robots is stored as npz files, named as `ep\d{4}_t\d{4}\.npz`. Each npz file store all data from one time step.
 ```
+# If you are stuck at `rpc_client.h:153: Failed to connect to GCS at address` error you might have stale Ray cluster state
+# Remove /tmp/ray to remove the stale pointer
 <AWS_PROFILE=your_profile> uv run --group=preprocessing vla_foundry/data/preprocessing/preprocess_robotics_to_tar.py \
 --type mmt_npz \
 --source_episodes "[

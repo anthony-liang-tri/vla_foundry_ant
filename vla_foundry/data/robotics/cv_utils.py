@@ -10,6 +10,8 @@ from typing import Any
 import matplotlib.cm as cm
 import numpy as np
 
+from vla_foundry.data.preprocessing.image_utils import ImageResizingMethod
+
 
 def intrinsics_3x3_to_4(K: np.ndarray) -> np.ndarray:
     """
@@ -29,40 +31,145 @@ def intrinsics_3x3_to_4(K: np.ndarray) -> np.ndarray:
     return np.stack([fx, fy, cx, cy], axis=-1).astype(float)
 
 
-def scale_intrinsics_for_resize_and_crop(
+def intrinsics_4_to_3x3(intrinsics: np.ndarray) -> np.ndarray:
+    """
+    Convert camera intrinsics from (fx, fy, cx, cy) with shape (4,) or (N,4)
+    to intrinsic matrix/matrices with shape (3,3) or (N,3,3).
+    """
+    intr = np.asarray(intrinsics)
+
+    if intr.ndim not in (1, 2):
+        raise ValueError(f"intrinsics must have shape (4,) or (N,4), got {intr.shape}")
+    if intr.shape[-1] != 4:
+        raise ValueError(f"Last dimension must be 4, got {intr.shape}")
+
+    fx, fy, cx, cy = intr[..., 0], intr[..., 1], intr[..., 2], intr[..., 3]
+
+    # Create output array
+    out_shape = intr.shape[:-1] + (3, 3)
+    K = np.zeros(out_shape, dtype=float)
+
+    K[..., 0, 0] = fx
+    K[..., 1, 1] = fy
+    K[..., 0, 2] = cx
+    K[..., 1, 2] = cy
+    K[..., 2, 2] = 1.0
+
+    return K
+
+
+def scale_intrinsics_4_for_resize_and_crop(
     original_intrinsics: np.ndarray,
     original_image_size: tuple[int, int],
     processed_image_size: tuple[int, int],
+    resize_method: ImageResizingMethod = ImageResizingMethod.CENTER_CROP,
 ) -> np.ndarray:
-    """Scales camera intrinsics to account for resizing and square cropping.
+    """Scales camera intrinsics to account for resizing and cropping/padding.
 
     Args:
         original_intrinsics: Camera intrinsics as (fx, fy, cx, cy) or (N, 4).
         original_image_size: Original image size as (width, height).
         processed_image_size: Processed image size as (width, height).
+        resize_method: Method used to resize the image.
     """
     intrinsics = np.asarray(original_intrinsics, dtype=float)
 
-    if intrinsics.shape[-1] != 4:
-        raise ValueError(f"Expected shape (..., 4), got {intrinsics.shape}")
-
-    fx, fy, cx, cy = intrinsics[..., 0], intrinsics[..., 1], intrinsics[..., 2], intrinsics[..., 3]
+    Returns
+    -------
+    np.ndarray
+        Scaled intrinsics with same shape as input: (4,) or (N, 4).
+    """
+    original_intrinsics = np.asarray(original_intrinsics)
+    if original_intrinsics.ndim not in (1, 2):
+        raise ValueError(f"original_intrinsics must have ndim 1 or 2, got {original_intrinsics.ndim}")
+    if original_intrinsics.shape[-1] != 4:
+        raise ValueError(f"original_intrinsics last dim must be 4, got {original_intrinsics.shape}")
 
     W0, H0 = original_image_size
     W, H = processed_image_size
 
-    scale = max(W / W0, H / H0)
-    sx = sy = scale
+    fx, fy, cx, cy = (
+        original_intrinsics[..., 0],
+        original_intrinsics[..., 1],
+        original_intrinsics[..., 2],
+        original_intrinsics[..., 3],
+    )
 
-    cx_offset = (W0 * scale - W) / 2
-    cy_offset = (H0 * scale - H) / 2
+    if resize_method == ImageResizingMethod.CENTER_CROP:
+        # Scale to cover target
+        scale = max(W / W0, H / H0)
 
-    fx1 = fx * sx
-    fy1 = fy * sy
-    cx1 = cx * sx - cx_offset
-    cy1 = cy * sy - cy_offset
+        new_W = W0 * scale
+        new_H = H0 * scale
+
+        # Center crop offsets
+        cx_offset = (new_W - W) / 2.0
+        cy_offset = (new_H - H) / 2.0
+
+        fx1 = fx * scale
+        fy1 = fy * scale
+        cx1 = cx * scale - cx_offset
+        cy1 = cy * scale - cy_offset
+
+    elif resize_method == ImageResizingMethod.RESIZE_NO_CROP:
+        # Independent scaling (may distort)
+        sx = W / W0
+        sy = H / H0
+
+        fx1 = fx * sx
+        fy1 = fy * sy
+        cx1 = cx * sx
+        cy1 = cy * sy
+
+    elif resize_method == ImageResizingMethod.RESIZE_FIT:
+        # Scale to fit inside target
+        scale = min(W / W0, H / H0)
+
+        new_W = W0 * scale
+        new_H = H0 * scale
+
+        # Padding offsets (image pasted centered)
+        pad_x = (W - new_W) / 2.0
+        pad_y = (H - new_H) / 2.0
+
+        fx1 = fx * scale
+        fy1 = fy * scale
+        cx1 = cx * scale + pad_x
+        cy1 = cy * scale + pad_y
+
+    else:
+        raise ValueError(f"Unrecognized image resizing method: {resize_method}")
 
     return np.stack([fx1, fy1, cx1, cy1], axis=-1)
+
+
+def scale_intrinsics_3x3_for_resize_and_crop(
+    original_intrinsics: np.ndarray,
+    original_image_size: Tuple[int, int],
+    processed_image_size: Tuple[int, int],
+    resize_method: ImageResizingMethod = ImageResizingMethod.CENTER_CROP,
+) -> np.ndarray:
+    """Scales camera intrinsics to account for resizing and cropping.
+
+    Parameters
+    ----------
+    original_intrinsics : np.ndarray
+        Camera intrinsics containing (fx, fy, cx, cy). Accepts shape (3, 3) or (N, 3, 3).
+    original_image_size : Tuple[int, int]
+        Original image size as (width, height).
+    processed_image_size : Tuple[int, int]
+        Processed image size as (width, height).
+
+    Returns
+    -------
+    np.ndarray
+        Scaled intrinsics with same shape as input: (3, 3) or (N, 3, 3).
+    """
+    return intrinsics_4_to_3x3(
+        scale_intrinsics_4_for_resize_and_crop(
+            intrinsics_3x3_to_4(original_intrinsics), original_image_size, processed_image_size, resize_method
+        )
+    )
 
 
 def transform_points_to_camera_frame(camera_T_base: np.ndarray, base_t_pts: np.ndarray) -> np.ndarray:

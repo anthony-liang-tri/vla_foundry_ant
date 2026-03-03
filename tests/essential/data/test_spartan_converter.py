@@ -491,6 +491,7 @@ class TestPointCloudGeneration:
                 # Verify lookup works with camera_name (not "intrinsics.camera_name")
                 assert camera_name in sample_intrinsics  # Should be True
                 assert f"intrinsics.{camera_name}" not in sample_intrinsics  # Should be False
+                assert f"original_intrinsics.{camera_name}" not in sample_intrinsics  # Should be False
 
                 # This is the correct lookup pattern (what the fixed code does)
                 if camera_name in sample_intrinsics:
