@@ -28,7 +28,7 @@ def load_tasks_from_filenames(filenames_path: str) -> dict:
         print(f"⚠️  Warning: Filenames file not found: {filenames_path}")
         return tasks
 
-    with open(filenames_path, "r") as f:
+    with open(filenames_path) as f:
         for line in f:
             if not line.strip():
                 continue
@@ -233,7 +233,7 @@ if __name__ == "__main__":
     # Load task filter from file if specified
     tasks_to_run = None
     if args.tasks_file:
-        with open(args.tasks_file, "r") as f:
+        with open(args.tasks_file) as f:
             tasks_to_run = set(line.strip() for line in f if line.strip())
         print(f"Filtering to {len(tasks_to_run)} tasks from {args.tasks_file}")
 

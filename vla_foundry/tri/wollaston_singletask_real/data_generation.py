@@ -2,7 +2,7 @@ import subprocess
 
 tasks = {}
 
-with open("vla_foundry/tri/wollaston_singletask_real/wollaston_real_filenames.txt", "r") as f:
+with open("vla_foundry/tri/wollaston_singletask_real/wollaston_real_filenames.txt") as f:
     for line in f:
         if not line.strip():
             continue

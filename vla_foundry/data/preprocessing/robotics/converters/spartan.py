@@ -115,7 +115,7 @@ class SpartanConverter(BaseRoboticsConverter):
 
         # Load language annotations
         print("📚 Loading language annotations...")
-        with open(cfg.language_annotations_path, "r") as f:
+        with open(cfg.language_annotations_path) as f:
             data = yaml.safe_load(f)
         self.language_annotations = data.get("language_dict", {})
         print(f"Loaded language annotations for {len(self.language_annotations)} tasks")
@@ -153,7 +153,7 @@ class SpartanConverter(BaseRoboticsConverter):
         # Load validation episodes
         self.validation_episodes = None
         if cfg.validation_episodes_path:
-            with open(cfg.validation_episodes_path, "r") as f:
+            with open(cfg.validation_episodes_path) as f:
                 self.validation_episodes = json.load(f)
             print(f"Loaded validation episodes: {self.validation_episodes}")
 

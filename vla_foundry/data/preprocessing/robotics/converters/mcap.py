@@ -652,10 +652,10 @@ class MCAPConverter(BaseRoboticsConverter):
             metadata_path = episode_path / metadata_file
             if metadata_path.exists():
                 if metadata_path.suffix == ".yaml":
-                    with open(metadata_path, "r") as f:
+                    with open(metadata_path) as f:
                         return yaml.safe_load(f)
                 else:
-                    with open(metadata_path, "r") as f:
+                    with open(metadata_path) as f:
                         return json.load(f)
 
         # Default metadata

@@ -4,8 +4,8 @@ import logging
 import random
 import subprocess
 import traceback
+from collections.abc import Iterable, Sequence
 from multiprocessing import Value
-from typing import Iterable, Sequence
 
 import webdataset as wds
 from torch.utils.data import get_worker_info

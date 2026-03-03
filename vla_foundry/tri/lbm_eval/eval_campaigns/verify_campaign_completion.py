@@ -37,7 +37,7 @@ class TaskSpec:
 
 def parse_tasks_file(tasks_file: Path) -> list[TaskSpec]:
     """Parse the tasks file and extract task information."""
-    with open(tasks_file, "r") as f:
+    with open(tasks_file) as f:
         content = f.read()
 
     # Remove f-string prefix

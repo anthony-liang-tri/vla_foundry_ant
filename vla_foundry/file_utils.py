@@ -50,7 +50,7 @@ def json_load(file_path):
     if file_path.startswith("s3"):
         logging.info("Loading remote json.")
         return _json_load_s3_cp(file_path)
-    with open(file_path, "r") as f:
+    with open(file_path) as f:
         out = json.load(f)
     return out
 
@@ -66,7 +66,7 @@ def jsonl_load(file_path):
     if file_path.startswith("s3"):
         logging.info("Loading remote jsonl.")
         return _jsonl_load_s3_cp(file_path)
-    with open(file_path, "r") as f:
+    with open(file_path) as f:
         entries = [json.loads(line) for line in f if line.strip()]
     return entries
 
@@ -81,7 +81,7 @@ def yaml_load(file_path):
     if file_path.startswith("s3"):
         logging.info("Loading remote yaml.")
         return _yaml_load_s3_cp(file_path)
-    with open(file_path, "r") as f:
+    with open(file_path) as f:
         out = yaml.safe_load(f)
     return out
 
@@ -430,8 +430,7 @@ def remote_sync(local_dir, remote_dir):
     logging.info("Starting remote sync.")
     result = subprocess.run(
         ["aws", "s3", "sync", local_dir, remote_dir],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
     )
     if result.returncode != 0:
         logging.error(f"Error: Failed to sync with S3 bucket {result.stderr.decode('utf-8')}")

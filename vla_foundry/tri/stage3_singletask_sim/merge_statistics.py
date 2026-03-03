@@ -82,7 +82,7 @@ def main():
                 failed_tasks.append(task)
                 continue
 
-            with open(local_path, "r") as f:
+            with open(local_path) as f:
                 stats = json.load(f)
                 all_statistics.append(stats)
                 print(f"Loaded stats for {task}")

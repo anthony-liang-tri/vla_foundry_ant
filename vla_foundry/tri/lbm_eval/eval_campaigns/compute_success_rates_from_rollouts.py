@@ -21,7 +21,7 @@ import yaml
 
 def parse_tasks_file(tasks_file: Path) -> list[tuple[str, str, str]]:
     """Parse the tasks file and extract task information."""
-    with open(tasks_file, "r") as f:
+    with open(tasks_file) as f:
         content = f.read()
 
     # Remove f-string prefix
@@ -118,7 +118,7 @@ def parse_summary_file(summary_path: Path) -> dict[str, Any]:
         # Register multi constructor for all unknown tags
         yaml.add_multi_constructor("!", ignore_unknown_tags, Loader=yaml.SafeLoader)
 
-        with open(summary_path, "r") as f:
+        with open(summary_path) as f:
             data = yaml.safe_load(f)
 
         # Extract success status

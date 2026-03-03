@@ -56,7 +56,7 @@ six_camera_names = [
     "wrist_right_plus",
 ]
 
-with open("vla_foundry/tri/stage3_singletask_sim/stage3_sim_filenames.txt", "r") as f:
+with open("vla_foundry/tri/stage3_singletask_sim/stage3_sim_filenames.txt") as f:
     for line in f:
         if not line.strip():
             continue

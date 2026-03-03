@@ -81,7 +81,7 @@ def init_distributed_device(distributed_params):
         object.__setattr__(distributed_params, "use_distributed", True)
 
     if torch.cuda.is_available():
-        device = "cuda:%d" % distributed_params.local_rank if distributed_params.use_distributed else "cuda:0"
+        device = f"cuda:{distributed_params.local_rank}" if distributed_params.use_distributed else "cuda:0"
         torch.cuda.set_device(device)
     else:
         device = "cpu"

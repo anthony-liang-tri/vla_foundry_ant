@@ -177,19 +177,17 @@ uv run python vla_foundry/main.py --help | head -5
 
 ## Python Style Guide
 
-### Type Hints (Python 3.12+)
-Use modern built-in generics and union syntax (PEP 585/604):
-- `X | None` not `Optional[X]`
-- `list[X]` not `List[X]`
-- `dict[X, Y]` not `Dict[X, Y]`
-- `tuple[X, ...]` not `Tuple[X, ...]`
-- `X | Y` not `Union[X, Y]`
-- `set[X]` not `Set[X]`
+Ruff enforces [pyupgrade (`UP`) rules](https://docs.astral.sh/ruff/rules/#pyupgrade-up) with `target-version = "py312"`:
+- **Modern type hints**: `list[X]` not `List[X]`, `X | None` not `Optional[X]`, `X | Y` not `Union[X, Y]`
+- **`collections.abc` imports**: `from collections.abc import Sequence` not `from typing import Sequence`
+- **No `from __future__ import annotations`** (unnecessary on 3.12)
+- **f-strings** over `%` formatting and `.format()`
+- **`yield from`** over `for x in y: yield x`
 
-Do not use `from __future__ import annotations`. Imports like `Any`, `Callable`, `Literal`, `Sequence`, `TypeVar` from `typing` are still valid.
+All `UP` violations are auto-fixable: `uv run ruff check --fix`
 
-### Docstrings
-Use **Google-style** docstrings (`Args:`, `Returns:`, `Raises:`). Do not use NumPy-style (`Parameters\n----------`) or reST-style (`:param:`).
+Project docstring convention (not currently enforced by ruff, but highly recommended for readability and consistency):
+- Use **Google-style** docstrings (`Args:`, `Returns:`, `Raises:`). Not NumPy-style or reST-style.
 
 ## Critical Notes
 - **ALWAYS use `uv run` prefix** for Python commands to ensure proper environment

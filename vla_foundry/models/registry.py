@@ -17,7 +17,7 @@ Example usage:
         ...
 """
 
-from typing import Callable, Type
+from collections.abc import Callable
 
 import torch.nn as nn
 
@@ -25,7 +25,7 @@ from vla_foundry.params.model_params import ModelParams
 
 # Global registries
 _MODEL_REGISTRY: dict[str, Callable] = {}
-_BATCH_HANDLER_REGISTRY: dict[str, Type] = {}
+_BATCH_HANDLER_REGISTRY: dict[str, type] = {}
 
 
 def register_model(model_type: str):
@@ -63,7 +63,7 @@ def register_batch_handler(model_type: str):
             ...
     """
 
-    def decorator(handler_cls: Type):
+    def decorator(handler_cls: type):
         if model_type in _BATCH_HANDLER_REGISTRY:
             raise ValueError(f"Batch handler for '{model_type}' is already registered")
         _BATCH_HANDLER_REGISTRY[model_type] = handler_cls

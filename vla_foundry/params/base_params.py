@@ -1,8 +1,8 @@
 import json
 from collections.abc import Mapping, Sequence
+from collections.abc import Sequence as SequenceType
 from dataclasses import dataclass, fields
-from typing import Any, Type
-from typing import Sequence as SequenceType
+from typing import Any
 
 import draccus
 from draccus.parsers.decoding import (
@@ -67,10 +67,10 @@ class BaseParams:
         from draccus.cfgparsing import load_config
 
         if file_path.startswith("s3"):
-            with copy_to_temp_file(file_path) as temp_path, open(temp_path, "r") as f:
+            with copy_to_temp_file(file_path) as temp_path, open(temp_path) as f:
                 data_dict = load_config(f, file=temp_path)
         else:
-            with open(file_path, "r") as f:
+            with open(file_path) as f:
                 data_dict = load_config(f, file=file_path)
 
         # Use from_dict which handles unknown key stripping
@@ -86,7 +86,7 @@ class BaseParams:
 
 # Register a special decoder for BaseParams that handles unknown keys without failing
 @draccus_decode.register(BaseParams, include_subclasses=False)
-def _decode_base_params(cls: Type[BaseParams], raw_value: Any, path: SequenceType[str]):
+def _decode_base_params(cls: type[BaseParams], raw_value: Any, path: SequenceType[str]):
     target_cls = _resolve_dataclass(cls)
     if target_cls is not None and is_choice_type(target_cls):
         return _decode_choice_base_params(cls, raw_value, path)

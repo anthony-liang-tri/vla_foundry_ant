@@ -1,7 +1,7 @@
 import logging
+from collections.abc import Sequence as SequenceType
 from dataclasses import fields, is_dataclass
-from typing import Any, Type, get_origin
-from typing import Sequence as SequenceType
+from typing import Any, get_origin
 
 from draccus.choice_types import CHOICE_TYPE_KEY
 from draccus.parsers.decoding import decode_choice_class
@@ -29,7 +29,7 @@ def _apply_field_migrations(raw_value: Any, path: SequenceType[str]) -> Any:
     return result
 
 
-def _strip_unknown_keys(raw_value: Any, cls: Type[Any], path: SequenceType[str]) -> Any:
+def _strip_unknown_keys(raw_value: Any, cls: type[Any], path: SequenceType[str]) -> Any:
     """Ignore keys that are not in the dataclass definition while decoding."""
     target_cls = _resolve_dataclass(cls)
     if target_cls is None or not isinstance(raw_value, dict):
@@ -75,7 +75,7 @@ def _strip_unknown_keys(raw_value: Any, cls: Type[Any], path: SequenceType[str])
     return cleaned
 
 
-def _resolve_dataclass(cls: Type[Any]) -> Type[Any] | None:
+def _resolve_dataclass(cls: type[Any]) -> type[Any] | None:
     origin = get_origin(cls)
     target_cls = cls if origin is None else origin
 
@@ -84,7 +84,7 @@ def _resolve_dataclass(cls: Type[Any]) -> Type[Any] | None:
     return None
 
 
-def _decode_choice_base_params(cls: Type["BaseParams"], raw_value: Any, path: SequenceType[str]):  # noqa: F821 BaseParams would be circular if imported
+def _decode_choice_base_params(cls: type["BaseParams"], raw_value: Any, path: SequenceType[str]):  # noqa: F821 BaseParams would be circular if imported
     """Handle BaseParams that also behave as Choice types (e.g., DataParams)."""
     if not isinstance(raw_value, dict):
         return decode_choice_class(cls, raw_value, path)

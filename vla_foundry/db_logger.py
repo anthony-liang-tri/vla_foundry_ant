@@ -15,8 +15,9 @@ import signal
 import socket
 import subprocess
 import sys
+from collections.abc import Callable
 from io import StringIO
-from typing import Any, Callable
+from typing import Any
 
 import boto3
 import draccus
@@ -131,7 +132,7 @@ def _get_git_info() -> dict[str, Any]:
         }
         git_diff_file = os.environ.get("VLA_GIT_DIFF_FILE")
         if git_diff_file and os.path.exists(git_diff_file):
-            with open(git_diff_file, "r") as f:
+            with open(git_diff_file) as f:
                 diff = f.read()
                 if len(diff) > 10000:
                     diff = diff[:10000] + "\n... [truncated]"

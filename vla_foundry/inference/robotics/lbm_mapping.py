@@ -1,5 +1,6 @@
 import logging
-from typing import Any, Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
+from typing import Any
 
 import fsspec
 import numpy as np

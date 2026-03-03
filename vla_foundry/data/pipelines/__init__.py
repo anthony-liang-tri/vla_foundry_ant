@@ -1,5 +1,5 @@
+from collections.abc import Callable
 from itertools import islice
-from typing import Callable
 
 import webdataset as wds
 

@@ -62,7 +62,7 @@ six_camera_names = [
     "wrist_right_plus",
 ]
 
-with open("vla_foundry/tri/stage3_singletask_sim/stage3_sim_filenames.txt", "r") as f:
+with open("vla_foundry/tri/stage3_singletask_sim/stage3_sim_filenames.txt") as f:
     for line in f:
         if not line.strip():
             continue
@@ -243,7 +243,7 @@ if __name__ == "__main__":
     # Load task filter from file if specified
     tasks_to_run = None
     if args.tasks_file:
-        with open(args.tasks_file, "r") as f:
+        with open(args.tasks_file) as f:
             tasks_to_run = set(line.strip() for line in f if line.strip())
         print(f"Filtering to {len(tasks_to_run)} tasks from {args.tasks_file}")
 

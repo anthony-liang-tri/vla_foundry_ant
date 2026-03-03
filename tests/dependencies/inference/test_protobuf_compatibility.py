@@ -25,7 +25,7 @@ def get_generated_protobuf_version():
     proto_dir = project_root / "packages" / "grpc-workspace" / "src" / "grpc_workspace" / "proto"
 
     for proto_file in proto_dir.glob("*_pb2.py"):
-        with open(proto_file, "r") as f:
+        with open(proto_file) as f:
             content = f.read()
             # Look for "# Protobuf Python Version: X.Y.Z" comment
             match = re.search(r"# Protobuf Python Version: (\d+\.\d+\.\d+)", content)

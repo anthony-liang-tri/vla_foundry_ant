@@ -6,7 +6,7 @@ from vla_foundry.params.model_params import NoiseSchedulerParams
 
 class NoiseSchedulerDDPMDiffusers(NoiseScheduler):
     def __init__(self, params: NoiseSchedulerParams):
-        super(NoiseSchedulerDDPMDiffusers, self).__init__(params)
+        super().__init__(params)
         self.num_timesteps = params.num_timesteps
         if params.clamp_range is not None:
             assert -params.clamp_range[0] == params.clamp_range[1], (
@@ -42,7 +42,7 @@ class NoiseSchedulerDDPMDiffusers(NoiseScheduler):
 
 class FlowMatchingScheduler(NoiseScheduler):
     def __init__(self, params: NoiseSchedulerParams):
-        super(FlowMatchingScheduler, self).__init__(params)
+        super().__init__(params)
         self.num_timesteps = params.num_timesteps
         self.clamp_range = params.clamp_range
 

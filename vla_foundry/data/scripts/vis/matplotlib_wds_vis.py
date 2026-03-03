@@ -31,8 +31,8 @@ import io
 import os
 import sys
 import tarfile
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 import fsspec
 
@@ -80,8 +80,7 @@ def open_s3(path: str):
 def iter_tar_members(fileobj: io.BufferedReader) -> Iterable[tarfile.TarInfo]:
     # Streaming mode: sequential read, minimal memory
     with tarfile.open(fileobj=fileobj, mode="r|*") as tf:
-        for m in tf:
-            yield m
+        yield from tf
 
 
 def extract_member_bytes(fileobj: io.BufferedReader, member: tarfile.TarInfo) -> bytes:

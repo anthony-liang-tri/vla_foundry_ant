@@ -29,13 +29,19 @@ git remote set-url --push upstream no_push
 ```
 git fetch upstream
 ```
-5. Create a branch to develop in.
+5. (Optional) Set up pre-commit hooks for automatic linting on commit.
+```
+uv run pre-commit install
+```
+This runs `ruff format` and `ruff check --fix` automatically on every commit. CI enforces the same checks regardless, but the hook catches issues earlier.
+
+6. Create a branch to develop in.
 ```
 git checkout -b my_feature_branch upstream/main
 ```
 Make changes within this branch, committing them as you go.
 
-6. Create a pull request.
+7. Create a pull request.
 ```
 git push origin my_feature_branch
 ```
@@ -43,7 +49,7 @@ Go to the VLA Foundry [repo](https://github.com/TRI-ML/vla_foundry).
 There should be an option to create a pull request at the top,
 follow instructions there to create a pull request
 
-7. Code review.
+8. Code review.
 We're using github code reviews in this codebase.
 
 If changes are requested to the review there are a few options for
@@ -98,34 +104,16 @@ uv run ruff format
 uv run ruff check --fix
 ```
 
-#### Type Hints (Python 3.12+)
-Use modern built-in generics and union syntax (PEP 585/604). Do **not** use the deprecated capitalized forms from `typing`:
+We enforce [pyupgrade (`UP`) rules](https://docs.astral.sh/ruff/rules/#pyupgrade-up) via ruff with `target-version = "py312"`. This enforces modern Python 3.12 idioms including:
+- **Modern type hints** (PEP 585/604): `list[int]` not `List[int]`, `X | None` not `Optional[X]`
+- **`collections.abc` imports**: `from collections.abc import Sequence` not `from typing import Sequence`
+- **No `from __future__ import annotations`** (unnecessary on 3.12)
+- **f-strings** over `%` formatting and `.format()`
+- **`yield from`** over `for x in y: yield x`
 
-| Deprecated | Modern |
-|---|---|
-| `Optional[X]` | `X \| None` |
-| `List[X]` | `list[X]` |
-| `Dict[X, Y]` | `dict[X, Y]` |
-| `Tuple[X, ...]` | `tuple[X, ...]` |
-| `Union[X, Y]` | `X \| Y` |
-| `Set[X]` | `set[X]` |
+All `UP` violations are auto-fixable with `uv run ruff check --fix`.
 
-`from __future__ import annotations` is unnecessary on Python 3.12 and should not be used. Imports like `Any`, `Callable`, `Literal`, `Sequence`, `TypeVar`, and `Type` from `typing` are still fine, only the generic container aliases above are deprecated.
-
-#### Docstrings
-Use **Google-style** docstrings (not NumPy-style or reST-style):
-```python
-def example(x: int, name: str) -> bool:
-    """One-line summary.
-
-    Args:
-        x: Description of x.
-        name: Description of name.
-
-    Returns:
-        Description of return value.
-    """
-```
+We also strongly recommend **Google-style docstrings** (`Args:`, `Returns:`, `Raises:` sections), not NumPy-style or reST-style. While not currently enforced by ruff, following this convention is highly encouraged to maintain readability and consistency across the codebase.
 
 ### Test Coverage
 This codebase uses [pytest](https://docs.pytest.org/en/stable/). Pytest has many useful

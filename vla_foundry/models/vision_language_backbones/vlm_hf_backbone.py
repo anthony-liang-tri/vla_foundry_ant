@@ -1,7 +1,5 @@
 """VLM backbone wrapper for action policy conditioning."""
 
-from typing import Optional
-
 import torch
 
 from vla_foundry.models.model_outputs.backbone_output import VisionLanguageBackboneOutput
@@ -52,10 +50,10 @@ class VLMHFBackboneWrapper(BaseBackboneWrapper):
 
     def _validate_inputs(
         self,
-        input_ids: Optional[torch.Tensor],
-        pixel_values: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        attention_mask_images: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None,
+        pixel_values: torch.Tensor | None,
+        attention_mask: torch.Tensor | None = None,
+        attention_mask_images: torch.Tensor | None = None,
         **kwargs,
     ) -> None:
         """Validate VLM backbone inputs.
@@ -101,10 +99,10 @@ class VLMHFBackboneWrapper(BaseBackboneWrapper):
 
     def _prepare_inputs(
         self,
-        input_ids: Optional[torch.Tensor],
-        pixel_values: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        attention_mask_images: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None,
+        pixel_values: torch.Tensor | None,
+        attention_mask: torch.Tensor | None = None,
+        attention_mask_images: torch.Tensor | None = None,
         **kwargs,
     ):
         self._validate_inputs(input_ids, pixel_values, attention_mask, attention_mask_images, **kwargs)

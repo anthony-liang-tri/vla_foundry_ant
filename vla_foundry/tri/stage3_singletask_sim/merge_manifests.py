@@ -87,7 +87,7 @@ def main():
                 failed_tasks.append(task)
                 continue
 
-            with open(local_path, "r") as f:
+            with open(local_path) as f:
                 for line in f:
                     line = line.strip()
                     if not line:

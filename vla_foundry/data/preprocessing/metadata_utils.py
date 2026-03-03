@@ -44,7 +44,7 @@ def get_python_dependencies(file_path: str, repo_root: str | None = None, visite
         repo_root = find_repo_root(file_path)
 
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             content = f.read()
 
         tree = ast.parse(content)

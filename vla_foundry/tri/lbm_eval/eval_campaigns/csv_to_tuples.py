@@ -170,7 +170,7 @@ def parse_task_filter(filter_input, line_range=None):
         path = Path(filter_input)
         if path.exists():
             # Read from file
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 lines = f.readlines()
                 # Apply line range if specified
                 if line_range:
@@ -236,7 +236,7 @@ def load_run_names_from_csv(csv_path):
     """Collect run names present in a W&B CSV export."""
     run_names = set()
 
-    with open(csv_path, "r", encoding="utf-8") as f:
+    with open(csv_path, encoding="utf-8") as f:
         reader = csv.reader(f)
         try:
             header = next(reader)
@@ -270,7 +270,7 @@ def csv_to_tuples(csv_path, output_path=None, task_filter=None, exclude_runs=Non
     entries_by_task = {}
     seen_runs = set()
 
-    with open(csv_path, "r", encoding="utf-8") as f:
+    with open(csv_path, encoding="utf-8") as f:
         reader = csv.reader(f)
         header = next(reader)
 

@@ -80,7 +80,7 @@ class TestRoboticsProcessorLoad:
     def sample_statistics_data(self, dataset_stats_path):
         """Create sample statistics data for testing using real dataset structure."""
         # Load the full statistics file
-        with open(dataset_stats_path, "r") as f:
+        with open(dataset_stats_path) as f:
             full_stats = json.load(f)
 
         # Return a subset of the most relevant fields for testing
@@ -412,7 +412,7 @@ class TestRoboticsNormalizerLoad:
         )
 
         # Load the full statistics file
-        with open(dataset_stats_path, "r") as f:
+        with open(dataset_stats_path) as f:
             full_stats = json.load(f)
 
         # Return a subset of the most relevant fields for testing

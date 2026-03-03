@@ -1,6 +1,6 @@
 import itertools
 import logging
-from typing import Callable
+from collections.abc import Callable
 
 import torch
 import torch.distributed as dist

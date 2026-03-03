@@ -23,7 +23,6 @@
 """PointNet encoder for 3D point cloud processing."""
 
 import logging
-from typing import Type
 
 import torch
 import torch.nn as nn
@@ -37,7 +36,7 @@ def create_mlp(
     input_dim: int,
     output_dim: int,
     net_arch: list[int],
-    activation_fn: Type[nn.Module] = nn.ReLU,
+    activation_fn: type[nn.Module] = nn.ReLU,
     squash_output: bool = False,
 ) -> list[nn.Module]:
     """

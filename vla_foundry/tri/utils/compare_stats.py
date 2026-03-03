@@ -108,9 +108,9 @@ def load_json(path: str) -> dict:
         )
         if result.returncode != 0:
             raise FileNotFoundError(f"Failed to download {path}: {result.stderr}")
-        with open(tmp_path, "r") as f:
+        with open(tmp_path) as f:
             return json.load(f)
-    with open(path, "r") as f:
+    with open(path) as f:
         return json.load(f)
 
 

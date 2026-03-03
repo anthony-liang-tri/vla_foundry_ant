@@ -506,7 +506,7 @@ class StreamingDatasetStatistics:
             return
 
         try:
-            with open(filepath, "r") as f:
+            with open(filepath) as f:
                 state = json.load(f)
 
             # Restore configuration

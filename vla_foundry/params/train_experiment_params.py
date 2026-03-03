@@ -2,7 +2,6 @@ import logging
 import os
 import tempfile
 from dataclasses import dataclass, field
-from typing import Type
 
 import yaml
 
@@ -121,7 +120,7 @@ class TrainExperimentParams(BaseParams):
         #     raise ValueError(f"--fsdp can only be specified in distributed mode.")
 
 
-def load_params_from_yaml(params_class: Type[BaseParams], path: str, localize_params: bool = False) -> BaseParams:
+def load_params_from_yaml(params_class: type[BaseParams], path: str, localize_params: bool = False) -> BaseParams:
     """
     Load a draccus params object from a yaml file with support for s3 paths.
 

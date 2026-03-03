@@ -506,7 +506,7 @@ def main() -> None:
 
     expected_tasks: list[str]
     if args.tasks_file:
-        with open(args.tasks_file, "r", encoding="utf-8") as f:
+        with open(args.tasks_file, encoding="utf-8") as f:
             parsed = [extract_task_name(line) for line in f]
             expected_tasks = sorted({task for task in parsed if task})
     else:

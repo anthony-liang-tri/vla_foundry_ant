@@ -74,7 +74,7 @@ def mock_config():
     ):
         # Load the base config from YAML using draccus (supports !include)
         config_path = "vla_foundry/config_presets/data/lbm/lbm_data_params.yaml"
-        with open(config_path, "r") as f:
+        with open(config_path) as f:
             config_dict = load_config(f, file=config_path)
         config_dict.pop("type", None)
 
@@ -133,7 +133,7 @@ def manifest_data(dataset_path):
     """Load and return manifest data."""
     manifest_path = os.path.join(dataset_path, "manifest.jsonl")
 
-    with open(manifest_path, "r") as f:
+    with open(manifest_path) as f:
         manifest_lines = f.readlines()
 
     manifest = [json.loads(line.strip()) for line in manifest_lines]
@@ -528,7 +528,7 @@ def test_normalization(dataset_path, manifest_data, mock_config):
         """Helper to create config with normalization enabled/disabled."""
         # Load the base config from YAML using draccus (supports !include)
         config_path = "vla_foundry/config_presets/data/lbm/lbm_data_params.yaml"
-        with open(config_path, "r") as f:
+        with open(config_path) as f:
             config_dict = load_config(f, file=config_path)
             config_dict.pop("type", None)
 
@@ -686,7 +686,7 @@ def test_normalization_consistency(dataset_path, manifest_data, mock_config):
 
     # Load the base config from YAML using draccus (supports !include)
     config_path = "vla_foundry/config_presets/data/lbm/lbm_data_params.yaml"
-    with open(config_path, "r") as f:
+    with open(config_path) as f:
         config_dict = load_config(f, file=config_path)
 
     # Override test-specific settings
@@ -779,7 +779,7 @@ def test_compare_dataloader_and_roboticsdataloader(dataset_path, manifest_data, 
     """Test that get_wds_dataloader and RoboticsDataLoader produce matching lowdim data for all sample_ids."""
     # Load config using draccus (supports !include)
     config_path = "vla_foundry/config_presets/data/lbm/lbm_data_params.yaml"
-    with open(config_path, "r") as f:
+    with open(config_path) as f:
         config_dict = load_config(f, file=config_path)
     config_dict.update(
         {

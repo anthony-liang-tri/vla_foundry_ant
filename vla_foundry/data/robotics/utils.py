@@ -33,7 +33,7 @@ def normalize(x, eps=1e-12):
 
 def load_action_field_config(config_path: str) -> dict[str, list[Any]]:
     """Load action field configuration from YAML file."""
-    with open(config_path, "r") as f:
+    with open(config_path) as f:
         data = yaml.safe_load(f) or {}
     return {
         "action_key_fields": data.get("action_key_fields", []),

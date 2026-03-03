@@ -71,7 +71,7 @@ class HumanoidEverydayConverter(BaseRoboticsConverter):
                 if not os.path.isfile(metadata_path):
                     print(f"Warning: no metadata.json found at '{metadata_path}', skipping task '{task_name}'")
                     continue
-                with open(metadata_path, "r") as f:
+                with open(metadata_path) as f:
                     metadata = json.load(f)
                 self.language_annotations[task_name] = {
                     "original": [metadata.get("description", task_name)],
@@ -99,7 +99,7 @@ class HumanoidEverydayConverter(BaseRoboticsConverter):
             The robot type string (e.g. ``"h1"``, ``"g1"``).
         """
         data_json_path = os.path.join(episode_path, "data.json")
-        with open(data_json_path, "r") as f:
+        with open(data_json_path) as f:
             frames = json.load(f)
 
         if not frames:
@@ -363,7 +363,7 @@ class HumanoidEverydayConverter(BaseRoboticsConverter):
             - depth_images: array of depth images, or None.
         """
         data_json_path = os.path.join(episode_path, "data.json")
-        with open(data_json_path, "r") as f:
+        with open(data_json_path) as f:
             frames = json.load(f)
 
         episode_length = len(frames)

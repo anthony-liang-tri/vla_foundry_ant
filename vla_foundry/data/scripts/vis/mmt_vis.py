@@ -11,9 +11,9 @@ import io
 import json
 import logging
 import tarfile
+from collections.abc import Iterator, Mapping, MutableMapping
 from dataclasses import dataclass
 from pathlib import PurePosixPath
-from typing import Iterator, Mapping, MutableMapping
 
 import fsspec
 import numpy as np
@@ -96,7 +96,7 @@ class NormalizerBundle:
     @classmethod
     def from_paths(cls, data_params_path: str, stats_json_uri: str) -> "NormalizerBundle":
         """Create a NormalizerBundle from local YAML and (possibly remote) JSON stats."""
-        with open(data_params_path, "r", encoding="utf-8") as f:
+        with open(data_params_path, encoding="utf-8") as f:
             data_params = yaml.safe_load(f) or {}
 
         # Load normalization stats (JSON may be local or remote via fsspec).
@@ -150,8 +150,7 @@ class S3TarReader:
                 except Exception as exc:  # Be resilient to partial TAR corruption.
                     logging.warning("Failed to ingest %s: %s", member.name, exc)
 
-        for sid, payload in data_dict.items():
-            yield sid, payload
+        yield from data_dict.items()
 
     def _ingest_member(
         self,

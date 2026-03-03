@@ -2092,7 +2092,7 @@ class DemoResultsViewer:
 
 def parse_tasks_file(tasks_file: str) -> list[tuple[str, str, str]]:
     """Parse the tasks file and extract task information."""
-    with open(tasks_file, "r") as f:
+    with open(tasks_file) as f:
         content = f.read()
 
     # Remove f-string prefix
@@ -2129,7 +2129,7 @@ def load_yaml_file(yaml_path: str) -> dict[Any, Any]:
         # Add a default constructor for any unknown tag
         CustomLoader.add_constructor(None, construct_unknown)
 
-        with open(yaml_path, "r") as f:
+        with open(yaml_path) as f:
             return yaml.load(f, Loader=CustomLoader)
     except Exception as e:
         print(f"Error loading {yaml_path}: {e}")

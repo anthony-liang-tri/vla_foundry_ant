@@ -343,7 +343,7 @@ class DiTX(nn.Module):
         blacklist_weight_modules = (torch.nn.LayerNorm, torch.nn.Embedding, RmsNorm)
         for mn, m in self.named_modules():
             for pn, _p in m.named_parameters():
-                fpn = "%s.%s" % (mn, pn) if mn else pn  # full param name
+                fpn = f"{mn}.{pn}" if mn else pn  # full param name
 
                 if pn.endswith("bias"):
                     # all biases will not be decayed

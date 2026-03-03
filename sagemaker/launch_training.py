@@ -264,7 +264,7 @@ def main():
         "VLA_LAUNCHED_BY": args.user,
         **get_git_env_vars(),
     }
-    with open("secrets.env", "r") as f:
+    with open("secrets.env") as f:
         for line in f:
             line = line.strip()
             if line and not line.startswith("#") and "=" in line:
