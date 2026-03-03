@@ -213,6 +213,32 @@ def resolve_task_name_on_s3(checkpoint_base: str, task_name: str) -> str:
     return task_name
 
 
+def _list_evaluation_subfolders(checkpoint_base: str) -> list[str]:
+    """List subfolders under evaluation/ that look like eval-run IDs (e.g. 2026-02-27_6c090584).
+
+    Returns subfolder names (not full paths) that are *not* plausible task names
+    (i.e. they match a date-hash or UUID-like pattern).
+    """
+    result = subprocess.run(
+        ["aws", "s3", "ls", f"{checkpoint_base.rstrip('/')}/evaluation/"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if result.returncode != 0:
+        return []
+
+    # Pattern: date_hash like "2026-02-27_6c090584" or similar non-task-name folders
+    eval_run_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}[_T]")
+    subfolders = []
+    for line in result.stdout.splitlines():
+        if " PRE " in line:
+            token = line.split(" PRE ", 1)[1].strip().rstrip("/")
+            if eval_run_pattern.match(token):
+                subfolders.append(token)
+    return subfolders
+
+
 def _extract_sample_data(summary_data: dict, summary_file: Path) -> dict:
     """Extract relevant fields from a summary.yaml for storage."""
     # Extract demonstration index from path (e.g., demonstration_100)
@@ -279,11 +305,27 @@ def download_summaries_and_compute_rate(
             resolved_task_name = resolve_task_name_on_s3(checkpoint_base, task_name) if task_name else None
 
             paths_to_check: list[str] = []
-            if evaluation_subfolder and resolved_task_name:
+
+            # Collect evaluation subfolders to search: explicit flag first,
+            # then auto-discovered date-hash subfolders from S3.
+            eval_subfolders: list[str] = []
+            if evaluation_subfolder:
+                eval_subfolders.append(evaluation_subfolder)
+            else:
+                eval_subfolders.extend(_list_evaluation_subfolders(checkpoint_base))
+
+            for subfolder in eval_subfolders:
+                if resolved_task_name:
+                    paths_to_check.extend(
+                        [
+                            f"{checkpoint_base}/evaluation/{subfolder}/{resolved_task_name}/rollouts/",
+                            f"{checkpoint_base}/evaluation/{subfolder}/{resolved_task_name}/summary/",
+                        ]
+                    )
                 paths_to_check.extend(
                     [
-                        f"{checkpoint_base}/evaluation/{evaluation_subfolder}/{resolved_task_name}/rollouts/",
-                        f"{checkpoint_base}/evaluation/{evaluation_subfolder}/{resolved_task_name}/summary/",
+                        f"{checkpoint_base}/evaluation/{subfolder}/rollouts/",
+                        f"{checkpoint_base}/evaluation/{subfolder}/summary/",
                     ]
                 )
             if resolved_task_name:
@@ -291,13 +333,6 @@ def download_summaries_and_compute_rate(
                     [
                         f"{checkpoint_base}/evaluation/{resolved_task_name}/rollouts/",
                         f"{checkpoint_base}/evaluation/{resolved_task_name}/summary/",
-                    ]
-                )
-            if evaluation_subfolder:
-                paths_to_check.extend(
-                    [
-                        f"{checkpoint_base}/evaluation/{evaluation_subfolder}/rollouts/",
-                        f"{checkpoint_base}/evaluation/{evaluation_subfolder}/summary/",
                     ]
                 )
             paths_to_check.extend(

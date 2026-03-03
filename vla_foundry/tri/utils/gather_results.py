@@ -27,6 +27,7 @@ import curses
 import glob
 import os
 import pickle
+import re
 import shutil
 import subprocess
 import sys
@@ -2159,6 +2160,32 @@ def find_video_file(base_folder: str, demo_name: str) -> str | None:
         return None
 
 
+def _list_evaluation_subfolders(checkpoint_base: str) -> list[str]:
+    """List subfolders under evaluation/ that look like eval-run IDs (e.g. 2026-02-27_6c090584).
+
+    Returns subfolder names (not full paths) that are *not* plausible task names
+    (i.e. they match a date-hash or UUID-like pattern).
+    """
+    result = subprocess.run(
+        ["aws", "s3", "ls", f"{checkpoint_base.rstrip('/')}/evaluation/"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if result.returncode != 0:
+        return []
+
+    # Pattern: date_hash like "2026-02-27_6c090584" or similar non-task-name folders
+    eval_run_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}[_T]")
+    subfolders = []
+    for line in result.stdout.splitlines():
+        if " PRE " in line:
+            token = line.split(" PRE ", 1)[1].strip().rstrip("/")
+            if eval_run_pattern.match(token):
+                subfolders.append(token)
+    return subfolders
+
+
 def download_summaries(
     checkpoint_s3_path: str,
     task_name: str,
@@ -2210,17 +2237,39 @@ def download_summaries(
     if checkpoint_base.endswith("/checkpoint.ckpt") or checkpoint_base.endswith("/checkpoint.pt"):
         checkpoint_base = checkpoint_base.rsplit("/", 1)[0]
 
+    # Auto-discover date-hash evaluation subfolders from S3
+    eval_subfolders = _list_evaluation_subfolders(checkpoint_base)
+
     # Common paths where rollouts might be found
     # First check paths with task_name (more specific), then fallback to paths without
-    paths_to_check = [
-        f"{checkpoint_base}/evaluation/{task_name}/rollouts/",
-        f"{checkpoint_base}/evaluation/{task_name}/summary/",
-        f"{checkpoint_base}/evaluation/rollouts/",
-        f"{checkpoint_base}/evaluation/summary/",
-    ]
-
-    # If we knew campaign name we could check that too, but we don't always know it
-    # We could try to infer it or just search more broadly if needed
+    paths_to_check: list[str] = []
+    for subfolder in eval_subfolders:
+        if task_name:
+            paths_to_check.extend(
+                [
+                    f"{checkpoint_base}/evaluation/{subfolder}/{task_name}/rollouts/",
+                    f"{checkpoint_base}/evaluation/{subfolder}/{task_name}/summary/",
+                ]
+            )
+        paths_to_check.extend(
+            [
+                f"{checkpoint_base}/evaluation/{subfolder}/rollouts/",
+                f"{checkpoint_base}/evaluation/{subfolder}/summary/",
+            ]
+        )
+    if task_name:
+        paths_to_check.extend(
+            [
+                f"{checkpoint_base}/evaluation/{task_name}/rollouts/",
+                f"{checkpoint_base}/evaluation/{task_name}/summary/",
+            ]
+        )
+    paths_to_check.extend(
+        [
+            f"{checkpoint_base}/evaluation/rollouts/",
+            f"{checkpoint_base}/evaluation/summary/",
+        ]
+    )
 
     found = False
     for s3_base in paths_to_check:
