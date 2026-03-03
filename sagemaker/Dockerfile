@@ -14,6 +14,7 @@ COPY packages/ /opt/ml/code/packages/
 RUN \
     # Drop the optional inference group and workspace-only sources that aren't present in this image
     sed -E -i '/^[[:space:]]*inference[[:space:]]*=[[:space:]]*\[/,/^[[:space:]]*\][[:space:]]*$/d' /opt/ml/code/pyproject.toml \
+    && sed -E -i '/^[[:space:]]*"robot-gym",?[[:space:]]*$/d' /opt/ml/code/pyproject.toml \
     && sed -E -i '/^[[:space:]]*robot-gym[[:space:]]*=[[:space:]]*\{[[:space:]]*workspace[[:space:]]*=[[:space:]]*true[[:space:]]*\}/d' /opt/ml/code/pyproject.toml \
     && sed -E -i '/^[[:space:]]*grpc_workspace[[:space:]]*=[[:space:]]*\{[[:space:]]*workspace[[:space:]]*=[[:space:]]*true[[:space:]]*\}/d' /opt/ml/code/pyproject.toml \
     && uv pip install --python /usr/local/bin/python --no-cache-dir -r /opt/ml/code/pyproject.toml \
