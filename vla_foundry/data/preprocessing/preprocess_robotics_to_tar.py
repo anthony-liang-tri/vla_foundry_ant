@@ -4,11 +4,10 @@ import os
 import random
 import uuid
 
-import boto3
 import draccus
 import ray
-from botocore.exceptions import UnauthorizedSSOTokenError
 
+from vla_foundry.aws.s3_utils import get_aws_credentials_env
 from vla_foundry.data.preprocessing.metadata_utils import create_processing_metadata
 from vla_foundry.data.preprocessing.robotics.converters import get_converter
 from vla_foundry.data.preprocessing.robotics.preprocess_params import TYPE_MAPPER
@@ -54,38 +53,14 @@ def main():
 
     # Initialize Ray - forward AWS credentials to workers when needed for S3 I/O
     runtime_env = {"env_vars": {}}
-    aws_profile = os.environ.get("AWS_PROFILE")
-    if aws_profile:
-        runtime_env["env_vars"]["AWS_PROFILE"] = aws_profile
 
     # Capture git info on head node and pass to workers (since .git is excluded)
     runtime_env["env_vars"].update(get_git_env_vars())
     # Capture the user who launched the job (head node user, not worker node user)
     if os.environ.get("USER"):
         runtime_env["env_vars"]["VLA_LAUNCHED_BY"] = os.environ["USER"]
-    source_paths = cfg.source_episodes if isinstance(cfg.source_episodes, list) else [cfg.source_episodes]
-    paths_that_use_s3 = source_paths + [cfg.output_dir]
-    needs_s3_credentials = any(isinstance(path, str) and path.startswith("s3://") for path in paths_that_use_s3)
-
-    # Explicitly forward AWS credentials from head node to workers for S3.
-    # This avoids reliance on IMDS on worker nodes, which can be flaky.
-    if needs_s3_credentials:
-        try:
-            session = boto3.Session()
-            credentials = session.get_credentials()
-            if credentials:
-                credentials = credentials.get_frozen_credentials()
-                if credentials.access_key:
-                    runtime_env["env_vars"]["AWS_ACCESS_KEY_ID"] = credentials.access_key
-                if credentials.secret_key:
-                    runtime_env["env_vars"]["AWS_SECRET_ACCESS_KEY"] = credentials.secret_key
-                if credentials.token:
-                    runtime_env["env_vars"]["AWS_SESSION_TOKEN"] = credentials.token
-        except UnauthorizedSSOTokenError as e:
-            raise RuntimeError(
-                "AWS SSO token is expired, but this run requires S3 access. "
-                "Please run `aws sso login` (with your profile) and retry."
-            ) from e
+    # Forward AWS credentials from head node to workers (avoids flaky IMDS on workers)
+    runtime_env["env_vars"].update(get_aws_credentials_env())
 
     if cfg.ray_address:
         ray.init(address=cfg.ray_address, runtime_env=runtime_env)

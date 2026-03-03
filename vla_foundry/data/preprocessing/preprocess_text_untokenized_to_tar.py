@@ -13,28 +13,21 @@ import tempfile
 import uuid
 from pathlib import Path
 
-import boto3
 import fsspec
 import pandas as pd
 import pyarrow.parquet as pq
 import ray
 
+from vla_foundry.aws.s3_io import list_objects
+from vla_foundry.aws.s3_path import S3Path
+from vla_foundry.aws.s3_utils import create_s3_client
+
 
 def list_parquet_files(s3_input_path):
     """List all parquet files in S3 path."""
-    bucket = s3_input_path.replace("s3://", "").split("/")[0]
-    prefix = "/".join(s3_input_path.replace("s3://", "").split("/")[1:])
-
-    s3 = boto3.client("s3")
-    paginator = s3.get_paginator("list_objects_v2")
-
-    files = []
-    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
-        if "Contents" in page:
-            for obj in page["Contents"]:
-                if obj["Key"].endswith(".parquet"):
-                    files.append(obj["Key"])
-    return files, bucket
+    parsed = S3Path(s3_path=s3_input_path)
+    files = list_objects(parsed.bucket, parsed.key, suffix_filter=".parquet")
+    return files, parsed.bucket
 
 
 @ray.remote
@@ -83,7 +76,7 @@ def compute_parquet_shard_plan(parquet_files, row_counts, samples_per_shard):
 def process_parquet_to_shards(parquet_plan, bucket, s3_output_path, tmp_dir, samples_per_shard):
     print("parquet_plan", parquet_plan)
     """Process one parquet file and create only complete tar shards from it."""
-    s3_client = boto3.client("s3")
+    s3_client = create_s3_client()
     parquet_file = parquet_plan["parquet_file"]
     start_shard_idx = parquet_plan["start_shard_idx"]
     num_complete_shards = parquet_plan["num_complete_shards"]
@@ -128,7 +121,8 @@ def process_parquet_to_shards(parquet_plan, bucket, s3_output_path, tmp_dir, sam
                         sample_count += 1
 
             # Upload to S3
-            bucket_name, s3_key = s3_output_path.replace("s3://", "").split("/", 1)
+            _parsed = S3Path(s3_path=s3_output_path)
+            bucket_name, s3_key = _parsed.bucket, _parsed.key
             full_s3_key = f"{s3_key.rstrip('/')}/{tar_filename}"
             s3_client.upload_file(str(tar_path), bucket_name, full_s3_key)
 

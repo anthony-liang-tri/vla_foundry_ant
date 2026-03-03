@@ -9,10 +9,11 @@ import time
 from contextlib import contextmanager
 from typing import Any
 
-import boto3
 import fsspec
 import numpy as np
 import yaml
+
+from vla_foundry.aws.s3_path import S3Path
 
 try:
     import torch
@@ -165,29 +166,7 @@ def is_dir(path):
 def list_s3_directory_recursive(dir_path):
     """Get all S3 objects under a prefix efficiently using pagination."""
     assert dir_path.startswith("s3"), "Only S3 paths are supported for now"
-    s3_client = boto3.client("s3")
-    bucket, prefix = parse_s3_path(dir_path)
-
-    if prefix and not prefix.endswith("/"):
-        prefix += "/"
-
-    paginator = s3_client.get_paginator("list_objects_v2")
-    objects = set()
-
-    try:
-        for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
-            if "Contents" in page:
-                for obj in page["Contents"]:
-                    # Store relative path from prefix
-                    key = obj["Key"]
-                    if key.startswith(prefix):
-                        relative_key = key[len(prefix) :]
-                        objects.add(relative_key.lstrip("/"))
-    except Exception as e:
-        print(f"Error listing directory {dir_path}: {e}")
-        pass
-
-    return objects
+    return S3Path(s3_path=dir_path).list_objects_relative()
 
 
 def _file_exists_s3_ls(file_path):
@@ -218,14 +197,6 @@ def localize_paths(data: Any, base_path: str) -> Any:
         for key, value in data.items():
             data[key] = localize_paths(value, base_path)
     return data
-
-
-def parse_s3_path(s3_path: str):
-    assert s3_path.startswith("s3://")
-    parts = s3_path.removeprefix("s3://").split("/", 1)
-    bucket = parts[0]
-    directory = parts[1].removesuffix("/") if len(parts) > 1 else ""
-    return bucket, directory
 
 
 @contextmanager

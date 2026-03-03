@@ -6,15 +6,15 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
-import boto3
 import ray
 import requests
-from botocore.config import Config
 from huggingface_hub import HfApi
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from vla_foundry.file_utils import file_exists, parse_s3_path
+from vla_foundry.aws.s3_path import S3Path
+from vla_foundry.aws.s3_utils import create_s3_client
+from vla_foundry.file_utils import file_exists
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -87,8 +87,7 @@ def _download_and_upload_file(
 
         # Upload to S3 if configured
         if s3_bucket is not None:
-            boto3_config = Config(max_pool_connections=50, retries={"max_attempts": 3})
-            s3_client = boto3.client("s3", config=boto3_config)
+            s3_client = create_s3_client()
             s3_rel_key = relative_key if preserve_structure else filename
             s3_key = f"{s3_output_dir}/{s3_rel_key}"
             s3_client.upload_file(str(temp_path), s3_bucket, s3_key)
@@ -287,7 +286,8 @@ if __name__ == "__main__":
     if args.mode == "s3":
         assert args.s3_output_path is not None
 
-        s3_bucket, s3_output_dir = parse_s3_path(args.s3_output_path)
+        s3_path = S3Path(s3_path=args.s3_output_path)
+        s3_bucket, s3_output_dir = s3_path.bucket, s3_path.key
         downloader = DatasetDownloader(
             s3_bucket=s3_bucket,
             s3_output_dir=s3_output_dir,

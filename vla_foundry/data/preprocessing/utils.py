@@ -1,9 +1,7 @@
 import io
 import json
-import random
 import re
 import tarfile
-import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
@@ -11,13 +9,14 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
-import boto3
 import numpy as np
 import ray
 import torch
-from botocore.config import Config
 from PIL import Image
 
+from vla_foundry.aws.s3_io import download_fileobj_from_s3, upload_fileobj_to_s3
+from vla_foundry.aws.s3_path import S3Path
+from vla_foundry.aws.s3_utils import create_s3_client, is_s3_path
 from vla_foundry.data.preprocessing.image_utils import ImageResizingMethod, depth_image_to_bytes, image_to_bytes
 from vla_foundry.data.robotics.cv_utils import scale_intrinsics_3x3_for_resize_and_crop
 
@@ -33,11 +32,7 @@ def upload_sample_to_s3(
     image_resizing_method: ImageResizingMethod = ImageResizingMethod.CENTER_CROP,
 ) -> None:
     """Upload sample data to S3 as tar file. (or save locally)"""
-    s3_client = (
-        boto3.client("s3", config=Config(retries={"max_attempts": 10, "mode": "adaptive"}))
-        if output_dir.startswith("s3://")
-        else None
-    )
+    s3_client = create_s3_client() if is_s3_path(output_dir) else None
     tar_buffer = io.BytesIO()
     uuid_prefix = str(uuid.uuid4())
 
@@ -152,12 +147,12 @@ def upload_sample_to_s3(
     unique_id = extract_unique_id(episode_path)
     tar_filename = f"{unique_id}_{episode_id}_frame_{frame_idx}.tar"
 
-    if output_dir.startswith("s3://"):
+    if is_s3_path(output_dir):
         # Upload to S3
-        bucket_name, s3_prefix = output_dir.removeprefix("s3://").split("/", 1)
-        s3_key = f"{s3_prefix.rstrip('/')}/frames/{tar_filename}"
-        s3_client.upload_fileobj(tar_buffer, bucket_name, s3_key)
-        print(f"Uploaded s3://{bucket_name}/{s3_key}", flush=True)
+        parsed = S3Path(s3_path=output_dir)
+        s3_key = f"{parsed.key.rstrip('/')}/frames/{tar_filename}"
+        s3_client.upload_fileobj(tar_buffer, parsed.bucket, s3_key)
+        print(f"Uploaded s3://{parsed.bucket}/{s3_key}", flush=True)
     else:
         # Save to local filesystem
         local_path = Path(output_dir) / "frames" / tar_filename
@@ -180,20 +175,19 @@ def extract_unique_id(episode_path: str) -> str:
 
 def save_and_upload_dict(dict_data: dict, output_path: str, file_name: str):
     # Used to upload manifest.jsonl and stats.json (or save locally)
-    bucket_name, s3_prefix = output_path.removeprefix("s3://").split("/", 1)
     body = "\n".join(json.dumps(record) for record in dict_data) if "jsonl" in file_name else json.dumps(dict_data)
 
-    if output_path.startswith("s3://"):
+    if is_s3_path(output_path):
         # Upload to S3
-        bucket_name, s3_prefix = output_path.removeprefix("s3://").split("/", 1)
-        s3_key = f"{s3_prefix.rstrip('/')}/{file_name}"
-        boto3.client("s3").put_object(
-            Bucket=bucket_name,
+        parsed = S3Path(s3_path=output_path)
+        s3_key = f"{parsed.key.rstrip('/')}/{file_name}"
+        create_s3_client().put_object(
+            Bucket=parsed.bucket,
             Key=s3_key,
             Body=body.encode("utf-8"),
             ContentType="application/json",
         )
-        print(f"Uploaded {file_name} to s3://{bucket_name}/{s3_key}")
+        print(f"Uploaded {file_name} to s3://{parsed.bucket}/{s3_key}")
     else:
         # Save to local filesystem
         local_path = Path(output_path) / file_name
@@ -214,12 +208,12 @@ def save_and_upload_config(config, output_path: str, file_name: str):
         draccus.dump(config, temp_file)
         temp_path = temp_file.name
 
-    if output_path.startswith("s3://"):
+    if is_s3_path(output_path):
         # Upload to S3
-        bucket_name, s3_prefix = output_path.removeprefix("s3://").split("/", 1)
-        s3_key = f"{s3_prefix.rstrip('/')}/{file_name}"
-        boto3.client("s3").upload_file(temp_path, bucket_name, s3_key)
-        print(f"Uploaded {file_name} to s3://{bucket_name}/{s3_key}")
+        parsed = S3Path(s3_path=output_path)
+        s3_key = f"{parsed.key.rstrip('/')}/{file_name}"
+        create_s3_client().upload_file(temp_path, parsed.bucket, s3_key)
+        print(f"Uploaded {file_name} to s3://{parsed.bucket}/{s3_key}")
     else:
         # Save to local filesystem
         local_path = Path(output_path) / file_name
@@ -231,33 +225,19 @@ def save_and_upload_config(config, output_path: str, file_name: str):
 def _download_tar_from_s3(s3_key: str, s3_client, bucket_name: str, s3_prefix: str):
     """Download a single tar file from S3 with retry logic."""
     full_key = f"{s3_prefix.rstrip('/')}/frames/{s3_key}"
-    max_retries = 10
-    base_delay = 1.0
-
-    for attempt in range(max_retries):
-        try:
-            obj_buffer = io.BytesIO()
-            s3_client.download_fileobj(bucket_name, full_key, obj_buffer)
-            obj_buffer.seek(0)
-            return (s3_key, obj_buffer)
-        except Exception as e:
-            if attempt == max_retries - 1:
-                raise
-            # Exponential backoff with jitter
-            delay = base_delay * (2**attempt) + random.uniform(0, 1)
-            print(f"S3 download failed (attempt {attempt + 1}/{max_retries}), retrying in {delay:.1f}s: {e}")
-            time.sleep(delay)
+    obj_buffer = download_fileobj_from_s3(bucket_name, full_key, s3_client=s3_client)
+    return (s3_key, obj_buffer)
 
 
 @ray.remote
 def create_episode_shard(shard_files: list[str], episode_key: str, output_dir: str) -> str:
     """Download/read tar files and create an episode-based shard. Supports both S3 and local filesystem."""
-    is_s3 = output_dir.startswith("s3://")
+    is_s3 = is_s3_path(output_dir)
 
     if is_s3:
-        s3_config = Config(max_pool_connections=50, retries={"max_attempts": 10, "mode": "adaptive"})
-        s3_client = boto3.client("s3", config=s3_config)
-        bucket_name, s3_prefix = output_dir.removeprefix("s3://").split("/", 1)
+        s3_client = create_s3_client()
+        parsed = S3Path(s3_path=output_dir)
+        bucket_name, s3_prefix = parsed.bucket, parsed.key
         download_tar = partial(_download_tar_from_s3, s3_client=s3_client, bucket_name=bucket_name, s3_prefix=s3_prefix)
     else:
         frames_dir = Path(output_dir) / "frames"
@@ -316,12 +296,12 @@ def create_episode_shard(shard_files: list[str], episode_key: str, output_dir: s
 @ray.remote
 def create_shard(shard_files: list[str], shard_idx: int, output_dir: str) -> str:
     """Download tar files from S3 and create a shard. OPTIMIZED with parallel downloads."""
-    is_s3 = output_dir.startswith("s3://")
+    is_s3 = is_s3_path(output_dir)
 
     if is_s3:
-        s3_config = Config(max_pool_connections=50, retries={"max_attempts": 10, "mode": "adaptive"})
-        s3_client = boto3.client("s3", config=s3_config)
-        bucket_name, s3_prefix = output_dir.removeprefix("s3://").split("/", 1)
+        s3_client = create_s3_client()
+        parsed = S3Path(s3_path=output_dir)
+        bucket_name, s3_prefix = parsed.bucket, parsed.key
 
         def read_tar(tar_key):
             """Download a single tar file from S3."""
@@ -365,27 +345,17 @@ def create_shard(shard_files: list[str], shard_idx: int, output_dir: str) -> str
     shard_buffer.seek(0)
     shard_name = f"shard_{shard_idx:06d}.tar"
 
-    max_retries = 10
-    base_delay = 1.0
-    for attempt in range(max_retries):
-        try:
-            shard_buffer.seek(0)
-            if is_s3:
-                s3_client.upload_fileobj(shard_buffer, bucket_name, f"{s3_prefix.rstrip('/')}/shards/{shard_name}")
-                print(f"Uploaded shard {shard_name} to s3://{bucket_name}/{s3_prefix.rstrip('/')}/shards/{shard_name}")
-            else:
-                shard_path = Path(output_dir) / "shards" / shard_name
-                shard_path.parent.mkdir(parents=True, exist_ok=True)
-                with open(shard_path, "wb") as f:
-                    f.write(shard_buffer.getvalue())
-                print(f"Saved shard {shard_name} to {shard_path}")
-            break
-        except Exception as e:
-            if attempt == max_retries - 1:
-                raise
-            delay = base_delay * (2**attempt) + random.uniform(0, 1)
-            print(f"S3 upload failed (attempt {attempt + 1}/{max_retries}), retrying in {delay:.1f}s: {e}")
-            time.sleep(delay)
+    if is_s3:
+        upload_fileobj_to_s3(
+            shard_buffer, bucket_name, f"{s3_prefix.rstrip('/')}/shards/{shard_name}", s3_client=s3_client
+        )
+        print(f"Uploaded shard {shard_name} to s3://{bucket_name}/{s3_prefix.rstrip('/')}/shards/{shard_name}")
+    else:
+        shard_path = Path(output_dir) / "shards" / shard_name
+        shard_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(shard_path, "wb") as f:
+            f.write(shard_buffer.getvalue())
+        print(f"Saved shard {shard_name} to {shard_path}")
 
     return (shard_name.rstrip(".tar"), len(shard_files))
 
@@ -434,7 +404,7 @@ def transform_points_to_world(points: np.ndarray, extrinsics: np.ndarray) -> np.
 @ray.remote
 def copy_s3_object(source_bucket: str, source_key: str, dest_bucket: str, dest_key: str) -> str:
     """Copy a single S3 object from source to destination."""
-    s3_client = boto3.client("s3")
+    s3_client = create_s3_client()
     copy_source = {"Bucket": source_bucket, "Key": source_key}
     s3_client.copy_object(CopySource=copy_source, Bucket=dest_bucket, Key=dest_key)
     return dest_key
@@ -444,15 +414,14 @@ def recursive_s3_copy(path1: str, path2: str) -> None:
     """
     Recursively copy all objects from path1 to path2 using Ray for parallelization.
     """
-    from vla_foundry.file_utils import list_s3_directory_recursive, parse_s3_path
+    from vla_foundry.aws.s3_path import S3Path
+    from vla_foundry.file_utils import list_s3_directory_recursive
 
     # Parse source and destination paths
-    source_bucket, source_prefix = parse_s3_path(path1)
-    dest_bucket, dest_prefix = parse_s3_path(path2)
-    if source_prefix and not source_prefix.endswith("/"):
-        source_prefix += "/"
-    if dest_prefix and not dest_prefix.endswith("/"):
-        dest_prefix += "/"
+    source = S3Path(s3_path=path1)
+    dest = S3Path(s3_path=path2)
+    source_bucket, source_prefix = source.bucket, source.key.rstrip("/") + "/"
+    dest_bucket, dest_prefix = dest.bucket, dest.key.rstrip("/") + "/"
 
     relative_paths = list(list_s3_directory_recursive(path1))
     print(f"Found {len(relative_paths)} objects to copy")

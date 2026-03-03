@@ -1,10 +1,10 @@
 import json
 import math
 
-import boto3
-
+from vla_foundry.aws.s3_path import S3Path
+from vla_foundry.aws.s3_utils import create_s3_client
 from vla_foundry.data.preprocessing.hf_utils.hf_dataset_downloader import _download_and_upload_file
-from vla_foundry.file_utils import list_s3_directory_recursive, parse_s3_path
+from vla_foundry.file_utils import list_s3_directory_recursive
 
 
 def get_camera_names_from_s3(s3_client, bucket: str, prefix: str, chunk_num: int) -> list[str]:
@@ -57,9 +57,9 @@ def check_lerobot_complete(s3_path: str) -> list[str]:
     Returns:
         List of incomplete/missing files that were not downloaded correctly.
     """
-    s3_client = boto3.client("s3")
-    bucket, prefix = parse_s3_path(s3_path)
-    prefix = prefix.rstrip("/")
+    s3_client = create_s3_client()
+    parsed = S3Path(s3_path=s3_path)
+    bucket, prefix = parsed.bucket, parsed.key.rstrip("/")
 
     missing_files = []
 
@@ -109,7 +109,8 @@ def download_missing_files(
         hf_dataset="IPEC-COMMUNITY/droid_lerobot",
     )
     """
-    bucket, prefix = parse_s3_path(s3_path)
+    parsed = S3Path(s3_path=s3_path)
+    bucket, prefix = parsed.bucket, parsed.key
     for failed_file in missing_files:
         file_name = failed_file.removeprefix(s3_path).lstrip("/")
         url = f"https://huggingface.co/datasets/{hf_dataset}/resolve/main/{file_name}"
