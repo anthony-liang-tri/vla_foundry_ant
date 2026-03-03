@@ -16,7 +16,7 @@ import socket
 import subprocess
 import sys
 from io import StringIO
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable
 
 import boto3
 import draccus
@@ -48,7 +48,7 @@ def _get_dynamodb_table(table_name: str):
     return dynamodb.Table(table_name)
 
 
-def get_git_env_vars() -> Dict[str, str]:
+def get_git_env_vars() -> dict[str, str]:
     """Capture git info as environment variables for passing to remote workers.
 
     Use this to capture git info on a head node and pass to workers that don't
@@ -59,7 +59,7 @@ def get_git_env_vars() -> Dict[str, str]:
     """
     cwd = os.path.dirname(__file__)
 
-    def run_git(args: List[str]) -> Optional[str]:
+    def run_git(args: list[str]) -> str | None:
         result = subprocess.run(args, capture_output=True, text=True, cwd=cwd)
         return result.stdout.strip() if result.returncode == 0 else None
 
@@ -76,7 +76,7 @@ def get_git_env_vars() -> Dict[str, str]:
     }
 
 
-def _get_git_info() -> Dict[str, Any]:
+def _get_git_info() -> dict[str, Any]:
     """Get git repository information for code version tracking.
 
     Tries git commands first (for local runs), falls back to VLA_GIT_*
@@ -90,7 +90,7 @@ def _get_git_info() -> Dict[str, Any]:
     """
     cwd = os.path.dirname(__file__)
 
-    def run_git(args: List[str], fail_on_error: bool = True) -> Optional[str]:
+    def run_git(args: list[str], fail_on_error: bool = True) -> str | None:
         result = subprocess.run(args, capture_output=True, text=True, cwd=cwd)
         if result.returncode != 0:
             if not fail_on_error:
@@ -148,7 +148,7 @@ def _serialize_config(cfg: Any) -> str:
     return buffer.getvalue()
 
 
-def _get_env_info() -> Dict[str, str]:
+def _get_env_info() -> dict[str, str]:
     """Get environment information for reproducibility."""
     return {
         "hostname": socket.gethostname(),
@@ -206,7 +206,7 @@ class ModelTrainingLogger:
         return self._table
 
     @db_safe
-    def log_job_start(self, experiment_name: str, experiment_path: str, wandb_url: Optional[str] = None) -> None:
+    def log_job_start(self, experiment_name: str, experiment_path: str, wandb_url: str | None = None) -> None:
         """Log the start of a training job."""
         if not self.enabled:
             return
@@ -322,7 +322,7 @@ def log_dataset_preprocessing(
     dataset_uuid: str,
     cfg: Any,
     dataset_type: str,
-    source_paths: List[str],
+    source_paths: list[str],
     target_path: str,
     fixed_path: str,
     episode_count: int,

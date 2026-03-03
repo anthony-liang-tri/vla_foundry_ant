@@ -1,6 +1,6 @@
 import json
 import threading
-from typing import Any, Dict, List
+from typing import Any
 
 import numpy as np
 import ray
@@ -45,8 +45,8 @@ class TDigestEstimator:
         self.max_buffer = max_buffer  # Collect samples before creating t-digest
         self.compression = compression
         self.counts = np.zeros(self.shape, dtype=int)
-        self.buffers: Dict[tuple, List[float]] = {}
-        self.digests: Dict[tuple, Any] = {}
+        self.buffers: dict[tuple, list[float]] = {}
+        self.digests: dict[tuple, Any] = {}
 
     def get_quantile(self, p: float):
         """Estimate the p-th quantile for all indices."""
@@ -228,7 +228,7 @@ class StreamingDatasetStatistics:
         self.global_quantile_estimators = {}  # key -> TDigestEstimator (global, per-channel)
         self.lock = threading.Lock()
 
-    def update(self, sample_lowdim: Dict[str, np.ndarray]):
+    def update(self, sample_lowdim: dict[str, np.ndarray]):
         """Thread-safe update of statistics with new sample (Welford's online algorithm)."""
         if not self.compute_stats:
             return
@@ -340,7 +340,7 @@ class StreamingDatasetStatistics:
                         if len(data_c) > 0:
                             self.global_quantile_estimators[key].update(data_c, idx_override=(c,))
 
-    def merge_from_samples(self, samples_batch: List[Dict[str, Any]]):
+    def merge_from_samples(self, samples_batch: list[dict[str, Any]]):
         """Efficiently merge statistics from a batch of samples."""
         if not self.compute_stats:
             return
@@ -392,7 +392,7 @@ class StreamingDatasetStatistics:
                 pc_stats["mask"] = np.ones((B * N, T), dtype=bool)
             self.update(pc_stats)
 
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_statistics(self) -> dict[str, Any]:
         """Get final statistics (thread-safe)."""
         if not self.compute_stats:
             return {"statistics_disabled": True}

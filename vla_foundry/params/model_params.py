@@ -1,6 +1,6 @@
 import logging
 from dataclasses import dataclass, field
-from typing import List, Literal, Tuple, Union
+from typing import Literal
 
 import draccus
 
@@ -109,8 +109,8 @@ class ViTHFParams(TransformerHFParams):
 @register_model_params("vlm")
 @dataclass(frozen=True)
 class VLMParams(ModelParams):
-    vit: Union[ViTParams, ViTHFParams] = field(default_factory=ViTParams)
-    transformer: Union[TransformerParams, TransformerHFParams] = field(default_factory=TransformerParams)
+    vit: ViTParams | ViTHFParams = field(default_factory=ViTParams)
+    transformer: TransformerParams | TransformerHFParams = field(default_factory=TransformerParams)
     image_token_id: int = field(default=None)
     processor: str = field(default=None)
 
@@ -173,7 +173,7 @@ class UNetParams(ModelParams):
     out_channels: int = field(default=3)
     time_emb_dim: int = field(default=256)
     text_emb_dim: int = field(default=512)
-    channels: List[int] = field(default_factory=list)
+    channels: list[int] = field(default_factory=list)
     image_size: int = field(default=128)
     time_mlp_float32: bool = field(default=False)
 
@@ -184,7 +184,7 @@ class NoiseSchedulerParams(ModelParams):
     num_timesteps: int = field(default=1000)
     beta_start: float = field(default=0.0001)
     beta_end: float = field(default=0.02)
-    clamp_range: Tuple[float, float] = field(default=(-1.5, 1.5))
+    clamp_range: tuple[float, float] = field(default=(-1.5, 1.5))
 
     def init_shared_attributes(self, cfg):
         super().init_shared_attributes(cfg)
@@ -257,7 +257,7 @@ class StableDiffusionParams(ModelParams):
 @dataclass(frozen=True)
 class DiffusionPolicyParams(ModelParams):
     vision_language_backbone: CLIPBackboneParams = field(default_factory=CLIPBackboneParams)
-    transformer: Union[TransformerParams, TransformerHFParams] = field(default_factory=ModelParams)
+    transformer: TransformerParams | TransformerHFParams = field(default_factory=ModelParams)
     noise_scheduler: NoiseSchedulerParams = field(default_factory=NoiseSchedulerParams)
 
     use_diffusers_scheduler: bool = field(default=False)
@@ -290,7 +290,7 @@ class DP3EncoderParams(ModelParams):
     proprioception_dim: int = field(default=0)
 
     @property
-    def point_cloud_shape(self) -> Tuple[int, int]:
+    def point_cloud_shape(self) -> tuple[int, int]:
         """Computed point cloud shape based on configuration."""
         point_dim = 6 if self.use_pc_color else 3
         return (self.num_fps_points, point_dim)

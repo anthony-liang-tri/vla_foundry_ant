@@ -1,6 +1,6 @@
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Dict, List
+from typing import Any
 
 import numpy as np
 
@@ -37,7 +37,7 @@ class BaseRoboticsConverter:
         # Set padding function
         self.pad_fn = PaddingStrategy.get_pad_fn(cfg.padding_strategy)
 
-    def discover_episodes(self, source_paths: List[str], max_episodes_to_process: int = -1) -> List[str]:
+    def discover_episodes(self, source_paths: list[str], max_episodes_to_process: int = -1) -> list[str]:
         """
         Given a list of source paths, return a list of all full episode paths in the directories.
         """
@@ -96,11 +96,11 @@ class BaseRoboticsConverter:
         anchor_timestep: int,
         episode_path: str,
         episode_length: int,
-        camera_data: Dict[str, Any],
-        lowdim_data: Dict[str, Any],
-        intrinsics_data: Dict[str, Any],
-        extrinsics_data: Dict[str, Any],
-        metadata_data: Dict[str, Any],
+        camera_data: dict[str, Any],
+        lowdim_data: dict[str, Any],
+        intrinsics_data: dict[str, Any],
+        extrinsics_data: dict[str, Any],
+        metadata_data: dict[str, Any],
         statistics_ray_actor,
         logger_actor,
     ):
@@ -132,8 +132,8 @@ class BaseRoboticsConverter:
         raise NotImplementedError("Subclasses must implement extract_sample_data()")
 
     def create_relative_lowdim_data(
-        self, lowdim_data: Dict[str, np.ndarray], reference_data: Dict[str, np.ndarray]
-    ) -> Dict[str, np.ndarray]:
+        self, lowdim_data: dict[str, np.ndarray], reference_data: dict[str, np.ndarray]
+    ) -> dict[str, np.ndarray]:
         """Create relative coordinate data using configuration-based pose matching."""
         if not hasattr(self, "pose_groups") or not self.pose_groups:
             # No pose groups configured - return empty dict (no relative coordinates needed)

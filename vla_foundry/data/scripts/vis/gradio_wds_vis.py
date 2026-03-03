@@ -16,13 +16,10 @@ Notes
 - Gallery can be limited by a slider; set to -1 to load all images
 """
 
-from __future__ import annotations
-
 import io
 import os
 import tarfile
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
 
 import fsspec
 import gradio as gr
@@ -37,8 +34,8 @@ LOWDIM_EXTS = {".npz"}
 @dataclass
 class LowdimSummary:
     member_name: str
-    keys: List[str]
-    shapes: Dict[str, Tuple[int, ...]]
+    keys: list[str]
+    shapes: dict[str, tuple[int, ...]]
 
 
 def is_image(name: str) -> bool:
@@ -51,7 +48,7 @@ def is_lowdim(name: str) -> bool:
     return any(n.endswith(ext) for ext in LOWDIM_EXTS) and ("lowdim" in n or "npz" in n)
 
 
-def list_s3_targets(uri: str, recursive: bool) -> List[str]:
+def list_s3_targets(uri: str, recursive: bool) -> list[str]:
     if not uri:
         return []
     if uri.endswith(".tar"):
@@ -76,8 +73,8 @@ def scan_tar_stream(s3_path: str, max_images: int = -1):
     """Return (lowdim_df, gallery_items) for a single .tar streamed from S3.
     gallery_items is list of (PIL.Image, caption)
     """
-    lowdim_rows: List[Dict[str, str]] = []
-    gallery_items: List[Tuple[Image.Image, str]] = []
+    lowdim_rows: list[dict[str, str]] = []
+    gallery_items: list[tuple[Image.Image, str]] = []
 
     if not s3_path:
         return pd.DataFrame(), []

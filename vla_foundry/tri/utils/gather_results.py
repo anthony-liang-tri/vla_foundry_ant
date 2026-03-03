@@ -33,7 +33,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import yaml
@@ -49,10 +49,10 @@ class DemoResult:
         success: bool,
         duration: float,
         yaml_path: str,
-        video_path: Optional[str] = None,
-        yaml_data: Optional[Dict[str, Any]] = None,
-        task_name: Optional[str] = None,
-        model_name: Optional[str] = None,
+        video_path: str | None = None,
+        yaml_data: dict[str, Any] | None = None,
+        task_name: str | None = None,
+        model_name: str | None = None,
     ):
         self.demo_name = demo_name
         self.success = success
@@ -68,7 +68,7 @@ class DemoResult:
 class DemoResultsViewer:
     """Interactive curses-based demonstration results viewer."""
 
-    def __init__(self, results: List[DemoResult], base_folder: str):
+    def __init__(self, results: list[DemoResult], base_folder: str):
         self.results = results
         self.base_folder = base_folder
         self.filtered_results = results.copy()
@@ -146,7 +146,7 @@ class DemoResultsViewer:
         self.current_row = 0
         self.scroll_offset = 0
 
-    def _get_sorted_results(self) -> List[DemoResult]:
+    def _get_sorted_results(self) -> list[DemoResult]:
         """Get results sorted according to current grouping mode."""
         if self.grouping_mode == "task":
             return sorted(self.filtered_results, key=lambda r: (r.task_name or "", r.demo_id))
@@ -157,8 +157,8 @@ class DemoResultsViewer:
         return self.filtered_results
 
     def _get_group_stats(
-        self, results: Optional[List[DemoResult]] = None, grouping_mode: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+        self, results: list[DemoResult] | None = None, grouping_mode: str | None = None
+    ) -> list[dict[str, Any]]:
         """Calculate statistics for each group based on current grouping mode."""
         grouping_mode = grouping_mode or self.grouping_mode
         if grouping_mode == "none":
@@ -573,7 +573,7 @@ class DemoResultsViewer:
         self.success_filter = None
         self._apply_filters()
 
-    def _filter_list(self, source_list: List[DemoResult], filters: Dict[str, str]) -> List[DemoResult]:
+    def _filter_list(self, source_list: list[DemoResult], filters: dict[str, str]) -> list[DemoResult]:
         """Filter a list of results based on a dictionary of filters."""
         filtered = source_list
         for key, value in filters.items():
@@ -600,7 +600,7 @@ class DemoResultsViewer:
         if self.success_filter is not None:
             self.filtered_results = [r for r in self.filtered_results if r.success == self.success_filter]
 
-    def _get_scored_results_for_stats(self) -> List[DemoResult]:
+    def _get_scored_results_for_stats(self) -> list[DemoResult]:
         """Get the list of results to calculate stats/histograms for."""
         if self.view_mode == "groups" and self.grouping_mode != "none":
             # Highlighting a group in main group view
@@ -803,8 +803,8 @@ class DemoResultsViewer:
                 break
 
     def _create_text_histogram(
-        self, all_durations: List[float], success_durations: List[float], failure_durations: List[float], width: int
-    ) -> List[List[Tuple[str, int]]]:
+        self, all_durations: list[float], success_durations: list[float], failure_durations: list[float], width: int
+    ) -> list[list[tuple[str, int]]]:
         """Create a text-based histogram using unicode blocks and colors."""
         lines = []
 
@@ -1377,7 +1377,7 @@ class DemoResultsViewer:
                 elif key in [ord("l")]:
                     current_frame = min(total_frames - 1, current_frame + int(fps))  # Jump forward 1 second
 
-    def _get_video_dimensions(self, video_path: str) -> Tuple[int, int]:
+    def _get_video_dimensions(self, video_path: str) -> tuple[int, int]:
         """Get the original width and height of the video."""
         try:
             cmd = ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_streams", video_path]
@@ -1400,7 +1400,7 @@ class DemoResultsViewer:
 
     def _extract_colored_ascii_frame(
         self, video_path: str, frame_number: int, width: int, height: int
-    ) -> List[Tuple[str, List[int]]]:
+    ) -> list[tuple[str, list[int]]]:
         """Extract a single frame and convert to colored ASCII art."""
         try:
             # Create temporary file for frame
@@ -1427,7 +1427,7 @@ class DemoResultsViewer:
             error_msg = f"Error: {str(e)}"
             return [(error_msg, [0] * len(error_msg))]
 
-    def _image_to_colored_ascii(self, image_path: str, width: int, height: int) -> List[Tuple[str, List[int]]]:
+    def _image_to_colored_ascii(self, image_path: str, width: int, height: int) -> list[tuple[str, list[int]]]:
         """Convert image to colored ASCII art."""
         try:
             # Try to use PIL if available
@@ -1517,7 +1517,7 @@ class DemoResultsViewer:
         except Exception:
             return 0  # Default
 
-    def _basic_ascii_fallback(self, image_path: str, width: int, height: int) -> List[Tuple[str, List[int]]]:
+    def _basic_ascii_fallback(self, image_path: str, width: int, height: int) -> list[tuple[str, list[int]]]:
         """Fallback ASCII conversion without color."""
         try:
             # Use ImageMagick if available
@@ -1770,7 +1770,7 @@ class DemoResultsViewer:
                 elif key in [ord("l")]:
                     current_frame = min(total_frames - 1, current_frame + int(fps))  # Jump forward 1 second
 
-    def _extract_ascii_frame(self, video_path: str, frame_number: int, width: int, height: int) -> List[str]:
+    def _extract_ascii_frame(self, video_path: str, frame_number: int, width: int, height: int) -> list[str]:
         """Extract a single frame and convert to ASCII art."""
         try:
             # Create temporary file for frame
@@ -1796,7 +1796,7 @@ class DemoResultsViewer:
         except Exception as e:
             return [f"Error: {str(e)}"]
 
-    def _image_to_ascii(self, image_path: str, width: int, height: int) -> List[str]:
+    def _image_to_ascii(self, image_path: str, width: int, height: int) -> list[str]:
         """Convert image to ASCII art."""
         try:
             # Try to use PIL if available, otherwise use simple method
@@ -2089,7 +2089,7 @@ class DemoResultsViewer:
             break
 
 
-def parse_tasks_file(tasks_file: str) -> List[Tuple[str, str, str]]:
+def parse_tasks_file(tasks_file: str) -> list[tuple[str, str, str]]:
     """Parse the tasks file and extract task information."""
     with open(tasks_file, "r") as f:
         content = f.read()
@@ -2107,7 +2107,7 @@ def parse_tasks_file(tasks_file: str) -> List[Tuple[str, str, str]]:
         return []
 
 
-def load_yaml_file(yaml_path: str) -> Dict[Any, Any]:
+def load_yaml_file(yaml_path: str) -> dict[Any, Any]:
     """Load and parse a YAML file with custom tags."""
     try:
         # Create a custom loader that ignores unknown tags
@@ -2135,7 +2135,7 @@ def load_yaml_file(yaml_path: str) -> Dict[Any, Any]:
         return {}
 
 
-def find_video_file(base_folder: str, demo_name: str) -> Optional[str]:
+def find_video_file(base_folder: str, demo_name: str) -> str | None:
     """Find the corresponding video file for a demonstration."""
     # Extract demo ID from demo_name (e.g., demonstration_1000 -> 1000)
     try:
@@ -2163,7 +2163,7 @@ def download_summaries(
     checkpoint_s3_path: str,
     task_name: str,
     output_dir: Path,
-    job_name: Optional[str] = None,
+    job_name: str | None = None,
     use_cache: bool = True,
 ) -> str:
     """Download all summary.yaml files for a task."""
@@ -2260,7 +2260,7 @@ def download_summaries(
     return str(task_dir)
 
 
-def find_yaml_files(demo_dir: str) -> List[str]:
+def find_yaml_files(demo_dir: str) -> list[str]:
     """Find YAML files in the demonstration directory."""
     yaml_files = glob.glob(os.path.join(demo_dir, "*.yaml"))
     if not yaml_files:
@@ -2269,8 +2269,8 @@ def find_yaml_files(demo_dir: str) -> List[str]:
 
 
 def process_demonstration_directories(
-    base_folder: str, task_name: Optional[str] = None, model_name: Optional[str] = None, use_cache: bool = True
-) -> Tuple[List[DemoResult], List[str]]:
+    base_folder: str, task_name: str | None = None, model_name: str | None = None, use_cache: bool = True
+) -> tuple[list[DemoResult], list[str]]:
     """
     Process all demonstration_* directories in the base folder.
 
@@ -2395,7 +2395,7 @@ def process_demonstration_directories(
     return results, error_list
 
 
-def print_summary_stats(results: List[DemoResult], error_list: List[str]):
+def print_summary_stats(results: list[DemoResult], error_list: list[str]):
     """Print summary statistics to console."""
     total_trials = len(results)
     successful_trials = sum(1 for r in results if r.success)

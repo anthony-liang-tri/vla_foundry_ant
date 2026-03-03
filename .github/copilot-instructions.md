@@ -175,6 +175,22 @@ uv run python vla_foundry/main.py --help | head -5
 - **Model/params tests**: ~20 seconds
 - **Full test suite**: ~60 seconds (may timeout on internet-dependent tests)
 
+## Python Style Guide
+
+### Type Hints (Python 3.12+)
+Use modern built-in generics and union syntax (PEP 585/604):
+- `X | None` not `Optional[X]`
+- `list[X]` not `List[X]`
+- `dict[X, Y]` not `Dict[X, Y]`
+- `tuple[X, ...]` not `Tuple[X, ...]`
+- `X | Y` not `Union[X, Y]`
+- `set[X]` not `Set[X]`
+
+Do not use `from __future__ import annotations`. Imports like `Any`, `Callable`, `Literal`, `Sequence`, `TypeVar` from `typing` are still valid.
+
+### Docstrings
+Use **Google-style** docstrings (`Args:`, `Returns:`, `Raises:`). Do not use NumPy-style (`Parameters\n----------`) or reST-style (`:param:`).
+
 ## Critical Notes
 - **ALWAYS use `uv run` prefix** for Python commands to ensure proper environment
 - **Configuration is immutable** by design - use `object.__setattr__` if modification needed

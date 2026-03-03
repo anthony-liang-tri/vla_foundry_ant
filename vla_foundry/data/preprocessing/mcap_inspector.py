@@ -18,7 +18,6 @@ Examples:
 import argparse
 import sys
 from pathlib import Path
-from typing import Optional
 
 from rosbags.highlevel import AnyReader
 
@@ -32,7 +31,7 @@ def _print_section(title: str) -> None:
     print("=" * 70)
 
 
-def inspect_mcap(mcap_path: str, show_sample: bool = False, topic_filter: Optional[str] = None) -> None:
+def inspect_mcap(mcap_path: str, show_sample: bool = False, topic_filter: str | None = None) -> None:
     """
     Inspect MCAP file and print topic information.
 
@@ -51,7 +50,7 @@ def inspect_mcap(mcap_path: str, show_sample: bool = False, topic_filter: Option
         _inspect_local(mcap_path, show_sample, topic_filter)
 
 
-def _inspect_local(local_path: str, show_sample: bool, topic_filter: Optional[str]) -> None:
+def _inspect_local(local_path: str, show_sample: bool, topic_filter: str | None) -> None:
     """
     Inspect local MCAP file.
 
@@ -87,7 +86,7 @@ def _inspect_local(local_path: str, show_sample: bool, topic_filter: Optional[st
             _print_sample_messages(reader, topics, topic_filter)
 
 
-def _print_sample_messages(reader, topics: dict, topic_filter: Optional[str]) -> None:
+def _print_sample_messages(reader, topics: dict, topic_filter: str | None) -> None:
     """
     Print one sample message from each topic.
 

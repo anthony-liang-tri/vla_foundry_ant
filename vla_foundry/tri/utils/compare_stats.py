@@ -16,7 +16,7 @@ import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
-from typing import Any, Dict
+from typing import Any
 
 import numpy as np
 
@@ -196,7 +196,7 @@ def compare_stats(
     ref_anchor: int | None = None,
     our_anchor_source: str = "unknown",
     ref_anchor_source: str = "unknown",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Compare two stats dictionaries and return detailed comparison."""
     our_tensors = set(our_stats.keys())
     ref_tensors = set(ref_stats.keys())

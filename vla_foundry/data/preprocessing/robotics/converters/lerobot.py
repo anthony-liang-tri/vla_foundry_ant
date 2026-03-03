@@ -1,6 +1,6 @@
 import os
 import re
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import numpy as np
 import pyarrow.parquet as pq
@@ -32,7 +32,7 @@ def detect_fps(info_path: str) -> float:
 
 
 @ray.remote
-def build_episode_lookup_chunk(chunk_dir: str) -> Dict[int, str]:
+def build_episode_lookup_chunk(chunk_dir: str) -> dict[int, str]:
     """Build episode lookup for a single chunk directory."""
     episode_lookup = {}
     for file in list_directory(chunk_dir):
@@ -44,7 +44,7 @@ def build_episode_lookup_chunk(chunk_dir: str) -> Dict[int, str]:
     return episode_lookup
 
 
-def build_episode_lookup(data_chunks: List[str]) -> Dict[int, str]:
+def build_episode_lookup(data_chunks: list[str]) -> dict[int, str]:
     print(f"Building episode lookup dict from {len(data_chunks)} chunks...")
     # Process chunks in parallel
     chunk_futures = [build_episode_lookup_chunk.remote(chunk) for chunk in data_chunks]
@@ -58,7 +58,7 @@ def build_episode_lookup(data_chunks: List[str]) -> Dict[int, str]:
 
 
 @ray.remote
-def discover_episodes_chunk(chunk_dir: str) -> List[str]:
+def discover_episodes_chunk(chunk_dir: str) -> list[str]:
     episodes = []
     for file in list_directory(chunk_dir):
         if file.endswith(".parquet") and "episode_" in file:
@@ -68,7 +68,7 @@ def discover_episodes_chunk(chunk_dir: str) -> List[str]:
     return episodes
 
 
-def discover_image_columns(data_chunks: List[str], episode_file_pattern: str) -> List[str]:
+def discover_image_columns(data_chunks: list[str], episode_file_pattern: str) -> list[str]:
     """Discover image columns by checking first available episode."""
     for chunk_dir in data_chunks:
         for episode_idx in range(10):
@@ -99,7 +99,7 @@ def discover_image_columns(data_chunks: List[str], episode_file_pattern: str) ->
     return []
 
 
-def discover_cameras(video_chunks: List[str]) -> Dict[str, str]:
+def discover_cameras(video_chunks: list[str]) -> dict[str, str]:
     """Discover available cameras by scanning video chunk directories."""
     cameras = {}
 
@@ -116,7 +116,7 @@ def discover_cameras(video_chunks: List[str]) -> Dict[str, str]:
 
 
 @ray.remote
-def build_video_lookup_chunk(chunk_dir: str, cameras: Dict[str, str]) -> Dict[Tuple[int, str], str]:
+def build_video_lookup_chunk(chunk_dir: str, cameras: dict[str, str]) -> dict[tuple[int, str], str]:
     """Build video lookup for a single chunk directory."""
     video_lookup = {}
     for _camera_name, camera_path in cameras.items():
@@ -131,7 +131,7 @@ def build_video_lookup_chunk(chunk_dir: str, cameras: Dict[str, str]) -> Dict[Tu
     return video_lookup
 
 
-def build_video_lookup(video_chunks: List[str], cameras: Dict[str, str]) -> Dict[Tuple[int, str], str]:
+def build_video_lookup(video_chunks: list[str], cameras: dict[str, str]) -> dict[tuple[int, str], str]:
     print(f"Building video lookup dict from {len(video_chunks)} chunks and {len(cameras)} cameras...")
     # Process chunks in parallel
     chunk_futures = [build_video_lookup_chunk.remote(chunk, cameras) for chunk in video_chunks]
@@ -189,11 +189,11 @@ class LeRobotConverter(BaseRoboticsConverter):
         self.entries = jsonl_load(self.meta_episodes_path)
         print(f"Loaded {len(self.entries)} episodes metadata")
 
-    def get_language_instructions(self, sample_metadata) -> Dict[str, str]:
+    def get_language_instructions(self, sample_metadata) -> dict[str, str]:
         episode_index = sample_metadata["episode_index"]
         return {"original": self.entries[episode_index]["tasks"][0]}
 
-    def discover_chunks(self, source_paths: List[str]) -> List[str]:
+    def discover_chunks(self, source_paths: list[str]) -> list[str]:
         """Discover all chunk directories in the base path."""
         chunk_dirs = []
         for source_path in source_paths:
@@ -204,7 +204,7 @@ class LeRobotConverter(BaseRoboticsConverter):
         chunk_dirs.sort()  # Sort to ensure consistent ordering
         return chunk_dirs
 
-    def discover_episodes(self, source_paths: List[str], max_episodes_to_process: int = -1) -> List[str]:
+    def discover_episodes(self, source_paths: list[str], max_episodes_to_process: int = -1) -> list[str]:
         chunks = self.discover_chunks([os.path.join(source_paths[0], "data")])
         chunk_futures = [discover_episodes_chunk.remote(chunk) for chunk in chunks]
         chunk_results = ray.get(chunk_futures)
@@ -267,11 +267,11 @@ class LeRobotConverter(BaseRoboticsConverter):
         anchor_timestep: int,
         episode_path: str,
         episode_length: int,
-        camera_data: Dict[str, np.ndarray],
-        lowdim_data: Dict[str, np.ndarray],
-        intrinsics_data: Dict[str, np.ndarray],
-        extrinsics_data: Dict[str, np.ndarray],
-        metadata_data: Dict[str, Any],
+        camera_data: dict[str, np.ndarray],
+        lowdim_data: dict[str, np.ndarray],
+        intrinsics_data: dict[str, np.ndarray],
+        extrinsics_data: dict[str, np.ndarray],
+        metadata_data: dict[str, Any],
         statistics_ray_actor,
         logger_actor,
     ):

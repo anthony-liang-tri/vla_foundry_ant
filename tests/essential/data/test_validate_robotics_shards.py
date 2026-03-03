@@ -20,7 +20,7 @@ Usage:
 """
 
 import os
-from typing import Any, Dict
+from typing import Any
 
 import numpy as np
 import pytest
@@ -105,7 +105,7 @@ def mock_sample_missing_fields():
     }
 
 
-def validate_sample(sample: Dict[str, Any]) -> Dict[str, Any]:
+def validate_sample(sample: dict[str, Any]) -> dict[str, Any]:
     """Validate a single sample and return statistics."""
     stats = {
         "has_images": False,

@@ -1,6 +1,6 @@
 import itertools
 import logging
-from typing import Callable, Optional
+from typing import Callable
 
 import torch
 import torch.distributed as dist
@@ -16,7 +16,7 @@ from vla_foundry.precision import get_autocast
 def validate_one_checkpoint(
     model: nn.Module,
     val_dataloader,
-    loss: Callable[[torch.Tensor, torch.Tensor, Optional[torch.Tensor]], torch.Tensor],
+    loss: Callable[[torch.Tensor, torch.Tensor, torch.Tensor | None], torch.Tensor],
     checkpoint_num: int,
     step: int,
     cfg: TrainExperimentParams,

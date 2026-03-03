@@ -1,5 +1,3 @@
-from typing import Optional, Tuple, Union
-
 import torch
 
 from vla_foundry.models.model_outputs.base_output import BaseOutput
@@ -16,11 +14,11 @@ class TransformerOutput(BaseOutput):
 
     def __init__(
         self,
-        logits: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
-        hidden_states: Optional[Union[Tuple[torch.Tensor], list]] = None,
-        attentions: Optional[Tuple[torch.Tensor]] = None,
-        loss: Optional[torch.Tensor] = None,
+        logits: torch.Tensor | None = None,
+        past_key_values: tuple[tuple[torch.Tensor]] | None = None,
+        hidden_states: tuple[torch.Tensor] | list | None = None,
+        attentions: tuple[torch.Tensor] | None = None,
+        loss: torch.Tensor | None = None,
     ):
         self.logits = logits
         self.past_key_values = past_key_values

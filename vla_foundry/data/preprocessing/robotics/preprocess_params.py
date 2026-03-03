@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Union
 
 import draccus
 
@@ -27,15 +26,15 @@ class PreprocessParams(draccus.ChoiceRegistry, BaseParams):
     type: str = field(default=None)
 
     # Core I/O
-    source_episodes: Optional[List[str]] = field(default=None)
-    output_dir: Optional[str] = field(default=None)
-    output_dir_fixed_path: Optional[str] = field(default="s3://tri-ml-datasets-uw2/vla_foundry_datasets_fixed/")
+    source_episodes: list[str] | None = field(default=None)
+    output_dir: str | None = field(default=None)
+    output_dir_fixed_path: str | None = field(default="s3://tri-ml-datasets-uw2/vla_foundry_datasets_fixed/")
 
     # Sampling/windowing
     past_lowdim_steps: int = field(default=1)
     future_lowdim_steps: int = field(default=14)
-    camera_names: Optional[List[str]] = field(default=None)
-    image_indices: List[int] = field(default_factory=lambda: [-1, 0])
+    camera_names: list[str] | None = field(default=None)
+    image_indices: list[int] = field(default_factory=lambda: [-1, 0])
     stride: int = field(default=1)
     max_padding_left: int = field(default=1)
     max_padding_right: int = field(default=7)
@@ -61,7 +60,7 @@ class PreprocessParams(draccus.ChoiceRegistry, BaseParams):
     skip_git_tagging: bool = field(default=False)  # Skip git operations for testing
 
     # Image preprocessing
-    resize_images_size: Optional[List[int]] = field(default=None)
+    resize_images_size: list[int] | None = field(default=None)
     image_resizing_method: ImageResizingMethod = ImageResizingMethod.CENTER_CROP
     jpeg_quality: int = field(default=95)
 
@@ -101,7 +100,7 @@ class PreprocessParams(draccus.ChoiceRegistry, BaseParams):
 @register_preprocess_params("spartan")
 @dataclass(frozen=True)
 class SpartanPreprocessParams(PreprocessParams):
-    data_discard_keys: Optional[List[str]] = field(default=None)
+    data_discard_keys: list[str] | None = field(default=None)
 
     language_annotations_path: str = field(
         default="vla_foundry/config_presets/data/lbm/lbm_language_annotations.yaml",
@@ -109,7 +108,7 @@ class SpartanPreprocessParams(PreprocessParams):
     action_fields_config_path: str = field(
         default="vla_foundry/config_presets/data/lbm/lbm_action_fields.yaml",
     )
-    validation_episodes_path: Optional[str] = field(default=None)
+    validation_episodes_path: str | None = field(default=None)
 
     # Depth filtering parameters
     min_depth: float = field(default=0.001)  # Minimum valid depth in meters (filters invalid/too-close points)
@@ -119,17 +118,17 @@ class SpartanPreprocessParams(PreprocessParams):
 @register_preprocess_params("lerobot")
 @dataclass(frozen=True)
 class LeRobotPreprocessParams(PreprocessParams):
-    observation_keys: List[str] = field(default=None)
-    action_keys: List[str] = field(default=None)
+    observation_keys: list[str] = field(default=None)
+    action_keys: list[str] = field(default=None)
 
 
 @dataclass(frozen=True)
 class RangeSpec:
     """Dataclass for specifying a range with optional start, end, and step."""
 
-    start: Optional[int] = field(default=None)
-    end: Optional[int] = field(default=None)
-    step: Optional[int] = field(default=None)
+    start: int | None = field(default=None)
+    end: int | None = field(default=None)
+    step: int | None = field(default=None)
 
 
 @register_preprocess_params("mmt_npz")
@@ -137,7 +136,7 @@ class RangeSpec:
 class MMTPreprocessParams(PreprocessParams):
     """Dataclass for MMT-specific preprocessing configuration parsed by draccus."""
 
-    mmt_lowdim_flatten_indices_selection: Optional[Dict[str, Union[int, List[int], List[RangeSpec]]]] = field(
+    mmt_lowdim_flatten_indices_selection: dict[str, int | list[int] | list[RangeSpec]] | None = field(
         default_factory=dict
     )
     depth_resizing_mask_threshold: float = field(default=0.99)
@@ -182,16 +181,16 @@ class HumanoidEverydayPreprocessParams(PreprocessParams):
 
     # Required fields — must be set via YAML config.
     use_depth_data: bool = field(default=None)
-    resize_images_size: List[int] = field(default=None)
-    depth_resolution: List[int] = field(default=None)  # Raw depth sensor resolution (H, W)
+    resize_images_size: list[int] = field(default=None)
+    depth_resolution: list[int] = field(default=None)  # Raw depth sensor resolution (H, W)
 
     # Filtering: restrict to specific tasks and/or episodes
     # e.g. task_filter: ["drag_a_white_board"] to only process that task
-    task_filter: Optional[List[str]] = field(default=None)
+    task_filter: list[str] | None = field(default=None)
     # e.g. episode_filter: ["episode_0", "episode_1"] to only process those episodes
-    episode_filter: Optional[List[str]] = field(default=None)
+    episode_filter: list[str] | None = field(default=None)
     # e.g. embodiment_filter: ["h1"] to only process episodes with robot_type "h1"
-    embodiment_filter: Optional[List[str]] = field(default=None)
+    embodiment_filter: list[str] | None = field(default=None)
 
     _REQUIRED_FIELDS = ("use_depth_data", "resize_images_size", "depth_resolution")
 
@@ -216,7 +215,7 @@ class MCAPPreprocessParams(PreprocessParams):
         default="vla_foundry/config_presets/data/preprocessing/test/unitree_g1_camera_names.yaml",
     )
 
-    task_name: Optional[str] = field(
+    task_name: str | None = field(
         default=None, metadata={"help": "Task name for language instruction (overrides config default_task_name)"}
     )
 

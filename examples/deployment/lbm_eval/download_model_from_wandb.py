@@ -31,8 +31,6 @@ Usage:
     python download_model_from_wandb.py --run-name "my_experiment" --aws-profile default
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import os

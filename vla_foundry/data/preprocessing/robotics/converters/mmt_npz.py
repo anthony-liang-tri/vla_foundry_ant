@@ -1,6 +1,5 @@
 import os
 import re
-from typing import Dict, List, Tuple
 
 import cv2
 import fsspec
@@ -12,7 +11,7 @@ from vla_foundry.data.preprocessing.robotics.preprocess_params import MMTPreproc
 from vla_foundry.data.preprocessing.utils import is_still_sample
 
 
-def downsample_with_valid_depths(depth_image: np.ndarray, target_size: Tuple[int, int], mask_threshold: float):
+def downsample_with_valid_depths(depth_image: np.ndarray, target_size: tuple[int, int], mask_threshold: float):
     """Downsample depth image while preserving valid depth pixels. Assumptions:
     1. Invalid depth pixels are represented as 0.
     2.  Target size is smaller than original size and follows (width, height) format."""
@@ -66,11 +65,11 @@ class MMTNPZConverter(BaseRoboticsConverter):
             episode_id = episode_id.replace("/", "_").replace("\\", "_")
         return episode_id
 
-    def get_language_instructions(self, sample_metadata: Dict):
+    def get_language_instructions(self, sample_metadata: dict):
         # MMT datasets do not have language instructions
         return {"original": "You are a helpful robot assistant finishing tasks to help people's daily lives."}
 
-    def discover_episodes(self, source_paths: List[str], max_episodes_to_process: int = -1) -> List[str]:
+    def discover_episodes(self, source_paths: list[str], max_episodes_to_process: int = -1) -> list[str]:
         """Because of the this output of this function is required to represent episodes, we choose to return
         only the npz files corresponding to timestep 0 for each episode and defer episode loading to later."""
         all_episodes = []
@@ -113,10 +112,10 @@ class MMTNPZConverter(BaseRoboticsConverter):
 
         return data
 
-    def get_episode_length(self, episode_data: Dict):
+    def get_episode_length(self, episode_data: dict):
         return len(episode_data)
 
-    def extract_camera_data(self, episode_data: Dict):
+    def extract_camera_data(self, episode_data: dict):
         camera_data = {}
         for camera_name in self.cfg.camera_names:
             camera_data[camera_name] = []
@@ -132,7 +131,7 @@ class MMTNPZConverter(BaseRoboticsConverter):
 
         return camera_data
 
-    def extract_lowdim_data(self, episode_data: Dict):
+    def extract_lowdim_data(self, episode_data: dict):
         lowdim_data = {}
         for key in self.action_keys + self.state_keys + self.wrench_keys + self.item_bbox_keys:
             lowdim_data[key] = []
@@ -165,7 +164,7 @@ class MMTNPZConverter(BaseRoboticsConverter):
 
         return intrinsics_data, extrinsics_data
 
-    def extract_metadata_data(self, episode_data: Dict):
+    def extract_metadata_data(self, episode_data: dict):
         metadata_keys = ["depth_scale"]
 
         metadata = {}
@@ -181,13 +180,13 @@ class MMTNPZConverter(BaseRoboticsConverter):
 
     def extract_sample_camera_calibration(
         self,
-        episode_intrinsics: Dict[str, np.ndarray],
-        episode_extrinsics: Dict[str, np.ndarray],
+        episode_intrinsics: dict[str, np.ndarray],
+        episode_extrinsics: dict[str, np.ndarray],
         valid_start: int,
         valid_end: int,
         past_padding: int,
         future_padding: int,
-    ) -> Tuple[Dict[str, np.ndarray], Dict[str, np.ndarray]]:
+    ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
         """Extract camera calibration data for the lowdim sequence timespan."""
         sample_intrinsics = {}
         sample_extrinsics = {}
@@ -235,11 +234,11 @@ class MMTNPZConverter(BaseRoboticsConverter):
         anchor_timestep: int,
         episode_path: str,
         episode_length: int,
-        camera_data: Dict[str, np.ndarray],
-        lowdim_data: Dict[str, np.ndarray],
-        intrinsics_data: Dict[str, np.ndarray],
-        extrinsics_data: Dict[str, np.ndarray],
-        metadata_data: Dict[str, np.ndarray],
+        camera_data: dict[str, np.ndarray],
+        lowdim_data: dict[str, np.ndarray],
+        intrinsics_data: dict[str, np.ndarray],
+        extrinsics_data: dict[str, np.ndarray],
+        metadata_data: dict[str, np.ndarray],
         statistics_ray_actor,
         logger_actor,
     ):

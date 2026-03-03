@@ -28,7 +28,6 @@ import json
 import tarfile
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict, Optional, Set
 
 import numpy as np
 
@@ -69,7 +68,7 @@ def open_tar(tar_path: str):
             yield tar
 
 
-def get_expected_keys_from_config(config: dict) -> Dict[str, Set[str]]:
+def get_expected_keys_from_config(config: dict) -> dict[str, set[str]]:
     """
     Extract expected output keys from mcap topics config.
 
@@ -110,7 +109,7 @@ def get_expected_keys_from_config(config: dict) -> Dict[str, Set[str]]:
     return expected
 
 
-def inspect_tar(tar_path: str, verbose: bool = False) -> Dict:
+def inspect_tar(tar_path: str, verbose: bool = False) -> dict:
     """Inspect contents of a tar file."""
 
     with open_tar(tar_path) as tar:
@@ -188,7 +187,7 @@ def inspect_tar(tar_path: str, verbose: bool = False) -> Dict:
         return result
 
 
-def print_tar_inspection(result: Dict, verbose: bool = False):
+def print_tar_inspection(result: dict, verbose: bool = False):
     """Print tar inspection results."""
     print(f"\nPath: {result['path']}")
     print(f"Total files: {len(result['files'])}")
@@ -216,7 +215,7 @@ def print_tar_inspection(result: Dict, verbose: bool = False):
         print(f"\nLanguage instruction: {result['language']}")
 
 
-def validate_against_config(tar_result: Dict, stats: Optional[Dict], config: Dict, verbose: bool = False):
+def validate_against_config(tar_result: dict, stats: dict | None, config: dict, verbose: bool = False):
     """Validate tar contents and stats against mcap topics config."""
 
     expected = get_expected_keys_from_config(config)
@@ -345,7 +344,7 @@ def validate_against_config(tar_result: Dict, stats: Optional[Dict], config: Dic
             print("    [OK] All dimensions match")
 
 
-def inspect_dataset(dataset_path: str, config_path: Optional[str] = None, verbose: bool = False):
+def inspect_dataset(dataset_path: str, config_path: str | None = None, verbose: bool = False):
     """Inspect entire dataset structure."""
 
     dataset_path = dataset_path.rstrip("/")

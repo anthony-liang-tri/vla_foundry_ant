@@ -17,15 +17,15 @@ Example usage:
         ...
 """
 
-from typing import Callable, Dict, Type
+from typing import Callable, Type
 
 import torch.nn as nn
 
 from vla_foundry.params.model_params import ModelParams
 
 # Global registries
-_MODEL_REGISTRY: Dict[str, Callable] = {}
-_BATCH_HANDLER_REGISTRY: Dict[str, Type] = {}
+_MODEL_REGISTRY: dict[str, Callable] = {}
+_BATCH_HANDLER_REGISTRY: dict[str, Type] = {}
 
 
 def register_model(model_type: str):

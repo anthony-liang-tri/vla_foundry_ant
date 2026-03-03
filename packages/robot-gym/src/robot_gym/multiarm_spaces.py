@@ -1,5 +1,5 @@
 import dataclasses as dc
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 from pydrake.math import RigidTransform
@@ -12,35 +12,35 @@ from pydrake.math import RigidTransform
 @dc.dataclass
 class PosesAndGrippers:
     # Per model.
-    poses: Dict[str, RigidTransform]
+    poses: dict[str, RigidTransform]
     # Per gripper.
-    grippers: Dict[str, float]
+    grippers: dict[str, float]
 
     # Additional per-model observation data.
-    joint_position: Dict[str, np.ndarray] = None
-    joint_velocity: Dict[str, np.ndarray] = None
-    joint_torque: Dict[str, np.ndarray] = None
-    joint_torque_external: Dict[str, np.ndarray] = None
-    wrench: Dict[str, np.ndarray] = None
-    external_wrench: Dict[str, np.ndarray] = None
+    joint_position: dict[str, np.ndarray] = None
+    joint_velocity: dict[str, np.ndarray] = None
+    joint_torque: dict[str, np.ndarray] = None
+    joint_torque_external: dict[str, np.ndarray] = None
+    wrench: dict[str, np.ndarray] = None
+    external_wrench: dict[str, np.ndarray] = None
 
     # Timing addons.
 
     # Timestamp (seconds). Wall time from the status message (`utime` for
     # actual, `command_utime` for desired). Specifically, these timestamps are
     # generated in `robot_control_main`'s `publish_status()`.
-    timestamp_data: Optional[float] = None
+    timestamp_data: float | None = None
     # Timestamp (seconds). Wall time for when this object was "sent" to the
     # robot.
-    timestamp_sent: Optional[float] = None
+    timestamp_sent: float | None = None
     # Timestamp (seconds). Wall time for when this object was received by the
     # env in this process.
-    timestamp_received: Optional[float] = None
+    timestamp_received: float | None = None
 
     # Optional debugging information, typically used for the relevant Policy
     # (e.g., diffusion policy debug outputs we want to record).
-    debugging_output: Optional[Dict[str, Any]] = None
 
+    debugging_output: dict[str, Any] | None = None
 
 @dc.dataclass
 class PosesAndGrippersActualAndDesired:
@@ -59,8 +59,8 @@ class PosesAndGrippersActualAndDesired:
     # - 20241212: Addition of the language field in MultiarmObservation.
     # We set this to None so that way pickles before versioning indicate there
     # was no data present.
-    version: Optional[float] = None
 
+    version: float | None = None
 
 # N.B. We ddefer setting the current version to `multiarm.py`.
 CURRENT_VERSION = float(20241212)
@@ -76,27 +76,27 @@ class CameraImage:
 @dc.dataclass
 class CameraRgbImage(CameraImage):
     array: np.ndarray  # (H, W, C), dtype=uint8
-    timestamp: Optional[float] = None
 
+    timestamp: float | None = None
 
 @dc.dataclass
 class CameraDepthImage(CameraImage):
     array: np.ndarray  # (H, W), dtype=uint16
-    timestamp: Optional[float] = None
 
+    timestamp: float | None = None
 
 @dc.dataclass
 class CameraLabelImage(CameraImage):
     array: np.ndarray  # (H, W), dtype= ?
-    timestamp: Optional[float] = None
 
+    timestamp: float | None = None
 
 @dc.dataclass
 class CameraImageSet:
     rgb: CameraRgbImage
-    depth: Optional[CameraDepthImage] = None
-    label: Optional[CameraLabelImage] = None
 
+    depth: CameraDepthImage | None = None
+    label: CameraLabelImage | None = None
 
 # Camera Id -> Camera images
 CameraImageSetMap = dict[str, CameraImageSet]
@@ -105,19 +105,19 @@ CameraImageSetMap = dict[str, CameraImageSet]
 @dc.dataclass
 class MultiarmObservation:
     robot: PosesAndGrippersActualAndDesired
-    visuo: Dict[str, CameraImageSet]
+    visuo: dict[str, CameraImageSet]
     # Timestamp (seconds). Wall time for when this object was assembled.
-    timestamp_packaged: Optional[float] = None
 
-    language_instruction: Optional[str] = None
+    timestamp_packaged: float | None = None
 
+    language_instruction: str | None = None
 
 @dc.dataclass
 class RestorePosesAndGrippersConfig:
     # Note: This only unpacks poses and grippers. It does not attempt to unpack
     # force or joint configuration information.
-    model_names: List[str]
-    gripper_names: List[str]
+    model_names: list[str]
+    gripper_names: list[str]
 
     @staticmethod
     def make_default():

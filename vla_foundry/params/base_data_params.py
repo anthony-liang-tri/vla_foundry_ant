@@ -1,6 +1,5 @@
 import multiprocessing
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 import draccus
 
@@ -10,13 +9,13 @@ from vla_foundry.params.base_params import BaseParams
 @dataclass(frozen=True)
 class DataParams(draccus.ChoiceRegistry, BaseParams):
     type: str = field(default=None)
-    dataset_manifest: List[str] = field(default_factory=list)
-    dataset_weighting: List[float] = field(default_factory=list)
-    dataset_modality: List[str] = field(default_factory=list)
-    val_dataset_manifest: List[str] = field(default_factory=list)
-    val_dataset_weighting: List[float] = field(default_factory=list)
+    dataset_manifest: list[str] = field(default_factory=list)
+    dataset_weighting: list[float] = field(default_factory=list)
+    dataset_modality: list[str] = field(default_factory=list)
+    val_dataset_manifest: list[str] = field(default_factory=list)
+    val_dataset_weighting: list[float] = field(default_factory=list)
     allow_multiple_epochs: bool = False
-    num_workers: Optional[int] = field(default=None)  # Auto-calculated per-GPU if None
+    num_workers: int | None = field(default=None)  # Auto-calculated per-GPU if None
     prefetch_factor: int = field(default=4)  # Number of batches to prefetch per worker (PyTorch DataLoader)
     seq_len: int = field(default=2048)
     shuffle: bool = field(default=True)

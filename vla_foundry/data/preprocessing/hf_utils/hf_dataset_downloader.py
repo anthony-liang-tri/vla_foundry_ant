@@ -4,7 +4,6 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Tuple
 from urllib.parse import urlparse
 
 import boto3
@@ -30,13 +29,13 @@ def download_and_upload_file(*args, **kwargs):
 def _download_and_upload_file(
     url: str,
     relative_key: str,
-    s3_bucket: Optional[str],
-    s3_output_dir: Optional[str],
+    s3_bucket: str | None,
+    s3_output_dir: str | None,
     local_output_dir: str,
     preserve_structure: bool,
     max_retries: int,
     backoff_factor: float,
-) -> Tuple[bool, Optional[dict]]:
+) -> tuple[bool, dict | None]:
     """
     Ray remote function to download a file and optionally upload to S3
     Returns (success, error_info)
@@ -139,7 +138,7 @@ class DatasetDownloader:
         self.failed_files = []
         self.backoff_factor = backoff_factor
 
-    def get_dataset_files(self, dataset_id: str, revision: str = "main", subfolder: str = "") -> List[Tuple[str, str]]:
+    def get_dataset_files(self, dataset_id: str, revision: str = "main", subfolder: str = "") -> list[tuple[str, str]]:
         """
         Get list of file URLs from a Hugging Face dataset
 
@@ -156,7 +155,7 @@ class DatasetDownloader:
             files = [f for f in files if f.startswith(subfolder.rstrip("/"))]
 
         # Generate download URLs and relative keys
-        urls: List[Tuple[str, str]] = []
+        urls: list[tuple[str, str]] = []
         base_prefix = subfolder.strip("/")
         for file_path in files:
             url = f"https://huggingface.co/datasets/{dataset_id}/resolve/{revision}/{file_path}"

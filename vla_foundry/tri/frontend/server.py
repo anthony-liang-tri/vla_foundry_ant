@@ -18,7 +18,7 @@ import json
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import boto3
 import numpy as np
@@ -150,8 +150,8 @@ async def get_leaderboard(
     min_rollouts: int = 0,
     order_by: str = "success_rate",
     descending: bool = True,
-    limit: Optional[int] = None,
-    config_filters: Optional[str] = None,
+    limit: int | None = None,
+    config_filters: str | None = None,
 ):
     """Get leaderboard data with optional filters."""
     # Get filter params - support multiple values
@@ -276,7 +276,7 @@ async def get_config(run_id: int):
 
 
 class CompareRequest(BaseModel):
-    selections: List[dict]
+    selections: list[dict]
 
 
 @app.post("/api/compare")
@@ -325,7 +325,7 @@ async def compare_runs(req: CompareRequest):
 # ============================================================================
 
 
-def get_samples_for_eval(eval_id: str) -> List[dict]:
+def get_samples_for_eval(eval_id: str) -> list[dict]:
     """Get all sample results for a given eval_id."""
     table = dynamodb.Table(SAMPLE_RESULTS_TABLE)
     items = []
@@ -356,13 +356,13 @@ def compute_beta_params(successes: int, total: int, alpha_prior: float = 1, beta
     return alpha, beta
 
 
-def compute_beta_quantiles(alpha: float, beta: float, quantiles: List[float]) -> List[float]:
+def compute_beta_quantiles(alpha: float, beta: float, quantiles: list[float]) -> list[float]:
     """Compute quantiles of beta distribution."""
     dist = stats.beta(alpha, beta)
     return [float(dist.ppf(q)) for q in quantiles]
 
 
-def draw_beta_samples(alpha: float, beta: float, n_samples: int = 1000, seed: int = 42) -> List[float]:
+def draw_beta_samples(alpha: float, beta: float, n_samples: int = 1000, seed: int = 42) -> list[float]:
     """Draw samples from beta distribution for violin plot."""
     rng = np.random.default_rng(seed)
     dist = stats.beta(alpha, beta)
@@ -393,7 +393,7 @@ def compare_two_proportions(n_a: int, k_a: int, n_b: int, k_b: int, alpha: float
     return 0
 
 
-def compute_cld(results_list: List[dict], alpha: float = 0.05) -> Dict[str, str]:
+def compute_cld(results_list: list[dict], alpha: float = 0.05) -> dict[str, str]:
     """
     Compute Compact Letter Display for statistical groupings.
     results_list: list of {label, successes, total}
@@ -455,7 +455,7 @@ def compute_cld(results_list: List[dict], alpha: float = 0.05) -> Dict[str, str]
 
 
 class StatCompareRequest(BaseModel):
-    selections: List[dict]  # [{runId, campaignName}, ...]
+    selections: list[dict]  # [{runId, campaignName}, ...]
     n_samples: int = 500  # Number of samples for violin plots
     max_per_task: int = 5  # Maximum runs per task for violin plots
 
@@ -623,7 +623,7 @@ async def compare_stats(req: StatCompareRequest):
 async def get_config_schema():
     """Get config field paths with their types and value distributions."""
     runs = scan_table(LEADERBOARD_RUNS_TABLE)
-    schema: Dict[str, Any] = {}
+    schema: dict[str, Any] = {}
 
     for run in runs:
         config_json = run.get("config_json")
@@ -649,7 +649,7 @@ async def get_config_schema():
     return {"success": True, "data": schema}
 
 
-def flatten_config(config: dict, prefix: str = "") -> List[Tuple[str, str, str]]:
+def flatten_config(config: dict, prefix: str = "") -> list[tuple[str, str, str]]:
     """Flatten a nested config into (path, value, type) tuples."""
     results = []
 
@@ -673,7 +673,7 @@ def flatten_config(config: dict, prefix: str = "") -> List[Tuple[str, str, str]]
 
 
 class ConfigDiffRequest(BaseModel):
-    run_ids: List[int]
+    run_ids: list[int]
 
 
 @app.post("/api/config-diff")
@@ -687,7 +687,7 @@ async def get_config_diff(req: ConfigDiffRequest):
     runs_by_id = {r["run_id"]: r for r in runs}
 
     # Get configs and flatten
-    fields_by_path: Dict[str, Dict[int, str]] = {}
+    fields_by_path: dict[str, dict[int, str]] = {}
     runs_info = []
 
     for run_id in req.run_ids:

@@ -1,6 +1,5 @@
 import json
 import math
-from typing import List
 
 import boto3
 
@@ -8,7 +7,7 @@ from vla_foundry.data.preprocessing.hf_utils.hf_dataset_downloader import _downl
 from vla_foundry.file_utils import list_s3_directory_recursive, parse_s3_path
 
 
-def get_camera_names_from_s3(s3_client, bucket: str, prefix: str, chunk_num: int) -> List[str]:
+def get_camera_names_from_s3(s3_client, bucket: str, prefix: str, chunk_num: int) -> list[str]:
     """Get camera names from the first chunk's video directory."""
     videos_prefix = f"{prefix}/videos/chunk-{chunk_num:03d}/"
 
@@ -26,7 +25,7 @@ def get_camera_names_from_s3(s3_client, bucket: str, prefix: str, chunk_num: int
         raise ValueError(f"Error getting camera names from {videos_prefix}: {e}") from e
 
 
-def generate_expected_files(total_episodes: int, chunks_size: int, camera_names: List[str]):
+def generate_expected_files(total_episodes: int, chunks_size: int, camera_names: list[str]):
     """Generate sets of expected data and video files."""
     expected_data_files, expected_video_files = set(), set()
 
@@ -50,7 +49,7 @@ def generate_expected_files(total_episodes: int, chunks_size: int, camera_names:
     return expected_data_files, expected_video_files
 
 
-def check_lerobot_complete(s3_path: str) -> List[str]:
+def check_lerobot_complete(s3_path: str) -> list[str]:
     """
     Check if all files from a lerobot dataset are complete/downloaded correctly.
     Args:
@@ -94,7 +93,7 @@ def check_lerobot_complete(s3_path: str) -> List[str]:
 
 
 def download_missing_files(
-    missing_files: List[str],
+    missing_files: list[str],
     s3_path: str,
     hf_dataset: str,
     local_output_dir: str = "/tmp/lerobot_missing_files",

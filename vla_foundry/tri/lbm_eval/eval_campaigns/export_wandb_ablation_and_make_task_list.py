@@ -21,8 +21,6 @@ Notes:
   This script enforces that ordering when writing the CSV.
 """
 
-from __future__ import annotations
-
 import argparse
 import csv
 import os

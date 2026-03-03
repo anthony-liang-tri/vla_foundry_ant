@@ -98,6 +98,35 @@ uv run ruff format
 uv run ruff check --fix
 ```
 
+#### Type Hints (Python 3.12+)
+Use modern built-in generics and union syntax (PEP 585/604). Do **not** use the deprecated capitalized forms from `typing`:
+
+| Deprecated | Modern |
+|---|---|
+| `Optional[X]` | `X \| None` |
+| `List[X]` | `list[X]` |
+| `Dict[X, Y]` | `dict[X, Y]` |
+| `Tuple[X, ...]` | `tuple[X, ...]` |
+| `Union[X, Y]` | `X \| Y` |
+| `Set[X]` | `set[X]` |
+
+`from __future__ import annotations` is unnecessary on Python 3.12 and should not be used. Imports like `Any`, `Callable`, `Literal`, `Sequence`, `TypeVar`, and `Type` from `typing` are still fine, only the generic container aliases above are deprecated.
+
+#### Docstrings
+Use **Google-style** docstrings (not NumPy-style or reST-style):
+```python
+def example(x: int, name: str) -> bool:
+    """One-line summary.
+
+    Args:
+        x: Description of x.
+        name: Description of name.
+
+    Returns:
+        Description of return value.
+    """
+```
+
 ### Test Coverage
 This codebase uses [pytest](https://docs.pytest.org/en/stable/). Pytest has many useful
 features (e.g., [`@pytest.mark.parametrize`](https://docs.pytest.org/en/stable/how-to/parametrize.html)).

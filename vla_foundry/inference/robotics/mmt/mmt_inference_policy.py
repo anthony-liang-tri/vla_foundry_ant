@@ -23,7 +23,6 @@ import os
 import sys
 import time
 from collections import deque
-from typing import Dict, List, Optional
 
 import numpy as np
 import torch
@@ -42,15 +41,15 @@ class ZzkPolicyInference:
     def __init__(
         self,
         checkpoint_directory: str,
-        checkpoint_name: Optional[str] = None,
+        checkpoint_name: str | None = None,
         robot_hostname: str = "localhost",
         robot_port: int = 8888,
         device: str = "cuda",
         num_flow_steps: int = 10,
         open_loop_steps: int = 4,
         language_instruction: str = "You are a helpful robot assistant finishing tasks to help people's daily lives.",
-        zzk_api_client_py_path: Optional[str] = None,
-        zzk_api_client_ctypes_library_path: Optional[str] = None,
+        zzk_api_client_py_path: str | None = None,
+        zzk_api_client_ctypes_library_path: str | None = None,
     ):
         """Initialize the inference system.
 
@@ -187,7 +186,7 @@ class ZzkPolicyInference:
 
         logging.info("Buffers reset")
 
-    def extract_obs_from_zzk_status(self, status: Dict) -> Dict[str, np.ndarray]:
+    def extract_obs_from_zzk_status(self, status: dict) -> dict[str, np.ndarray]:
         """Extract observation dictionary from ZZK API status.
 
         Args:
@@ -278,7 +277,7 @@ class ZzkPolicyInference:
 
         return obs
 
-    def collect_images_from_buffer(self) -> Dict[str, np.ndarray]:
+    def collect_images_from_buffer(self) -> dict[str, np.ndarray]:
         """Collect images from buffer with temporal ordering.
 
         Returns:
@@ -317,7 +316,7 @@ class ZzkPolicyInference:
 
         return images_dict
 
-    def collect_proprioception_from_buffer(self) -> Dict[str, List[np.ndarray]]:
+    def collect_proprioception_from_buffer(self) -> dict[str, list[np.ndarray]]:
         """Collect proprioception from buffer.
 
         Returns:
@@ -343,7 +342,7 @@ class ZzkPolicyInference:
 
         return proprioception
 
-    def collect_actions_from_buffer(self) -> Dict[str, List[np.ndarray]]:
+    def collect_actions_from_buffer(self) -> dict[str, list[np.ndarray]]:
         """Collect actions from buffer.
 
         Returns:
@@ -373,8 +372,8 @@ class ZzkPolicyInference:
         return actions
 
     def build_lowdim_dict(
-        self, actions: Dict[str, List[np.ndarray]], proprioception: Dict[str, List[np.ndarray]]
-    ) -> Dict[str, torch.Tensor]:
+        self, actions: dict[str, list[np.ndarray]], proprioception: dict[str, list[np.ndarray]]
+    ) -> dict[str, torch.Tensor]:
         """Build lowdim dictionary from actions and proprioception.
 
         Args:
@@ -398,7 +397,7 @@ class ZzkPolicyInference:
 
         return lowdim_dict
 
-    def prepare_model_input(self) -> Dict[str, torch.Tensor]:
+    def prepare_model_input(self) -> dict[str, torch.Tensor]:
         """Prepare model input from buffered observations.
 
         Returns:
@@ -513,7 +512,7 @@ class ZzkPolicyInference:
 
         logging.debug(f"Updated action buffer with {self.total_timesteps} predicted actions")
 
-    def step_observations(self, zzk_status: Dict) -> None:
+    def step_observations(self, zzk_status: dict) -> None:
         """Update observation buffers with new ZZK status.
 
         Args:
@@ -530,7 +529,7 @@ class ZzkPolicyInference:
             f"Stepped observations: images={len(self.image_buffer)}, proprioception={len(self.proprioception_buffer)}"
         )
 
-    def step_action(self) -> Dict:
+    def step_action(self) -> dict:
         """Get current action from buffer, shift buffer, and convert to ZZK format.
 
         Returns:

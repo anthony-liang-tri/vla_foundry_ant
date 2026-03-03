@@ -2,7 +2,7 @@ import json
 import os
 import uuid
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import fsspec
 import numpy as np
@@ -21,21 +21,21 @@ class SampleMetadata:
 
     episode_id: str
     sample_id: str
-    anchor_timestep: Optional[int]
-    anchor_relative_idx: Optional[int]
-    image_timesteps: List[int]
+    anchor_timestep: int | None
+    anchor_relative_idx: int | None
+    image_timesteps: list[int]
     lowdim_start_timestep: int
     lowdim_end_timestep: int
     past_padding: int
     future_padding: int
-    camera_names: List[str]
+    camera_names: list[str]
     original_episode_length: int
-    original_image_sizes: Dict[str, Tuple[int, int]]
+    original_image_sizes: dict[str, tuple[int, int]]
     is_padded: bool
 
 
 @ray.remote
-def check_episode_validity_ray(episode_path: str) -> Optional[str]:
+def check_episode_validity_ray(episode_path: str) -> str | None:
     """Check if an episode directory has valid processed data. Returns episode path if valid, None otherwise."""
     fs, _ = fsspec.core.url_to_fs(episode_path)
     processed_path = os.path.join(episode_path, "processed")
@@ -60,7 +60,7 @@ def check_episode_validity_ray(episode_path: str) -> Optional[str]:
 @ray.remote
 def discover_and_validate_episodes_in_directory(
     diffusion_spartan_path: str, max_episodes: int = -1, validation_episodes=None
-) -> List[str]:
+) -> list[str]:
     """Discover and validate episodes in a diffusion_spartan directory in parallel."""
     fs, _ = fsspec.core.url_to_fs(diffusion_spartan_path)
     fs_path = diffusion_spartan_path.replace("s3://", "")
@@ -218,7 +218,7 @@ class SpartanConverter(BaseRoboticsConverter):
         else:
             print("⚠️  No valid pose groups found")
 
-    def discover_episodes(self, source_paths: List[str], max_episodes_to_process: int = -1) -> List[str]:
+    def discover_episodes(self, source_paths: list[str], max_episodes_to_process: int = -1) -> list[str]:
         """
         Discover episodes efficiently by assuming all source_paths are diffusion_spartan directories.
         Uses Ray for parallel validation.
@@ -254,13 +254,13 @@ class SpartanConverter(BaseRoboticsConverter):
 
     def extract_sample_camera_calibration(
         self,
-        episode_intrinsics: Dict[str, Any],
-        episode_extrinsics: Dict[str, Any],
+        episode_intrinsics: dict[str, Any],
+        episode_extrinsics: dict[str, Any],
         valid_start: int,
         valid_end: int,
         past_padding: int,
         future_padding: int,
-    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         """Extract camera calibration data for the lowdim sequence timespan."""
         sample_intrinsics = {}
         sample_extrinsics = {}
@@ -306,8 +306,8 @@ class SpartanConverter(BaseRoboticsConverter):
         return sample_intrinsics, sample_extrinsics
 
     def transform_camera_calibration_keys(
-        self, intrinsics: Dict[str, Any], extrinsics: Dict[str, Any], metadata: Dict[str, Any]
-    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        self, intrinsics: dict[str, Any], extrinsics: dict[str, Any], metadata: dict[str, Any]
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         """Transform camera calibration keys from camera IDs to semantic names."""
         # Get camera mapping from metadata
         camera_mapping = metadata.get("camera_id_to_semantic_name", {})
@@ -329,7 +329,7 @@ class SpartanConverter(BaseRoboticsConverter):
 
         return transformed_intrinsics, transformed_extrinsics
 
-    def get_language_instructions(self, episode_path: str, instruction_types: List[str] = None) -> Dict[str, List[str]]:
+    def get_language_instructions(self, episode_path: str, instruction_types: list[str] = None) -> dict[str, list[str]]:
         """Get language instructions for a given task, organized by type.
 
         Args:
@@ -360,7 +360,7 @@ class SpartanConverter(BaseRoboticsConverter):
 
         return instructions_by_type
 
-    def load_episode_data(self, episode_path: str) -> Dict[str, Any]:
+    def load_episode_data(self, episode_path: str) -> dict[str, Any]:
         """Load episode data with optimization and retry logic."""
         processed_path = os.path.join(episode_path, "processed")
 
@@ -410,13 +410,13 @@ class SpartanConverter(BaseRoboticsConverter):
             "extrinsics": extrinsics,
         }
 
-    def get_episode_length(self, episode_data: Dict[str, Any]) -> int:
+    def get_episode_length(self, episode_data: dict[str, Any]) -> int:
         """Get episode length from episode data."""
         first_obs_key = next(iter(episode_data["observations"].keys()))
         episode_length = episode_data["observations"][first_obs_key].shape[0]
         return episode_length
 
-    def extract_camera_data(self, episode_data: Dict[str, Any]) -> Dict[str, np.ndarray]:
+    def extract_camera_data(self, episode_data: dict[str, Any]) -> dict[str, np.ndarray]:
         """Extract camera data with filtering, including depth images."""
         camera_mapping = episode_data["metadata"].get("camera_id_to_semantic_name", {})
 
@@ -451,7 +451,7 @@ class SpartanConverter(BaseRoboticsConverter):
 
         return result
 
-    def extract_lowdim_data(self, episode_data: Dict[str, Any]):
+    def extract_lowdim_data(self, episode_data: dict[str, Any]):
         result = {}
 
         # Extract low-dimensional observations
@@ -492,7 +492,7 @@ class SpartanConverter(BaseRoboticsConverter):
 
         return result
 
-    def extract_intrinsics_extrinsics_data(self, episode_data: Dict[str, Any]):
+    def extract_intrinsics_extrinsics_data(self, episode_data: dict[str, Any]):
         return episode_data.get("intrinsics", {}), episode_data.get("extrinsics", {})
 
     def extract_sample_data(
@@ -500,11 +500,11 @@ class SpartanConverter(BaseRoboticsConverter):
         anchor_timestep: int,
         episode_path: str,
         episode_length: int,
-        camera_data: Dict[str, np.ndarray],
-        lowdim_data: Dict[str, np.ndarray],
-        intrinsics_data: Dict[str, np.ndarray],
-        extrinsics_data: Dict[str, np.ndarray],
-        metadata_data: Dict[str, Any],
+        camera_data: dict[str, np.ndarray],
+        lowdim_data: dict[str, np.ndarray],
+        intrinsics_data: dict[str, np.ndarray],
+        extrinsics_data: dict[str, np.ndarray],
+        metadata_data: dict[str, Any],
         statistics_ray_actor,
         logger_actor,
     ):

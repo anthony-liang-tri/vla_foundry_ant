@@ -7,7 +7,7 @@ import os
 import platform
 import subprocess
 import sys
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import fsspec
 from draccus.parsers import encoding as _draccus_encoding
@@ -28,7 +28,7 @@ def find_repo_root(start_path):
     return None
 
 
-def get_python_dependencies(file_path: str, repo_root: Optional[str] = None, visited: Optional[set] = None) -> set:
+def get_python_dependencies(file_path: str, repo_root: str | None = None, visited: set | None = None) -> set:
     """Dynamically extract Python file dependencies by parsing imports."""
     if visited is None:
         visited = set()
@@ -117,7 +117,7 @@ def get_python_dependencies(file_path: str, repo_root: Optional[str] = None, vis
     return dependencies
 
 
-def check_preprocessing_related_changes() -> Tuple[bool, List[str]]:
+def check_preprocessing_related_changes() -> tuple[bool, list[str]]:
     """Check if uncommitted changes affect preprocessing code or dependencies."""
 
     # Get the main preprocessing script path
@@ -292,7 +292,7 @@ def create_preprocessing_tag(dataset_name: str = None, preprocessing_type: str =
         return ""
 
 
-def get_git_info(auto_tag: bool = True) -> Dict[str, str]:
+def get_git_info(auto_tag: bool = True) -> dict[str, str]:
     """Get git repository information for code version tracking."""
     git_info = {}
 
@@ -404,7 +404,7 @@ def get_git_info(auto_tag: bool = True) -> Dict[str, str]:
     return git_info
 
 
-def get_source_data_info(source_path: str, episodes: List[str]) -> Dict[str, str]:
+def get_source_data_info(source_path: str, episodes: list[str]) -> dict[str, str]:
     """Get information about the source data."""
     source_info = {
         "source_path": source_path,
@@ -446,7 +446,7 @@ def get_source_data_info(source_path: str, episodes: List[str]) -> Dict[str, str
     return source_info
 
 
-def create_processing_metadata(args: PreprocessParams, episodes: List[str]) -> Dict[str, Any]:
+def create_processing_metadata(args: PreprocessParams, episodes: list[str]) -> dict[str, Any]:
     """Create comprehensive metadata about the processing run."""
 
     # Get command line information

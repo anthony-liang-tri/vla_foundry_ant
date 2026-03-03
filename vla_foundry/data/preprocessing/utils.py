@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
 from functools import partial
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import boto3
 import numpy as np
@@ -21,13 +21,13 @@ from vla_foundry.data.preprocessing.image_utils import ImageResizingMethod, dept
 
 
 def upload_sample_to_s3(
-    sample_data: Dict[str, Any],
+    sample_data: dict[str, Any],
     output_dir: str,
     episode_path: str,
     episode_id: str,
     frame_idx: int,
     jpeg_quality: int = 95,
-    resize_images_size: Optional[List[int]] = None,
+    resize_images_size: list[int] | None = None,
     image_resizing_method: ImageResizingMethod = ImageResizingMethod.CENTER_CROP,
 ) -> None:
     """Upload sample data to S3 as tar file. (or save locally)"""
@@ -153,7 +153,7 @@ def extract_unique_id(episode_path: str) -> str:
         return str(uuid.uuid5(uuid.NAMESPACE_URL, episode_path))
 
 
-def save_and_upload_dict(dict_data: Dict, output_path: str, file_name: str):
+def save_and_upload_dict(dict_data: dict, output_path: str, file_name: str):
     # Used to upload manifest.jsonl and stats.json (or save locally)
     bucket_name, s3_prefix = output_path.removeprefix("s3://").split("/", 1)
     body = "\n".join(json.dumps(record) for record in dict_data) if "jsonl" in file_name else json.dumps(dict_data)
@@ -225,7 +225,7 @@ def _download_tar_from_s3(s3_key: str, s3_client, bucket_name: str, s3_prefix: s
 
 
 @ray.remote
-def create_episode_shard(shard_files: List[str], episode_key: str, output_dir: str) -> str:
+def create_episode_shard(shard_files: list[str], episode_key: str, output_dir: str) -> str:
     """Download/read tar files and create an episode-based shard. Supports both S3 and local filesystem."""
     is_s3 = output_dir.startswith("s3://")
 
@@ -289,7 +289,7 @@ def create_episode_shard(shard_files: List[str], episode_key: str, output_dir: s
 
 
 @ray.remote
-def create_shard(shard_files: List[str], shard_idx: int, output_dir: str) -> str:
+def create_shard(shard_files: list[str], shard_idx: int, output_dir: str) -> str:
     """Download tar files from S3 and create a shard. OPTIMIZED with parallel downloads."""
     is_s3 = output_dir.startswith("s3://")
 
@@ -365,7 +365,7 @@ def create_shard(shard_files: List[str], shard_idx: int, output_dir: str) -> str
     return (shard_name.rstrip(".tar"), len(shard_files))
 
 
-def is_still_sample(lowdim_data: Dict[str, np.ndarray], start_idx: int, end_idx: int, still_threshold: float) -> bool:
+def is_still_sample(lowdim_data: dict[str, np.ndarray], start_idx: int, end_idx: int, still_threshold: float) -> bool:
     """Check if sample is still by looking at action/position/pose keys."""
     recognized_patterns = ["action", "joint", "poses", "xyz", "actual"]
     movement_keys = [k for k in lowdim_data if any(x in k.lower() for x in recognized_patterns)]

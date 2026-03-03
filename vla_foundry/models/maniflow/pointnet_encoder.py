@@ -23,7 +23,7 @@
 """PointNet encoder for 3D point cloud processing."""
 
 import logging
-from typing import List, Type
+from typing import Type
 
 import torch
 import torch.nn as nn
@@ -36,10 +36,10 @@ logger = logging.getLogger(__name__)
 def create_mlp(
     input_dim: int,
     output_dim: int,
-    net_arch: List[int],
+    net_arch: list[int],
     activation_fn: Type[nn.Module] = nn.ReLU,
     squash_output: bool = False,
-) -> List[nn.Module]:
+) -> list[nn.Module]:
     """
     Create a multi layer perceptron (MLP).
 

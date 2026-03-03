@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from typing import Tuple, Union
 
 from vla_foundry.params.base_params import BaseParams
 
@@ -22,7 +21,7 @@ class ColorJitterParams(BaseAugmentationParams):
     brightness: float = field(default=0.2)
     contrast: float = field(default=0.4)
     saturation: float = field(default=0.2)
-    hue: Tuple[float, float] = field(default_factory=lambda: (-0.05, 0.05))
+    hue: tuple[float, float] = field(default_factory=lambda: (-0.05, 0.05))
 
     def __post_init__(self):
         if self.brightness < 0 or self.contrast < 0 or self.saturation < 0:
@@ -43,7 +42,7 @@ class CropParams(BaseAugmentationParams):
     Configuration for crop parameters
     """
 
-    shape: Tuple[Union[int, float], Union[int, float]] = field(default=(224, 224))
+    shape: tuple[int | float, int | float] = field(default=(224, 224))
     mode: str = field(default="random")  # "random" or "center"
 
     def __post_init__(self):

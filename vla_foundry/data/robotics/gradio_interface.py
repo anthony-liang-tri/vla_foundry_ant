@@ -21,7 +21,7 @@ Features:
     - Sample metadata display
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import gradio as gr
 import numpy as np
@@ -50,7 +50,7 @@ class CameraProjection:
         self.extrinsics = self.extrinsics_original.copy()
         self.use_inverted = False
 
-    def project_3d_to_2d(self, points_3d: np.ndarray, image_ratios: Tuple[float, float] = (1.0, 1.0)) -> np.ndarray:
+    def project_3d_to_2d(self, points_3d: np.ndarray, image_ratios: tuple[float, float] = (1.0, 1.0)) -> np.ndarray:
         """Project 3D points to 2D image coordinates, automatically choosing the best extrinsics."""
         # Test both original and inverted extrinsics
         # points_2d_orig = self._project_with_extrinsics(points_3d, self.extrinsics_original)
@@ -72,7 +72,7 @@ class CameraProjection:
         return result_points * np.array(image_ratios)[None, :]
 
     def project_3d_to_2d_scaled_intrinsics(
-        self, points_3d: np.ndarray, image_ratios: Tuple[float, float] = (1.0, 1.0)
+        self, points_3d: np.ndarray, image_ratios: tuple[float, float] = (1.0, 1.0)
     ) -> np.ndarray:
         """Project 3D points to 2D image coordinates using scaled intrinsics."""
         # Scale the intrinsics matrix to match the current image size
@@ -154,7 +154,7 @@ class CameraProjection:
 class GradioDataExplorer:
     """Gradio-based data explorer."""
 
-    def __init__(self, samples: List[Dict[str, Any]], trajectory_length: int = 50):
+    def __init__(self, samples: list[dict[str, Any]], trajectory_length: int = 50):
         self.samples = samples
         self.trajectory_length = trajectory_length
         self.available_cameras = self._get_available_cameras()
@@ -162,7 +162,7 @@ class GradioDataExplorer:
         self.show_action_trajectories = False
         self.use_reconstructed = False
 
-    def _get_available_cameras(self) -> List[str]:
+    def _get_available_cameras(self) -> list[str]:
         """Get list of available camera names."""
         cameras = set()
 
@@ -182,7 +182,7 @@ class GradioDataExplorer:
 
         return sorted(list(cameras))
 
-    def _get_available_camera_timesteps(self, camera_name: str) -> List[str]:
+    def _get_available_camera_timesteps(self, camera_name: str) -> list[str]:
         """Get list of available timesteps for a specific camera."""
         timesteps = set()
 
@@ -210,8 +210,8 @@ class GradioDataExplorer:
         return sorted(list(timesteps), key=sort_key)
 
     def _get_camera_projection(
-        self, sample: Dict[str, Any], camera_name: str, calibration_timestep: int
-    ) -> Optional[CameraProjection]:
+        self, sample: dict[str, Any], camera_name: str, calibration_timestep: int
+    ) -> CameraProjection | None:
         """Get camera projection for specified camera at given timestep."""
         if not camera_name:
             return None
@@ -264,7 +264,7 @@ class GradioDataExplorer:
             return None
 
     def _overlay_trajectory_on_image(
-        self, image: Image.Image, sample: Dict[str, Any], camera_name: str, image_timestep_info: str = "t0"
+        self, image: Image.Image, sample: dict[str, Any], camera_name: str, image_timestep_info: str = "t0"
     ) -> Image.Image:
         """Overlay trajectory on camera image."""
         # Create a copy to draw on
@@ -615,7 +615,7 @@ class GradioDataExplorer:
 
         return img_with_overlay
 
-    def _create_3d_plot(self, sample: Dict[str, Any]) -> go.Figure:
+    def _create_3d_plot(self, sample: dict[str, Any]) -> go.Figure:
         """Create interactive 3D trajectory plot using Plotly."""
         fig = go.Figure()
 
@@ -643,7 +643,7 @@ class GradioDataExplorer:
 
         return fig
 
-    def _get_valid_gripper_trajectories(self, trajectories: Dict[str, np.ndarray]) -> List[Tuple[str, np.ndarray]]:
+    def _get_valid_gripper_trajectories(self, trajectories: dict[str, np.ndarray]) -> list[tuple[str, np.ndarray]]:
         """Filter and return valid gripper trajectories."""
         valid_trajectories = []
 
@@ -664,7 +664,7 @@ class GradioDataExplorer:
 
         return valid_trajectories
 
-    def _calculate_cubic_axis_range(self, valid_trajectories: List[Tuple[str, np.ndarray]]) -> List[List[float]]:
+    def _calculate_cubic_axis_range(self, valid_trajectories: list[tuple[str, np.ndarray]]) -> list[list[float]]:
         """Calculate cubic axis ranges based on trajectory data."""
         all_points = np.concatenate([traj for _, traj in valid_trajectories], axis=0)
         min_coords = np.min(all_points, axis=0)
@@ -723,7 +723,7 @@ class GradioDataExplorer:
                 return [[0, "rgb(0, 255, 100)"], [1, "rgb(0, 100, 0)"]]
 
     def _add_trajectory_trace(
-        self, fig: go.Figure, traj_name: str, traj_data: np.ndarray, traj_idx: int, sample: Dict[str, Any]
+        self, fig: go.Figure, traj_name: str, traj_data: np.ndarray, traj_idx: int, sample: dict[str, Any]
     ) -> None:
         """Add a single trajectory trace to the figure."""
         # Clean the trajectory name for display
@@ -774,7 +774,7 @@ class GradioDataExplorer:
         time_values: np.ndarray,
         colorscale: str,
         clean_name: str,
-        sample: Dict[str, Any],
+        sample: dict[str, Any],
     ) -> None:
         """Add current position marker to trajectory."""
         metadata = sample.get("metadata", {})
@@ -802,7 +802,7 @@ class GradioDataExplorer:
             )
         )
 
-    def _configure_3d_layout(self, fig: go.Figure, axis_range: List[List[float]], num_trajectories: int) -> None:
+    def _configure_3d_layout(self, fig: go.Figure, axis_range: list[list[float]], num_trajectories: int) -> None:
         """Configure the 3D plot layout."""
         fig.update_layout(
             title="Robot Trajectory (3D) - Interactive with Time Gradient",
@@ -846,7 +846,7 @@ class GradioDataExplorer:
         )
         return fig
 
-    def _format_metadata(self, sample: Dict[str, Any]) -> str:
+    def _format_metadata(self, sample: dict[str, Any]) -> str:
         """Format sample metadata for display."""
         lines = []
 
@@ -914,7 +914,7 @@ class GradioDataExplorer:
 
     def update_display(
         self, sample_idx: int, camera_name: str, camera_timestep: str, show_3d_plot: bool
-    ) -> Tuple[Image.Image, Optional[go.Figure], str]:
+    ) -> tuple[Image.Image, go.Figure | None, str]:
         """Update the display based on current selections."""
         if sample_idx >= len(self.samples):
             return None, None, "Invalid sample index"

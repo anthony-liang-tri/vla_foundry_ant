@@ -1,7 +1,6 @@
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Dict, Optional
 
 from vla_foundry.data.processor import get_processor
 from vla_foundry.file_utils import yaml_load
@@ -102,7 +101,7 @@ class RoboticsDataParams(DataParams):
     mask_padded_images: bool = field(default=False)
     proprioception_fields: list[str] = field(default_factory=list)
     action_fields: list[str] = field(default_factory=list)
-    pose_groups: list[Dict[str, str]] = field(default_factory=list)
+    pose_groups: list[dict[str, str]] = field(default_factory=list)
     intrinsics_fields: list[str] = field(default_factory=list)
     extrinsics_fields: list[str] = field(default_factory=list)
     use_point_cloud: bool = field(default=False)
@@ -110,10 +109,10 @@ class RoboticsDataParams(DataParams):
     normalization: NormalizationParams = field(default_factory=NormalizationParams)
     augmentation: DataAugmentationParams = field(default_factory=DataAugmentationParams)
 
-    lowdim_past_timesteps: Optional[int] = field(default=None)
-    lowdim_future_timesteps: Optional[int] = field(default=None)
+    lowdim_past_timesteps: int | None = field(default=None)
+    lowdim_future_timesteps: int | None = field(default=None)
     action_dim: int = field(default=None)
-    proprioception_dim: Optional[int] = field(default=None)
+    proprioception_dim: int | None = field(default=None)
 
     def __post_init__(self):
         super().__post_init__()

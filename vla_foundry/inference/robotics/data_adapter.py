@@ -9,7 +9,7 @@ processor, and policy-facing outputs.
 
 import copy
 import logging
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import numpy as np
 import torch
@@ -53,12 +53,12 @@ class PolicyDataAdapter:
         robotics_processor,
         data_config,
         field_mapping_path: str,
-        image_names: List[str],
-        preprocessor_image_size: Tuple[int, int],
+        image_names: list[str],
+        preprocessor_image_size: tuple[int, int],
         preprocessor_image_resize_method: ImageResizingMethod = ImageResizingMethod.CENTER_CROP,
         num_past_timesteps: int = 1,
         num_future_timesteps: int = 14,
-        image_indices: Tuple[int, ...] = (-1, 0),
+        image_indices: tuple[int, ...] = (-1, 0),
     ):
         self.robotics_processor = robotics_processor
         self.data_config = data_config
@@ -229,9 +229,9 @@ class PolicyDataAdapter:
             "reference_proprioception", self.field_mapping.create_pose_and_gripper(self.reference)
         )
 
-    def preprocess_images(self, images: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
+    def preprocess_images(self, images: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
         logging.debug(f"Preprocessing images resize {self.preprocessor_image_size} crop {self.image_crop_size}")
-        processed: Dict[str, np.ndarray] = {}
+        processed: dict[str, np.ndarray] = {}
         for camera_name, image in images.items():
             resized = resize_image(
                 image,
@@ -284,9 +284,9 @@ class PolicyDataAdapter:
         self.step_past_mask()
         vz.log_robot_gym_poses_and_grippers("current_pose", observation.robot.actual)
 
-    def get_images_for_processor(self) -> Dict[str, np.ndarray]:
+    def get_images_for_processor(self) -> dict[str, np.ndarray]:
         logging.debug("Getting images for processor")
-        images: Dict[str, np.ndarray] = {}
+        images: dict[str, np.ndarray] = {}
         for image_name in self.image_names:
             camera_name, timestep_str = image_name.rsplit("_t", 1)
             timestep = int(timestep_str)
@@ -308,7 +308,7 @@ class PolicyDataAdapter:
         vz.log_images("processed_images", processed_images)
         return images
 
-    def get_lowdim_for_processor(self) -> Dict[str, torch.Tensor]:
+    def get_lowdim_for_processor(self) -> dict[str, torch.Tensor]:
         logging.debug("Getting lowdim for processor")
         lowdim = self._stack_fields(
             self.action_buffer,
@@ -381,7 +381,7 @@ class PolicyDataAdapter:
         fields: list[str],
         relative_fields: list[str],
         timesteps_slice: slice | None = None,
-    ) -> Dict[str, torch.Tensor]:
+    ) -> dict[str, torch.Tensor]:
         """Stack fields from buffer into tensors, applying relative conversions as needed.
 
         Note: If both xyz_relative and rot_6d_relative from the same pose group are in fields,
@@ -389,7 +389,7 @@ class PolicyDataAdapter:
         alternative would require pre-processing pose groups which adds complexity. The duplicate
         calculation is minimal compared to model inference time. Consider refactoring in the future.
         """
-        stacked_fields: Dict[str, torch.Tensor] = {}
+        stacked_fields: dict[str, torch.Tensor] = {}
         if not buffer or not fields:
             return stacked_fields
 
@@ -420,7 +420,7 @@ class PolicyDataAdapter:
 
     def _pose_to_relative(
         self, buffer: list[dict], xyz_key: str, rot_6d_key: str, timesteps_slice: slice | None = None
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray]:
         """Convert absolute pose fields to relative pose.
 
         Args:
@@ -530,7 +530,7 @@ class PolicyDataAdapter:
         stacked_point_cloud = np.stack(point_clouds_timesteps, axis=0)
         return stacked_point_cloud
 
-    def get_processor_input(self) -> Dict[str, Any]:
+    def get_processor_input(self) -> dict[str, Any]:
         logging.debug("Getting processor input")
         processor_input = {
             "images": [self.get_images_for_processor()],
@@ -551,7 +551,7 @@ class PolicyDataAdapter:
 
         return processor_input
 
-    def get_model_input(self, observation) -> Dict[str, torch.Tensor]:
+    def get_model_input(self, observation) -> dict[str, torch.Tensor]:
         logging.debug("Getting model input")
         self.update_reference(observation)
         processor_input = self.get_processor_input()

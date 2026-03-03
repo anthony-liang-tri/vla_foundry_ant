@@ -14,12 +14,12 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import yaml
 
 
-def parse_tasks_file(tasks_file: Path) -> List[Tuple[str, str, str]]:
+def parse_tasks_file(tasks_file: Path) -> list[tuple[str, str, str]]:
     """Parse the tasks file and extract task information."""
     with open(tasks_file, "r") as f:
         content = f.read()
@@ -42,7 +42,7 @@ def download_summaries(
     task_name: str,
     campaign_name: str,
     output_dir: Path,
-) -> List[Path]:
+) -> list[Path]:
     """Download all summary.yaml files for a task."""
     import shutil
 
@@ -103,7 +103,7 @@ def download_summaries(
     return []
 
 
-def parse_summary_file(summary_path: Path) -> Dict[str, Any]:
+def parse_summary_file(summary_path: Path) -> dict[str, Any]:
     """Parse a summary.yaml file and extract success information."""
     try:
         # Add a custom constructor to handle unknown tags
@@ -132,7 +132,7 @@ def parse_summary_file(summary_path: Path) -> Dict[str, Any]:
         return None
 
 
-def compute_success_rate(summaries: List[Dict[str, Any]]) -> Dict[str, Any]:
+def compute_success_rate(summaries: list[dict[str, Any]]) -> dict[str, Any]:
     """Compute success rate from parsed summaries."""
     if not summaries:
         return {"total": 0, "successes": 0, "success_rate": 0.0}

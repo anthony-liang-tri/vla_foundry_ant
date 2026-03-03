@@ -1,6 +1,5 @@
 import dataclasses as dc
 import typing
-from typing import Dict, Optional
 
 # Minor type annotations
 ObsType = typing.NewType("ObsType", typing.Any)
@@ -27,12 +26,12 @@ class PolicyMetadata:
 
     # Should be true for language conditioned policies. Optional for backward
     # compability reasons.
-    is_language_conditioned: Optional[bool] = None
+    is_language_conditioned: bool | None = None
 
     # These are supposed to capture the code state used at *inference* time,
     # not training time.
-    git_repo: Optional[str] = None
-    git_sha: Optional[str] = None
+    git_repo: str | None = None
+    git_sha: str | None = None
 
     # Raw yaml config used to construct the policy
     raw_policy_config: dict = dc.field(default_factory=dict)
@@ -43,8 +42,8 @@ class PolicyMetadata:
     # runtime info for reproduction, let's lift those information out of the
     # catchall (e.g. we decided to go with containerization, use the
     # appropriate id for images.)
-    runtime_information: Dict[str, str] = dc.field(default_factory=dict)
 
+    runtime_information: dict[str, str] = dc.field(default_factory=dict)
 
 class Policy:
     """

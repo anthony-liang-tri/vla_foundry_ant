@@ -1,6 +1,5 @@
 import numbers
 from functools import partial
-from typing import List, Union
 
 import torch
 import torch.nn as nn
@@ -15,7 +14,7 @@ class LayerNorm(nn.Module):
 
     def __init__(
         self,
-        normalized_shape: Union[int, List[int], Size],
+        normalized_shape: int | list[int] | Size,
         eps: float = 0.00001,
         elementwise_gain: bool = True,
         elementwise_bias: bool = True,
@@ -101,7 +100,7 @@ def _cast_if_autocast_enabled(tensor):
 class RmsNorm(nn.Module):
     def __init__(
         self,
-        normalized_shape: Union[int, List[int], Size],
+        normalized_shape: int | list[int] | Size,
         eps: float = 1e-6,
         device=None,
         dtype=None,

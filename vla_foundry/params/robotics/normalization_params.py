@@ -1,6 +1,5 @@
 import os
 from dataclasses import dataclass, field
-from typing import Dict, Optional
 
 from vla_foundry.file_utils import yaml_load
 from vla_foundry.params.base_params import BaseParams
@@ -64,12 +63,12 @@ class NormalizationParams(BaseParams):
     centered_norm: bool = field(default=False)
 
     # Field-specific configurations (initialized in __post_init__)
-    field_configs: Dict[str, FieldNormalizationParams] = field(default_factory=dict)
+    field_configs: dict[str, FieldNormalizationParams] = field(default_factory=dict)
 
     # Shared attributes. Overwritten in init_shared_attributes.
     # Low-dimensional trajectory window captured during preprocessing
-    lowdim_past_timesteps: Optional[int] = field(default=None)
-    lowdim_future_timesteps: Optional[int] = field(default=None)
+    lowdim_past_timesteps: int | None = field(default=None)
+    lowdim_future_timesteps: int | None = field(default=None)
 
     def to_dict(self):
         return {

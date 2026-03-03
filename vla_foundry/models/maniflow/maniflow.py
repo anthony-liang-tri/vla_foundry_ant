@@ -23,7 +23,6 @@
 """ManiFlow model implementation for consistency flow training."""
 
 import logging
-from typing import Dict, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -178,8 +177,8 @@ class ManiFlow(BaseModel):
         self,
         actions: torch.Tensor,
         vis_cond: torch.Tensor,
-        lang_cond: Optional[list] = None,
-    ) -> Dict[str, torch.Tensor]:
+        lang_cond: list | None = None,
+    ) -> dict[str, torch.Tensor]:
         """Get flow velocity targets for training.
 
         Flow training is used to train the model to predict instantaneous velocity
@@ -227,8 +226,8 @@ class ManiFlow(BaseModel):
         self,
         actions: torch.Tensor,
         vis_cond: torch.Tensor,
-        lang_cond: Optional[list],
-    ) -> Dict[str, torch.Tensor]:
+        lang_cond: list | None,
+    ) -> dict[str, torch.Tensor]:
         """Get consistency velocity targets for training.
 
         Consistency training is used to train the model to be consistent across
@@ -304,8 +303,8 @@ class ManiFlow(BaseModel):
         self,
         x0: torch.Tensor,
         vis_cond: torch.Tensor,
-        lang_cond: Optional[list] = None,
-        N: Optional[int] = None,
+        lang_cond: list | None = None,
+        N: int | None = None,
     ) -> list:
         """Sample trajectory using Euler ODE integration.
 
@@ -417,8 +416,8 @@ class ManiFlow(BaseModel):
 
     def predict_action(
         self,
-        obs_dict: Dict[str, torch.Tensor],
-        lang_cond: Optional[list] = None,
+        obs_dict: dict[str, torch.Tensor],
+        lang_cond: list | None = None,
     ) -> torch.Tensor:
         """Predict action from observations using ODE sampling.
 
@@ -478,8 +477,8 @@ class ManiFlow(BaseModel):
 
     def compute_loss(
         self,
-        batch: Dict[str, torch.Tensor],
-    ) -> Tuple[torch.Tensor, Dict[str, float]]:
+        batch: dict[str, torch.Tensor],
+    ) -> tuple[torch.Tensor, dict[str, float]]:
         """Compute combined flow matching and consistency training loss.
 
         Args:
@@ -580,10 +579,10 @@ class ManiFlow(BaseModel):
 
     def forward(
         self,
-        point_cloud: Optional[torch.Tensor] = None,
-        proprioception: Optional[torch.Tensor] = None,
-        actions: Optional[torch.Tensor] = None,
-        task_name: Optional[list] = None,
+        point_cloud: torch.Tensor | None = None,
+        proprioception: torch.Tensor | None = None,
+        actions: torch.Tensor | None = None,
+        task_name: list | None = None,
         **kwargs,
     ):
         """Forward pass - handles both training (with loss) and inference.

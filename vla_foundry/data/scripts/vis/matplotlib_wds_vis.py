@@ -26,15 +26,13 @@ Notes
 - Contact sheets are saved as PNG files; one per tar.
 """
 
-from __future__ import annotations
-
 import argparse
 import io
 import os
 import sys
 import tarfile
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Iterable
 
 import fsspec
 
@@ -51,15 +49,15 @@ LOWDIM_EXTS = {".npz"}
 @dataclass
 class LowdimSummary:
     member_name: str
-    keys: List[str]
-    shapes: Dict[str, Tuple[int, ...]]
+    keys: list[str]
+    shapes: dict[str, tuple[int, ...]]
 
 
 @dataclass
 class TarReport:
     s3_path: str
-    lowdim_summaries: List[LowdimSummary]
-    image_entries: List[Tuple[str, Image.Image]]  # (member_name, PIL Image)
+    lowdim_summaries: list[LowdimSummary]
+    image_entries: list[tuple[str, Image.Image]]  # (member_name, PIL Image)
 
 
 def is_image(name: str) -> bool:
@@ -100,8 +98,8 @@ def extract_member_bytes(fileobj: io.BufferedReader, member: tarfile.TarInfo) ->
 
 
 def scan_tar_stream(s3_path: str, max_images: int = -1) -> TarReport:
-    lowdim_summaries: List[LowdimSummary] = []
-    image_entries: List[Tuple[str, Image.Image]] = []
+    lowdim_summaries: list[LowdimSummary] = []
+    image_entries: list[tuple[str, Image.Image]] = []
 
     # Open one streaming reader we will iterate exactly once; because streaming tar
     # cannot seek backwards, we must read members and their bytes on the fly.
@@ -145,7 +143,7 @@ def ensure_matplotlib_backend(show: bool):
     import matplotlib.pyplot as plt  # noqa: F401
 
 
-def render_contact_sheet(images: List[Tuple[str, Image.Image]], title: str, save_path: Optional[str], show: bool):
+def render_contact_sheet(images: list[tuple[str, Image.Image]], title: str, save_path: str | None, show: bool):
     ensure_matplotlib_backend(show)
     import matplotlib.pyplot as plt
 
@@ -189,7 +187,7 @@ def print_lowdim_summary(report: TarReport):
             print(f"      {k}: {shape}")
 
 
-def list_s3_targets(uri: str, recursive: bool) -> List[str]:
+def list_s3_targets(uri: str, recursive: bool) -> list[str]:
     if uri.endswith(".tar"):
         return [uri]
     # Treat as prefix

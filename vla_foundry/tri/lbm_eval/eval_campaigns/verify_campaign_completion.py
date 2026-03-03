@@ -16,7 +16,6 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
 
 
 @dataclass
@@ -36,7 +35,7 @@ class TaskSpec:
         return f"{self.task_name}-{ckpt_id}"
 
 
-def parse_tasks_file(tasks_file: Path) -> List[TaskSpec]:
+def parse_tasks_file(tasks_file: Path) -> list[TaskSpec]:
     """Parse the tasks file and extract task information."""
     with open(tasks_file, "r") as f:
         content = f.read()
@@ -57,7 +56,7 @@ def parse_tasks_file(tasks_file: Path) -> List[TaskSpec]:
     ]
 
 
-def list_s3_summaries(s3_path: str, aws_profile: Optional[str] = None) -> Set[int]:
+def list_s3_summaries(s3_path: str, aws_profile: str | None = None) -> set[int]:
     """List all demonstration indices that have summary.yaml on S3."""
     cmd = ["aws", "s3", "ls", s3_path, "--recursive"]
     if aws_profile:
@@ -94,7 +93,7 @@ def list_s3_summaries(s3_path: str, aws_profile: Optional[str] = None) -> Set[in
         return set()
 
 
-def resolve_task_name_on_s3(checkpoint_base: str, task_name: str, aws_profile: Optional[str] = None) -> str:
+def resolve_task_name_on_s3(checkpoint_base: str, task_name: str, aws_profile: str | None = None) -> str:
     """
     Resolve the task_name used for evaluation output paths on S3.
 
@@ -137,9 +136,9 @@ def resolve_task_name_on_s3(checkpoint_base: str, task_name: str, aws_profile: O
 
 def find_existing_summaries(
     checkpoint: str,
-    aws_profile: Optional[str] = None,
-    task_name: Optional[str] = None,
-) -> Set[int]:
+    aws_profile: str | None = None,
+    task_name: str | None = None,
+) -> set[int]:
     """Find all existing summary indices for a checkpoint.
 
     Args:
@@ -178,8 +177,8 @@ def verify_task(
     task: TaskSpec,
     start_index: int,
     num_samples: int,
-    aws_profile: Optional[str] = None,
-) -> Tuple[Set[int], Set[int]]:
+    aws_profile: str | None = None,
+) -> tuple[set[int], set[int]]:
     """
     Verify a single task's completion.
 
@@ -196,7 +195,7 @@ def verify_task(
     return existing_in_range, missing_indices
 
 
-def format_index_ranges(indices: Set[int]) -> str:
+def format_index_ranges(indices: set[int]) -> str:
     """Format a set of indices as compact ranges (e.g., '0-5,10,15-20')."""
     if not indices:
         return ""
@@ -225,7 +224,7 @@ def format_index_ranges(indices: Set[int]) -> str:
     return ",".join(ranges)
 
 
-def indices_to_ranges(indices: Set[int]) -> List[Tuple[int, int]]:
+def indices_to_ranges(indices: set[int]) -> list[tuple[int, int]]:
     """Convert a set of indices to a list of (start, end) ranges."""
     if not indices:
         return []
@@ -247,8 +246,8 @@ def indices_to_ranges(indices: Set[int]) -> List[Tuple[int, int]]:
 
 
 def generate_rerun_tasks_file(
-    tasks: List[TaskSpec],
-    missing_by_task: Dict[str, Set[int]],
+    tasks: list[TaskSpec],
+    missing_by_task: dict[str, set[int]],
     output_path: Path,
 ):
     """Generate a tasks file for re-running missing episodes."""
@@ -268,10 +267,10 @@ def generate_rerun_tasks_file(
 
 
 def generate_rerun_commands(
-    tasks: List[TaskSpec],
-    missing_by_task: Dict[str, Set[int]],
-    campaign_config: Optional[Path] = None,
-) -> List[str]:
+    tasks: list[TaskSpec],
+    missing_by_task: dict[str, set[int]],
+    campaign_config: Path | None = None,
+) -> list[str]:
     """Generate shell commands to re-run missing episodes."""
     commands = []
 

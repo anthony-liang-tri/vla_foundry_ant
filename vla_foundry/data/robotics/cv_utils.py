@@ -5,7 +5,7 @@ This module provides helper functions for working with computer vision data,
 including rescaling of camera intrinsics to match image preprocessing steps.
 """
 
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any
 
 import matplotlib.cm as cm
 import numpy as np
@@ -31,19 +31,15 @@ def intrinsics_3x3_to_4(K: np.ndarray) -> np.ndarray:
 
 def scale_intrinsics_for_resize_and_crop(
     original_intrinsics: np.ndarray,
-    original_image_size: Tuple[int, int],
-    processed_image_size: Tuple[int, int],
+    original_image_size: tuple[int, int],
+    processed_image_size: tuple[int, int],
 ) -> np.ndarray:
     """Scales camera intrinsics to account for resizing and square cropping.
 
-    Parameters
-    ----------
-    original_intrinsics : np.ndarray
-        Camera intrinsics as (fx, fy, cx, cy) or (N, 4).
-    original_image_size : Tuple[int, int]
-        Original image size as (width, height).
-    processed_image_size : Tuple[int, int]
-        Processed image size as (width, height).
+    Args:
+        original_intrinsics: Camera intrinsics as (fx, fy, cx, cy) or (N, 4).
+        original_image_size: Original image size as (width, height).
+        processed_image_size: Processed image size as (width, height).
     """
     intrinsics = np.asarray(original_intrinsics, dtype=float)
 
@@ -72,16 +68,12 @@ def scale_intrinsics_for_resize_and_crop(
 def transform_points_to_camera_frame(camera_T_base: np.ndarray, base_t_pts: np.ndarray) -> np.ndarray:
     """Transform 3D points from base frame to camera frame.
 
-    Parameters
-    ----------
-    camera_T_base : np.ndarray
-        Homogeneous transformation matrix from base frame to camera frame of shape (4, 4).
-    base_t_pts : np.ndarray
-        Points in base frame of shape (N, 3).
+    Args:
+        camera_T_base: Homogeneous transformation matrix from base frame to camera frame of shape (4, 4).
+        base_t_pts: Points in base frame of shape (N, 3).
 
-    Returns
-    -------
-    Points in camera frame of shape (N, 3).
+    Returns:
+        Points in camera frame of shape (N, 3).
     """
 
     base_t_pts_homogeneous = np.concatenate(
@@ -92,18 +84,14 @@ def transform_points_to_camera_frame(camera_T_base: np.ndarray, base_t_pts: np.n
     return camera_t_pts
 
 
-def draw_circle(img: np.ndarray, center: Tuple[int, int], radius: int, color: Union[int, Tuple[int, int, int]]):
-    """
-    Draw a circle onto an image.
+def draw_circle(img: np.ndarray, center: tuple[int, int], radius: int, color: int | tuple[int, int, int]):
+    """Draw a circle onto an image.
 
-    Parameters
-    ----------
-    img : (H, W, 3) or (H, W)
-        Numpy array for RGB or depth images respectively.
-    center : (x, y)
-        Coordinates of the circle's center.
-    radius : int
-    color: color: Union[int, Tuple[int, int, int]]
+    Args:
+        img: Numpy array for RGB or depth images respectively, of shape (H, W, 3) or (H, W).
+        center: Coordinates of the circle's center as (x, y).
+        radius: Radius of the circle.
+        color: Color value for the circle.
     """
     out = np.array(img, copy=True)
     x0, y0 = center
@@ -119,22 +107,17 @@ def draw_circle(img: np.ndarray, center: Tuple[int, int], radius: int, color: Un
 def draw_projected_trajectory_if_rgb(
     image: np.ndarray,
     intrinsics: np.ndarray,
-    trace_pts_list: List[np.ndarray],
+    trace_pts_list: list[np.ndarray],
 ):
-    """
-    Draw a 3D trajectory as a set of circles projected onto the image, if the image is RGB.
+    """Draw a 3D trajectory as a set of circles projected onto the image, if the image is RGB.
 
-    Parameters
-    ----------
-    img : (H, W, 3) or (H, W)
-        Numpy array for RGB or depth images respectively.
-    intrinsics : np.ndarray
-        Camera intrinsics containing (fx, fy, cx, cy). This function expects to unpack them as
-        `fx, fy, cx, cy = intrinsics`.
-    trace_pts_list : List[np.ndarray]
-        List of 3D trajectories (N, 3) in the camera frame that will be
-        projected onto the 2D image. Each trajectory is plotted independently from each
-        other, and can come from differents sources (e.g. right arm and left arm).
+    Args:
+        image: Numpy array for RGB or depth images respectively, of shape (H, W, 3) or (H, W).
+        intrinsics: Camera intrinsics containing (fx, fy, cx, cy). This function expects to unpack them as
+            `fx, fy, cx, cy = intrinsics`.
+        trace_pts_list: List of 3D trajectories (N, 3) in the camera frame that will be
+            projected onto the 2D image. Each trajectory is plotted independently from each
+            other, and can come from differents sources (e.g. right arm and left arm).
     """
     # Only handle RGB for now, and not depth.
     if image.ndim != 3 or image.shape[2] < 3:
@@ -183,23 +166,18 @@ def draw_projected_trajectory_if_rgb(
 def create_images_with_projected_trace(
     images: Any,
     intrinsics: np.ndarray,
-    trace_pts_list_or_dict: Union[List[np.ndarray], Dict[str, List[np.ndarray]]],
+    trace_pts_list_or_dict: list[np.ndarray] | dict[str, list[np.ndarray]],
     **kwargs,
 ) -> None:
-    """
-    Create images with projected traces.
+    """Create images with projected traces.
 
-    Parameters
-    ----------
-    images : Any
-        Either a single NumPy array representing an image or a dictionary of images.
-    intrinsics : np.ndarray
-        Either a single NumPy array of amera intrinsics containing (fx, fy, cx, cy) = intrinsics,
-        or a dictionary of intrinsics.
-    trace_pts_list_or_dict : List[np.ndarray] or Dict[str, List[np.ndarray]]
-        List (or dictionary of lists) of 3D trajectories (N, 3) in the camera frame that will be
-        projected onto the 2D image. Each trajectory is plotted independently from each
-        other, and can come from differents sources (e.g. right arm and left arm).
+    Args:
+        images: Either a single NumPy array representing an image or a dictionary of images.
+        intrinsics: Either a single NumPy array of amera intrinsics containing (fx, fy, cx, cy) = intrinsics,
+            or a dictionary of intrinsics.
+        trace_pts_list_or_dict: List (or dictionary of lists) of 3D trajectories (N, 3) in the camera frame
+            that will be projected onto the 2D image. Each trajectory is plotted independently from each
+            other, and can come from differents sources (e.g. right arm and left arm).
     """
 
     # Project 3D points onto the image. Do it only for RGB images for now.

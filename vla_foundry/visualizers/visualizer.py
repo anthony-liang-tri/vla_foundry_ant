@@ -12,15 +12,13 @@ Goals:
 Current support: rerun.io only (optional dependency)
 """
 
-from __future__ import annotations
-
 import atexit
 import importlib.util  # Add this import
 import logging
 import os
 from dataclasses import dataclass, field
 from functools import wraps
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
 from robot_gym.multiarm_spaces import MultiarmObservation, PosesAndGrippers
@@ -65,7 +63,7 @@ class Backend:
         pass  # Optional
 
 
-_BACKENDS: Dict[str, Backend] = {}
+_BACKENDS: dict[str, Backend] = {}
 
 
 def register_backend(backend: Backend) -> None:
@@ -80,7 +78,7 @@ def register_backend(backend: Backend) -> None:
 @dataclass
 class _State:
     backend_name: str = "auto"  # "rerun" | "disabled" | ...
-    backend: Optional[Backend] = None
+    backend: Backend | None = None
     run_name: str = ""
     enabled: bool = False
     initialized: bool = False
@@ -92,7 +90,7 @@ class _State:
 
     # Per-(log method, path) counters used for sparse logging (every-n subsampling).
     # Example key: ("images", "observation_images")
-    counters: Dict[Tuple[str, str], int] = field(default_factory=dict)
+    counters: dict[tuple[str, str], int] = field(default_factory=dict)
 
 
 _STATE = _State()
@@ -126,7 +124,7 @@ def _choose_backend_from_env() -> str:
     return "disabled"
 
 
-def _get_backend(name: str) -> Optional[Backend]:
+def _get_backend(name: str) -> Backend | None:
     if name == "disabled":
         return None
     if name == "rerun":
@@ -162,9 +160,9 @@ def _get_backend(name: str) -> Optional[Backend]:
 
 
 def init(
-    run_name: Optional[str] = None,
+    run_name: str | None = None,
     *,
-    backend: Optional[str] = None,
+    backend: str | None = None,
     spawn: bool = True,
     open_browser: bool = False,
     allow_disabled: bool = True,
@@ -267,7 +265,7 @@ def reset_sparse_counters() -> None:
     _STATE.counters.clear()
 
 
-def _pop_every_n(kwargs: Dict[str, Any]) -> Optional[int]:
+def _pop_every_n(kwargs: dict[str, Any]) -> int | None:
     """Extract the sparse-logging frequency from kwargs.
 
     We support both ``n=...`` (as requested) and ``every_n=...``.
@@ -294,7 +292,7 @@ def _pop_every_n(kwargs: Dict[str, Any]) -> Optional[int]:
     return every_n_int
 
 
-def _should_log(kind: str, path: str, every_n: Optional[int]) -> bool:
+def _should_log(kind: str, path: str, every_n: int | None) -> bool:
     """Return True if we should log this (kind, path) event."""
 
     if every_n is None or every_n <= 1:
@@ -334,15 +332,11 @@ class Visualizer:
 
     @ensure_initialized_and_enabled
     def log_images(self, path: str, images: Any, **kwargs) -> None:
-        """
-        Log images to the active backend.
+        """Log images to the active backend.
 
-        Parameters
-        ----------
-        path : str
-            Base path in the visualization hierarchy.
-        images : Any
-            Either a single NumPy array representing an image or a dictionary of images.
+        Args:
+            path: Base path in the visualization hierarchy.
+            images: Either a single NumPy array representing an image or a dictionary of images.
         """
         every_n = _pop_every_n(kwargs)
         full_path = _prefix(path)
@@ -352,15 +346,11 @@ class Visualizer:
 
     @ensure_initialized_and_enabled
     def log_scalar(self, path: str, value: float, **kwargs) -> None:
-        """
-        Log a scalar value to the active backend.
+        """Log a scalar value to the active backend.
 
-        Parameters
-        ----------
-        path : str
-            Path in the visualization hierarchy (e.g., "metrics/loss").
-        value : float
-            Scalar value to log.
+        Args:
+            path: Path in the visualization hierarchy (e.g., "metrics/loss").
+            value: Scalar value to log.
         """
         every_n = _pop_every_n(kwargs)
         full_path = _prefix(path)
@@ -370,15 +360,11 @@ class Visualizer:
 
     @ensure_initialized_and_enabled
     def log_points3d(self, path: str, points: np.ndarray, **kwargs) -> None:
-        """
-        Log 3D points to the active backend.
+        """Log 3D points to the active backend.
 
-        Parameters
-        ----------
-        path : str
-            Path in the visualization hierarchy (e.g., "points/scene").
-        points : np.ndarray
-            3D points as a NumPy array of shape (N, 3).
+        Args:
+            path: Path in the visualization hierarchy (e.g., "points/scene").
+            points: 3D points as a NumPy array of shape (N, 3).
         """
         every_n = _pop_every_n(kwargs)
         full_path = _prefix(path)
@@ -388,15 +374,11 @@ class Visualizer:
 
     @ensure_initialized_and_enabled
     def log_trajectory(self, path: str, trajectory_points: np.ndarray, **kwargs) -> None:
-        """
-        Log a trajectory as waypoints and a path in the visualization hierarchy.
+        """Log a trajectory as waypoints and a path in the visualization hierarchy.
 
-        Parameters
-        ----------
-        path : str
-            Base path in the visualization hierarchy (e.g., "robot/trajectory").
-        trajectory_points : np.ndarray
-            Array of shape (N, 3) representing the trajectory points.
+        Args:
+            path: Base path in the visualization hierarchy (e.g., "robot/trajectory").
+            trajectory_points: Array of shape (N, 3) representing the trajectory points.
         """
         every_n = _pop_every_n(kwargs)
         full_path = _prefix(path)
@@ -410,15 +392,11 @@ class Visualizer:
 
     @ensure_initialized_and_enabled
     def log_line_strips3d(self, path: str, line_strips: np.ndarray, **kwargs) -> None:
-        """
-        Log 3D line strips to the active backend.
+        """Log 3D line strips to the active backend.
 
-        Parameters
-        ----------
-        path : str
-            Path in the visualization hierarchy (e.g., "lines/trajectory").
-        line_strips : np.ndarray
-            Line strips as a NumPy array of shape (N, 3).
+        Args:
+            path: Path in the visualization hierarchy (e.g., "lines/trajectory").
+            line_strips: Line strips as a NumPy array of shape (N, 3).
         """
         every_n = _pop_every_n(kwargs)
         full_path = _prefix(path)
@@ -428,15 +406,11 @@ class Visualizer:
 
     @ensure_initialized_and_enabled
     def log_text(self, path: str, text: str, **kwargs) -> None:
-        """
-        Log a text value to the active backend.
+        """Log a text value to the active backend.
 
-        Parameters
-        ----------
-        path : str
-            Path in the visualization hierarchy (e.g., "language/instruction").
-        text : str
-            Text value to log.
+        Args:
+            path: Path in the visualization hierarchy (e.g., "language/instruction").
+            text: Text value to log.
         """
         every_n = _pop_every_n(kwargs)
         full_path = _prefix(path)
@@ -446,20 +420,15 @@ class Visualizer:
 
     @ensure_initialized_and_enabled
     def log_pose(self, path: str, translation: np.ndarray, rotation: np.ndarray, **kwargs) -> None:
-        """
-        Log a generic pose to the active backend.
+        """Log a generic pose to the active backend.
 
-        Parameters
-        ----------
-        path : str
-            Path in the visualization hierarchy (e.g., "poses/end_effector").
-        translation : np.ndarray
-            Translation vector of shape (3,).
-        rotation : np.ndarray
-            Rotation representation. Can be:
-            - Quaternion [x, y, z, w] of shape (4,)
-            - Rotation matrix of shape (3, 3)
-            - Transformation matrix of shape (4, 4) (translation will be ignored)
+        Args:
+            path: Path in the visualization hierarchy (e.g., "poses/end_effector").
+            translation: Translation vector of shape (3,).
+            rotation: Rotation representation. Can be:
+                - Quaternion [x, y, z, w] of shape (4,)
+                - Rotation matrix of shape (3, 3)
+                - Transformation matrix of shape (4, 4) (translation will be ignored)
         """
         every_n = _pop_every_n(kwargs)
         full_path = _prefix(path)
@@ -535,45 +504,32 @@ class Visualizer:
         self,
         path: str,
         raw_depth: np.ndarray,
-        depth_scale: Union[float, np.ndarray],
-        color_image: Optional[np.ndarray],
+        depth_scale: float | np.ndarray,
+        color_image: np.ndarray | None,
         intrinsics_rgb: np.ndarray,
-        original_image_size: Tuple[int, int],
+        original_image_size: tuple[int, int],
         **kwargs,
     ) -> None:
-        """
-        Log a 3D point cloud reconstructed from a depth map and camera intrinsics.
+        """Log a 3D point cloud reconstructed from a depth map and camera intrinsics.
 
-        Parameters
-        ----------
-        path : str
-            Destination path in the visualization hierarchy (e.g., "sensors/depth/point_cloud").
-        raw_depth : np.ndarray
-            Depth image of shape (H, W). Values are in units that must be converted to meters
-            using `depth_scale`.
-        depth_scale : float or np.ndarray
-            Factor converting `raw_depth` to meters: `Z_m = raw_depth / depth_scale`.
-            If an array is provided, only its first element is used.
-        color_image : Optional[np.ndarray]
-            Optional RGB image aligned with `raw_depth`, of shape (H, W, 3).
-            If provided, per-point colors are attached to the logged points.
-        intrinsics_rgb : np.ndarray
-            Camera intrinsics containing (fx, fy, cx, cy). This function expects to unpack them as
-            `fx, fy, cx, cy = intrinsics_rgb`.
-        original_image_size : Tuple[int, int]
-            Original image size as (width, height) before any resizing. Used to rescale the intrinsics
-            so they match the current depth/image resolution.
+        Args:
+            path: Destination path in the visualization hierarchy (e.g., "sensors/depth/point_cloud").
+            raw_depth: Depth image of shape (H, W). Values are in units that must be converted to
+                meters using `depth_scale`.
+            depth_scale: Factor converting `raw_depth` to meters: `Z_m = raw_depth / depth_scale`.
+                If an array is provided, only its first element is used.
+            color_image: Optional RGB image aligned with `raw_depth`, of shape (H, W, 3).
+                If provided, per-point colors are attached to the logged points.
+            intrinsics_rgb: Camera intrinsics containing (fx, fy, cx, cy). This function expects to
+                unpack them as `fx, fy, cx, cy = intrinsics_rgb`.
+            original_image_size: Original image size as (width, height) before any resizing. Used to
+                rescale the intrinsics so they match the current depth/image resolution.
 
-        Notes
-        -----
-        - Pixels with zero depth are discarded.
-        - Back-projection uses the pinhole model:
-        X = (x - cx) / fx * Z, Y = (y - cy) / fy * Z, Z = depth (meters).
-        - The resulting points (and optional colors) are forwarded to `self.log_points3d`.
-
-        Returns
-        -------
-        None
+        Note:
+            - Pixels with zero depth are discarded.
+            - Back-projection uses the pinhole model:
+              X = (x - cx) / fx * Z, Y = (y - cy) / fy * Z, Z = depth (meters).
+            - The resulting points (and optional colors) are forwarded to `self.log_points3d`.
         """
         every_n = _pop_every_n(kwargs)
         full_path = _prefix(path)
@@ -633,15 +589,11 @@ class DrakeVisualizer(Visualizer):
 
     @ensure_initialized_and_enabled
     def log_rigid_transform(self, path: str, transform: RigidTransform, **kwargs) -> None:
-        """
-        Log a rigid transform to the active backend.
+        """Log a rigid transform to the active backend.
 
-        Parameters
-        ----------
-        path : str
-            Path in the visualization hierarchy.
-        transform : RigidTransform
-            Rigid transform object.
+        Args:
+            path: Path in the visualization hierarchy.
+            transform: Rigid transform object.
         """
         # Convert Drake RigidTransform to translation + quaternion for generic log_pose
         translation = transform.translation()
@@ -653,15 +605,11 @@ class DrakeVisualizer(Visualizer):
 
     @ensure_initialized_and_enabled
     def log_robot_gym_poses_and_grippers(self, path: str, poses_and_grippers: PosesAndGrippers, **kwargs) -> None:
-        """
-        Log poses and grippers (robot-gym-specific) to the active backend.
+        """Log poses and grippers (robot-gym-specific) to the active backend.
 
-        Parameters
-        ----------
-        path : str
-            Base path in the visualization hierarchy.
-        poses_and_grippers : PosesAndGrippers
-            Object containing poses and gripper data.
+        Args:
+            path: Base path in the visualization hierarchy.
+            poses_and_grippers: Object containing poses and gripper data.
         """
 
         for model_name, transform in poses_and_grippers.poses.items():
@@ -677,16 +625,12 @@ class DrakeVisualizer(Visualizer):
                 self.log_scalar(f"{path}/{gripper_name}", value, **kwargs)
 
     @ensure_initialized_and_enabled
-    def log_robot_gym_action_predictions(self, path: str, predictions: List[PosesAndGrippers], **kwargs) -> None:
-        """
-        Log action predictions (robot-gym-specific) to the active backend.
+    def log_robot_gym_action_predictions(self, path: str, predictions: list[PosesAndGrippers], **kwargs) -> None:
+        """Log action predictions (robot-gym-specific) to the active backend.
 
-        Parameters
-        ----------
-        path : str
-            Base path in the visualization hierarchy.
-        predictions : List[PosesAndGrippers]
-            A list of objects containing action prediction data.
+        Args:
+            path: Base path in the visualization hierarchy.
+            predictions: A list of objects containing action prediction data.
         """
         traj = {}
         for step in predictions:
@@ -705,15 +649,11 @@ class DrakeVisualizer(Visualizer):
 
     @ensure_initialized_and_enabled
     def log_robot_gym_multiarm_observation(self, path: str, observation: MultiarmObservation, **kwargs) -> None:
-        """
-        Log a MultiarmObservation (robot-gym-specific) to the active backend.
+        """Log a MultiarmObservation (robot-gym-specific) to the active backend.
 
-        Parameters
-        ----------
-        path : str
-            Base path in the visualization hierarchy.
-        observation : MultiarmObservation
-            The MultiarmObservation object to log.
+        Args:
+            path: Base path in the visualization hierarchy.
+            observation: The MultiarmObservation object to log.
         """
         self.log_robot_gym_poses_and_grippers(f"{path}/robot", observation.robot.actual, **kwargs)
         for camera_id, image_set in observation.visuo.items():
@@ -771,7 +711,7 @@ def log_robot_gym_poses_and_grippers(path: str, poses_and_grippers: PosesAndGrip
     _get_drake_visualizer().log_robot_gym_poses_and_grippers(path, poses_and_grippers, **kwargs)
 
 
-def log_robot_gym_action_predictions(path: str, predictions: List[PosesAndGrippers], **kwargs) -> None:
+def log_robot_gym_action_predictions(path: str, predictions: list[PosesAndGrippers], **kwargs) -> None:
     _get_drake_visualizer().log_robot_gym_action_predictions(path, predictions, **kwargs)
 
 

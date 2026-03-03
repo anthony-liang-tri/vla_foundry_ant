@@ -1,7 +1,7 @@
 """Base class for backbone wrappers used in action policies."""
 
 from abc import abstractmethod
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 import torch
 from transformers.utils import ModelOutput
@@ -31,10 +31,10 @@ class BaseBackboneWrapper(BaseModel):
 
     def get_action_conditioning(
         self,
-        input_ids: Optional[torch.Tensor],
-        pixel_values: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        attention_mask_images: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None,
+        pixel_values: torch.Tensor | None,
+        attention_mask: torch.Tensor | None = None,
+        attention_mask_images: torch.Tensor | None = None,
         **kwargs,
     ) -> VisionLanguageBackboneOutput:
         """Get embeddings for conditioning action policies.
@@ -69,17 +69,17 @@ class BaseBackboneWrapper(BaseModel):
 
     def _prepare_inputs(
         self,
-        input_ids: Optional[torch.Tensor],
-        pixel_values: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        attention_mask_images: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None,
+        pixel_values: torch.Tensor | None,
+        attention_mask: torch.Tensor | None = None,
+        attention_mask_images: torch.Tensor | None = None,
         **kwargs,
-    ) -> Tuple[
-        Optional[torch.Tensor],
-        Optional[torch.Tensor],
-        Optional[torch.Tensor],
-        Optional[torch.Tensor],
-        Dict[str, Any],
+    ) -> tuple[
+        torch.Tensor | None,
+        torch.Tensor | None,
+        torch.Tensor | None,
+        torch.Tensor | None,
+        dict[str, Any],
     ]:
         """Prepare inputs for conditioning, if necessary."""
         return input_ids, pixel_values, attention_mask, attention_mask_images, kwargs

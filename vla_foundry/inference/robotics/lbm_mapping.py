@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple
+from typing import Any, Callable, Iterable, Sequence
 
 import fsspec
 import numpy as np
@@ -31,7 +31,7 @@ class ObservationMapping:
         image_names: The names of the images in the observation (in the format of camera_name_t<timestep>).
     """
 
-    def __init__(self, mapping_path: str, image_names: List[str], num_past_timesteps: int = None):
+    def __init__(self, mapping_path: str, image_names: list[str], num_past_timesteps: int = None):
         with fsspec.open(mapping_path, "r") as handle:
             mapping = yaml.safe_load(handle)
         self._field_paths = mapping["field_paths"]
@@ -42,8 +42,8 @@ class ObservationMapping:
         self._camera_names = self._get_camera_names(image_names)
         self.num_past_timesteps = num_past_timesteps
 
-    def _build_type_map(self) -> Dict[str, Dict[str, Dict[str, str]]]:
-        type_map: Dict[str, Dict[str, Dict[str, str]]] = {
+    def _build_type_map(self) -> dict[str, dict[str, dict[str, str]]]:
+        type_map: dict[str, dict[str, dict[str, str]]] = {
             type_name: {side: {} for side in self._laterality} for type_name in self._types
         }
 
@@ -72,8 +72,8 @@ class ObservationMapping:
 
         return type_map
 
-    def _get_camera_names(self, image_names: List[str]) -> List[str]:
-        camera_names: List[str] = []
+    def _get_camera_names(self, image_names: list[str]) -> list[str]:
+        camera_names: list[str] = []
         for img_name in image_names:
             if "_t" in img_name:
                 camera_name, _timestep_str = img_name.rsplit("_t", 1)
@@ -87,7 +87,7 @@ class ObservationMapping:
         absolute = relative_to_absolute_map(field)
         return self._field_paths[absolute]
 
-    def get_type(self, observation: MultiarmObservation, type_name: str) -> Dict[str, Dict[str, str]]:
+    def get_type(self, observation: MultiarmObservation, type_name: str) -> dict[str, dict[str, str]]:
         if "actual" in type_name:
             return observation.robot.actual
         elif "desired" in type_name:
@@ -158,7 +158,7 @@ class ObservationMapping:
         )
         return self.get_component(observation, type_name, laterality, component)
 
-    def get_all_images(self, observation: MultiarmObservation) -> Dict[str, Any]:
+    def get_all_images(self, observation: MultiarmObservation) -> dict[str, Any]:
         """
         Get all the images of the observation in the order listed in the image_names.
         Args:
@@ -166,13 +166,13 @@ class ObservationMapping:
         Returns:
             The all the images of the robot.
         """
-        images: Dict[str, Any] = {}
+        images: dict[str, Any] = {}
         for camera_name in self._camera_names:
             if camera_name in observation.visuo:
                 images[camera_name] = observation.visuo[camera_name].rgb.array.copy()
         return images
 
-    def get_all_depth_images(self, observation: MultiarmObservation) -> Dict[str, Any]:
+    def get_all_depth_images(self, observation: MultiarmObservation) -> dict[str, Any]:
         """
         Get all the depth images of the observation.
         Args:
@@ -180,13 +180,13 @@ class ObservationMapping:
         Returns:
             Dictionary mapping camera names to depth arrays (H, W) uint16.
         """
-        depth_images: Dict[str, Any] = {}
+        depth_images: dict[str, Any] = {}
         for camera_name in self._camera_names:
             if camera_name in observation.visuo and observation.visuo[camera_name].depth is not None:
                 depth_images[camera_name] = observation.visuo[camera_name].depth.array.copy()
         return depth_images if depth_images else None
 
-    def get_all_intrinsics(self, observation: MultiarmObservation) -> Dict[str, np.ndarray]:
+    def get_all_intrinsics(self, observation: MultiarmObservation) -> dict[str, np.ndarray]:
         """
         Get intrinsics matrices for all cameras.
         Args:
@@ -194,13 +194,13 @@ class ObservationMapping:
         Returns:
             Dictionary mapping camera names to intrinsics matrices (3, 3).
         """
-        intrinsics: Dict[str, np.ndarray] = {}
+        intrinsics: dict[str, np.ndarray] = {}
         for camera_name in self._camera_names:
             if camera_name in observation.visuo:
                 intrinsics[camera_name] = observation.visuo[camera_name].rgb.K.copy()
         return intrinsics
 
-    def get_all_extrinsics(self, observation: MultiarmObservation) -> Dict[str, np.ndarray]:
+    def get_all_extrinsics(self, observation: MultiarmObservation) -> dict[str, np.ndarray]:
         """
         Get extrinsics transforms for all cameras.
         Args:
@@ -208,7 +208,7 @@ class ObservationMapping:
         Returns:
             Dictionary mapping camera names to extrinsics matrices (4, 4).
         """
-        extrinsics: Dict[str, np.ndarray] = {}
+        extrinsics: dict[str, np.ndarray] = {}
         for camera_name in self._camera_names:
             if camera_name in observation.visuo:
                 X_TC: RigidTransform = observation.visuo[camera_name].rgb.X_TC
@@ -235,9 +235,9 @@ class ActionMapping:
     def __init__(
         self,
         mapping_path: str,
-        action_fields: List[str],
+        action_fields: list[str],
         robotics_processor,
-        pose_groups: List[Dict[str, str]] = None,
+        pose_groups: list[dict[str, str]] = None,
         num_past_timesteps: int = None,
     ):
         with fsspec.open(mapping_path, "r") as handle:
@@ -287,7 +287,7 @@ class ActionMapping:
         relative_rot_6d: np.ndarray,
         reference_xyz: np.ndarray,
         reference_rot_6d: np.ndarray,
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray]:
         """Convert relative pose to absolute using reference pose.
 
         Args:
@@ -318,7 +318,7 @@ class ActionMapping:
         return pose_to_9d(absolute_pose_matrices)
 
     def _to_absolute(
-        self, field: str, relative_data: np.ndarray, action: dict, reference: Dict[str, np.ndarray]
+        self, field: str, relative_data: np.ndarray, action: dict, reference: dict[str, np.ndarray]
     ) -> None:
         """Convert relative field to absolute and store in action dict.
 
@@ -368,7 +368,7 @@ class ActionMapping:
         self,
         action_from_model: torch.Tensor,
         normalizer,
-        reference: Dict[str, np.ndarray],
+        reference: dict[str, np.ndarray],
     ) -> dict:
         """
         Convert the action from the action model output format to the buffer action format.
@@ -464,7 +464,7 @@ class ActionMapping:
         return action
 
 
-def resolve_pose_component(component: np.ndarray) -> Tuple[str, Any]:
+def resolve_pose_component(component: np.ndarray) -> tuple[str, Any]:
     if component.shape[0] == 3:
         return "p", component
     if component.shape[0] == 6:
@@ -474,13 +474,13 @@ def resolve_pose_component(component: np.ndarray) -> Tuple[str, Any]:
 
 
 def create_pose_and_grippers(
-    field_paths: Dict[str, Sequence[str]],
+    field_paths: dict[str, Sequence[str]],
     fields: Iterable[str],
     value_getter: Callable[[str, str], np.ndarray],
     source_label: str,
 ) -> PosesAndGrippers:
-    grippers: Dict[str, Any] = {}
-    poses: Dict[str, Any] = {}
+    grippers: dict[str, Any] = {}
+    poses: dict[str, Any] = {}
     for field in fields:
         absolute_field = relative_to_absolute_map(field)
         mapping_fields = field_paths[absolute_field]

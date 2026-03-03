@@ -9,7 +9,6 @@ import glob as glob_module
 import os
 import subprocess
 from pathlib import Path
-from typing import List, Optional, Union
 
 
 def wrap_called_process_error(func):
@@ -34,9 +33,9 @@ def is_s3_path(path: str) -> bool:
 
 
 def resolve_glob_to_list(
-    pattern: Union[str, List[str]],
+    pattern: str | list[str],
     allow_empty: bool = False,
-) -> List[str]:
+) -> list[str]:
     """
     Resolve glob pattern(s) to a list of file paths.
 
@@ -67,7 +66,7 @@ def resolve_glob_to_list(
 
 def exec_s3_ls(
     path: str,
-    aws_profile: Optional[str] = None,
+    aws_profile: str | None = None,
 ) -> subprocess.CompletedProcess:
     """
     List S3 objects at the given path.
@@ -95,8 +94,8 @@ def exec_s3_ls(
 def exec_s3_sync(
     src: str,
     dest: str,
-    extras: Optional[List[str]] = None,
-    aws_profile: Optional[str] = None,
+    extras: list[str] | None = None,
+    aws_profile: str | None = None,
     print_to_console: bool = True,
 ) -> subprocess.CompletedProcess:
     """
@@ -133,7 +132,7 @@ def exec_s3_sync(
 def exec_s3_cp(
     src: str,
     dest: str,
-    aws_profile: Optional[str] = None,
+    aws_profile: str | None = None,
     print_to_console: bool = True,
 ) -> subprocess.CompletedProcess:
     """

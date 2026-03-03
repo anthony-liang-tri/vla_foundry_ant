@@ -8,7 +8,6 @@ with dependencies on Anzu removed.
 import os
 from fnmatch import fnmatch
 from textwrap import indent
-from typing import List, Tuple, Union
 
 import numpy as np
 import yaml
@@ -26,7 +25,7 @@ from .utils import (
 INTERVAL_CHOICES = ["two-sided", "lower", "upper"]
 
 
-def _common_subpath(paths: List[str]) -> str:
+def _common_subpath(paths: list[str]) -> str:
     """Find the common prefix subpath among a list of paths."""
     if not paths:
         return ""
@@ -55,9 +54,9 @@ def _common_subpath(paths: List[str]) -> str:
 
 
 def _aggregate_success_stats(
-    summary_files: List[str],
+    summary_files: list[str],
     verbose: bool = False,
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     """
     Aggregate success statistics from summary YAML files.
 
@@ -113,7 +112,7 @@ def download_summary_yamls_from_s3(
     s3_path: str,
     local_path: str,
     print_to_console: bool = True,
-) -> List[str]:
+) -> list[str]:
     """
     Download summary.yaml files from S3 from a single experiment folder.
 
@@ -179,7 +178,7 @@ def download_summary_yamls_from_s3(
 
 
 def collect_multi_rollout_success_stats(
-    globs_list: Union[str, List[str]],
+    globs_list: str | list[str],
     verbose: bool = False,
 ) -> np.ndarray:
     """
@@ -224,7 +223,7 @@ def calculate_confidence_interval(
     confidence_level: float,
     interval_type: str = "two-sided",
     scipy_interval: bool = True,
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     """
     Compute confidence interval for success rate.
 

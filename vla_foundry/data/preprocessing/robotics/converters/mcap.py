@@ -53,7 +53,7 @@ import json
 import logging
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import cv2
 import numpy as np
@@ -76,7 +76,7 @@ MIN_SAMPLES_FOR_ANTIALIASING = 8
 MIN_EPISODE_DURATION = 0.001
 
 
-def extract_image_from_msg(msg: Any, return_numpy: bool = True) -> Union[bytes, np.ndarray]:
+def extract_image_from_msg(msg: Any, return_numpy: bool = True) -> bytes | np.ndarray:
     """
     Extract image data from ROS2 image message. Raises exceptions for unsupported formats.
 
@@ -134,7 +134,7 @@ def extract_image_from_msg(msg: Any, return_numpy: bool = True) -> Union[bytes, 
     return jpeg_data.tobytes()
 
 
-def extract_structured_msg(msg: Any) -> Optional[Dict[str, np.ndarray]]:
+def extract_structured_msg(msg: Any) -> dict[str, np.ndarray] | None:
     """
     Extract structured key-value data with 6D rotation.
 
@@ -166,7 +166,7 @@ def extract_structured_msg(msg: Any) -> Optional[Dict[str, np.ndarray]]:
     return None
 
 
-def extract_array_from_msg(msg: Any) -> Optional[np.ndarray]:
+def extract_array_from_msg(msg: Any) -> np.ndarray | None:
     """
     Fallback: extract flat numeric array from ROS2 message using attribute inspection.
 
@@ -205,7 +205,7 @@ def extract_array_from_msg(msg: Any) -> Optional[np.ndarray]:
     return np.concatenate(arrays).astype(np.float32) if arrays else None
 
 
-def extract_field_path(msg: Any, path: str) -> Optional[np.ndarray]:
+def extract_field_path(msg: Any, path: str) -> np.ndarray | None:
     """
     Extract nested values using dot-notation path with fail-fast error handling.
 
@@ -366,8 +366,8 @@ class TemporalResampler:
         return resampled
 
     def resample_images(
-        self, source_times: np.ndarray, source_images: List[Any], target_times: np.ndarray
-    ) -> List[Any]:
+        self, source_times: np.ndarray, source_images: list[Any], target_times: np.ndarray
+    ) -> list[Any]:
         """
         Temporal resampling for images using nearest-neighbor lookup.
 
@@ -450,7 +450,7 @@ class MCAPConverter(BaseRoboticsConverter):
         logger.info(f"Action topics: {len(self.action_topics)}, State topics: {len(self.state_topics)}")
         logger.info(f"Camera topics: {len(self.camera_topics)}")
 
-    def discover_episodes(self, source_episode_paths: List[str], max_episodes_to_process: int = -1) -> List[str]:
+    def discover_episodes(self, source_episode_paths: list[str], max_episodes_to_process: int = -1) -> list[str]:
         """
         Discover MCAP episode files.
 
@@ -490,7 +490,7 @@ class MCAPConverter(BaseRoboticsConverter):
         logger.info(f"Discovered {len(episode_paths)} MCAP episodes")
         return episode_paths
 
-    def load_episode_data(self, episode_path: str) -> Dict[str, Any]:
+    def load_episode_data(self, episode_path: str) -> dict[str, Any]:
         """
         Load and resample MCAP episode to target frequency.
 
@@ -516,7 +516,7 @@ class MCAPConverter(BaseRoboticsConverter):
         else:
             return self._process_mcap_file(episode_path, episode_path)
 
-    def _process_mcap_file(self, mcap_path: str, original_path: str) -> Dict[str, Any]:
+    def _process_mcap_file(self, mcap_path: str, original_path: str) -> dict[str, Any]:
         """
         Process a local MCAP file and resample to target frequency.
 
@@ -629,7 +629,7 @@ class MCAPConverter(BaseRoboticsConverter):
         logger.info(f"Resampled to {len(target_timeline)} timesteps at {self.target_hz}Hz")
         return episode_data
 
-    def _load_episode_metadata(self, episode_path: Union[str, Path]) -> Dict:
+    def _load_episode_metadata(self, episode_path: str | Path) -> dict:
         """
         Load episode metadata from accompanying files.
 
@@ -661,7 +661,7 @@ class MCAPConverter(BaseRoboticsConverter):
         # Default metadata
         return {"episode_id": episode_path.name}
 
-    def get_episode_length(self, episode_data: Dict[str, Any]) -> int:
+    def get_episode_length(self, episode_data: dict[str, Any]) -> int:
         """
         Get number of timesteps in episode.
 
@@ -673,7 +673,7 @@ class MCAPConverter(BaseRoboticsConverter):
         """
         return len(episode_data["timestamps"])
 
-    def extract_camera_data(self, episode_data: Dict[str, Any]) -> Dict[str, List[bytes]]:
+    def extract_camera_data(self, episode_data: dict[str, Any]) -> dict[str, list[bytes]]:
         """
         Extract camera data for ALL timesteps.
 
@@ -694,7 +694,7 @@ class MCAPConverter(BaseRoboticsConverter):
 
         return camera_data
 
-    def extract_lowdim_data(self, episode_data: Dict[str, Any]) -> Dict[str, np.ndarray]:
+    def extract_lowdim_data(self, episode_data: dict[str, Any]) -> dict[str, np.ndarray]:
         """
         Extract lowdim data for ALL timesteps.
 
@@ -744,7 +744,7 @@ class MCAPConverter(BaseRoboticsConverter):
 
             return lowdim_data
 
-    def extract_intrinsics_extrinsics_data(self, episode_data: Dict[str, Any]) -> Tuple[Optional[Dict], Optional[Dict]]:
+    def extract_intrinsics_extrinsics_data(self, episode_data: dict[str, Any]) -> tuple[dict | None, dict | None]:
         """
         Extract camera intrinsics/extrinsics if available.
 
@@ -756,7 +756,7 @@ class MCAPConverter(BaseRoboticsConverter):
         """
         return None, None
 
-    def extract_metadata_data(self, episode_data: Dict[str, Any]) -> Dict:
+    def extract_metadata_data(self, episode_data: dict[str, Any]) -> dict:
         """
         Extract metadata.
 
@@ -785,14 +785,14 @@ class MCAPConverter(BaseRoboticsConverter):
         anchor_timestep: int,
         episode_path: str,
         episode_length: int,
-        camera_data: Dict[str, List[bytes]],
-        lowdim_data: Dict[str, np.ndarray],
-        intrinsics_data: Dict[str, Any],
-        extrinsics_data: Dict[str, Any],
-        metadata_data: Dict[str, Any],
+        camera_data: dict[str, list[bytes]],
+        lowdim_data: dict[str, np.ndarray],
+        intrinsics_data: dict[str, Any],
+        extrinsics_data: dict[str, Any],
+        metadata_data: dict[str, Any],
         statistics_ray_actor,
         logger_actor,
-    ) -> Tuple[Optional[Dict], Optional[Dict], Optional[Dict], Optional[Dict], Optional[int], Optional[Dict]]:
+    ) -> tuple[dict | None, dict | None, dict | None, dict | None, int | None, dict | None]:
         """
         Extract sample data for a single timestep with temporal windowing and stillness filtering.
 

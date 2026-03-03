@@ -1,5 +1,3 @@
-from typing import Tuple
-
 import torch
 
 # Disable torch.compile/dynamo for cache updates to avoid in-graph buffer overwrites
@@ -85,7 +83,7 @@ class RotaryEmbedding(torch.nn.Module):
                 self._cos_cached = emb.cos().to(dtype)[None, :, None, :]
                 self._sin_cached = emb.sin().to(dtype)[None, :, None, :]
 
-    def forward(self, q: torch.Tensor, k: torch.Tensor, offset: int = 0) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, q: torch.Tensor, k: torch.Tensor, offset: int = 0) -> tuple[torch.Tensor, torch.Tensor]:
         self._update_cos_sin_tables(k.shape[1] + offset, device=k.device, dtype=k.dtype)
         return (
             apply_rotary_pos_emb(q, self._cos_cached, self._sin_cached, offset),

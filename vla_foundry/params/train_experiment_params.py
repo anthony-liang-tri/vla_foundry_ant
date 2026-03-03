@@ -2,7 +2,7 @@ import logging
 import os
 import tempfile
 from dataclasses import dataclass, field
-from typing import Optional, Type
+from typing import Type
 
 import yaml
 
@@ -30,7 +30,7 @@ class TrainExperimentParams(BaseParams):
     # If resolve_configs is True, main.py will print the resolved config and stop.
     # The optional resolve_configs_path field will dump that printed output to {path}/resolved_config.yaml.
     resolve_configs: bool = field(default=False)
-    resolve_configs_path: Optional[str] = field(default=None)
+    resolve_configs_path: str | None = field(default=None)
 
     # Optional base directory where the experiment folder is created. If `None`, defaults to `experiments/`.
     save_path: str = field(default=None)

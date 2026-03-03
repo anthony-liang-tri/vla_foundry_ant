@@ -26,7 +26,7 @@ import textwrap
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import boto3
 import yaml
@@ -76,9 +76,9 @@ class CampaignConfig:
     cluster_name: str  # Unique cluster name (derived from owner_email if not specified)
 
     # Evaluation configuration
-    tasks_file: Optional[Path]
-    checkpoints: Optional[List[str]]
-    task: Optional[str]
+    tasks_file: Path | None
+    checkpoints: list[str] | None
+    task: str | None
     num_samples: int
     start_index: int
     max_samples_per_job: int
@@ -87,18 +87,18 @@ class CampaignConfig:
     docker_image: str
 
     # Ray configuration
-    launch_config_file: Optional[str]
+    launch_config_file: str | None
     launch_scenario: str
     launch_script: str
     num_flow_steps: int
     open_loop_steps: int
     device: str
-    launch_cuda_visible_devices: Optional[str]
-    entrypoint_num_cpus: Optional[float]
-    entrypoint_num_gpus: Optional[float]
-    entrypoint_num_gpus: Optional[float]
-    entrypoint_memory: Optional[int]
-    jobs_per_gpu: Optional[float]
+    launch_cuda_visible_devices: str | None
+    entrypoint_num_cpus: float | None
+    entrypoint_num_gpus: float | None
+    entrypoint_num_gpus: float | None
+    entrypoint_memory: int | None
+    jobs_per_gpu: float | None
     max_retries: int
 
     # Output configuration
@@ -111,18 +111,18 @@ class CampaignConfig:
     skip_cleanup: bool
 
     # vla_foundry source management
-    vla_repo_url: Optional[str]
-    vla_repo_ref: Optional[str]
-    vla_repo_local_dir: Optional[Path]
+    vla_repo_url: str | None
+    vla_repo_ref: str | None
+    vla_repo_local_dir: Path | None
     vla_repo_use_remote: bool
-    vla_repo_local_source: Optional[Path]
-    vla_repo_remote_dir: Optional[str]
+    vla_repo_local_source: Path | None
+    vla_repo_remote_dir: str | None
     vla_repo_mount_target: str = "/opt/vla_foundry"
 
     # Custom inference command configuration (for alternative policy repos like LBM)
-    inference_script: Optional[str] = None
-    inference_script_args: Optional[str] = None
-    inference_cmd_override: Optional[str] = None
+    inference_script: str | None = None
+    inference_script_args: str | None = None
+    inference_cmd_override: str | None = None
     download_rollouts: bool = False
     download_episode_pkls: bool = False
 
@@ -133,7 +133,7 @@ class CampaignConfig:
     # S3 output path customization
     # Optional subfolder to insert in S3 path: {checkpoint}/evaluation/{subfolder}/{task}/rollouts/
     # Useful for organizing results from different evaluation campaigns (e.g., "oss", "stage3")
-    evaluation_subfolder: Optional[str] = None
+    evaluation_subfolder: str | None = None
 
     @classmethod
     def from_yaml(cls, yaml_path: Path) -> "CampaignConfig":
@@ -148,7 +148,7 @@ class CampaignConfig:
                 path = (REPO_ROOT / path).resolve()
             return path
 
-        local_source_path: Optional[Path] = None
+        local_source_path: Path | None = None
         if "local_source" in vla_cfg and vla_cfg["local_source"] is not None:
             local_source_path = resolve_repo_relative(vla_cfg["local_source"])
 
@@ -240,25 +240,25 @@ class EvaluationCampaign:
 
     def __init__(self, config: CampaignConfig):
         self.config = config
-        self.cluster_url: Optional[str] = None
-        self.submission_ids: List[str] = []
-        self.runner_env: Dict[str, str] = dict(os.environ)
-        self.local_vla_repo_dir: Optional[Path] = None
-        self.remote_vla_repo_dir: Optional[str] = None
-        self.success_metrics: Optional[Dict[str, Any]] = None
-        self._cluster_auth: Optional[Tuple[str, Path]] = None
+        self.cluster_url: str | None = None
+        self.submission_ids: list[str] = []
+        self.runner_env: dict[str, str] = dict(os.environ)
+        self.local_vla_repo_dir: Path | None = None
+        self.remote_vla_repo_dir: str | None = None
+        self.success_metrics: dict[str, Any] | None = None
+        self._cluster_auth: tuple[str, Path] | None = None
         # Maps vla_ref (or None for default) to (local_dir, remote_dir)
-        self.vla_ref_dirs: Dict[Optional[str], Tuple[Path, str]] = {}
+        self.vla_ref_dirs: dict[str | None, tuple[Path, str]] = {}
         # Loaded tasks from tasks_file (for per-task vla_ref support)
-        self._loaded_tasks: Optional[List[TaskSpec]] = None
+        self._loaded_tasks: list[TaskSpec] | None = None
         # Track completed jobs for state persistence
-        self.completed: Dict[str, str] = {}  # submission_id -> status
+        self.completed: dict[str, str] = {}  # submission_id -> status
         self._last_state_save = 0.0
         self._state_save_interval = 30  # Save state every 30 seconds
         self._cluster_unreachable_count = 0
         self._max_cluster_unreachable = 10  # Max consecutive failures before aborting
         # Expanded cluster config with placeholders replaced (saved to results_dir)
-        self._expanded_cluster_config_path: Optional[Path] = None
+        self._expanded_cluster_config_path: Path | None = None
 
     @property
     def _cluster_config_for_ray(self) -> Path:
@@ -336,7 +336,7 @@ class EvaluationCampaign:
         except Exception as e:
             print(f"  [state] WARNING: Failed to save state: {e}")
 
-    def load_state(self) -> Optional[Dict[str, Any]]:
+    def load_state(self) -> dict[str, Any] | None:
         """Load campaign state from disk if it exists."""
         state_file = self._get_state_file_path()
         if not state_file.exists():
@@ -403,7 +403,7 @@ class EvaluationCampaign:
         except Exception as e:
             print(f"  WARNING: Failed to write cluster info file: {e}")
 
-    def check_cluster_health(self) -> Tuple[bool, str]:
+    def check_cluster_health(self) -> tuple[bool, str]:
         """Check if the Ray cluster is reachable and healthy.
 
         Returns:
@@ -945,8 +945,8 @@ class EvaluationCampaign:
     def _submit_jobs_for_ref(
         self,
         runner_path: Path,
-        vla_ref: Optional[str],
-        tasks_file: Optional[Path],
+        vla_ref: str | None,
+        tasks_file: Path | None,
     ):
         """Submit jobs for a specific vla_ref (legacy method, kept for compatibility)."""
         cmd = [
@@ -1259,7 +1259,7 @@ class EvaluationCampaign:
         self.run_subprocess(rsync_cmd, env=env, cwd=REPO_ROOT)
         self.remote_vla_repo_dir = remote_path
 
-    def _load_tasks_if_needed(self) -> List[TaskSpec]:
+    def _load_tasks_if_needed(self) -> list[TaskSpec]:
         """Load tasks from file if not already loaded."""
         if self._loaded_tasks is None:
             if self.config.tasks_file:
@@ -1268,7 +1268,7 @@ class EvaluationCampaign:
                 self._loaded_tasks = []
         return self._loaded_tasks
 
-    def _get_unique_vla_refs(self) -> List[Optional[str]]:
+    def _get_unique_vla_refs(self) -> list[str | None]:
         """Get unique vla_refs from loaded tasks, including None for default."""
         tasks = self._load_tasks_if_needed()
         refs = set()
@@ -1333,14 +1333,14 @@ class EvaluationCampaign:
 
         print(f"[validate] ✓ All {len(refs_to_check)} vla_foundry ref(s) validated")
 
-    def _sanitize_ref_for_path(self, ref: Optional[str]) -> str:
+    def _sanitize_ref_for_path(self, ref: str | None) -> str:
         """Convert a git ref to a safe directory name."""
         if ref is None:
             return "default"
         # Replace slashes and other unsafe chars with underscores
         return re.sub(r"[^a-zA-Z0-9_.-]", "_", ref)
 
-    def _prepare_vla_ref(self, ref: Optional[str]) -> Tuple[Path, str]:
+    def _prepare_vla_ref(self, ref: str | None) -> tuple[Path, str]:
         """
         Prepare a specific vla_foundry ref and return (local_dir, remote_dir).
 
@@ -1426,7 +1426,7 @@ class EvaluationCampaign:
         print(f"[prep] vla_foundry ref '{actual_ref}' ready at {local_dir}")
         return local_dir, remote_dir
 
-    def _sync_vla_ref_to_cluster(self, ref: Optional[str]):
+    def _sync_vla_ref_to_cluster(self, ref: str | None):
         """Sync a specific vla_foundry ref to all cluster nodes."""
         if ref not in self.vla_ref_dirs:
             raise RuntimeError(f"vla_ref '{ref}' not prepared; call _prepare_vla_ref first")
@@ -1881,7 +1881,7 @@ df -h /tmp 2>/dev/null || true
         if not self.cluster_url:
             raise RuntimeError("Cluster URL is not available for JobSubmissionClient creation.")
 
-        last_exc: Optional[Exception] = None
+        last_exc: Exception | None = None
         for attempt in range(1, max_attempts + 1):
             try:
                 return JobSubmissionClient(self.cluster_url)
@@ -2010,7 +2010,7 @@ df -h /tmp 2>/dev/null || true
         else:
             print("✓ Cluster torn down")
 
-    def compute_success_metrics(self) -> Optional[Dict[str, Any]]:
+    def compute_success_metrics(self) -> dict[str, Any] | None:
         """Aggregate rollout success metrics and persist them locally/S3."""
         rollouts_root = self.config.results_dir / "rollouts" / "rollouts"
         if not rollouts_root.exists():
@@ -2098,7 +2098,7 @@ df -h /tmp 2>/dev/null || true
             for dest in uploaded_destinations:
                 print(f"    {dest}")
 
-    def _resolve_checkpoint_paths(self) -> List[str]:
+    def _resolve_checkpoint_paths(self) -> list[str]:
         """Return the list of checkpoint paths associated with this campaign."""
         if self.config.tasks_file:
             task_specs = load_tasks_from_file(self.config.tasks_file)
@@ -2107,7 +2107,7 @@ df -h /tmp 2>/dev/null || true
             return list(self.config.checkpoints)
         return []
 
-    def _resolve_task_checkpoint_pairs(self) -> List[Tuple[str, str]]:
+    def _resolve_task_checkpoint_pairs(self) -> list[tuple[str, str]]:
         """Return list of (task_name, checkpoint) pairs for this campaign.
 
         This is needed for multi-task evaluation where the same checkpoint
@@ -2203,7 +2203,7 @@ df -h /tmp 2>/dev/null || true
             display_name = f"{task_name} ({checkpoint_name})" if task_name else checkpoint_name
             print(f"    - {display_name}: {s3_rollouts}")
 
-            cmd: List[str] = [
+            cmd: list[str] = [
                 "aws",
                 "s3",
                 "sync",
@@ -2233,10 +2233,10 @@ df -h /tmp 2>/dev/null || true
 
         print(f"  Total demonstrations downloaded: {total_downloaded}")
 
-    def _discover_cluster_nodes(self) -> List[Tuple[str, str]]:
+    def _discover_cluster_nodes(self) -> list[tuple[str, str]]:
         """Return [('head', ip0), ('worker0', ip1), ...] for the active cluster."""
         env = {**os.environ, "AWS_PROFILE": self.config.aws_profile}
-        nodes: List[Tuple[str, str]] = []
+        nodes: list[tuple[str, str]] = []
         ip_pattern = re.compile(r"(?:\d{1,3}\.){3}\d{1,3}")
 
         head_output = self._capture_command_output(
@@ -2278,7 +2278,7 @@ df -h /tmp 2>/dev/null || true
             return ""
         return result.stdout.strip()
 
-    def _get_cluster_auth(self) -> Tuple[str, Path]:
+    def _get_cluster_auth(self) -> tuple[str, Path]:
         if self._cluster_auth is not None:
             return self._cluster_auth
 
@@ -2417,7 +2417,7 @@ df -h /tmp 2>/dev/null || true
         if uploaded_any:
             shutil.rmtree(rollouts_root, ignore_errors=True)
 
-    def _sync_directory_to_s3(self, source: Path, destination: str, env: Dict[str, str]) -> bool:
+    def _sync_directory_to_s3(self, source: Path, destination: str, env: dict[str, str]) -> bool:
         cmd = [
             "aws",
             "s3",

@@ -2,7 +2,6 @@ import random
 import re
 from collections import Counter, defaultdict
 from datetime import datetime
-from typing import Dict, List, Tuple
 
 import numpy as np
 import torch
@@ -49,7 +48,7 @@ def get_experiment_name(cfg):
     return name
 
 
-def summarize_datastrings(datastrings: List[str]) -> str:
+def summarize_datastrings(datastrings: list[str]) -> str:
     """
     Sometimes datastrings can be very long (e.g., many epochs). This helper function
     summarize them to avoid polluting logging.
@@ -57,7 +56,7 @@ def summarize_datastrings(datastrings: List[str]) -> str:
     datastring_pattern = re.compile(r"^(?P<prefix>.*?){(?P<items>[^}]*)}(?P<suffix>.*)$")
 
     # (prefix, suffix) -> Counter[str, count]
-    counter: Dict[Tuple[str, str], Counter[str]] = defaultdict(Counter)
+    counter: dict[tuple[str, str], Counter[str]] = defaultdict(Counter)
     # Data strings without braces
     passthrough = Counter()
 

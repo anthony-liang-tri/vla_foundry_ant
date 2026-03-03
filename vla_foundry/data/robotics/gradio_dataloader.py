@@ -25,7 +25,7 @@ import json
 import logging
 import os
 from types import SimpleNamespace
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import fsspec
 import numpy as np
@@ -49,9 +49,9 @@ from vla_foundry.params.data_params import RoboticsDataParams
 ACTION_FIELDS_CONFIG_PATH = "vla_foundry/config_presets/data/lbm/lbm_action_fields.yaml"
 
 
-def build_action_field_lookup(action_field_keys: List[str]) -> Dict[str, Optional[str]]:
+def build_action_field_lookup(action_field_keys: list[str]) -> dict[str, str | None]:
     """Build a lookup dictionary for action fields based on their semantic names."""
-    lookup: Dict[str, Optional[str]] = {
+    lookup: dict[str, str | None] = {
         "left_xyz": None,
         "left_rot_6d": None,
         "left_gripper": None,
@@ -98,7 +98,7 @@ def arm_xyz_to_gripper_xyz(
     return gripper_xyz
 
 
-def _reconstruct_relative_coordinates(sample: Dict[str, Any]) -> Dict[str, np.ndarray]:
+def _reconstruct_relative_coordinates(sample: dict[str, Any]) -> dict[str, np.ndarray]:
     """
     Reconstruct absolute coordinates from relative coordinates by adding back the reference position.
     Uses robot__actual as the reference for ALL trajectory types.
@@ -204,11 +204,11 @@ def _reconstruct_relative_coordinates(sample: Dict[str, Any]) -> Dict[str, np.nd
 
 
 def extract_trajectories(
-    sample: Dict[str, Any],
+    sample: dict[str, Any],
     include_desired: bool = False,
     include_action: bool = False,
     use_reconstructed: bool = False,
-) -> Dict[str, np.ndarray]:
+) -> dict[str, np.ndarray]:
     """Extract robot trajectories from a sample.
 
     Args:
@@ -321,7 +321,7 @@ class RoboticsDataLoader:
         use_dataloader: bool = True,
         device: str = "cuda",
         dtype: torch.dtype = torch.float32,
-        augmentation_params: Optional = None,
+        augmentation_params: object | None = None,
     ):
         self.params = params
         self.max_samples = max_samples
@@ -360,7 +360,7 @@ class RoboticsDataLoader:
         img_numpy = img_numpy.astype(np.uint8)
         return img_numpy
 
-    def load_samples(self) -> List[Dict[str, Any]]:
+    def load_samples(self) -> list[dict[str, Any]]:
         """Fallback method to load samples directly from shards."""
 
         # Try to load manifest
@@ -418,7 +418,7 @@ class RoboticsDataLoader:
 
         return self.samples
 
-    def load_samples_auto(self) -> List[Dict[str, Any]]:
+    def load_samples_auto(self) -> list[dict[str, Any]]:
         """Load samples using the preferred method (dataloader or direct file loading)."""
         if self.use_dataloader:
             print("🔧 Loading samples using dataloader pipeline...")
@@ -427,7 +427,7 @@ class RoboticsDataLoader:
             print("📁 Loading samples directly from files...")
             return self.load_samples()
 
-    def load_samples_from_dataloader(self) -> List[Dict[str, Any]]:
+    def load_samples_from_dataloader(self) -> list[dict[str, Any]]:
         """Load samples using the data loader and denormalize the output."""
         # Create config for dataloader
         cfg = SimpleNamespace()
@@ -635,7 +635,7 @@ class RoboticsDataLoader:
 
         return samples
 
-    def _denormalize_lowdim_data(self, lowdim_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _denormalize_lowdim_data(self, lowdim_data: dict[str, Any]) -> dict[str, Any]:
         """Denormalize lowdim data if normalizer is available."""
         if self.normalizer is None:
             return lowdim_data
@@ -652,7 +652,7 @@ class RoboticsDataLoader:
 
         return denormalized_lowdim
 
-    def _batch_to_samples(self, batch: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _batch_to_samples(self, batch: dict[str, Any]) -> list[dict[str, Any]]:
         """Convert a batch to a list of individual samples."""
         samples = []
         batch_size = batch["input_ids"].shape[0]

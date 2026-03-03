@@ -23,7 +23,6 @@
 """DiTX block implementation for ManiFlow consistency flow training."""
 
 import logging
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -103,7 +102,7 @@ class CrossAttention(nn.Module):
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
 
-    def forward(self, x: torch.Tensor, c: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, c: torch.Tensor, mask: torch.Tensor | None = None) -> torch.Tensor:
         """
         Args:
             x: (B, N, C) query tensor
@@ -213,7 +212,7 @@ class DiTXBlock(FSDPBlock):
         x: torch.Tensor,
         time_c: torch.Tensor,
         context_c: torch.Tensor,
-        attn_mask: Optional[torch.Tensor] = None,
+        attn_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Forward pass of the DiTX block.

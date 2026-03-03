@@ -24,7 +24,6 @@
 
 import logging
 import re
-from typing import Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -391,7 +390,7 @@ class DiTX(nn.Module):
         self,
         learning_rate: float = 1e-4,
         weight_decay: float = 1e-3,
-        betas: Tuple[float, float] = (0.9, 0.95),
+        betas: tuple[float, float] = (0.9, 0.95),
     ):
         """Configure AdamW optimizer with weight decay."""
         optim_groups = self.get_optim_groups(weight_decay=weight_decay)
@@ -401,10 +400,10 @@ class DiTX(nn.Module):
     def forward(
         self,
         sample: torch.Tensor,
-        timestep: Union[torch.Tensor, float, int],
-        target_t: Union[torch.Tensor, float, int],
+        timestep: torch.Tensor | float | int,
+        target_t: torch.Tensor | float | int,
         vis_cond: torch.Tensor,
-        lang_cond: Union[torch.Tensor, list, str] = None,
+        lang_cond: torch.Tensor | list | str = None,
         **kwargs,
     ):
         """

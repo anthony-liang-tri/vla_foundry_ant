@@ -12,7 +12,6 @@ import os
 import uuid
 from collections import defaultdict
 from datetime import datetime
-from typing import Dict
 
 import torch
 from grpc_workspace.git_util import (
@@ -153,8 +152,8 @@ class InferenceDiffusionPolicy(Policy):
         )
 
         # Initialize data adapter with robotics processor, data config, and field mapping
-        self.data_adapter: Dict[uuid.UUID, PolicyDataAdapter] = {}
-        self.should_reset: Dict[uuid.UUID, bool] = {}
+        self.data_adapter: dict[uuid.UUID, PolicyDataAdapter] = {}
+        self.should_reset: dict[uuid.UUID, bool] = {}
 
         # Initialize state
         self.reset()
@@ -242,7 +241,7 @@ class InferenceDiffusionPolicy(Policy):
 
         return actions
 
-    def step_batch(self, observations: Dict[uuid.UUID, MultiarmObservation]) -> Dict[uuid.UUID, PosesAndGrippers]:
+    def step_batch(self, observations: dict[uuid.UUID, MultiarmObservation]) -> dict[uuid.UUID, PosesAndGrippers]:
         """Generate robot actions for a batch of observations.
 
         Args:
@@ -283,7 +282,7 @@ class InferenceDiffusionPolicy(Policy):
 
         return batch_actions
 
-    def reset_batch(self, clients: Dict[uuid.UUID, int]):
+    def reset_batch(self, clients: dict[uuid.UUID, int]):
         """Reset the policy state for a batch of observations.
 
         Args:

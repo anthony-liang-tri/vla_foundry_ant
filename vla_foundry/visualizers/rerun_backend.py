@@ -28,11 +28,11 @@ class RerunBackend:
         """
         Initialize the Rerun visualizer.
 
-        Parameters:
-        - run_name: Name of the run.
-        - add_rank_to_run: Whether to add rank information to the run name.
-        - open_browser: Whether to automatically open the browser with the web viewer.
-        - **kwargs: Additional arguments (ignored).
+        Args:
+            run_name: Name of the run.
+            add_rank_to_run: Whether to add rank information to the run name.
+            open_browser: Whether to automatically open the browser with the web viewer.
+            **kwargs: Additional arguments (ignored).
         """
         if not self._initialized:
             rr.init(run_name)
@@ -68,12 +68,9 @@ class RerunBackend:
         """
         Log images to the rerun backend. Supports both single images and dictionaries of images.
 
-        Parameters
-        ----------
-        path : str
-            Base path in the visualization hierarchy.
-        images : Any
-            Either a single NumPy array representing an image or a dictionary of images.
+        Args:
+            path: Base path in the visualization hierarchy.
+            images: Either a single NumPy array representing an image or a dictionary of images.
         """
         if isinstance(images, np.ndarray):
             # Single image
@@ -89,9 +86,9 @@ class RerunBackend:
         """
         Log a scalar value to the Rerun backend.
 
-        Parameters:
-        - path: The hierarchical path for the scalar.
-        - value: The scalar value.
+        Args:
+            path: The hierarchical path for the scalar.
+            value: The scalar value.
         """
         rr.log(path, rr.Scalars(value))
 
@@ -101,11 +98,11 @@ class RerunBackend:
         """
         Log 3D points to the Rerun backend.
 
-        Parameters:
-        - path: The hierarchical path for the 3D points.
-        - points: The 3D points as a NumPy array of shape (N, 3).
-        - radii: Optional array of point radii.
-        - colors: Optional array of point colors.
+        Args:
+            path: The hierarchical path for the 3D points.
+            points: The 3D points as a NumPy array of shape (N, 3).
+            radii: Optional array of point radii.
+            colors: Optional array of point colors.
         """
         rr.log(path, rr.Points3D(points, radii=radii, colors=colors))
 
@@ -113,9 +110,9 @@ class RerunBackend:
         """
         Log a trajectory to the Rerun backend.
 
-        Parameters:
-        - path: The hierarchical path for the trajectory.
-        - trajectory: The trajectory as a NumPy array of shape (N, 3).
+        Args:
+            path: The hierarchical path for the trajectory.
+            trajectory: The trajectory as a NumPy array of shape (N, 3).
         """
         rr.log(path, rr.LineStrips3D([trajectory]))
         rr.log(f"{path}/waypoints", rr.Points3D(trajectory))
@@ -126,16 +123,11 @@ class RerunBackend:
         """
         Log a generic pose to the Rerun backend.
 
-        Parameters
-        ----------
-        path : str
-            Path in the visualization hierarchy.
-        translation : np.ndarray
-            Translation vector of shape (3,).
-        rotation : np.ndarray
-            Quaternion [x, y, z, w] of shape (4,).
-        axis_length : float, optional
-            Length of the axes for visualization, by default 1.0.
+        Args:
+            path: Path in the visualization hierarchy.
+            translation: Translation vector of shape (3,).
+            rotation: Quaternion [x, y, z, w] of shape (4,).
+            axis_length: Length of the axes for visualization, by default 1.0.
         """
         rr.log(
             path,
@@ -149,12 +141,9 @@ class RerunBackend:
         """
         Log 3D line strips to the Rerun backend.
 
-        Parameters
-        ----------
-        path : str
-            The hierarchical path for the line strips.
-        line_strips : np.ndarray
-            The 3D line strips as a NumPy array of shape (N, 3).
+        Args:
+            path: The hierarchical path for the line strips.
+            line_strips: The 3D line strips as a NumPy array of shape (N, 3).
         """
         rr.log(path, rr.LineStrips3D([line_strips]))
 
@@ -162,11 +151,8 @@ class RerunBackend:
         """
         Log a text value to the Rerun backend.
 
-        Parameters
-        ----------
-        path : str
-            Path in the visualization hierarchy.
-        text : str
-            Text value to log.
+        Args:
+            path: Path in the visualization hierarchy.
+            text: Text value to log.
         """
         rr.log(path, rr.TextLog(text))

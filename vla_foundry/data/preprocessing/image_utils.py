@@ -1,6 +1,5 @@
 import io
 from enum import Enum
-from typing import Optional, Tuple, Union
 
 import numpy as np
 from PIL import Image
@@ -22,7 +21,7 @@ class ImageResizingMethod(Enum):
 
 
 def resize_image(
-    image: Union[np.ndarray, Image.Image],
+    image: np.ndarray | Image.Image,
     target_size: tuple,
     resize_method=ImageResizingMethod.CENTER_CROP,
     fill_color: tuple = (0, 0, 0),
@@ -75,8 +74,8 @@ def resize_image(
 
 
 def depth_image_to_bytes(
-    image: np.ndarray, target_size: Optional[Tuple[int, int]] = None
-) -> Tuple[bytes, Tuple[int, int]]:
+    image: np.ndarray, target_size: tuple[int, int] | None = None
+) -> tuple[bytes, tuple[int, int]]:
     """Convert depth image to PNG with uint16 format (millimeters)."""
     # Ensure uint16 format for depth (mm units)
     assert image.dtype == np.uint16, "depth images must use np.uint16"
@@ -96,10 +95,10 @@ def depth_image_to_bytes(
 
 def image_to_bytes(
     image: np.ndarray,
-    quality: Optional[int] = None,
-    target_size: Optional[Tuple[int, int]] = None,
+    quality: int | None = None,
+    target_size: tuple[int, int] | None = None,
     resize_method=ImageResizingMethod.CENTER_CROP,
-) -> Tuple[bytes, Tuple[int, int]]:
+) -> tuple[bytes, tuple[int, int]]:
     """Optimized image to JPEG conversion with resize and minimal allocations."""
     if quality is None:
         quality = _jpeg_quality

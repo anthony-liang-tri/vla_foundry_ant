@@ -5,14 +5,11 @@ Launched automatically by compare_stats.py when stdout is a TTY (unless
 by :class:`DemoResultsViewer` in ``gather_results.py``.
 """
 
-from __future__ import annotations
-
 import contextlib
 import curses
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Set
 
 import numpy as np
 
@@ -42,11 +39,11 @@ FILTER_CONFIG_PATH = Path("~/.config/vla_foundry/compare_stats_filters.json").ex
 class FilterState:
     """Persistent filter selections (empty set = show all)."""
 
-    group: Set[str] = field(default_factory=set)
-    category: Set[str] = field(default_factory=set)
-    representation: Set[str] = field(default_factory=set)
-    limb: Set[str] = field(default_factory=set)
-    robot: Set[str] = field(default_factory=set)
+    group: set[str] = field(default_factory=set)
+    category: set[str] = field(default_factory=set)
+    representation: set[str] = field(default_factory=set)
+    limb: set[str] = field(default_factory=set)
+    robot: set[str] = field(default_factory=set)
 
     sort_by: str = "max_pct"  # max_pct | avg_pct | max_abs | name
     sort_ascending: bool = False
@@ -92,7 +89,7 @@ class StatsComparisonViewer:
 
         # Parse tensor names
         all_tensors = sorted(set(our_stats.keys()) | set(ref_stats.keys()))
-        self.tensor_infos: Dict[str, TensorInfo] = {name: parse_tensor_name(name) for name in all_tensors}
+        self.tensor_infos: dict[str, TensorInfo] = {name: parse_tensor_name(name) for name in all_tensors}
 
         # Available filter values
         self.available_axes = extract_filter_axes(all_tensors)
@@ -111,27 +108,27 @@ class StatsComparisonViewer:
 
         # View mode: overview | detail | filter | side_by_side | help | info
         self.view_mode = "overview"
-        self.selected_tensor: Optional[str] = None
+        self.selected_tensor: str | None = None
         self.detail_scroll = 0
         self.info_scroll = 0
-        self._info_lines: List[str] = []  # built lazily on first info view
+        self._info_lines: list[str] = []  # built lazily on first info view
 
         # Filter panel state
         self.active_filter_axis = 0
-        self.filter_cursor: Dict[str, int] = {axis: 0 for axis in AXIS_ORDER}
+        self.filter_cursor: dict[str, int] = {axis: 0 for axis in AXIS_ORDER}
 
         # Search
         self.search_term = ""
 
         # Filtered view
-        self.filtered_summary: List[dict] = []
+        self.filtered_summary: list[dict] = []
         self._apply_filters()
 
     # ------------------------------------------------------------------
     # Data building
     # ------------------------------------------------------------------
 
-    def _build_tensor_summary(self) -> List[dict]:
+    def _build_tensor_summary(self) -> list[dict]:
         """Build the per-tensor summary list (mirrors print_report logic)."""
         summaries = []
         for tensor in sorted(self.comparison.get("common_tensors", [])):
@@ -154,7 +151,7 @@ class StatsComparisonViewer:
         summaries.sort(key=lambda x: x["max_pct"], reverse=True)
         return summaries
 
-    def _build_count_diffs(self) -> List[dict]:
+    def _build_count_diffs(self) -> list[dict]:
         """Build count-field diff list."""
         count_diffs = []
         for tensor, field_diffs in self.comparison.get("field_differences", {}).items():
@@ -306,7 +303,7 @@ class StatsComparisonViewer:
                 parts.append(f"{label}={','.join(sorted(vals))}")
         return "  ".join(parts) if parts else "(none)"
 
-    def _ordered_tensors(self) -> List[str]:
+    def _ordered_tensors(self) -> list[str]:
         """Tensor names in the filtered_summary order."""
         return [s["tensor"] for s in self.filtered_summary]
 
@@ -716,9 +713,9 @@ class StatsComparisonViewer:
     # INFO OVERLAY (scrollable)
     # ==================================================================
 
-    def _build_info_lines(self) -> List[str]:
+    def _build_info_lines(self) -> list[str]:
         """Build the full info content (called once, cached)."""
-        lines: List[str] = []
+        lines: list[str] = []
         lines.append(f"Ours: {self.our_path}")
         lines.append(f"Ref:  {self.ref_path}")
         lines.append("")

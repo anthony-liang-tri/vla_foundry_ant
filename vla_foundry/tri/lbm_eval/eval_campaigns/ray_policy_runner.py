@@ -13,7 +13,6 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Set, Tuple
 
 import ray
 import requests
@@ -86,7 +85,7 @@ def register_task_metadata(
     task_name: str,
     t_max: float,
     station: str,
-    config_file: Optional[str] = None,
+    config_file: str | None = None,
 ) -> None:
     """Register metadata for a task programmatically."""
     TASK_METADATA[task_name] = {
@@ -102,11 +101,11 @@ class JobSpec:
     task: str
     checkpoint: str
     demo_indices: str
-    launch_config_file: Optional[str]
+    launch_config_file: str | None
     launch_scenario: str
     launch_script: str
     launch_task_name: str = ""
-    mount_src: Optional[str] = None  # Per-job vla_foundry mount source path
+    mount_src: str | None = None  # Per-job vla_foundry mount source path
 
 
 def parse_range(range_text):
@@ -127,7 +126,7 @@ def shift_range(range_text, repetition):
     return f"{new_start}:{new_end}"
 
 
-def split_jobs_by_max_samples(jobs: List[JobSpec], max_samples_per_job: int) -> List[JobSpec]:
+def split_jobs_by_max_samples(jobs: list[JobSpec], max_samples_per_job: int) -> list[JobSpec]:
     """Split jobs so each job evaluates at most max_samples_per_job demonstrations.
 
     This operates on JobSpec.demo_indices ranges (start:end), producing multiple
@@ -136,7 +135,7 @@ def split_jobs_by_max_samples(jobs: List[JobSpec], max_samples_per_job: int) -> 
     if max_samples_per_job <= 0:
         raise ValueError(f"max_samples_per_job must be > 0, got {max_samples_per_job}")
 
-    split: List[JobSpec] = []
+    split: list[JobSpec] = []
     for job in jobs:
         start, end = parse_range(job.demo_indices)
         span = end - start
@@ -370,12 +369,12 @@ class TaskSpec:
     name: str  # Job name (e.g., stage3_singletask_sim_BimanualPlaceAppleFromBowlIntoBin)
     task_name: str  # Task name (e.g., BimanualPlaceAppleFromBowlIntoBin)
     checkpoint: str  # S3 path or local path
-    vla_ref: Optional[str] = None  # Optional vla_foundry git ref (branch/tag/commit)
-    mount_src: Optional[str] = None  # Optional per-task vla_foundry mount source path
-    demo_indices: Optional[str] = None  # Optional per-task demo range (start:end)
+    vla_ref: str | None = None  # Optional vla_foundry git ref (branch/tag/commit)
+    mount_src: str | None = None  # Optional per-task vla_foundry mount source path
+    demo_indices: str | None = None  # Optional per-task demo range (start:end)
 
 
-def load_tasks_from_file(file_path: Path) -> List[TaskSpec]:
+def load_tasks_from_file(file_path: Path) -> list[TaskSpec]:
     """
     Load task specifications from a text file.
 
@@ -398,12 +397,12 @@ def load_tasks_from_file(file_path: Path) -> List[TaskSpec]:
     job_name,TaskName,s3://path/to/checkpoint,branch_name,/path/to/mount,120:140
     """
 
-    def _parse_missing_indices_ranges(text: str) -> List[Tuple[int, int]]:
+    def _parse_missing_indices_ranges(text: str) -> list[tuple[int, int]]:
         """Parse '10-12,15,20-21' into [(10,13), (15,16), (20,22)] (end exclusive)."""
         s = text.strip()
         if not s:
             return []
-        ranges: List[Tuple[int, int]] = []
+        ranges: list[tuple[int, int]] = []
         for chunk in s.split(","):
             token = chunk.strip()
             if not token:
@@ -420,11 +419,11 @@ def load_tasks_from_file(file_path: Path) -> List[TaskSpec]:
                 ranges.append((idx, idx + 1))
         return ranges
 
-    tasks: List[TaskSpec] = []
+    tasks: list[TaskSpec] = []
     lines = file_path.read_text().splitlines()
-    pending_missing_ranges: Optional[List[Tuple[int, int]]] = None
+    pending_missing_ranges: list[tuple[int, int]] | None = None
 
-    buf: List[str] = []
+    buf: list[str] = []
     paren_depth = 0
 
     for raw in lines:
@@ -533,8 +532,8 @@ def load_tasks_from_file(file_path: Path) -> List[TaskSpec]:
 
 
 def distribute_tasks(
-    tasks: List[TaskSpec], num_samples: int, num_workers: int, start_index: int, defaults
-) -> List[JobSpec]:
+    tasks: list[TaskSpec], num_samples: int, num_workers: int, start_index: int, defaults
+) -> list[JobSpec]:
     """
     Distribute task specifications and sample ranges across workers optimally.
 
@@ -839,8 +838,8 @@ echo "Periodic cleanup completed"
 
 
 def verify_job_success_via_s3(
-    checkpoint: str, task_name: str, demo_indices: str, evaluation_subfolder: Optional[str] = None
-) -> Tuple[bool, int, int]:
+    checkpoint: str, task_name: str, demo_indices: str, evaluation_subfolder: str | None = None
+) -> tuple[bool, int, int]:
     """
     Verify if a job actually succeeded by checking if results exist in S3.
 
@@ -862,7 +861,7 @@ def verify_job_success_via_s3(
         - expected_count: Number of expected rollouts based on demo_indices
     """
     # Parse expected demo count from indices
-    expected_indices: Set[int] = set()
+    expected_indices: set[int] = set()
     try:
         start, end = demo_indices.split(":")
         start_i = int(start)
@@ -905,7 +904,7 @@ def verify_job_success_via_s3(
         lines = result.stdout.strip().split("\n") if result.stdout.strip() else []
         # Match either summary.yaml (vla_foundry) or resolved_scenario.yaml (lbm-eval-oss)
         pattern = re.compile(r"demonstration_(\d+)/(summary\.yaml|resolved_scenario\.yaml)")
-        found_indices: Set[int] = set()
+        found_indices: set[int] = set()
         for line in lines:
             match = pattern.search(line)
             if match:

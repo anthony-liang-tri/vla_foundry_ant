@@ -6,8 +6,6 @@ Example:
     --base-path s3://tri-ml-datasets-uw2/vla_foundry_datasets/v0.4.2
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import os

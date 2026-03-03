@@ -1,5 +1,3 @@
-from typing import Union
-
 import torch
 
 from vla_foundry.models.base_model import BaseModel
@@ -16,7 +14,7 @@ class DiffusionPolicy(BaseModel):
         self,
         model_params: DiffusionPolicyParams,
         vision_language_backbone: BaseBackboneWrapper,
-        transformer: Union[Transformer, TransformerHF],
+        transformer: Transformer | TransformerHF,
         noise_scheduler: NoiseScheduler,
     ):
         super().__init__(model_params)

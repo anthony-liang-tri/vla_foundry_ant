@@ -9,12 +9,10 @@ Example:
     --total_train_samples 100
 """
 
-from __future__ import annotations
-
 import logging
 import os
 import sys
-from typing import Dict, List, Mapping, Optional
+from typing import Mapping
 
 import draccus
 import numpy as np
@@ -42,7 +40,7 @@ NDArray = np.ndarray
 class FrameAssembler:
     """Compute and package pose frames for visualization."""
 
-    def base_to_frame_poses(self, lowdim: Mapping[str, NDArray]) -> Dict[str, NDArray]:
+    def base_to_frame_poses(self, lowdim: Mapping[str, NDArray]) -> dict[str, NDArray]:
         """Return mapping of base-anchored frame trajectories."""
 
         # Get left end-effector poses.
@@ -77,16 +75,16 @@ class Plotter:
 class RerunSampleVisualizer:
     """High-level visualizer that ties together reading, frames, and plotting."""
 
-    def __init__(self, normalizer: Optional[RoboticsNormalizer] = None):
+    def __init__(self, normalizer: RoboticsNormalizer | None = None):
         self._frames = FrameAssembler()
         self._plot = Plotter()
         self._normalizer = normalizer
 
-    def visualize_sample(self, sample_id: str, payload: Mapping[str, object], image_names: List[str]) -> None:
+    def visualize_sample(self, sample_id: str, payload: Mapping[str, object], image_names: list[str]) -> None:
         """Visualize a single sample's payload."""
-        pixel_values: Optional[NDArray] = payload.get("pixel_values").numpy()  # type: ignore[assignment]
-        lowdim: Optional[Mapping[str, NDArray]] = payload.get("lowdim")  # type: ignore[assignment]
-        metadata: Optional[Mapping[str, object]] = payload.get("metadata")[0]  # type: ignore[assignment]
+        pixel_values: NDArray | None = payload.get("pixel_values").numpy()  # type: ignore[assignment]
+        lowdim: Mapping[str, NDArray] | None = payload.get("lowdim")  # type: ignore[assignment]
+        metadata: Mapping[str, object] | None = payload.get("metadata")[0]  # type: ignore[assignment]
 
         # Denormalize low-dim data and convert to numpy arrays.
         if self._normalizer is not None and lowdim is not None:
@@ -114,10 +112,10 @@ class RerunSampleVisualizer:
         pixel_values = pixel_values.transpose(0, 2, 3, 1)
 
         # Populate data dictionaries keyed by image name (one for each camera and timestep).
-        image_data: Dict[str, NDArray] = {}
-        extrinsics_data: Dict[str, NDArray] = {}
-        intrinsics_data: Dict[str, NDArray] = {}
-        camera_data: Dict[str, str] = {}
+        image_data: dict[str, NDArray] = {}
+        extrinsics_data: dict[str, NDArray] = {}
+        intrinsics_data: dict[str, NDArray] = {}
+        camera_data: dict[str, str] = {}
 
         num_available_images = pixel_values.shape[0]
         if len(image_names) != num_available_images:
@@ -219,7 +217,7 @@ class RerunSampleVisualizer:
         self._plot.log_images("projected", img_data_with_traces)
 
 
-def main(argv: Optional[List[str]] = None) -> None:
+def main(argv: list[str] | None = None) -> None:
     # Parse --ordered flag before draccus processes the rest of argv.
     ordered = "--ordered" in sys.argv
     if ordered:

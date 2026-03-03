@@ -3,8 +3,6 @@
 Tests for PolicyDataAdapter aligned with the current refactored implementation.
 """
 
-from __future__ import annotations
-
 import sys
 import tempfile
 from dataclasses import dataclass
@@ -20,7 +18,7 @@ import yaml
 
 # We don't want to depend on pydrake for testing
 class RotationMatrix:
-    def __init__(self, matrix: np.ndarray | "RotationMatrix" | None = None):
+    def __init__(self, matrix: "np.ndarray | RotationMatrix | None" = None):
         if isinstance(matrix, RotationMatrix):
             matrix = matrix.matrix()
         if matrix is None:

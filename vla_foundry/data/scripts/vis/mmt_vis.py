@@ -6,8 +6,6 @@ Example:
         --data_params vla_foundry/config_presets/data/mmt/mmt_data_params.yaml
 """
 
-from __future__ import annotations
-
 import argparse
 import io
 import json
@@ -15,7 +13,7 @@ import logging
 import tarfile
 from dataclasses import dataclass
 from pathlib import PurePosixPath
-from typing import Dict, Iterator, List, Mapping, MutableMapping, Optional, Tuple, Union
+from typing import Iterator, Mapping, MutableMapping
 
 import fsspec
 import numpy as np
@@ -79,7 +77,7 @@ class FileNameParser:
     """
 
     @staticmethod
-    def parse(name: str) -> Tuple[str, str, str]:
+    def parse(name: str) -> tuple[str, str, str]:
         base = PurePosixPath(name).name  # Strip directories if present.
         parts = base.split(".")
         if len(parts) != 3:
@@ -124,9 +122,9 @@ class S3TarReader:
     def __init__(self, normalizer_bundle: NormalizerBundle):
         self._norm = normalizer_bundle
 
-    def iter_samples_from_tar(self, tar_uri: str) -> Iterator[Tuple[str, Dict[str, object]]]:
+    def iter_samples_from_tar(self, tar_uri: str) -> Iterator[tuple[str, dict[str, object]]]:
         """Yield (sample_id, sample_dict) for each sample found in a single TAR."""
-        data_dict: Dict[str, Dict[str, object]] = {}
+        data_dict: dict[str, dict[str, object]] = {}
         logging.debug("Opening TAR: %s", tar_uri)
 
         with open_s3(tar_uri) as fo, tarfile.open(fileobj=fo, mode="r|*") as tf:
@@ -218,7 +216,7 @@ class FrameAssembler:
             ]
         )
 
-    def chassis_frame_poses(self, lowdim: Mapping[str, NDArray]) -> Dict[str, NDArray]:
+    def chassis_frame_poses(self, lowdim: Mapping[str, NDArray]) -> dict[str, NDArray]:
         """Return mapping of chassis-anchored frame trajectories."""
         chest_T_eef = lowdim.get("chest_T_eef_pose")
         chest_T_head = lowdim.get("chest_T_head_pose")
@@ -302,10 +300,10 @@ class Plotter:
         self,
         path: str,
         raw_depth: NDArray,
-        depth_scale: Union[float, NDArray],
-        color_image: Optional[NDArray],
+        depth_scale: float | NDArray,
+        color_image: NDArray | None,
         intrinsics_rgb: NDArray,
-        original_image_size: Tuple[int, int],
+        original_image_size: tuple[int, int],
     ) -> None:
         vz.log_point_cloud(path, raw_depth, depth_scale, color_image, intrinsics_rgb, original_image_size)
 
@@ -338,9 +336,9 @@ class RerunSampleVisualizer:
 
     def visualize_sample(self, sample_id: str, payload: Mapping[str, object]) -> None:
         """Visualize a single sample's payload."""
-        img_data: Optional[Mapping[str, NDArray]] = payload.get("img_data")  # type: ignore[assignment]
-        lowdim: Optional[Mapping[str, NDArray]] = payload.get("lowdim")  # type: ignore[assignment]
-        metadata: Optional[Mapping[str, object]] = payload.get("metadata")  # type: ignore[assignment]
+        img_data: Mapping[str, NDArray] | None = payload.get("img_data")  # type: ignore[assignment]
+        lowdim: Mapping[str, NDArray] | None = payload.get("lowdim")  # type: ignore[assignment]
+        metadata: Mapping[str, object] | None = payload.get("metadata")  # type: ignore[assignment]
 
         if img_data:
             self._plot.log_images("", img_data)
@@ -420,7 +418,7 @@ class RerunSampleVisualizer:
                 input("Sample visualized. Press Enter to continue...")
 
 
-def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Visualize TAR samples from an S3 prefix using Rerun.")
     parser.add_argument(
@@ -442,7 +440,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main(argv: Optional[List[str]] = None) -> None:
+def main(argv: list[str] | None = None) -> None:
     """Entry point."""
     args = parse_args(argv)
     setup_logging(getattr(logging, args.log_level))

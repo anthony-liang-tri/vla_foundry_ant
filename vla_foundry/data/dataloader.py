@@ -2,7 +2,7 @@ import copy
 import logging
 import random
 from dataclasses import dataclass
-from typing import List, Sequence, Tuple
+from typing import Sequence
 
 import numpy as np
 import torch
@@ -34,7 +34,7 @@ class DataInfo:
     """
 
     dataloader: DataLoader
-    dataset_pipelines: List[wds.DataPipeline] = None
+    dataset_pipelines: list[wds.DataPipeline] = None
     sampler: DistributedSampler = None
     shared_checkpoint_counter: SharedCheckpointCounter = None
 
@@ -145,7 +145,7 @@ def get_datastring_input(
     allow_multiple_epochs: str,
     num_workers_per_gpu: int,
     world_size: int,
-) -> Tuple[List[str], List[int], List[int], List[int]]:
+) -> tuple[list[str], list[int], list[int], list[int]]:
     """
     Select shards for the next checkpoint window and build datastrings.
 

@@ -15,8 +15,6 @@ Dry-run (shows what would be launched, without actually launching jobs):
     vla_foundry/tri/ablations/ablations.yaml --dry-run
 """
 
-from __future__ import annotations
-
 import argparse
 import secrets
 import subprocess

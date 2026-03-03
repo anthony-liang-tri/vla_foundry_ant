@@ -15,7 +15,7 @@ The raw data format expects:
 
 import logging
 import os
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import fsspec
 import numpy as np
@@ -28,10 +28,10 @@ class RawRoboticsDataLoader:
 
     def __init__(
         self,
-        episode_paths: List[str],
+        episode_paths: list[str],
         max_samples: int = -1,
         max_episodes_to_process: int = -1,
-        camera_names: Optional[List[str]] = None,
+        camera_names: list[str] | None = None,
         trajectory_length: int = 50,
         stride: int = 1,
     ):
@@ -52,7 +52,7 @@ class RawRoboticsDataLoader:
 
         return img_array
 
-    def load_episode_data(self, episode_path: str) -> Optional[Dict[str, Any]]:
+    def load_episode_data(self, episode_path: str) -> dict[str, Any] | None:
         """Load raw episode data from directory structure."""
         processed_path = os.path.join(episode_path, "processed")
 
@@ -97,8 +97,8 @@ class RawRoboticsDataLoader:
             return None
 
     def extract_camera_data(
-        self, observations: Dict[str, np.ndarray], metadata: Dict[str, Any]
-    ) -> Dict[str, np.ndarray]:
+        self, observations: dict[str, np.ndarray], metadata: dict[str, Any]
+    ) -> dict[str, np.ndarray]:
         """Extract camera data with semantic naming."""
         camera_mapping = metadata.get("camera_id_to_semantic_name", {})
 
@@ -109,7 +109,7 @@ class RawRoboticsDataLoader:
 
         return camera_data
 
-    def extract_lowdim_data(self, observations: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
+    def extract_lowdim_data(self, observations: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
         """Extract low-dimensional data (non-image data)."""
         lowdim_data = {}
 
@@ -121,8 +121,8 @@ class RawRoboticsDataLoader:
         return lowdim_data
 
     def transform_camera_calibration_keys(
-        self, intrinsics: Dict[str, Any], extrinsics: Dict[str, Any], metadata: Dict[str, Any]
-    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        self, intrinsics: dict[str, Any], extrinsics: dict[str, Any], metadata: dict[str, Any]
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         """Transform camera calibration keys from camera IDs to semantic names."""
         camera_mapping = metadata.get("camera_id_to_semantic_name", {})
         if not camera_mapping:
@@ -142,7 +142,7 @@ class RawRoboticsDataLoader:
 
         return transformed_intrinsics, transformed_extrinsics
 
-    def create_samples_from_episode(self, episode_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def create_samples_from_episode(self, episode_data: dict[str, Any]) -> list[dict[str, Any]]:
         """Create exploration samples from a raw episode."""
         samples = []
 
@@ -216,7 +216,7 @@ class RawRoboticsDataLoader:
 
         return samples
 
-    def load_samples(self) -> List[Dict[str, Any]]:
+    def load_samples(self) -> list[dict[str, Any]]:
         """Load samples from raw episode data."""
         print(f"🔍 Loading raw episode data from {len(self.episode_paths)} episodes...")
 
@@ -241,7 +241,7 @@ class RawRoboticsDataLoader:
         return self.samples
 
 
-def discover_raw_episodes(source_paths: List[str], max_episodes_to_process: int = -1) -> List[str]:
+def discover_raw_episodes(source_paths: list[str], max_episodes_to_process: int = -1) -> list[str]:
     """Discover raw episode directories."""
     if isinstance(source_paths, str):
         source_paths = [source_paths]

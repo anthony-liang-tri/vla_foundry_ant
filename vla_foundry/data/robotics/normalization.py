@@ -5,7 +5,7 @@ Normalization utilities for robotics data.
 import json
 import logging
 import os
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any
 
 import draccus
 import torch
@@ -28,9 +28,9 @@ class RoboticsNormalizer:
 
     def __init__(
         self,
-        normalization_params: Union[Dict[str, Any], "NormalizationParams"],
-        statistics_data: Optional[Dict[str, Any]] = None,
-        statistics_path: Optional[Union[str, list[str]]] = None,
+        normalization_params: dict[str, Any] | NormalizationParams,
+        statistics_data: dict[str, Any] | None = None,
+        statistics_path: str | list[str] | None = None,
     ):
         """
         Initialize normalizer.
@@ -99,7 +99,7 @@ class RoboticsNormalizer:
         else:
             raise ValueError(f"Field {field_name} not found in dataset statistics")
 
-    def _load_statistics(self, statistics_path: str) -> Dict[str, Any]:
+    def _load_statistics(self, statistics_path: str) -> dict[str, Any]:
         """Load statistics from JSON file."""
         if isinstance(statistics_path, str):
             stats = json_load(statistics_path)
@@ -148,7 +148,7 @@ class RoboticsNormalizer:
 
         return True
 
-    def _get_normalization_params(self, field_name: str) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _get_normalization_params(self, field_name: str) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Get normalization parameters (center, scale) for a field.
         Use a cache for efficiency.
@@ -165,7 +165,7 @@ class RoboticsNormalizer:
         self._norm_param_cache[field_name] = (center, scale)
         return center, scale
 
-    def _compute_normalization_params(self, field_name: str) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _compute_normalization_params(self, field_name: str) -> tuple[torch.Tensor, torch.Tensor]:
         field_stats = self.stats[field_name]
         field_config = self._get_field_config(field_name)
 
@@ -236,7 +236,7 @@ class RoboticsNormalizer:
         return center, scale
 
     def normalize_tensor(
-        self, tensor: torch.Tensor, field_name: str, anchor_timestep: Optional[int] = None
+        self, tensor: torch.Tensor, field_name: str, anchor_timestep: int | None = None
     ) -> torch.Tensor:
         """
         Normalize a tensor.

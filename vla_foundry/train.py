@@ -1,7 +1,7 @@
 import itertools
 import logging
 import time
-from typing import Callable, Optional
+from typing import Callable
 
 import torch
 import torch.distributed as dist
@@ -22,13 +22,13 @@ from vla_foundry.precision import get_autocast
 def train_one_checkpoint(
     model: nn.Module,
     dataloader,
-    loss: Callable[[torch.Tensor, torch.Tensor, Optional[torch.Tensor]], torch.Tensor],
+    loss: Callable[[torch.Tensor, torch.Tensor, torch.Tensor | None], torch.Tensor],
     checkpoint_num: int,
     step: int,
     optimizer: optim.Optimizer,
     scheduler: Callable[[int], None],
     cfg: TrainExperimentParams,
-    ema_model: Optional[nn.Module] = None,
+    ema_model: nn.Module | None = None,
 ) -> tuple[bool, int]:
     """
     Trains model for one checkpoint on the provided data.

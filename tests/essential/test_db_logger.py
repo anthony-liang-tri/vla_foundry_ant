@@ -1,7 +1,6 @@
 """Tests for DynamoDB logger module."""
 
 from dataclasses import dataclass, field
-from typing import List, Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -25,14 +24,14 @@ from vla_foundry.db_logger import (
 class MockDataConfig:
     """Minimal data config for testing."""
 
-    dataset_manifest: List[str] = field(default_factory=lambda: ["s3://bucket/dataset1", "s3://bucket/dataset2"])
+    dataset_manifest: list[str] = field(default_factory=lambda: ["s3://bucket/dataset1", "s3://bucket/dataset2"])
 
 
 @dataclass
 class MockModelConfig:
     """Minimal model config for testing."""
 
-    resume_from_checkpoint: Optional[str] = None
+    resume_from_checkpoint: str | None = None
 
 
 @dataclass
@@ -51,7 +50,7 @@ class MockTrainConfig:
 class MockPreprocessConfig:
     """Minimal config object for dataset preprocessing tests."""
 
-    source_paths: List[str] = field(default_factory=lambda: ["/data/raw/dataset1"])
+    source_paths: list[str] = field(default_factory=lambda: ["/data/raw/dataset1"])
     target_path: str = "s3://bucket/output"
     type: str = "robotics"
 

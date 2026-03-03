@@ -5,7 +5,7 @@ This module provides helper functions for working with robotics data,
 including extraction of proprioception and action data based on configuration.
 """
 
-from typing import Any, Dict, List, Union
+from typing import Any
 
 import numpy as np
 import yaml
@@ -31,7 +31,7 @@ def normalize(x, eps=1e-12):
     return x / np.maximum(norm, eps)
 
 
-def load_action_field_config(config_path: str) -> Dict[str, List[Any]]:
+def load_action_field_config(config_path: str) -> dict[str, list[Any]]:
     """Load action field configuration from YAML file."""
     with open(config_path, "r") as f:
         data = yaml.safe_load(f) or {}
@@ -375,7 +375,7 @@ def rpy_to_R(roll: float, pitch: float, yaw: float) -> np.ndarray:
     return Rz @ (Ry @ Rx)
 
 
-def xyzrpy_to_T(pose: Union[np.ndarray, List[float]]) -> np.ndarray:
+def xyzrpy_to_T(pose: np.ndarray | list[float]) -> np.ndarray:
     """
     Convert [x, y, z, roll, pitch, yaw] vector(s) into homogeneous transform(s).
 
@@ -395,7 +395,7 @@ def xyzrpy_to_T(pose: Union[np.ndarray, List[float]]) -> np.ndarray:
     elif arr.ndim != 2 or arr.shape[1] != 6:
         raise ValueError("Pose must have shape (n, 6)")
 
-    Ts: List[np.ndarray] = []
+    Ts: list[np.ndarray] = []
     for x, y, z, r, p, y_ in arr:
         T = np.eye(4)
         T[:3, :3] = rpy_to_R(r, p, y_)
@@ -493,7 +493,7 @@ def crop_sequence(
     return data[start_idx:end_idx]
 
 
-def merge_percentiles_from_tdigest(states_list: List[Dict[str, Any]], target_p: float) -> np.ndarray:
+def merge_percentiles_from_tdigest(states_list: list[dict[str, Any]], target_p: float) -> np.ndarray:
     """
     Merge percentiles by merging t-digest states and querying the merged digest.
 
@@ -570,7 +570,7 @@ def merge_percentiles_from_tdigest(states_list: List[Dict[str, Any]], target_p: 
     return result
 
 
-def merge_statistics_single_field(tensor_stats: Dict[str, List[Any]], stat_name: str) -> np.ndarray:
+def merge_statistics_single_field(tensor_stats: dict[str, list[Any]], stat_name: str) -> np.ndarray:
     """
     tensor_stats: {mean: [m1, m2, ... mn], std: [s1, s2, ... sn], ...}
     stat_name: mean, std, min, max, etc.
@@ -648,7 +648,7 @@ def merge_statistics_single_field(tensor_stats: Dict[str, List[Any]], stat_name:
         raise ValueError(f"Invalid stat name: {stat_name}")
 
 
-def merge_statistics(statistics: List[Dict[str, Any]]) -> Dict[str, Any]:
+def merge_statistics(statistics: list[dict[str, Any]]) -> dict[str, Any]:
     """
     `statistics` is a list of dictionaries. Each item on the list represents a different dataset.
     Keys are tensor names. Values are dictionaries with keys mean, std, min, max, etc.

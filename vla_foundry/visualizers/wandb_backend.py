@@ -54,12 +54,9 @@ class WandbBackend:
         """
         Log images to the WandB backend. Supports both single images and dictionaries of images.
 
-        Parameters
-        ----------
-        path : str
-            Base path in the visualization hierarchy.
-        images : Any
-            Either a single NumPy array representing an image or a dictionary of images.
+        Args:
+            path: Base path in the visualization hierarchy.
+            images: Either a single NumPy array representing an image or a dictionary of images.
         """
         if isinstance(images, np.ndarray):
             wandb.log({path: wandb.Image(images)})
@@ -142,16 +139,11 @@ class WandbBackend:
         """
         Log a generic pose to the WandB backend using Plotly 3D visualization.
 
-        Parameters
-        ----------
-        path : str
-            Path in the visualization hierarchy.
-        translation : np.ndarray
-            Translation vector of shape (3,).
-        rotation : np.ndarray
-            Quaternion [x, y, z, w] of shape (4,).
-        axis_length : float, optional
-            Length of the axes for visualization, by default 1.0.
+        Args:
+            path: Path in the visualization hierarchy.
+            translation: Translation vector of shape (3,).
+            rotation: Quaternion [x, y, z, w] of shape (4,).
+            axis_length: Length of the axes for visualization, by default 1.0.
         """
         # Ensure translation is a 1D numpy array of shape (3,)
         translation = np.asarray(translation)
@@ -257,11 +249,8 @@ class WandbBackend:
         """
         Log a text value to the WandB backend.
 
-        Parameters
-        ----------
-        path : str
-            Path in the visualization hierarchy.
-        text : str
-            Text value to log.
+        Args:
+            path: Path in the visualization hierarchy.
+            text: Text value to log.
         """
         wandb.log({path: text})
