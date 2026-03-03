@@ -68,11 +68,11 @@ def get_processor(data_params: DataParams):
         processor.image_seq_length = data_params.img_num_tokens
 
         # Set image size for processors if specified in config
-        processor_name = str(data_params.processor).lower() if hasattr(data_params, "processor") else ""
+        processor_name = str(data_params.processor) if hasattr(data_params, "processor") else ""
         image_size = data_params.get("image_size")
         if image_size and hasattr(processor, "image_processor"):
             # Different processors expect different size formats
-            if "paligemma" in processor_name.lower() or "clip" in processor_name.lower():
+            if "paligemma" in processor_name or "clip" in processor_name:
                 # PaliGemma expects height and width
                 processor.image_processor.size = {"height": int(image_size), "width": int(image_size)}
                 logging.debug(

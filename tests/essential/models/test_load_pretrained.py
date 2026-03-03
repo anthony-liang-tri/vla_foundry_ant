@@ -41,9 +41,9 @@ def test_vlm_hf_load_pretrained():
 
     # Test with load_pretrained=True (should call from_pretrained)
     with (
-        patch("vla_foundry.models.vlm_hf.AutoModelForVision2Seq.from_pretrained") as mock_from_pretrained,
+        patch("vla_foundry.models.vlm_hf.AutoModelForImageTextToText.from_pretrained") as mock_from_pretrained,
         patch("vla_foundry.models.vlm_hf.AutoConfig.from_pretrained"),
-        patch("vla_foundry.models.vlm_hf.AutoModelForVision2Seq.from_config"),
+        patch("vla_foundry.models.vlm_hf.AutoModelForImageTextToText.from_config"),
     ):
         mock_from_pretrained.return_value = MagicMock()
         _model = create_model(config, load_pretrained=True)
@@ -51,9 +51,9 @@ def test_vlm_hf_load_pretrained():
 
     # Test with load_pretrained=False (should call from_config)
     with (
-        patch("vla_foundry.models.vlm_hf.AutoModelForVision2Seq.from_pretrained"),
+        patch("vla_foundry.models.vlm_hf.AutoModelForImageTextToText.from_pretrained"),
         patch("vla_foundry.models.vlm_hf.AutoConfig.from_pretrained") as mock_config,
-        patch("vla_foundry.models.vlm_hf.AutoModelForVision2Seq.from_config") as mock_from_config,
+        patch("vla_foundry.models.vlm_hf.AutoModelForImageTextToText.from_config") as mock_from_config,
     ):
         mock_config.return_value = MagicMock()
         mock_from_config.return_value = MagicMock()

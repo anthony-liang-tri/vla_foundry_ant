@@ -181,7 +181,7 @@ class TestVLMHF:
     def vlm_hf_config(self):
         return load_params_from_yaml(ModelParams, "tests/essential/params/dummy_configs/dummy_vlm_model_hf_config.yaml")
 
-    @patch("vla_foundry.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
+    @patch("vla_foundry.models.vlm_hf.AutoModelForImageTextToText.from_pretrained")
     def test_vlm_hf_forward_basic(self, mock_from_pretrained, vlm_hf_config):
         """Test basic forward pass without hidden states"""
         # Mock the HF model
@@ -215,7 +215,7 @@ class TestVLMHF:
         assert output.past_key_values is None
         assert output.hidden_states is None
 
-    @patch("vla_foundry.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
+    @patch("vla_foundry.models.vlm_hf.AutoModelForImageTextToText.from_pretrained")
     def test_vlm_hf_forward_with_hidden_states(self, mock_from_pretrained, vlm_hf_config):
         """Test forward pass with hidden states returned"""
         # Mock the HF model
@@ -252,7 +252,7 @@ class TestVLMHF:
         assert isinstance(output.hidden_states, tuple)
         assert len(output.hidden_states) == 2
 
-    @patch("vla_foundry.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
+    @patch("vla_foundry.models.vlm_hf.AutoModelForImageTextToText.from_pretrained")
     def test_vlm_hf_forward_hidden_states_fallback(self, mock_from_pretrained, vlm_hf_config):
         """Test forward pass with hidden states fallback to last_hidden_state"""
         # Mock the HF model
@@ -289,7 +289,7 @@ class TestVLMHF:
         assert isinstance(output.hidden_states, tuple)
         # Should create hidden states based on num_hidden_layers
 
-    @patch("vla_foundry.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
+    @patch("vla_foundry.models.vlm_hf.AutoModelForImageTextToText.from_pretrained")
     def test_vlm_hf_properties(self, mock_from_pretrained, vlm_hf_config):
         """Test VLM HF properties"""
         # Mock the HF model with config
@@ -308,7 +308,7 @@ class TestVLMHF:
         assert isinstance(vlm.hidden_dim, int)
         assert isinstance(vlm.num_hidden_layers, int)
 
-    @patch("vla_foundry.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
+    @patch("vla_foundry.models.vlm_hf.AutoModelForImageTextToText.from_pretrained")
     def test_vlm_hf_grad_checkpointing(self, mock_from_pretrained, vlm_hf_config):
         """Test gradient checkpointing methods"""
         # Mock the HF model with gradient checkpointing methods
@@ -323,7 +323,7 @@ class TestVLMHF:
         vlm.set_grad_checkpointing(True)
         vlm.set_grad_checkpointing(False)
 
-    @patch("vla_foundry.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
+    @patch("vla_foundry.models.vlm_hf.AutoModelForImageTextToText.from_pretrained")
     def test_vlm_hf_grad_checkpointing_no_methods(self, mock_from_pretrained, vlm_hf_config):
         """Test gradient checkpointing when methods don't exist"""
         # Mock the HF model without gradient checkpointing methods
@@ -337,7 +337,7 @@ class TestVLMHF:
         vlm.set_grad_checkpointing(True)
         vlm.set_grad_checkpointing(False)
 
-    @patch("vla_foundry.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
+    @patch("vla_foundry.models.vlm_hf.AutoModelForImageTextToText.from_pretrained")
     def test_vlm_hf_generate(self, mock_from_pretrained, vlm_hf_config):
         """Test VLM HF generation"""
         # Mock the HF model
@@ -482,7 +482,7 @@ class TestVLMHFInheritance:
     def vlm_hf_config(self):
         return load_params_from_yaml(ModelParams, "tests/essential/params/dummy_configs/dummy_vlm_model_hf_config.yaml")
 
-    @patch("vla_foundry.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
+    @patch("vla_foundry.models.vlm_hf.AutoModelForImageTextToText.from_pretrained")
     def test_vlm_hf_inherits_from_transformer_base(self, mock_from_pretrained, vlm_hf_config):
         """Test that VLMHF now inherits from TransformerBase instead of BaseModel directly"""
         # Mock the HF model
@@ -500,7 +500,7 @@ class TestVLMHFInheritance:
         # Check that the inheritance chain is correct
         assert VLMHF.__mro__.index(TransformerBase) < VLMHF.__mro__.index(BaseModel)
 
-    @patch("vla_foundry.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
+    @patch("vla_foundry.models.vlm_hf.AutoModelForImageTextToText.from_pretrained")
     def test_vlm_hf_has_vlm_base_methods(self, mock_from_pretrained, vlm_hf_config):
         """Test that VLMHF has all the methods from TransformerBase"""
         # Mock the HF model
@@ -526,7 +526,7 @@ class TestVLMHFVocabularyExtension:
     def vlm_hf_config(self):
         return load_params_from_yaml(ModelParams, "tests/essential/params/dummy_configs/dummy_vlm_model_hf_config.yaml")
 
-    @patch("vla_foundry.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
+    @patch("vla_foundry.models.vlm_hf.AutoModelForImageTextToText.from_pretrained")
     def test_vlm_hf_resize_token_embeddings_with_token_id(self, mock_from_pretrained, vlm_hf_config):
         """Test resize_token_embeddings with explicit token_id"""
         # Mock the HF model with embeddings
@@ -540,13 +540,13 @@ class TestVLMHFVocabularyExtension:
         vlm = create_model(vlm_hf_config)
 
         # Test extending to a larger vocabulary
-        new_token_id = 1500
-        result = vlm.resize_token_embeddings(new_token_id)
+        new_num_tokens = 1500
+        result = vlm.resize_token_embeddings(new_num_tokens)
 
-        assert result == new_token_id
-        mock_model.resize_token_embeddings.assert_called_once_with(new_token_id, mean_resizing=False)
+        assert result == new_num_tokens - 1  # Returns ID of last token
+        mock_model.resize_token_embeddings.assert_called_once_with(new_num_tokens, mean_resizing=False)
 
-    @patch("vla_foundry.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
+    @patch("vla_foundry.models.vlm_hf.AutoModelForImageTextToText.from_pretrained")
     def test_vlm_hf_resize_token_embeddings_without_token_id(self, mock_from_pretrained, vlm_hf_config):
         """Test resize_token_embeddings without explicit token_id (auto-increment)"""
         # Mock the HF model with embeddings
@@ -562,10 +562,10 @@ class TestVLMHFVocabularyExtension:
         # Test auto-increment
         result = vlm.resize_token_embeddings()
 
-        assert result == 1001  # current + 1
+        assert result == 1000  # Returns ID of last token (1001 - 1)
         mock_model.resize_token_embeddings.assert_called_once_with(1001, mean_resizing=False)
 
-    @patch("vla_foundry.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
+    @patch("vla_foundry.models.vlm_hf.AutoModelForImageTextToText.from_pretrained")
     def test_vlm_hf_resize_token_embeddings_no_resize_needed(self, mock_from_pretrained, vlm_hf_config):
         """Test resize_token_embeddings when no resize is needed"""
         # Mock the HF model with embeddings
@@ -578,14 +578,14 @@ class TestVLMHFVocabularyExtension:
 
         vlm = create_model(vlm_hf_config)
 
-        # Test with token_id that doesn't require resize
-        token_id = 500  # Less than current vocab size
-        result = vlm.resize_token_embeddings(token_id)
+        # Test with new_num_tokens that doesn't require resize
+        new_num_tokens = 500  # Less than current vocab size
+        result = vlm.resize_token_embeddings(new_num_tokens)
 
-        assert result == token_id
+        assert result == new_num_tokens - 1  # Returns ID of last token
         mock_model.resize_token_embeddings.assert_not_called()
 
-    @patch("vla_foundry.models.vlm_hf.AutoModelForVision2Seq.from_pretrained")
+    @patch("vla_foundry.models.vlm_hf.AutoModelForImageTextToText.from_pretrained")
     def test_vlm_hf_resize_token_embeddings_exact_size(self, mock_from_pretrained, vlm_hf_config):
         """Test resize_token_embeddings when token_id equals current vocab size"""
         # Mock the HF model with embeddings
@@ -598,9 +598,9 @@ class TestVLMHFVocabularyExtension:
 
         vlm = create_model(vlm_hf_config)
 
-        # Test with token_id equal to current vocab size
-        token_id = 1000
-        result = vlm.resize_token_embeddings(token_id)
+        # Test with new_num_tokens equal to current vocab size
+        new_num_tokens = 1000
+        result = vlm.resize_token_embeddings(new_num_tokens)
 
-        assert result == token_id
+        assert result == new_num_tokens - 1  # Returns ID of last token
         mock_model.resize_token_embeddings.assert_not_called()

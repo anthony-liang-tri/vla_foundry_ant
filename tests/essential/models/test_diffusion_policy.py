@@ -4,7 +4,13 @@ import pytest
 import torch
 
 from vla_foundry.models import create_model
-from vla_foundry.params.model_params import DiffusionPolicyParams
+from vla_foundry.models.model_outputs.backbone_output import VisionLanguageBackboneOutput
+from vla_foundry.models.vision_language_backbones.vlm_hf_backbone import VLMHFBackboneWrapper
+from vla_foundry.params.model_params import (
+    CLIPBackboneParams,
+    DiffusionPolicyParams,
+    VLMBackboneParams,
+)
 from vla_foundry.params.train_experiment_params import load_params_from_yaml
 
 
@@ -729,6 +735,122 @@ class TestDiffusionPolicy:
                 generated_actions[:, : seq_len // 2], actions[:, : seq_len // 2], rtol=1e-5, atol=1e-5
             )
 
+    # VLM specific test fixtures.
+    @pytest.fixture
+    def vlm_diffusion_policy_config(self):
+        return load_params_from_yaml(
+            DiffusionPolicyParams, "tests/essential/params/dummy_configs/dummy_vla_diffusion_policy_config.yaml"
+        )
+
+    @pytest.fixture
+    def vlm_diffusion_policy(self, vlm_diffusion_policy_config):
+        with patch("vla_foundry.models.vlm_hf.AutoModelForImageTextToText.from_pretrained") as mock_vlm_hf_pretrained:
+            mock_vlm_hf_model = Mock()
+            mock_vlm_hf_model.get_input_embeddings = Mock(
+                return_value=Mock(num_embeddings=1000, weight=torch.randn(1000, 2048))
+            )
+            mock_vlm_hf_model.resize_token_embeddings = lambda new_num_tokens, mean_resizing: new_num_tokens
+            mock_vlm_hf_model.language_model = Mock(config=Mock(hidden_size=2048))
+            mock_vlm_hf_model.config = Mock(model_type="", vision_config=None)
+            mock_vlm_hf_pretrained.return_value = mock_vlm_hf_model
+
+            # Create the diffusion policy model
+            model = create_model(vlm_diffusion_policy_config)
+            return model
+
+    def _mock_vlm_hf_output(self, batch_size, seq_len, hidden_dim=2048, num_layers=4):
+        mock_vlm_hf_output = Mock()
+        mock_vlm_hf_output.hidden_states = [torch.randn(batch_size, seq_len, hidden_dim) for _ in range(num_layers)]
+        return mock_vlm_hf_output
+
+    # VLM-specific tests
+    def test_vlm_diffusion_policy_forward_basic(self, vlm_diffusion_policy):
+        """Test forward pass with VLM backbone."""
+        batch_size, seq_len = 2, 10
+        action_dim = vlm_diffusion_policy.model_params.action_dim
+
+        input_ids = torch.randint(0, 1000, (batch_size, seq_len))
+        pixel_values = torch.randn(batch_size, 3, 224, 224)
+        attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+        attention_mask_images = None
+        actions = torch.randn(batch_size, seq_len, action_dim)
+        noise = torch.randn(batch_size, seq_len, action_dim)
+        past_mask = torch.zeros(batch_size, seq_len, dtype=torch.bool)
+        future_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+
+        mock_output = self._mock_vlm_hf_output(batch_size, seq_len + 1)
+        with patch.object(vlm_diffusion_policy.vision_language_backbone._model, "forward", return_value=mock_output):
+            output = vlm_diffusion_policy(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                attention_mask=attention_mask,
+                attention_mask_images=attention_mask_images,
+                actions=actions,
+                noise=noise,
+                past_mask=past_mask,
+                future_mask=future_mask,
+            )
+
+        assert output.shape == (batch_size, seq_len, action_dim)
+
+    def test_vlm_diffusion_policy_generate_actions(self, vlm_diffusion_policy):
+        """Test action generation with VLM backbone."""
+        batch_size, seq_len = 2, 6
+        action_dim = vlm_diffusion_policy.model_params.action_dim
+
+        input_ids = torch.randint(0, 1000, (batch_size, seq_len))
+        pixel_values = torch.randn(batch_size, 3, 224, 224)
+        actions = torch.randn(batch_size, seq_len, action_dim)
+        past_mask = torch.cat(
+            [
+                torch.ones(batch_size, seq_len // 2, dtype=torch.bool),
+                torch.zeros(batch_size, seq_len // 2, dtype=torch.bool),
+            ],
+            dim=1,
+        )
+
+        mock_output = self._mock_vlm_hf_output(batch_size, seq_len + 1)
+        with patch.object(vlm_diffusion_policy.vision_language_backbone._model, "forward", return_value=mock_output):
+            generated_actions = vlm_diffusion_policy.generate_actions(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                actions=actions,
+                num_inference_steps=5,
+                past_mask=past_mask,
+            )
+
+        assert generated_actions.shape == (batch_size, seq_len, action_dim)
+        torch.testing.assert_close(
+            generated_actions[:, : seq_len // 2], actions[:, : seq_len // 2], rtol=1e-5, atol=1e-5
+        )
+
+    def test_vlm_diffusion_policy_model_components(self, vlm_diffusion_policy):
+        """Test VLM policy uses backbone embedding dimensions."""
+        backbone = vlm_diffusion_policy.vision_language_backbone
+        expected_dim = backbone.get_conditioning_embeddings_dim()
+
+        assert vlm_diffusion_policy.time_encoding.embedding_dim == expected_dim
+        assert vlm_diffusion_policy.condition_encode.in_features == expected_dim
+
+    def test_build_transformer_input_concat(self, diffusion_policy):
+        """Test CONCAT time conditioning build path."""
+        batch_size, seq_len = 2, 6
+        original_diffusion_step_conditioning = diffusion_policy.diffusion_step_conditioning
+        diffusion_policy.diffusion_step_conditioning = "concat"
+        backbone_embeddings = VisionLanguageBackboneOutput(
+            embeddings=torch.randn(batch_size, 2, diffusion_policy.time_encoding.embedding_dim)
+        ).embeddings
+        timesteps = torch.randint(0, diffusion_policy.scheduler.num_timesteps, (batch_size,))
+        time_embeddings = diffusion_policy.time_encoding(timesteps).unsqueeze(1)
+        noisy_action = torch.randn(batch_size, seq_len, diffusion_policy.transformer.hidden_dim)
+
+        diffusion_policy._build_transformer_input(
+            backbone_embeddings=backbone_embeddings,
+            time_embeddings=time_embeddings,
+            noisy_action=noisy_action,
+        )
+        diffusion_policy.diffusion_step_conditioning = original_diffusion_step_conditioning
+
 
 class TestBuildTransformerInput:
     """Test _build_transformer_input with different time conditioning strategies."""
@@ -918,7 +1040,6 @@ class TestVisionLanguageBackbones:
     @pytest.fixture
     def clip_backbone(self):
         from vla_foundry.models.vision_language_backbones import CLIPBackboneWrapper
-        from vla_foundry.params.model_params import CLIPBackboneParams
 
         clip_params = CLIPBackboneParams(type="clip_backbone", hf_pretrained="openai/clip-vit-base-patch32")
         with patch("vla_foundry.models.diffusion_policy.clip_hf.CLIPModel.from_pretrained") as mock_pretrained:
@@ -926,6 +1047,21 @@ class TestVisionLanguageBackbones:
             mock_hf_clip_model.projection_dim = 512
             mock_pretrained.return_value = mock_hf_clip_model
             return CLIPBackboneWrapper(clip_params, load_pretrained=True)
+
+    @pytest.fixture
+    def vlm_backbone(self):
+        with patch("vla_foundry.models.vlm_hf.AutoModelForImageTextToText.from_pretrained") as mock_vlm:
+            mock_hf_model = Mock()
+            mock_hf_model.get_input_embeddings = Mock(
+                return_value=Mock(num_embeddings=1000, weight=torch.randn(1000, 2048))
+            )
+            mock_hf_model.resize_token_embeddings = lambda new_num_tokens, mean_resizing: new_num_tokens
+            mock_hf_model.language_model = Mock(config=Mock(hidden_size=2048))
+            mock_hf_model.config = Mock(model_type="", vision_config=None)
+            mock_vlm.return_value = mock_hf_model
+
+            vlm_params = VLMBackboneParams(hf_pretrained="google/paligemma-3b-pt-224", num_vlm_layers_to_use=2)
+            return VLMHFBackboneWrapper(vlm_params, load_pretrained=True)
 
     def test_clip_backbone_get_action_conditioning(self, clip_backbone):
         """Test that CLIP backbone returns correct conditioning embeddings."""
@@ -952,10 +1088,37 @@ class TestVisionLanguageBackbones:
         mock_output.image_embeds = torch.randn(batch_size, 512)
 
         with patch.object(clip_backbone._model, "forward", return_value=mock_output):
-            result = clip_backbone.get_action_conditioning(
+            output = clip_backbone.get_action_conditioning(
                 input_ids=torch.randint(0, 100, (batch_size, 5)),
                 pixel_values=torch.randn(batch_size, 3, 224, 224),
             )
 
-            # With disable_text: [B, 1, D] (image token only)
-            assert result.embeddings.shape == (batch_size, 1, 512)
+        assert output.embeddings.shape == (batch_size, 1, 512)
+
+    def test_vlm_backbone_action_token_and_concat(self, vlm_backbone):
+        """Test VLM backbone appends action token and concatenates layers."""
+        batch_size = 2
+        input_ids = torch.randint(0, 1000, (batch_size, 10))
+        pixel_values = torch.randn(batch_size, 3, 224, 224)
+
+        captured = {}
+
+        def mock_vlm_forward(*args, **kwargs):
+            captured["input_ids"] = kwargs["input_ids"]
+            seq_len = captured["input_ids"].shape[1]
+            mock_output = Mock()
+            mock_output.hidden_states = [
+                torch.randn(batch_size, seq_len, 2048) for _ in range(vlm_backbone.num_vlm_layers_to_use)
+            ]
+            return mock_output
+
+        with patch.object(vlm_backbone._model, "forward", side_effect=mock_vlm_forward):
+            output = vlm_backbone.get_action_conditioning(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                attention_mask=None,
+                attention_mask_images=None,
+            )
+
+        assert captured["input_ids"].shape[1] == input_ids.shape[1] + 1
+        assert output.embeddings.shape == (batch_size, 1, 2048 * vlm_backbone.num_vlm_layers_to_use)

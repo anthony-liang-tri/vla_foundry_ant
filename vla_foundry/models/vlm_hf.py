@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from transformers import AutoConfig, AutoModelForVision2Seq
+from transformers import AutoConfig, AutoModelForImageTextToText
 
 from vla_foundry.models.registry import register_model
 from vla_foundry.models.transformer_base import TransformerBase
@@ -13,39 +13,94 @@ class VLMHF(TransformerBase):
         super().__init__(model_params)
         self.model_name = model_params.hf_pretrained
         if load_pretrained:
-            self.model = AutoModelForVision2Seq.from_pretrained(self.model_name)
+            self.model = AutoModelForImageTextToText.from_pretrained(self.model_name)
         else:
             config = AutoConfig.from_pretrained(self.model_name)
-            self.model = AutoModelForVision2Seq.from_config(config)
+            self.model = AutoModelForImageTextToText.from_config(config)
         self._limit_hidden_states_to_last_n = None
+        self._setup_model_info()
+
+    def _setup_model_info(self):
+        """Detect model-specific information like hidden dimensions and expected image size."""
+        model = self.model
+        config = model.config
+
+        # Detect language model component
+        language_model_ref = None
+        for attr in ["language_model", "text_model", "llm", "model"]:
+            if hasattr(model, attr):
+                candidate = getattr(model, attr)
+                if candidate is not model and hasattr(candidate, "forward"):
+                    language_model_ref = candidate
+                    break
+
+        # Detect language model hidden dimension
+        self._lm_hidden_dim = None
+        if language_model_ref is not None:
+            lm_config = getattr(language_model_ref, "config", None)
+            if lm_config is not None:
+                for attr in ["hidden_size", "d_model", "n_embd", "hidden_dim"]:
+                    if hasattr(lm_config, attr):
+                        self._lm_hidden_dim = getattr(lm_config, attr)
+                        break
+
+        # Detect patches per image from vision config
+        self._patches_per_image = None
+        vision_config = getattr(config, "vision_config", None)
+        if vision_config is not None:
+            img_size = getattr(vision_config, "image_size", None)
+            patch_size = getattr(vision_config, "patch_size", 14)
+            if isinstance(img_size, int) and isinstance(patch_size, int):
+                self._patches_per_image = (img_size // patch_size) ** 2
+            elif isinstance(img_size, (list, tuple)) and isinstance(patch_size, int):
+                self._patches_per_image = (img_size[0] // patch_size) * (img_size[1] // patch_size)
+
+    @property
+    def lm_hidden_dim(self):
+        """Get the language model's hidden dimension (may differ from embedding dim)."""
+        if self._lm_hidden_dim is not None:
+            return self._lm_hidden_dim
+        # Fallback to general hidden_dim
+        return self.hidden_dim
 
     def forward(self, input_ids, pixel_values, attention_mask=None, output_hidden_states=False, **kwargs):
+        # Handle multi-image input [B, N, C, H, W]
+        # Convert pixel_values to bfloat16 (handles both standard and Qwen formats)
+
         out = self.model(
             input_ids=input_ids,
-            pixel_values=pixel_values.to(dtype=torch.bfloat16),
+            pixel_values=pixel_values,
             attention_mask=attention_mask,
             output_hidden_states=output_hidden_states,
             return_dict=True,
             **kwargs,
         )
+
         if self._limit_hidden_states_to_last_n is not None and output_hidden_states:
             out.hidden_states = out.hidden_states[-self._limit_hidden_states_to_last_n :]
 
         return out
 
-    def resize_token_embeddings(self, token_id: int = None) -> int:
-        """Ensure the token embedding matrix can index the provided token.
+    def resize_token_embeddings(self, new_num_tokens: int = None) -> int:
+        """Add a new token to the vocabulary and return its ID.
 
-        If token_id is None, attempt to read it from the registry for this model name.
-        This should be called during model setup, not inside the forward loop.
+        Args:
+            new_num_tokens: The new vocabulary size. If None, adds exactly one token.
+
+        Returns:
+            The ID (index) of the newly added token.
         """
-        if token_id is None:
-            token_id = int(self.model.get_input_embeddings().num_embeddings) + 1
+        current_size = int(self.model.get_input_embeddings().num_embeddings)
 
-        if token_id > self.model.get_input_embeddings().num_embeddings:
-            print(f"Resizing token embeddings from {self.model.get_input_embeddings().num_embeddings} to {token_id}")
-            self.model.resize_token_embeddings(token_id, mean_resizing=False)
-        return token_id
+        if new_num_tokens is None:
+            new_num_tokens = current_size + 1
+
+        if new_num_tokens > current_size:
+            print(f"Resizing token embeddings from {current_size} to {new_num_tokens}")
+            self.model.resize_token_embeddings(new_num_tokens, mean_resizing=False)
+
+        # Return the ID of the last token (the newly added one)
+        return new_num_tokens - 1
 
     @torch.jit.ignore
     def set_grad_checkpointing(self, enable=True):

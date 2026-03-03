@@ -4,6 +4,7 @@ from vla_foundry.models.diffusion_policy.clip_hf import CLIPHF
 from vla_foundry.models.diffusion_policy.clip_openclip import CLIP_OpenCLIP
 from vla_foundry.models.diffusion_policy.diffusion_policy import DiffusionPolicy
 from vla_foundry.models.registry import register_model
+from vla_foundry.models.vlm_hf import VLMHF
 from vla_foundry.params.model_params import ModelParams
 
 
@@ -16,6 +17,11 @@ def create_clip_openclip(model_params: ModelParams, load_pretrained: bool = True
 @register_model("clip_backbone")
 def create_clip_hf(model_params: ModelParams, load_pretrained: bool = True):
     return CLIPHF(model_params, load_pretrained=load_pretrained)
+
+
+@register_model("vlm_backbone")
+def create_vlm_backbone(model_params: ModelParams, load_pretrained: bool = True):
+    return VLMHF(model_params, load_pretrained=load_pretrained)
 
 
 @register_model("diffusion_policy")

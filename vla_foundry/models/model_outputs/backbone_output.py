@@ -11,7 +11,7 @@ class VisionLanguageBackboneOutput(BaseOutput):
 
     def __init__(self, embeddings: torch.Tensor):
         super().__init__()
-        # Primary embeddings for conditioning
-        # VLM: [B, hidden_dim * num_layers] - single embedding from action token
+        # Primary embeddings for conditioning [B, N, D]
+        # VLM: [B, 1, hidden_dim * num_layers] - single embedding from action token
         # CLIP: [B, 1+N, projection_dim] - concatenated [text, images] sequence
         self.embeddings = embeddings
