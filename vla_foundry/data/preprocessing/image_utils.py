@@ -20,13 +20,8 @@ class ImageResizingMethod(Enum):
     RESIZE_FIT = "resize_fit"
 
 
-<<<<<<< save_resized_intrinsics_to_wds
 def resize_and_crop_image(
-    image: Union[np.ndarray, Image.Image],
-=======
-def resize_image(
     image: np.ndarray | Image.Image,
->>>>>>> main
     target_size: tuple,
     resize_method=ImageResizingMethod.CENTER_CROP,
     fill_color: tuple = (0, 0, 0),

@@ -71,8 +71,6 @@ def scale_intrinsics_4_for_resize_and_crop(
         original_image_size: Original image size as (width, height).
         processed_image_size: Processed image size as (width, height).
         resize_method: Method used to resize the image.
-    """
-    intrinsics = np.asarray(original_intrinsics, dtype=float)
 
     Returns
     -------
@@ -145,8 +143,8 @@ def scale_intrinsics_4_for_resize_and_crop(
 
 def scale_intrinsics_3x3_for_resize_and_crop(
     original_intrinsics: np.ndarray,
-    original_image_size: Tuple[int, int],
-    processed_image_size: Tuple[int, int],
+    original_image_size: tuple[int, int],
+    processed_image_size: tuple[int, int],
     resize_method: ImageResizingMethod = ImageResizingMethod.CENTER_CROP,
 ) -> np.ndarray:
     """Scales camera intrinsics to account for resizing and cropping.
