@@ -138,7 +138,14 @@ class RoboticsProcessor:
             batch_attention_mask_images = torch.tensor(batch_attention_mask_images, dtype=torch.bool)  # [B, num_images]
 
         # Run processor on entire batch
-        processed = self.vlm_processor(images=batch_images, text=batch_text, padding=True, return_tensors="pt")
+        processed = self.vlm_processor(
+            images=batch_images,
+            text=batch_text,
+            padding=True,
+            truncation=max_text_seq_len is not None,
+            max_length=max_text_seq_len,
+            return_tensors="pt",
+        )
 
         processed_batch = batch.copy()
         processed_batch["input_ids"] = processed["input_ids"]

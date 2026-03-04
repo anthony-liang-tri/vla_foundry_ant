@@ -188,7 +188,7 @@ class RoboticsPipeline(BaseWebDatasetPipeline):
                 lambda batch: self.robotics_processor.process_inputs(
                     batch,
                     image_names=self.data_params.image_names,
-                    max_text_seq_len=None,
+                    max_text_seq_len=self.data_params.max_text_seq_len,
                 ),
                 handler=log_and_continue,
             ),

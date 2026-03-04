@@ -90,6 +90,7 @@ class RoboticsDataParams(DataParams):
     processor: str = field(default=None)
     img_num_tokens: int = field(default=256)
     image_size: int = field(default=224)
+    max_text_seq_len: int | None = field(default=None)
 
     # Language instruction types to use: "original", "randomized", "verbose", "alternative"
     language_instruction_types: list[str] = field(default_factory=lambda: ["original"])

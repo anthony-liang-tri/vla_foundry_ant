@@ -41,6 +41,11 @@ class CLIPHF(BaseModel):
 
     def forward(self, input_ids, pixel_values, attention_mask, attention_mask_images, **kwargs):
         if input_ids is not None:
+            max_len = self.model.text_model.config.max_position_embeddings
+            assert input_ids.shape[-1] <= max_len, (
+                f"input_ids length {input_ids.shape[-1]} exceeds CLIP max_position_embeddings {max_len}. "
+                "Pass max_text_seq_len to process_inputs to truncate upstream."
+            )
             text_output = self.model.text_model(input_ids).pooler_output
             text_embeds = F.normalize(text_output, dim=-1)
             text_embeds = self.model.text_projection(text_embeds)
