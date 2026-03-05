@@ -543,11 +543,21 @@ EOF
       reset_target="${target_ref}"
     fi
     git reset --hard "${reset_target}"
-    uv sync --python /usr/bin/python3 --link-mode=copy
-    if [[ -n "${VLA_FOUNDRY_REQUIREMENTS}" ]]; then
-      echo "Ensuring vla_foundry tooling packages: ${VLA_FOUNDRY_REQUIREMENTS}"
-      uv pip install --python "${VLA_FOUNDRY_VENV}/bin/python" --upgrade ${VLA_FOUNDRY_REQUIREMENTS}
-    fi
+    # Use flock to prevent concurrent uv sync from multiple containers on the same node
+    # sharing the same mounted vla_foundry directory. Without this lock, parallel jobs
+    # corrupt the .venv (SIGBUS/SIGKILL/pip errors).
+    local venv_lock_file="${VLA_FOUNDRY_HOME}/.venv.lock"
+    echo "Acquiring venv lock (${venv_lock_file}) for uv sync..."
+    (
+      flock -x 200
+      echo "Lock acquired, running uv sync..."
+      uv sync --python /usr/bin/python3 --link-mode=copy
+      if [[ -n "${VLA_FOUNDRY_REQUIREMENTS}" ]]; then
+        echo "Ensuring vla_foundry tooling packages: ${VLA_FOUNDRY_REQUIREMENTS}"
+        uv pip install --python "${VLA_FOUNDRY_HOME}/.venv/bin/python" --upgrade ${VLA_FOUNDRY_REQUIREMENTS}
+      fi
+      echo "uv sync complete, releasing lock."
+    ) 200>"${venv_lock_file}"
     echo "vla_foundry now at commit $(git rev-parse HEAD) on branch $(git rev-parse --abbrev-ref HEAD)"
   )
 }
@@ -1051,7 +1061,7 @@ fi
 # from a writable workspace (otherwise it may try to create /opt/vla_foundry/.venv).
 inference_cmd=(bash -c "
   cd '${INFERENCE_WORKDIR_RUNTIME}'
-  TORCH_LIB_PATH=\"${INFERENCE_WORKDIR_RUNTIME}/.venv/lib/python3.12/site-packages/torch/lib\"
+  TORCH_LIB_PATH=\"${INFERENCE_WORKDIR_RUNTIME}/.venv/lib/python3.10/site-packages/torch/lib\"
   export LD_LIBRARY_PATH=\"\${TORCH_LIB_PATH}:\${LD_LIBRARY_PATH:-}\"
   ${BUILT_INFERENCE_CMD}"
 )
