@@ -22,7 +22,7 @@ import yaml
 from vla_foundry.data.dataloader import get_datastring_input, get_wds_dataloader
 from vla_foundry.data.utils import load_data_chunks
 from vla_foundry.db_logger import ModelTrainingLogger
-from vla_foundry.distributed import get_model_precision, is_master, wrap_fsdp_ddp
+from vla_foundry.distributed import get_model_precision, is_master, move_buffers_to_device, wrap_fsdp_ddp
 from vla_foundry.file_utils import (
     collect_preprocessing_configs,
     collect_processing_metadata,
@@ -203,7 +203,12 @@ def main():
     optimizer = create_optimizer(cfg.hparams, model)
 
     if cfg.hparams.torchcompile:
+        # Ensure all buffers are on the correct device before compiling.
+        # Some HuggingFace models (like SigLIP) have buffers that stay on CPU
+        # which causes device mismatch errors during compilation.
+        move_buffers_to_device(model, device)
         logging.info("Compiling model with torch.compile()...")
+        # Note: torch.compile compatibility can vary across VLMs; some configurations may not compile cleanly.
         model = torch.compile(model)
 
     def count_parameters(model):

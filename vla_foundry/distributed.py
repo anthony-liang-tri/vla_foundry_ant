@@ -121,7 +121,33 @@ def get_model_precision(cfg):
         return torch.float32  # Default precision if not specified
 
 
+def move_buffers_to_device(model, device, verbose=False):
+    """
+    Recursively move all buffers to the specified device.
+
+    Some HuggingFace models (like SigLIP) have buffers (e.g., position_ids) that
+    are created on CPU and not automatically moved by FSDP. This causes issues
+    with torch.compile which requires all tensors to be on the same device.
+    """
+    device = torch.device(device) if isinstance(device, str) else device
+    moved_count = 0
+    for module in model.modules():
+        for name, buf in list(module._buffers.items()):
+            if buf is not None and buf.device != device:
+                if verbose:
+                    print(f"Moving buffer {module.__class__.__name__}.{name} from {buf.device} to {device}")
+                module._buffers[name] = buf.to(device)
+                moved_count += 1
+    if moved_count > 0:
+        print(f"=> Moved {moved_count} buffers to {device}")
+
+
 def wrap_fsdp_ddp(model, device, cfg):
+    # Move all buffers to device before FSDP wrapping.
+    # Some HuggingFace models (like SigLIP) have buffers (e.g., position_ids) that
+    # are created on CPU and not automatically moved by FSDP.
+    move_buffers_to_device(model, device)
+
     if cfg.distributed.fsdp:
         mp_policy = MixedPrecisionPolicy(
             param_dtype=None,
@@ -209,8 +235,8 @@ def wrap_fsdp_ddp(model, device, cfg):
         model = model.to(device, dtype=get_model_precision(cfg))
 
         ddp_args = {
-            "find_unused_parameters": True,  # Handle unused parameters in DDP
-            "static_graph": True,
+            "find_unused_parameters": True,  # Model has unused parameters (e.g., CLIP logit scale)
+            "static_graph": False,  # Must be False when find_unused_parameters=True
         }
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[device], **ddp_args)
 
