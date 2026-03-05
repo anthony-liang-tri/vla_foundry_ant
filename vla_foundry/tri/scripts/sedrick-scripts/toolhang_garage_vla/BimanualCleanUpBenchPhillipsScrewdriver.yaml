@@ -40,11 +40,11 @@ data:
   - wrist_left_plus
   - wrist_right_minus
   dataset_manifest:
-  - s3://tri-ml-datasets-uw2/vla_foundry_datasets/garage_02242026/BimanualCleanUpBenchNeedlenosePliers/shards/manifest.jsonl
+  - s3://tri-ml-datasets-uw2/vla_foundry_datasets/garage_02242026/BimanualCleanUpBenchPhillipsScrewdriver/shards/manifest.jsonl
   dataset_modality:
   - robotics
   dataset_statistics:
-  - s3://tri-ml-datasets-uw2/vla_foundry_datasets/garage_02242026/BimanualCleanUpBenchNeedlenosePliers/shards/stats.json
+  - s3://tri-ml-datasets-uw2/vla_foundry_datasets/garage_02242026/BimanualCleanUpBenchPhillipsScrewdriver/shards/stats.json
   dataset_weighting:
   - 1.0
   extrinsics_fields:
