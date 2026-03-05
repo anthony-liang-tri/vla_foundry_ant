@@ -486,7 +486,7 @@ class StatsComparisonViewer:
         self.safe_addstr(stdscr, data_y, 0, "\u2500" * width)
 
         # Column header
-        hdr = f"{'Field':<30s} {'MaxAbs':>12s} {'MeanAbs':>12s} {'%Range':>8s}  {'Bar':<12s}"
+        hdr = f"{'Field':<30s} {'Range':>19s} {'MaxAbs':>12s} {'MeanAbs':>12s} {'%Range':>8s}  {'Bar':<12s}"
         stdscr.attron(curses.color_pair(2) | curses.A_BOLD)
         self.safe_addstr(stdscr, data_y + 1, 0, hdr[:width])
         stdscr.attroff(curses.color_pair(2) | curses.A_BOLD)
@@ -508,8 +508,15 @@ class StatsComparisonViewer:
             if len(f_name) > 30:
                 f_name = "..." + f_name[-27:]
 
+            fmin = d.get("field_min", 0.0)
+            fmax = d.get("field_max", 0.0)
+            range_str = f"[{fmin:.1f}, {fmax:.1f}]"
+
             bar = self._diff_bar(d["norm_diff"])
-            row = f"{f_name:<30s} {d['max_abs_diff']:>12.6f} {d['mean_abs_diff']:>12.6f} {d['norm_diff']:>7.2f}%  {bar}"
+            row = (
+                f"{f_name:<30s} {range_str:>19s} {d['max_abs_diff']:>12.6f} {d['mean_abs_diff']:>12.6f} "
+                f"{d['norm_diff']:>7.2f}%  {bar}"
+            )
             color = curses.color_pair(self._severity_color(d["norm_diff"]))
             self.safe_addstr(stdscr, y, 0, row[:width], color)
 

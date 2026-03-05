@@ -3,8 +3,9 @@
 Script to compare two stats.json files and generate a detailed report.
 
 Differences are reported as absolute values and as a percentage of the
-tensor's range (max - min from the reference) so that near-zero values
-don't produce misleadingly large relative numbers.
+tensor's union range (max(max_ours, max_ref) - min(min_ours, min_ref))
+so that near-zero values don't produce misleadingly large relative
+numbers and percentages never exceed 100%.
 
 Run with --no-interactive to skip the curses TUI.
 """
@@ -156,19 +157,22 @@ def align_per_timestep(our_arr: np.ndarray, ref_arr: np.ndarray, our_anchor: int
     return our_arr[our_start:our_end], ref_arr[ref_start:ref_end]
 
 
-def get_tensor_range(ref_tensor_stats: dict) -> float:
-    """Get the range (max - min) of a tensor from its reference stats.
+def get_tensor_range(our_tensor_stats: dict, ref_tensor_stats: dict) -> float:
+    """Get the union range of a tensor across both stats.
 
-    Used to normalize absolute differences into a scale-aware percentage.
+    Computes max(max_ours, max_ref) - min(min_ours, min_ref) so that the
+    denominator spans both datasets and percentages never exceed 100%.
     """
+    our_min = our_tensor_stats.get("min")
+    our_max = our_tensor_stats.get("max")
     ref_min = ref_tensor_stats.get("min")
     ref_max = ref_tensor_stats.get("max")
-    if ref_min is None or ref_max is None:
+    if ref_min is None or ref_max is None or our_min is None or our_max is None:
         return 0.0
     try:
-        min_arr = np.array(ref_min, dtype=float)
-        max_arr = np.array(ref_max, dtype=float)
-        return float(np.max(max_arr - min_arr))
+        combined_min = np.minimum(np.array(our_min, dtype=float), np.array(ref_min, dtype=float))
+        combined_max = np.maximum(np.array(our_max, dtype=float), np.array(ref_max, dtype=float))
+        return float(np.max(combined_max - combined_min))
     except (TypeError, ValueError):
         return 0.0
 
@@ -260,7 +264,7 @@ def compare_stats(
                         "ref_count_array": [int(c) for c in ref_count],
                     }
 
-        tensor_range = get_tensor_range(ref_tensor_stats)
+        tensor_range = get_tensor_range(our_tensor_stats, ref_tensor_stats)
 
         field_diffs = []
 
@@ -296,6 +300,10 @@ def compare_stats(
                 max_abs = float(np.max(abs_diff))
                 mean_abs = float(np.mean(abs_diff))
 
+                # Per-field value range (union of both datasets)
+                field_min = float(np.min(np.minimum(our_arr, ref_arr)))
+                field_max = float(np.max(np.maximum(our_arr, ref_arr)))
+
                 # Normalized diff: count fields use % of ref count, others use % of tensor range
                 if field in COUNT_FIELDS:
                     ref_max_count = float(np.max(np.abs(ref_arr))) if np.any(ref_arr) else 0.0
@@ -311,6 +319,8 @@ def compare_stats(
                         "max_abs_diff": max_abs,
                         "mean_abs_diff": mean_abs,
                         "norm_diff": norm_diff,
+                        "field_min": field_min,
+                        "field_max": field_max,
                     }
                 )
             except (TypeError, ValueError):

@@ -459,10 +459,7 @@ class TestMergeStatisticsEdgeCases:
             },
         ]
 
-        # This should raise an error or handle gracefully
-        # The current implementation will likely fail due to shape mismatch
-        # This test documents the expected behavior
-        with pytest.raises((ValueError, IndexError, TypeError)):
+        with pytest.raises(ValueError):
             merge_statistics(stats)
 
     def test_merge_numerical_stability(self):

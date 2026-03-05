@@ -46,6 +46,16 @@ class TaskResult:
     image_indices: tuple[int, ...] | None = None
     image_resizing_method: str | None = None
     jpeg_quality: int | None = None
+    # Fields from task_log.json / COMPLETED marker
+    completed_marker: bool = False
+    task_log_total_episodes: int | None = None
+    task_log_successful_episodes: int | None = None
+    task_log_failed_episodes: int | None = None
+    task_log_errors: list[dict] | None = None
+    # Fields from run_summary for cross-reference
+    run_summary_samples: int | None = None
+    run_summary_episodes: int | None = None
+    run_summary_failed_episodes: int | None = None
 
 
 @dataclass
@@ -211,19 +221,24 @@ def get_manifest_entries_or_none(client: Any, bucket: str, key: str) -> list[dic
 
 
 def recursive_max_for_count_fields(value: Any) -> int:
+    """Get the max value from fields named exactly 'count' in a stats dict.
+
+    Stats structure: {tensor_name: {stat_name: value, ...}, ...}
+    The 'count' field is a list of per-timestep counts; the max is at the anchor index.
+    """
     best = 0
     if isinstance(value, dict):
         for k, v in value.items():
-            if isinstance(v, (int, float)) and "count" in k.lower():
-                best = max(best, int(v))
-            if isinstance(v, list) and "count" in k.lower():
-                numeric = [int(x) for x in v if isinstance(x, (int, float))]
-                if numeric:
-                    best = max(best, max(numeric))
-            best = max(best, recursive_max_for_count_fields(v))
-    elif isinstance(value, list):
-        for item in value:
-            best = max(best, recursive_max_for_count_fields(item))
+            # Only match fields named exactly "count", not "percentile_sample_count" etc.
+            if k == "count":
+                if isinstance(v, (int, float)):
+                    best = max(best, int(v))
+                elif isinstance(v, list):
+                    numeric = [int(x) for x in v if isinstance(x, (int, float))]
+                    if numeric:
+                        best = max(best, max(numeric))
+            elif isinstance(v, dict):
+                best = max(best, recursive_max_for_count_fields(v))
     return best
 
 
@@ -321,6 +336,7 @@ def verify_task(
     task: str,
     runtime_progress: RuntimeProgress | None = None,
     count_source: str = "auto",
+    run_summary_task_info: dict[str, Any] | None = None,
 ) -> TaskResult:
     if runtime_progress:
         runtime_progress.mark_task_started()
@@ -330,6 +346,31 @@ def verify_task(
 
     reasons: list[str] = []
     settings_issues: list[str] = []
+
+    # Check COMPLETED marker
+    completed_marker = False
+    try:
+        client.head_object(Bucket=bucket, Key=f"{shards_prefix}COMPLETED")
+        completed_marker = True
+    except ClientError:
+        pass
+
+    if not completed_marker:
+        reasons.append("no COMPLETED marker (task may not have finished)")
+
+    # Check task_log.json for episode-level failures
+    task_log = get_json_or_none(client, bucket, f"{shards_prefix}task_log.json")
+    task_log_total_episodes = None
+    task_log_successful_episodes = None
+    task_log_failed_episodes = None
+    task_log_errors = None
+    if task_log is not None:
+        task_log_total_episodes = task_log.get("total_episodes")
+        task_log_successful_episodes = task_log.get("successful_episodes")
+        task_log_failed_episodes = task_log.get("failed_episodes", 0)
+        task_log_errors = task_log.get("errors", [])
+        if task_log_failed_episodes and task_log_failed_episodes > 0:
+            reasons.append(f"task_log: {task_log_failed_episodes}/{task_log_total_episodes} episodes failed")
 
     episode_files = 0
     shards = 0
@@ -376,11 +417,44 @@ def verify_task(
     # Extract settings for coherence checking
     settings = extract_settings(metadata)
 
-    missing_from_stats = max(0, episode_files - stats_max)
+    missing_from_stats = episode_files - stats_max
     if missing_from_stats > 0:
-        reasons.append(f"missing from stats: {missing_from_stats} (episodes={episode_files}, stats_max={stats_max})")
+        reasons.append(
+            f"stats has fewer than manifest: {missing_from_stats} "
+            f"missing (manifest={episode_files}, stats_max={stats_max})"
+        )
+    elif missing_from_stats < 0:
+        reasons.append(
+            f"stats has MORE than manifest: stats_max={stats_max} > manifest={episode_files} (stale or corrupt stats?)"
+        )
 
-    status = "ok" if not reasons else "failed"
+    # Also check metadata samples vs stats_max — catches stale stats even when manifest is also stale
+    if samples > 0 and samples > stats_max > 0 and samples != episode_files:
+        # samples comes from metadata (fresh), episode_files from manifest (possibly stale)
+        reasons.append(
+            f"stale stats: stats_max={stats_max} but metadata says {samples} samples "
+            f"({(samples - stats_max) / samples * 100:.1f}% missing)"
+        )
+
+    # Cross-reference with run_summary if available
+    run_summary_samples = None
+    run_summary_episodes = None
+    run_summary_failed_episodes = None
+    if run_summary_task_info is not None:
+        run_summary_samples = run_summary_task_info.get("total_samples")
+        run_summary_episodes = run_summary_task_info.get("episode_count")
+        run_summary_failed_episodes = run_summary_task_info.get("failed_episodes")
+        if run_summary_samples is not None and samples != run_summary_samples:
+            reasons.append(f"sample count mismatch: S3 has {samples}, run_summary says {run_summary_samples}")
+        if run_summary_task_info.get("num_shards") is not None and shards != run_summary_task_info["num_shards"]:
+            reasons.append(
+                f"shard count mismatch: S3 has {shards}, run_summary says {run_summary_task_info['num_shards']}"
+            )
+
+    # Only report "ok" if no reasons at all (COMPLETED marker present, no failures)
+    # Treat episode failures as warnings, not hard failures, if the task completed
+    hard_reasons = [r for r in reasons if "episodes failed" not in r]
+    status = "ok" if not hard_reasons else "failed"
     result = TaskResult(
         task=task,
         status=status,
@@ -398,6 +472,14 @@ def verify_task(
         image_indices=settings.image_indices,
         image_resizing_method=settings.image_resizing_method,
         jpeg_quality=settings.jpeg_quality,
+        completed_marker=completed_marker,
+        task_log_total_episodes=task_log_total_episodes,
+        task_log_successful_episodes=task_log_successful_episodes,
+        task_log_failed_episodes=task_log_failed_episodes,
+        task_log_errors=task_log_errors,
+        run_summary_samples=run_summary_samples,
+        run_summary_episodes=run_summary_episodes,
+        run_summary_failed_episodes=run_summary_failed_episodes,
     )
     if runtime_progress:
         runtime_progress.mark_task_finished()
@@ -421,16 +503,24 @@ def format_task_line(r: TaskResult) -> str:
     if parts:
         settings_str = " | " + ", ".join(parts)
 
+    # Completion / episode info
+    marker_str = "COMPLETED" if r.completed_marker else "NO_MARKER"
+    ep_str = ""
+    if r.task_log_total_episodes is not None:
+        ep_str = f", episodes={r.task_log_successful_episodes}/{r.task_log_total_episodes}"
+        if r.task_log_failed_episodes:
+            ep_str += f" ({r.task_log_failed_episodes} failed)"
+
     if r.status == "ok":
         return (
-            f"  {r.task}: {r.shards} shards, {r.samples} samples, {r.episode_files} episode files, "
-            f"stats_max={r.stats_max}, missing_from_stats={r.missing_from_stats}{settings_str}"
+            f"  {r.task}: [{marker_str}] {r.shards} shards, {r.samples} samples, {r.episode_files} episode files, "
+            f"stats_max={r.stats_max}{ep_str}{settings_str}"
         )
 
     reason = "; ".join(r.reasons or ["unknown failure"])
     return (
-        f"  {r.task}: {reason} | episode_files={r.episode_files}, "
-        f"stats_max={r.stats_max}, missing_from_stats={r.missing_from_stats}{settings_str}"
+        f"  {r.task}: [{marker_str}] {reason} | episode_files={r.episode_files}, "
+        f"stats_max={r.stats_max}{ep_str}{settings_str}"
     )
 
 
@@ -481,6 +571,11 @@ def main() -> None:
             "'frames' scans frames/ objects directly (slow)."
         ),
     )
+    parser.add_argument(
+        "--no-run-summary",
+        action="store_true",
+        help="Skip loading run_summary.json for cross-referencing.",
+    )
     args = parser.parse_args()
 
     bucket, base_prefix = parse_s3_uri(args.base_path.rstrip("/"))
@@ -512,6 +607,24 @@ def main() -> None:
     else:
         expected_tasks = sorted(existing_tasks)
 
+    # Load run_summary.json for cross-referencing
+    run_summary_by_task: dict[str, dict[str, Any]] = {}
+    if not args.no_run_summary:
+        run_summary_key = f"{base_prefix}/run_summary.json" if base_prefix else "run_summary.json"
+        run_summary = get_json_or_none(client, bucket, run_summary_key)
+        if run_summary is not None:
+            for entry in run_summary.get("succeeded", []):
+                task_name = entry.get("task")
+                if task_name:
+                    run_summary_by_task[task_name] = entry
+            for entry in run_summary.get("failed", []):
+                task_name = entry.get("task")
+                if task_name:
+                    run_summary_by_task[task_name] = entry
+            print(f"Loaded run_summary.json ({len(run_summary_by_task)} tasks)")
+        else:
+            print("No run_summary.json found (skipping cross-reference)")
+
     print(f"Base path: {args.base_path.rstrip('/')}")
     print(f"Tasks to verify: {len(expected_tasks)}")
     print(f"Count source: {args.count_source}")
@@ -530,7 +643,16 @@ def main() -> None:
     pool = ThreadPoolExecutor(max_workers=max(1, args.workers))
     try:
         futs = {
-            pool.submit(verify_task, client, bucket, base_prefix, task, runtime_progress, args.count_source): task
+            pool.submit(
+                verify_task,
+                client,
+                bucket,
+                base_prefix,
+                task,
+                runtime_progress,
+                args.count_source,
+                run_summary_by_task.get(task),
+            ): task
             for task in to_check
         }
         pending = set(futs.keys())
@@ -585,6 +707,12 @@ def main() -> None:
     total_shards = 0
     total_samples = 0
     total_missing_from_stats = 0
+    total_completed_markers = 0
+    total_task_log_failed_episodes = 0
+    total_task_log_total_episodes = 0
+    tasks_without_marker: list[str] = []
+    tasks_with_episode_failures: list[tuple[str, int, int]] = []  # (task, failed, total)
+    tasks_with_xref_mismatch: list[tuple[str, str]] = []  # (task, description)
     failed_tasks: list[TaskResult] = []
 
     # Collect settings for coherence checking
@@ -604,6 +732,23 @@ def main() -> None:
         total_shards += r.shards
         total_samples += r.samples
         total_missing_from_stats += r.missing_from_stats
+
+        # Track completion markers
+        if r.completed_marker:
+            total_completed_markers += 1
+        else:
+            tasks_without_marker.append(task)
+
+        # Track episode failures from task_log
+        if r.task_log_total_episodes is not None:
+            total_task_log_total_episodes += r.task_log_total_episodes
+        if r.task_log_failed_episodes and r.task_log_failed_episodes > 0:
+            total_task_log_failed_episodes += r.task_log_failed_episodes
+            tasks_with_episode_failures.append((task, r.task_log_failed_episodes, r.task_log_total_episodes or 0))
+
+        # Track cross-reference mismatches
+        if r.run_summary_samples is not None and r.samples != r.run_summary_samples:
+            tasks_with_xref_mismatch.append((task, f"samples: S3={r.samples} vs run_summary={r.run_summary_samples}"))
 
         # Track settings
         if r.image_resize_dim is not None:
@@ -635,9 +780,53 @@ def main() -> None:
     print(f"  ❌ Failed:     {failed}/{len(expected_tasks)} tasks")
     print(f"  ⬜ Missing:    {missing}/{len(expected_tasks)} tasks")
     print()
+    total_stats_max = sum(r.stats_max for r in results_by_task.values())
     print(f"  Total shards:  {total_shards}")
-    print(f"  Total samples: {total_samples}")
-    print(f"  Missing from stats (episodes - stats_max_count): {total_missing_from_stats}")
+    print(f"  Total samples (from metadata): {total_samples}")
+    print(f"  Total stats max count:         {total_stats_max}")
+    if total_samples > 0 and total_stats_max < total_samples:
+        pct = (total_samples - total_stats_max) / total_samples * 100
+        print(
+            f"  ⚠️  Stats account for only {total_stats_max}/{total_samples} samples ({pct:.1f}% missing — stale stats?)"
+        )
+    print(f"  Missing from stats (manifest - stats_max_count): {total_missing_from_stats}")
+
+    # Completion marker summary
+    checked_tasks = len(expected_tasks) - missing
+    print()
+    print("=" * 60)
+    print("COMPLETION MARKERS")
+    print("=" * 60)
+    print(f"  With COMPLETED marker:    {total_completed_markers}/{checked_tasks}")
+    print(f"  Without COMPLETED marker: {len(tasks_without_marker)}/{checked_tasks}")
+    if tasks_without_marker:
+        for t in sorted(tasks_without_marker):
+            print(f"    - {t}")
+
+    # Episode failure summary
+    if total_task_log_total_episodes > 0:
+        print()
+        print("=" * 60)
+        print("EPISODE FAILURES (from task_log.json)")
+        print("=" * 60)
+        print(f"  Total episodes: {total_task_log_total_episodes}, failed: {total_task_log_failed_episodes}")
+        if tasks_with_episode_failures:
+            print(f"  Tasks with episode failures ({len(tasks_with_episode_failures)}):")
+            for t, ep_failed, ep_total in sorted(tasks_with_episode_failures):
+                print(f"    - {t}: {ep_failed}/{ep_total} episodes failed")
+
+    # Cross-reference summary
+    if run_summary_by_task:
+        print()
+        print("=" * 60)
+        print("CROSS-REFERENCE (run_summary.json)")
+        print("=" * 60)
+        if tasks_with_xref_mismatch:
+            print(f"  Mismatches found: {len(tasks_with_xref_mismatch)}")
+            for t, desc in sorted(tasks_with_xref_mismatch):
+                print(f"    - {t}: {desc}")
+        else:
+            print(f"  All {len(run_summary_by_task)} cross-referenced tasks match")
 
     # Print settings coherence report
     print()
@@ -706,12 +895,13 @@ def main() -> None:
             print(f"  - {task}")
 
     if args.failed_tasks_file:
-        all_failed_names = sorted([r.task for r in failed_tasks] + list(missing_tasks))
+        # Include failed tasks, missing tasks, and tasks without COMPLETED marker
+        all_failed_names = sorted(set([r.task for r in failed_tasks] + list(missing_tasks) + tasks_without_marker))
         os.makedirs(os.path.dirname(os.path.abspath(args.failed_tasks_file)), exist_ok=True)
         with open(args.failed_tasks_file, "w", encoding="utf-8") as f:
             for task_name in all_failed_names:
                 f.write(task_name + "\n")
-        print(f"\nWrote {len(all_failed_names)} failed/missing task names to {args.failed_tasks_file}")
+        print(f"\nWrote {len(all_failed_names)} failed/missing/incomplete task names to {args.failed_tasks_file}")
 
 
 if __name__ == "__main__":
