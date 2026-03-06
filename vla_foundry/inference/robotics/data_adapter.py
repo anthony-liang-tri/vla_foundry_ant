@@ -17,7 +17,7 @@ from PIL import Image
 
 import vla_foundry.visualizers.visualizer as vz
 from vla_foundry.data.preprocessing.image_utils import ImageResizingMethod, resize_and_crop_image
-from vla_foundry.data.preprocessing.utils import depth_images_to_point_cloud
+from vla_foundry.data.preprocessing.utils import depth_images_to_point_cloud, depth_images_to_point_maps
 from vla_foundry.data.robotics.utils import (
     calculate_relative_pose,
     pose_to_9d,
@@ -530,6 +530,63 @@ class PolicyDataAdapter:
         stacked_point_cloud = np.stack(point_clouds_timesteps, axis=0)
         return stacked_point_cloud
 
+    def get_point_maps_for_processor(self) -> dict[str, np.ndarray]:
+        """
+        Generate point maps from depth images in the observation buffer.
+        Returns dict with keys like "wrist_t0", "wrist_t-1" etc.
+        """
+        logging.debug("Generating point maps for processor")
+        if not self.data_config.use_point_cloud or not self.observation_buffer:
+            return None
+
+        point_maps_dict = {}
+        # Generate point maps for each image in image_names
+        for obs_idx, image_name in enumerate(self.image_names):
+            # Parse camera name and timestep offset from image_name
+            # image_name format: "camera_name_t<offset>" e.g., "wrist_t0", "overhead_t-1"
+            if "_t" not in image_name:
+                continue
+
+            camera_name, t_offset_str = image_name.rsplit("_t", 1)
+
+            # Get observation for this timestep
+            buffer_idx = obs_idx
+            if buffer_idx >= len(self.observation_buffer):
+                buffer_idx = len(self.observation_buffer) - 1
+            observation = self.observation_buffer[buffer_idx]
+
+            # Extract depth images and intrinsics for all cameras using field_mapping
+            depth_images = self.field_mapping.get_all_depth_images(observation)
+            if depth_images is None or camera_name not in depth_images:
+                logging.debug(f"No depth image for {camera_name}, skipping point maps")
+                continue
+
+            intrinsics = self.field_mapping.get_all_intrinsics(observation)
+            if intrinsics is None or camera_name not in intrinsics:
+                logging.debug(f"No intrinsics for {camera_name}, skipping point maps")
+                continue
+
+            # Generate point map for this specific camera
+            camera_depth = {camera_name: depth_images[camera_name]}
+            camera_intrinsics = {camera_name: intrinsics[camera_name]}
+
+            point_maps = depth_images_to_point_maps(
+                depth_images=camera_depth,
+                intrinsics=camera_intrinsics,
+                depth_scale=1000.0,
+                min_depth=0.001,
+                max_depth=3.0,
+            )
+
+            if point_maps is None or camera_name not in point_maps:
+                logging.debug(f"Failed to generate point map for {camera_name}")
+                continue
+
+            # Store with key format: camera_t<offset>
+            point_maps_dict[image_name] = point_maps[camera_name]
+
+        return point_maps_dict if point_maps_dict else None
+
     def get_processor_input(self) -> dict[str, Any]:
         logging.debug("Getting processor input")
         processor_input = {
@@ -548,6 +605,10 @@ class PolicyDataAdapter:
         if self.data_config.use_point_cloud:
             point_cloud = self.get_point_cloud_for_processor()
             processor_input["point_cloud"] = [point_cloud] if point_cloud is not None else None
+
+            # Add point maps
+            point_maps = self.get_point_maps_for_processor()
+            processor_input["point_maps"] = [point_maps] if point_maps is not None else None
 
         return processor_input
 

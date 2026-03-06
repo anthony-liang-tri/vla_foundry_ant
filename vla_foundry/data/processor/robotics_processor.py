@@ -1,10 +1,12 @@
 import logging
 import os
 
+import cv2
 import draccus
 import numpy as np
 import torch
 
+from vla_foundry.data.constants import POINT_MAP_MM_TO_M_SCALE, POINT_MAP_UINT16_OFFSET
 from vla_foundry.data.processor import get_processor
 from vla_foundry.data.robotics.normalization import RoboticsNormalizer
 from vla_foundry.file_utils import json_load
@@ -63,6 +65,47 @@ class RoboticsProcessor:
             batch["proprioception"] = torch.cat(proprioception_data, dim=-1)
 
         return batch
+
+    def _resize_point_map(self, point_map: np.ndarray, target_size: int) -> np.ndarray:
+        """
+        Resize a point map (H, W, 3) to (target_size, target_size, 3) using scale + center crop.
+        This matches the approach used for RGB and depth images to ensure consistent field of view.
+        Uses nearest neighbor interpolation to preserve coordinate values without artifacts.
+
+        Args:
+            point_map: (H, W, 3) uint16 array with XYZ coordinates
+            target_size: Target height and width
+
+        Returns:
+            Resized point map (target_size, target_size, 3) uint16 array
+        """
+        h, w, c = point_map.shape
+        if h == target_size and w == target_size:
+            return point_map
+
+        # Calculate scale to cover target dimensions (no black bars)
+        scale = max(target_size / w, target_size / h)
+        new_width = int(w * scale)
+        new_height = int(h * scale)
+
+        # Resize each channel separately using nearest neighbor to preserve coordinate integrity
+        resized_channels = []
+        for channel_idx in range(c):
+            channel = point_map[:, :, channel_idx]
+            # Use INTER_NEAREST to avoid interpolation artifacts
+            resized_channel = cv2.resize(channel, (new_width, new_height), interpolation=cv2.INTER_NEAREST)
+            resized_channels.append(resized_channel)
+
+        resized_pm = np.stack(resized_channels, axis=-1).astype(np.uint16)
+
+        # Center crop to exact target size
+        left = (new_width - target_size) // 2
+        top = (new_height - target_size) // 2
+        right = left + target_size
+        bottom = top + target_size
+        cropped_pm = resized_pm[top:bottom, left:right, :]
+
+        return cropped_pm
 
     def apply_chat_template(self, num_images, instruction):
         """
@@ -207,5 +250,55 @@ class RoboticsProcessor:
                 processed_batch["point_cloud"] = self.normalizer.normalize_tensor(
                     processed_batch["point_cloud"], "point_cloud", anchor_timestep=anchor_timestep
                 )
+
+        # Process point maps
+        if self.data_params.use_point_cloud and batch.get("point_maps") is not None:
+            # Stack point maps from all samples in batch
+            # Each sample has dict: {camera_t_offset: (H, W, 3) uint16}
+            batch_point_maps = []
+            for sample_pms in batch["point_maps"]:
+                if sample_pms is None:
+                    continue
+                # Convert to list ordered by camera_names and image_indices
+                pm_list = []
+                for camera_name in self.data_params.camera_names:
+                    for img_offset in self.data_params.image_indices:
+                        key = f"{camera_name}_t{img_offset}"
+                        if key not in sample_pms:
+                            continue
+                        pm = sample_pms[key]
+                        # Resize point map to match image size
+                        pm_resized = self._resize_point_map(pm, self.data_params.image_size)
+                        # Convert uint16 (offset) to float32 meters
+                        # Subtract offset to get signed mm values, then convert to meters
+                        pm_float = (pm_resized.astype(np.float32) - POINT_MAP_UINT16_OFFSET) / POINT_MAP_MM_TO_M_SCALE
+                        pm_list.append(pm_float)
+
+                # Stack into (T, H, W, 3) where T = num_cameras * len(image_indices)
+                if pm_list:
+                    batch_point_maps.append(np.stack(pm_list, axis=0))
+
+            if batch_point_maps:
+                processed_batch["point_maps"] = torch.stack(
+                    [torch.as_tensor(pm, dtype=torch.float32) for pm in batch_point_maps]
+                )
+                # Shape: (B, T, H, W, 3) in meters
+
+                # Normalize point maps using dataset statistics
+                if self.normalizer and "point_maps" in self.normalizer.include_fields:
+                    pm = processed_batch["point_maps"]
+                    B, T, H, W, C = pm.shape
+                    # Flatten spatial dimensions for normalization
+                    pm_flat = pm.reshape(B, T, H * W, C)
+
+                    # Apply normalization (uses min/max from stats)
+                    pm_normalized = self.normalizer.normalize_tensor(pm_flat, "point_maps", anchor_timestep=None)
+
+                    # Reshape back
+                    processed_batch["point_maps"] = pm_normalized.reshape(B, T, H, W, C)
+            else:
+                processed_batch["point_maps"] = None
+        else:
+            processed_batch["point_maps"] = None
 
         return processed_batch

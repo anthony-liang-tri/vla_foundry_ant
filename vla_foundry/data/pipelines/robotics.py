@@ -59,11 +59,20 @@ def extract_robotics_fields(
         action_fields = []
 
     images, data = {}, {}
+    point_maps_raw = {}  # Collect point maps: {camera_t_offset: (H, W, 3) array}
+
     for key, value in sample.items():
         if key.endswith(".jpg"):
             # Extract camera name and timestep from key (format: {sample_id}.{camera}_{timestep}.jpg)
             img_key = key.split(".")[-2]  # e.g., "wrist_camera_t-1"
             images[img_key] = np.array(value)
+        elif key.endswith(".tiff"):
+            # Point map: {sample_id}.{camera}_point_map_t{offset}.tiff
+            pm_key_with_suffix = key.split(".")[-2]  # e.g., "scene_right_0_point_map_t0"
+            # Remove "_point_map" to get the standard key format: "scene_right_0_t0"
+            pm_key = pm_key_with_suffix.replace("_point_map", "")
+            # PIL Image already loaded, convert to numpy array (H, W, 3) uint16
+            point_maps_raw[pm_key] = np.array(value)
         else:
             suffix_map = ["lowdim.npz", "metadata.json", "language_instructions.json", "point_cloud.npz"]
             for suffix in suffix_map:
@@ -120,10 +129,16 @@ def extract_robotics_fields(
         # It is already pre-cropped during preprocessing, so no need to crop again
         point_cloud = point_cloud_data.get("data")
 
+    # Extract point maps if enabled
+    # Point maps are stored as 3-channel TIFF: {camera}_t{offset}.tiff
+    # point_maps_raw already contains (H, W, 3) uint16 arrays in millimeters
+    point_maps = point_maps_raw if use_point_cloud else None
+
     return {
         "images": images,
         "lowdim": extracted_lowdim,
         "point_cloud": point_cloud,
+        "point_maps": point_maps,
         "past_mask": past_mask,
         "future_mask": future_mask,
         "metadata": metadata,

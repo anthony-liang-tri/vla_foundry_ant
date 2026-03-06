@@ -342,14 +342,15 @@ class TestPointCloudGeneration:
                     logger_actor=logger_actor,
                 )
 
-                # Unpack result (should be 6-tuple with point_clouds and stats)
-                assert len(result) == 6
+                # Unpack result (should be 7-tuple with point_clouds, point_maps, and stats)
+                assert len(result) == 7
                 (
                     sample_images,
                     sample_lowdim,
                     sample_metadata,
                     language_instructions,
                     sample_point_clouds,
+                    sample_point_maps,
                     sample_stats,
                 ) = result
 
@@ -398,14 +399,15 @@ class TestPointCloudGeneration:
                     logger_actor=logger_actor,
                 )
 
-                # Unpack result (should be 6-tuple but point_clouds is None)
-                assert len(result) == 6
+                # Unpack result (should be 7-tuple but point_clouds is None)
+                assert len(result) == 7
                 (
                     sample_images,
                     sample_lowdim,
                     sample_metadata,
                     language_instructions,
                     sample_point_clouds,
+                    sample_point_maps,
                     sample_stats,
                 ) = result
 
@@ -457,6 +459,7 @@ class TestPointCloudGeneration:
                     sample_metadata,
                     language_instructions,
                     sample_point_clouds,
+                    sample_point_maps,
                     sample_stats,
                 ) = result
 

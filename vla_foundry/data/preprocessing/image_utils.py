@@ -2,6 +2,7 @@ import io
 from enum import Enum
 
 import numpy as np
+import tifffile
 from PIL import Image
 
 # Global JPEG encoder pool to avoid repeated PIL overhead
@@ -90,6 +91,61 @@ def depth_image_to_bytes(
 
     buf = io.BytesIO()
     pil_image.save(buf, format="PNG")
+    return buf.getvalue(), original_image_size
+
+
+def point_map_to_bytes(point_map: np.ndarray, target_size: tuple = None) -> tuple[bytes, tuple[int, int]]:
+    """Convert point map (H, W, 3) uint16 to TIFF with 3 channels.
+
+    Args:
+        point_map: (H, W, 3) uint16 array with XYZ coordinates in millimeters (offset by +POINT_MAP_UINT16_OFFSET)
+        target_size: Optional target size for resizing (typically None to preserve resolution)
+
+    Returns:
+        Tuple of (bytes, original_size)
+    """
+
+    # Ensure uint16 format with 3 channels
+    assert point_map.dtype == np.uint16, f"point maps must use np.uint16, got {point_map.dtype}"
+    assert point_map.ndim == 3 and point_map.shape[2] == 3, f"point maps must be (H, W, 3), got {point_map.shape}"
+
+    original_image_size = (point_map.shape[1], point_map.shape[0])  # (W, H)
+
+    # Resize if needed (resize each channel separately using NEAREST to avoid interpolation artifacts)
+    if target_size and original_image_size != target_size:
+        target_width, target_height = target_size
+
+        # Resize using nearest neighbor to preserve coordinate integrity
+        # Use the same center-crop logic as other images
+        resized_channels = []
+        for channel_idx in range(3):
+            channel = point_map[:, :, channel_idx]
+            pil_channel = Image.fromarray(channel, mode="I;16")
+
+            orig_width, orig_height = pil_channel.size
+
+            # Calculate scale to cover target dimensions
+            scale = max(target_width / orig_width, target_height / orig_height)
+            new_width = int(orig_width * scale)
+            new_height = int(orig_height * scale)
+
+            # Resize with NEAREST (no interpolation)
+            pil_channel = pil_channel.resize((new_width, new_height), Image.NEAREST)
+
+            # Center crop to exact target size
+            left = (new_width - target_width) // 2
+            top = (new_height - target_height) // 2
+            right = left + target_width
+            bottom = top + target_height
+            pil_channel = pil_channel.crop((left, top, right, bottom))
+
+            resized_channels.append(np.array(pil_channel))
+        point_map = np.stack(resized_channels, axis=-1).astype(np.uint16)
+
+    # Save as TIFF with 3 channels using tifffile (better multi-channel support)
+    buf = io.BytesIO()
+    tifffile.imwrite(buf, point_map, compression="adobe_deflate")
+
     return buf.getvalue(), original_image_size
 
 

@@ -26,7 +26,7 @@ from vla_foundry.db_logger import get_git_env_vars, log_dataset_preprocessing
 from vla_foundry.file_utils import check_directory_has_files_with_substring
 
 
-@ray.remote
+@ray.remote(memory=2 * 1024 * 1024 * 1024)  # 2GB per episode worker
 def streaming_episode_worker(episode_path: str, converter, statistics_ray_actor, logger_actor):
     return converter.process_episode(episode_path, statistics_ray_actor, logger_actor)
 

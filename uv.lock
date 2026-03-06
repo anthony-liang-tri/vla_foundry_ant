@@ -3024,6 +3024,18 @@ wheels = [
 ]
 
 [[package]]
+name = "tifffile"
+version = "2026.2.20"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/90/80/0ddd8dc74c22e1e5efcfb152303b025f8f4a5010ae9936f1e57f7d7f9256/tifffile-2026.2.20.tar.gz", hash = "sha256:b98a7fc6ea4fa0e9919734857eebc6e2cb2c3a95468a930d4a948a9a49646ab7", size = 377196, upload-time = "2026-02-20T20:09:34.608Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/86/07/0cd5cad2fdb7d32515561bc26da041654f3b3c0abc299f4730f30b89271d/tifffile-2026.2.20-py3-none-any.whl", hash = "sha256:a83e0e991647e39d5912369998ef02d858f89effe30064403a1a123b5daef8fb", size = 234528, upload-time = "2026-02-20T20:09:33.278Z" },
+]
+
+[[package]]
 name = "timm"
 version = "1.0.15"
 source = { registry = "https://pypi.org/simple" }
@@ -3312,6 +3324,7 @@ dependencies = [
     { name = "scipy" },
     { name = "sentencepiece" },
     { name = "tdigest-rs" },
+    { name = "tifffile" },
     { name = "timm" },
     { name = "torch" },
     { name = "torchvision" },
@@ -3376,6 +3389,7 @@ requires-dist = [
     { name = "scipy", specifier = ">=1.15.3" },
     { name = "sentencepiece", specifier = "==0.2.0" },
     { name = "tdigest-rs", specifier = ">=0.1.0" },
+    { name = "tifffile", specifier = ">=2024.8.10" },
     { name = "timm", specifier = "==1.0.15" },
     { name = "torch", specifier = "==2.7.0" },
     { name = "torchvision", specifier = "==0.22.0" },

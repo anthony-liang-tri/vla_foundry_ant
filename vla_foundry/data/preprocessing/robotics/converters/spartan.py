@@ -11,7 +11,12 @@ import yaml
 
 from vla_foundry.data.preprocessing.robotics.converters.base import BaseRoboticsConverter
 from vla_foundry.data.preprocessing.robotics.preprocess_masks import create_past_and_future_masks
-from vla_foundry.data.preprocessing.utils import depth_images_to_point_cloud, is_still_sample
+from vla_foundry.data.preprocessing.utils import (
+    apply_fisheye_distortion_to_depth_images,
+    depth_images_to_point_cloud,
+    depth_images_to_point_maps,
+    is_still_sample,
+)
 from vla_foundry.data.robotics.utils import any_to_actual_key, load_action_field_config
 
 
@@ -544,6 +549,48 @@ class SpartanConverter(BaseRoboticsConverter):
                 key = f"{camera_name}_t{img_offset}"
                 sample_images[key] = camera_images[img_timestep]
 
+        # Extract sequence-specific camera calibration first (needed for depth distortion)
+        sample_intrinsics, sample_extrinsics = self.extract_sample_camera_calibration(
+            intrinsics_data,
+            extrinsics_data,
+            valid_start,
+            valid_end,
+            past_padding,
+            future_padding,
+        )
+
+        # Apply fisheye distortion to depth images for cabot cameras and store distorted versions
+        # This ensures stored depth images are aligned with RGB images
+        if self.cfg.use_depth_data:
+            for idx, img_offset in enumerate(self.cfg.image_indices):
+                img_timestep = actual_image_timesteps[idx]
+
+                # Collect depth images and intrinsics for this timestep
+                depth_images = {}
+                intrinsics = {}
+                for camera_name in camera_data:
+                    if "_depth" in camera_name:
+                        base_name = camera_name.replace("_depth", "")
+                        depth_images[base_name] = camera_data[camera_name][img_timestep]
+
+                        # Get intrinsics for this timestep
+                        seq_idx = self.cfg.past_lowdim_steps + img_offset
+                        if base_name in sample_intrinsics and 0 <= seq_idx < len(sample_intrinsics[base_name]):
+                            intrinsics[base_name] = sample_intrinsics[base_name][seq_idx]
+
+                # Apply fisheye distortion to depth images (for cabot cameras only)
+                if depth_images and intrinsics:
+                    depth_fisheye_dict = apply_fisheye_distortion_to_depth_images(
+                        depth_images, intrinsics, depth_scale=1000.0
+                    )
+
+                    # Replace raw depth images with distorted ones in sample_images
+                    for camera_name, depth_meters in depth_fisheye_dict.items():
+                        key = f"{camera_name}_depth_t{img_offset}"
+                        # Convert back to uint16 in mm for storage (matching original format)
+                        depth_mm = (depth_meters * 1000.0).astype(np.uint16)
+                        sample_images[key] = depth_mm
+
         # Process lowdim data (which includes actions)
         sample_lowdim = {}
         reference_data = {}
@@ -563,16 +610,6 @@ class SpartanConverter(BaseRoboticsConverter):
         # Create masks
         past_mask, future_mask = create_past_and_future_masks(
             anchor_timestep, self.cfg.past_lowdim_steps, self.cfg.future_lowdim_steps, episode_length
-        )
-
-        # Extract sequence-specific camera calibration
-        sample_intrinsics, sample_extrinsics = self.extract_sample_camera_calibration(
-            intrinsics_data,
-            extrinsics_data,
-            valid_start,
-            valid_end,
-            past_padding,
-            future_padding,
         )
 
         # Generate point clouds from depth and RGB images (T, N, 6) format
@@ -660,6 +697,44 @@ class SpartanConverter(BaseRoboticsConverter):
             if point_cloud_list:
                 sample_point_cloud = np.stack(point_cloud_list, axis=0)  # (T, N, 6)
 
+        # Generate point maps (camera coordinates in image space) from depth images
+        sample_point_maps = None
+        if self.cfg.use_depth_data:
+            point_map_dict = {}
+
+            for idx, img_offset in enumerate(self.cfg.image_indices):
+                img_timestep = actual_image_timesteps[idx]
+
+                # Collect depth images and intrinsics for this timestep
+                depth_images = {}
+                intrinsics = {}
+                for camera_name in camera_data:
+                    if "_depth" in camera_name:
+                        base_name = camera_name.replace("_depth", "")
+                        depth_images[base_name] = camera_data[camera_name][img_timestep]
+
+                        # Get intrinsics for this timestep
+                        seq_idx = self.cfg.past_lowdim_steps + img_offset
+                        if base_name in sample_intrinsics and 0 <= seq_idx < len(sample_intrinsics[base_name]):
+                            intrinsics[base_name] = sample_intrinsics[base_name][seq_idx]
+
+                # Generate point maps for this timestep
+                if depth_images and intrinsics:
+                    timestep_point_maps = depth_images_to_point_maps(
+                        depth_images=depth_images,
+                        intrinsics=intrinsics,
+                        depth_scale=1000.0,
+                        min_depth=self.cfg.min_depth,
+                        max_depth=self.cfg.max_depth,
+                    )
+
+                    # Store with keys like: wrist_t0, wrist_t-1
+                    for camera_name, point_map in timestep_point_maps.items():
+                        key = f"{camera_name}_t{img_offset}"
+                        point_map_dict[key] = point_map
+
+            sample_point_maps = point_map_dict if point_map_dict else None
+
         # Create metadata
         episode_id = self.get_episode_id(episode_path)
         sample_metadata = SampleMetadata(
@@ -690,7 +765,12 @@ class SpartanConverter(BaseRoboticsConverter):
             if sample_point_cloud is not None:
                 stats_sample["point_cloud"] = sample_point_cloud
 
-        # Add original_intrinsics, extrinsics, past_mask, future_mask to lowdim (after building stats_sample)
+            # Add point maps to statistics if available (no past/future masks needed)
+            if sample_point_maps is not None:
+                stats_sample["point_maps"] = sample_point_maps
+
+            statistics_ray_actor.merge_from_samples.remote([stats_sample])
+        # Add intrinsics, extrinsics, past_mask, future_mask to lowdim (after building stats_sample)
         for key, value in sample_intrinsics.items():
             sample_lowdim[f"original_intrinsics.{key}"] = value
         for key, value in sample_extrinsics.items():
@@ -700,4 +780,12 @@ class SpartanConverter(BaseRoboticsConverter):
 
         language_instructions = self.get_language_instructions(episode_path)
 
-        return sample_images, sample_lowdim, sample_metadata, language_instructions, sample_point_cloud, stats_sample
+        return (
+            sample_images,
+            sample_lowdim,
+            sample_metadata,
+            language_instructions,
+            sample_point_cloud,
+            sample_point_maps,
+            stats_sample,
+        )

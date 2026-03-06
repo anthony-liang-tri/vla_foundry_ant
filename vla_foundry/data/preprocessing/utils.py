@@ -2,6 +2,7 @@ import io
 import json
 import re
 import tarfile
+import tempfile
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
@@ -17,8 +18,85 @@ from PIL import Image
 from vla_foundry.aws.s3_io import download_fileobj_from_s3, upload_fileobj_to_s3
 from vla_foundry.aws.s3_path import S3Path
 from vla_foundry.aws.s3_utils import create_s3_client, is_s3_path
-from vla_foundry.data.preprocessing.image_utils import ImageResizingMethod, depth_image_to_bytes, image_to_bytes
+from vla_foundry.data.constants import (
+    CAMERA_FISHEYE_DISTORTION,
+    POINT_MAP_MAX_MM,
+    POINT_MAP_MIN_MM,
+    POINT_MAP_UINT16_OFFSET,
+)
+from vla_foundry.data.preprocessing.image_utils import (
+    ImageResizingMethod,
+    depth_image_to_bytes,
+    image_to_bytes,
+    point_map_to_bytes,
+)
 from vla_foundry.data.robotics.cv_utils import scale_intrinsics_3x3_for_resize_and_crop
+from vla_foundry.file_utils import list_s3_directory_recursive
+
+
+def is_cabot_fisheye_camera(camera_name: str, intrinsics: np.ndarray) -> bool:
+    """
+    Detect if a camera is a cabot fisheye camera by matching intrinsics.
+
+    Due to a simulator bug, we need to distinguish cabot (fisheye) from riverway (pinhole)
+    cameras that share the same camera names. We do this by matching the intrinsics matrix
+    against known cabot fisheye intrinsics (up to 3 decimal places).
+
+    Args:
+        camera_name: Camera semantic name (e.g., "wrist_left_minus")
+        intrinsics: Camera intrinsic matrix (3, 3)
+
+    Returns:
+        True if this is a cabot fisheye camera that needs distortion correction
+    """
+    if camera_name not in CAMERA_FISHEYE_DISTORTION:
+        return False
+
+    fisheye_params = CAMERA_FISHEYE_DISTORTION[camera_name]
+    K_fisheye_expected = np.array(fisheye_params["K_fisheye"], dtype=np.float32)
+
+    # Match up to 3 decimal places to handle floating point precision
+    return np.allclose(intrinsics, K_fisheye_expected, atol=1e-3, rtol=0)
+
+
+def apply_fisheye_distortion_to_depth_images(depth_images: dict, intrinsics: dict, depth_scale: float = 1000.0) -> dict:
+    """
+    Apply fisheye distortion to depth images for cabot cameras.
+
+    This converts pinhole depth images to fisheye-distorted depth images that align with RGB.
+
+    Args:
+        depth_images: Dict of depth images {camera_name: (H, W) array in units specified by depth_scale}
+        intrinsics: Dict of intrinsic matrices {camera_name: (3, 3) array}
+        depth_scale: Scale factor to convert depth values to meters (default: 1000.0 for mm→m)
+
+    Returns:
+        Dict {camera_name: (H, W) depth array in meters} (fisheye-distorted for cabot, unchanged for others)
+    """
+    depth_fisheye_dict = {}
+
+    for camera_name, depth_img in depth_images.items():
+        K = intrinsics[camera_name]
+
+        if is_cabot_fisheye_camera(camera_name, K):
+            # Cabot fisheye camera: convert pinhole depth to fisheye coordinates
+            fisheye_params = CAMERA_FISHEYE_DISTORTION[camera_name]
+            K_pinhole = np.array(fisheye_params["K_pinhole"], dtype=np.float32)
+            K_fisheye = K  # The stored intrinsics are fisheye intrinsics
+            distortion_coeffs = fisheye_params["d"]
+
+            # Convert to fisheye camera coordinates
+            cam_coords = convert_pinhole_depth_to_fisheye_coords(
+                depth_img, K_pinhole, K_fisheye, distortion_coeffs, depth_scale
+            )
+
+            # Extract Z as distorted depth in meters
+            depth_fisheye_dict[camera_name] = cam_coords[:, :, 2]
+        else:
+            # Pinhole camera: just convert to meters
+            depth_fisheye_dict[camera_name] = depth_img.astype(np.float32) / depth_scale
+
+    return depth_fisheye_dict
 
 
 def upload_sample_to_s3(
@@ -92,6 +170,29 @@ def upload_sample_to_s3(
         else:
             sample_data["metadata"].original_image_sizes = original_image_sizes
 
+        # Handle point maps as TIFF files (3-channel 16-bit images)
+        if "point_maps" in sample_data and sample_data["point_maps"] is not None:
+            for pm_key, pm_data in sample_data["point_maps"].items():
+                # pm_data is (H, W, 3) uint16 array with XYZ coordinates
+                # (offset by +POINT_MAP_UINT16_OFFSET to handle negatives)
+                assert pm_data.dtype == np.uint16, f"Point map must be uint16, got {pm_data.dtype}"
+                assert pm_data.ndim == 3 and pm_data.shape[2] == 3, f"Point map must be (H, W, 3), got {pm_data.shape}"
+
+                # Convert to TIFF bytes with resizing to match image size
+                image_bytes, _ = point_map_to_bytes(pm_data, target_size=resize_images_size)
+
+                # Insert "_point_map" before the timestep suffix
+                # pm_key format: "camera_t0" -> "camera_point_map_t0"
+                # e.g., "scene_right_0_t0" -> "scene_right_0_point_map_t0"
+                if "_t" in pm_key:
+                    camera_part, t_part = pm_key.rsplit("_t", 1)
+                    filename = f"{uuid_prefix}.{camera_part}_point_map_t{t_part}.tiff"
+                else:
+                    filename = f"{uuid_prefix}.{pm_key}_point_map.tiff"
+
+                tarinfo = tarfile.TarInfo(name=filename)
+                tarinfo.size = len(image_bytes)
+                tar.addfile(tarinfo, io.BytesIO(image_bytes))
         # Add the rescaled intrinsics into the sample_data
         sample_lowdim_data_with_rescaled_intrinsics = dict()
         if "lowdim" in sample_data and sample_data["lowdim"] is not None:
@@ -117,7 +218,7 @@ def upload_sample_to_s3(
 
         for key, value in sample_data.items():
             data_buffer = io.BytesIO()
-            if key == "images":  # Already added
+            if key == "images" or key == "point_maps":  # Already added
                 continue
             elif key in ["metadata", "language_instructions"]:
                 # Save as JSON
@@ -200,7 +301,6 @@ def save_and_upload_dict(dict_data: dict, output_path: str, file_name: str):
 def save_and_upload_config(config, output_path: str, file_name: str):
     # Draccus dump to temp file then upload to s3 (or save locally)
     import shutil
-    import tempfile
 
     import draccus
 
@@ -415,7 +515,6 @@ def recursive_s3_copy(path1: str, path2: str) -> None:
     Recursively copy all objects from path1 to path2 using Ray for parallelization.
     """
     from vla_foundry.aws.s3_path import S3Path
-    from vla_foundry.file_utils import list_s3_directory_recursive
 
     # Parse source and destination paths
     source = S3Path(s3_path=path1)
@@ -441,6 +540,133 @@ def recursive_s3_copy(path1: str, path2: str) -> None:
     ]
     copied_keys = ray.get(futures)
     print(f"✅ Successfully copied {len(copied_keys)} objects from {path1} to {path2}")
+
+
+def apply_inverse_fisheye_distortion(
+    cam_coords: np.ndarray, distortion_params: list[float] | None, max_valid_radius: float = None
+) -> np.ndarray:
+    """
+    Apply inverse fisheye distortion to convert fisheye coordinates to pinhole coordinates.
+
+    Args:
+        cam_coords: Normalized camera coordinates (N, 3) where each row is [x, y, 1]
+        distortion_params: Fisheye distortion parameters [d0, d1, d2, d3] or None
+        max_valid_radius: Maximum valid radius in normalized coordinates. Pixels beyond this
+                         radius will not have distortion correction applied. If None, no masking.
+
+    Returns:
+        corrected_coords: Distortion-corrected normalized camera coordinates (N, 3)
+    """
+    if distortion_params is None:
+        return cam_coords  # No distortion correction needed
+
+    d = np.array(distortion_params, dtype=np.float32)
+
+    # Extract x, y coordinates (third component is 1)
+    x = cam_coords[:, 0]
+    y = cam_coords[:, 1]
+
+    # Compute r = sqrt(x^2 + y^2)
+    r = np.sqrt(x**2 + y**2 + 1e-8)  # Add epsilon to avoid division by zero
+
+    # Inverse fisheye distortion model (map fisheye to pinhole)
+    theta_d = r
+    theta = theta_d / (1 + d[0] * theta_d**2 + d[1] * theta_d**4 + d[2] * theta_d**6 + d[3] * theta_d**8)
+
+    # Compute scale factor: tan(theta) / r
+    # Use np.where to handle r ≈ 0 case
+    scale = np.where(r > 1e-8, np.tan(theta) / r, np.ones_like(r))
+
+    # Apply masking if max_valid_radius is specified
+    # Pixels beyond this radius should not have distortion correction
+    if max_valid_radius is not None:
+        scale = np.where(r <= max_valid_radius, scale, np.ones_like(scale))
+
+    # Apply scaling to get pinhole coordinates
+    x_corrected = x * scale
+    y_corrected = y * scale
+
+    # Return corrected coordinates with 1 in the third component
+    return np.stack([x_corrected, y_corrected, np.ones_like(x)], axis=-1)
+
+
+def convert_pinhole_depth_to_fisheye_coords(
+    depth_pinhole: np.ndarray,
+    K_pinhole: np.ndarray,
+    K_fisheye: np.ndarray,
+    distortion_params: list[float],
+    depth_scale: float = 1000.0,
+) -> np.ndarray:
+    """
+    Convert pinhole depth image to 3D camera coordinates in fisheye image space.
+
+    This function addresses the simulator bug where depth is pinhole but RGB is fisheye.
+    Instead of transferring depth values (which are ray-dependent), we convert to 3D
+    camera coordinates which are invariant to the camera model.
+
+    Args:
+        depth_pinhole: Pinhole depth image (H, W) - undistorted, in units specified by depth_scale
+        K_pinhole: Pinhole camera intrinsic matrix (3, 3)
+        K_fisheye: Fisheye camera intrinsic matrix (3, 3)
+        distortion_params: Fisheye distortion parameters [d0, d1, d2, d3]
+        depth_scale: Scale factor to convert depth values to meters (default: 1000.0 for mm→m)
+
+    Returns:
+        cam_coords_fisheye: (H, W, 3) array of XYZ camera coordinates in meters in fisheye image space
+    """
+    h, w = depth_pinhole.shape
+
+    # Step 1: Convert pinhole depth image to 3D camera coordinates
+    y_pinhole, x_pinhole = np.meshgrid(np.arange(h), np.arange(w), indexing="ij")
+    ones = np.ones_like(x_pinhole, dtype=np.float32)
+    pixels_pinhole = np.stack([x_pinhole, y_pinhole, ones], axis=-1).astype(np.float32)
+
+    # Convert to normalized pinhole coordinates
+    K_pinhole_inv = np.linalg.inv(K_pinhole)
+    pixels_pinhole_flat = pixels_pinhole.reshape(-1, 3)
+    cam_coords_normalized = pixels_pinhole_flat @ K_pinhole_inv.T  # (H*W, 3)
+
+    # Scale by depth to get 3D camera coordinates (convert to meters)
+    depth_flat = depth_pinhole.flatten().astype(np.float32) / depth_scale
+    X = cam_coords_normalized[:, 0] * depth_flat
+    Y = cam_coords_normalized[:, 1] * depth_flat
+    Z = depth_flat
+    cam_coords_3d = np.stack([X, Y, Z], axis=-1)  # (H*W, 3) in meters
+
+    # Step 2: For each fisheye pixel, find corresponding 3D point
+    # Create fisheye pixel grid
+    y_fisheye, x_fisheye = np.meshgrid(np.arange(h), np.arange(w), indexing="ij")
+    pixels_fisheye = np.stack([x_fisheye, y_fisheye, ones], axis=-1).astype(np.float32)
+
+    # Convert fisheye pixels to normalized fisheye coordinates
+    K_fisheye_inv = np.linalg.inv(K_fisheye)
+    pixels_fisheye_flat = pixels_fisheye.reshape(-1, 3)
+    cam_coords_fisheye_norm = pixels_fisheye_flat @ K_fisheye_inv.T
+
+    # Apply inverse fisheye distortion to get pinhole normalized coordinates
+    cam_coords_pinhole_norm = apply_inverse_fisheye_distortion(cam_coords_fisheye_norm, distortion_params)
+
+    # Convert to pinhole pixel coordinates to find which 3D point to sample
+    pixels_pinhole_lookup = cam_coords_pinhole_norm @ K_pinhole.T
+    x_lookup = pixels_pinhole_lookup[:, 0]
+    y_lookup = pixels_pinhole_lookup[:, 1]
+
+    # Sample 3D coordinates using nearest neighbor
+    x_lookup_int = np.round(x_lookup).astype(np.int32)
+    y_lookup_int = np.round(y_lookup).astype(np.int32)
+
+    # Create output array
+    cam_coords_fisheye = np.zeros((h * w, 3), dtype=np.float32)
+
+    # Create valid mask
+    valid_mask = (x_lookup_int >= 0) & (x_lookup_int < w) & (y_lookup_int >= 0) & (y_lookup_int < h)
+
+    # Sample 3D coordinates
+    valid_indices = y_lookup_int[valid_mask] * w + x_lookup_int[valid_mask]
+    cam_coords_fisheye[valid_mask] = cam_coords_3d[valid_indices]
+
+    # Reshape to image dimensions
+    return cam_coords_fisheye.reshape(h, w, 3)
 
 
 def depth_images_to_point_cloud(
@@ -495,6 +721,32 @@ def depth_images_to_point_cloud(
         Rt = extrinsics[camera_name]
         rgb_img = rgb_images[camera_name]
 
+        # Convert depth to camera coordinates (apply fisheye distortion for cabot)
+        if is_cabot_fisheye_camera(camera_name, K):
+            fisheye_params = CAMERA_FISHEYE_DISTORTION[camera_name]
+            K_pinhole = np.array(fisheye_params["K_pinhole"], dtype=np.float32)
+            K_fisheye = K
+            distortion_coeffs = fisheye_params["d"]
+            cam_coords = convert_pinhole_depth_to_fisheye_coords(
+                depth_img, K_pinhole, K_fisheye, distortion_coeffs, depth_scale
+            )
+            h, w, _ = cam_coords.shape
+        else:
+            h, w = depth_img.shape
+            y, x = np.meshgrid(np.arange(h), np.arange(w), indexing="ij")
+            ones = np.ones_like(x, dtype=np.float32)
+            pixels = np.stack([x, y, ones], axis=-1).astype(np.float32)
+
+            K_inv = np.linalg.inv(K)
+            pixels_flat = pixels.reshape(-1, 3)
+            cam_coords_normalized = pixels_flat @ K_inv.T
+
+            depths = depth_img.flatten().astype(np.float32) / depth_scale
+            X = cam_coords_normalized[:, 0] * depths
+            Y = cam_coords_normalized[:, 1] * depths
+            Z = depths
+            cam_coords = np.stack([X, Y, Z], axis=-1).reshape(h, w, 3)
+
         # Estimate max possible points after subsampling
         h, w = depth_img.shape
         # Rough estimate after filtering
@@ -506,46 +758,29 @@ def depth_images_to_point_cloud(
         )
 
         if should_subsample:
-            depth_img = depth_img[::depth_subsample_factor, ::depth_subsample_factor]
+            cam_coords = cam_coords[::depth_subsample_factor, ::depth_subsample_factor]
             rgb_img = rgb_img[::depth_subsample_factor, ::depth_subsample_factor]
-            # Adjust intrinsics for subsampled image
-            K = K.copy()
-            K[0, 0] /= depth_subsample_factor  # fx
-            K[1, 1] /= depth_subsample_factor  # fy
-            K[0, 2] /= depth_subsample_factor  # cx
-            K[1, 2] /= depth_subsample_factor  # cy
+            h, w, _ = cam_coords.shape
 
-        # Generate points efficiently
-        h, w = depth_img.shape
-        depth_flat = depth_img.flatten()
-
-        # Generate all points
-        y, x = np.meshgrid(np.arange(h), np.arange(w), indexing="ij")
-        y = y.flatten()
-        x = x.flatten()
-        depths = depth_flat.astype(np.float32) / depth_scale
+        # Extract XYZ and colors
+        cam_coords_flat = cam_coords.reshape(-1, 3)
+        X = cam_coords_flat[:, 0]
+        Y = cam_coords_flat[:, 1]
+        Z = cam_coords_flat[:, 2]
 
         colors = rgb_img.reshape(-1, 3).astype(np.float32)
         if normalize_colors:
             colors = colors / 255.0
 
         # Filter invalid depths (0 values, too close, or too far)
-        valid_depth_mask = (depths > min_depth) & (depths < max_depth)
-        x = x[valid_depth_mask]
-        y = y[valid_depth_mask]
-        depths = depths[valid_depth_mask]
+        valid_depth_mask = (min_depth < Z) & (max_depth > Z)
+        X = X[valid_depth_mask]
+        Y = Y[valid_depth_mask]
+        Z = Z[valid_depth_mask]
         colors = colors[valid_depth_mask]
 
-        # Generate 3D points from depth
-        ones = np.ones_like(x, dtype=np.float32)
-        pixels = np.stack([x, y, ones], axis=-1)
-
-        # Apply inverse intrinsics (compute once per camera)
-        K_inv = np.linalg.inv(K)
-        cam_coords = pixels @ K_inv.T
-
-        # Scale by depth
-        cam_points = cam_coords * depths[:, None]
+        # Stack into camera points
+        cam_points = np.stack([X, Y, Z], axis=-1)
         cam_colors = colors
 
         if len(cam_points) == 0:
@@ -592,4 +827,89 @@ def depth_images_to_point_cloud(
 
     point_cloud = np.concatenate(all_point_clouds, axis=0)  # (num_views * points_per_view, 6)
 
+    # Pad with points at origin if we're short due to integer division
+    actual_num_points = len(point_cloud)
+    if actual_num_points < num_points:
+        num_padding = num_points - actual_num_points
+        padding = np.zeros((num_padding, 6), dtype=np.float32)
+        point_cloud = np.concatenate([point_cloud, padding], axis=0)
+
     return point_cloud.astype(np.float16)
+
+
+def depth_images_to_point_maps(
+    depth_images: dict,
+    intrinsics: dict,
+    depth_scale: float = 1000.0,
+    min_depth: float = 0.001,
+    max_depth: float = 3.0,
+) -> dict:
+    """
+    Generate point maps (camera coordinates in image space) from depth images.
+
+    Point maps preserve the full spatial resolution (H, W) of the depth images and store
+    3D camera coordinates (X, Y, Z) for each pixel in uint16 millimeter format with offset.
+
+    Args:
+        depth_images: Dict of depth images {camera_name: (H, W) uint16 array in mm}
+        intrinsics: Dict of intrinsic matrices {camera_name: (3, 3) array}
+        depth_scale: Scale factor to convert depth values to meters (default: 1000.0 for mm→m)
+        min_depth: Minimum valid depth in meters (default: 0.001m = 1mm). Invalid pixels set to 0.
+        max_depth: Maximum valid depth in meters (default: 3.0m). Invalid pixels set to 0.
+
+    Returns:
+        Dict mapping camera_name to (H, W, 3) uint16 array with XYZ camera coordinates in mm.
+        Coordinates are offset by +POINT_MAP_UINT16_OFFSET to handle negative values.
+        Invalid depth pixels (out of range) are set to [POINT_MAP_UINT16_OFFSET] (representing [0, 0, 0]).
+    """
+    point_maps = {}
+
+    for camera_name, depth_img in depth_images.items():
+        # Compute camera coordinates
+        K = intrinsics[camera_name]
+        if is_cabot_fisheye_camera(camera_name, K):
+            fisheye_params = CAMERA_FISHEYE_DISTORTION[camera_name]
+            K_pinhole = np.array(fisheye_params["K_pinhole"], dtype=np.float32)
+            K_fisheye = K
+            distortion_coeffs = fisheye_params["d"]
+            cam_points = convert_pinhole_depth_to_fisheye_coords(
+                depth_img, K_pinhole, K_fisheye, distortion_coeffs, depth_scale
+            )
+        else:
+            h, w = depth_img.shape
+            y, x = np.meshgrid(np.arange(h), np.arange(w), indexing="ij")
+            ones = np.ones_like(x, dtype=np.float32)
+            pixels = np.stack([x, y, ones], axis=-1).astype(np.float32)
+
+            K_inv = np.linalg.inv(K)
+            pixels_flat = pixels.reshape(-1, 3)
+            cam_coords_normalized = pixels_flat @ K_inv.T
+
+            depths = depth_img.astype(np.float32) / depth_scale
+            depths_flat = depths.flatten()
+            X = cam_coords_normalized[:, 0] * depths_flat
+            Y = cam_coords_normalized[:, 1] * depths_flat
+            Z = depths_flat
+            cam_points = np.stack([X, Y, Z], axis=-1).reshape(h, w, 3)
+
+        h, w, _ = cam_points.shape
+        depths = cam_points[:, :, 2]  # Extract Z for depth filtering
+
+        # Convert from meters to millimeters
+        cam_points_mm = cam_points * depth_scale
+        cam_points_mm = np.clip(cam_points_mm, POINT_MAP_MIN_MM, POINT_MAP_MAX_MM)  # Clip to valid range
+
+        # Add offset to handle negative coordinates (shifts range to [0, 65535])
+        cam_points_offset = cam_points_mm + POINT_MAP_UINT16_OFFSET
+
+        # Filter invalid depths: set to POINT_MAP_UINT16_OFFSET (representing 0) for out-of-range values (after offset)
+        valid_depth_mask = (depths > min_depth) & (depths < max_depth)
+        cam_points_offset[~valid_depth_mask] = (
+            POINT_MAP_UINT16_OFFSET  # Invalid pixels = POINT_MAP_UINT16_OFFSET (represents 0 mm)
+        )
+
+        cam_points_uint16 = cam_points_offset.astype(np.uint16)
+
+        point_maps[camera_name] = cam_points_uint16
+
+    return point_maps

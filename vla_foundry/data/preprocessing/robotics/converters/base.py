@@ -222,10 +222,12 @@ class BaseRoboticsConverter:
                         logger_actor,
                     )
 
-                    # Handle 4+ tuple returns (sample_point_clouds and stats_sample are optional 5th and 6th elements)
+                    # Handle 4+ tuple returns (sample_point_clouds, sample_point_maps and stats_sample are optional 5th
+                    # 6th, and 7th elements)
                     sample_images, sample_lowdim, sample_metadata, language_instructions, *extra = result
                     sample_point_cloud = extra[0] if len(extra) >= 1 else None
-                    stats_sample = extra[1] if len(extra) >= 2 else None
+                    sample_point_maps = extra[1] if len(extra) >= 2 else None
+                    stats_sample = extra[2] if len(extra) >= 3 else None
 
                     if sample_images is None and sample_lowdim is None:
                         # Filtered out either by max_padding or still_samples
@@ -245,6 +247,10 @@ class BaseRoboticsConverter:
                     # Add point cloud to sample data if provided
                     if sample_point_cloud is not None:
                         sample_data["point_cloud"] = sample_point_cloud
+
+                    # Add point maps to sample data if provided
+                    if sample_point_maps is not None:
+                        sample_data["point_maps"] = sample_point_maps
 
                     # Submit upload task
                     future = executor.submit(
