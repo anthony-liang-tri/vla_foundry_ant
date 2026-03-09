@@ -100,35 +100,71 @@ class WandbBackend:
         )
         wandb.log({path: fig})
 
-    def log_line_strips3d(self, path: str, line_strips: np.ndarray, **kwargs) -> None:
+    def log_line_strips3d(self, path: str, line_strips: np.ndarray | dict[str, np.ndarray], **kwargs) -> None:
         """
         Log 3D line strips to the WandB backend using Plotly.
 
+        Supports:
+        - Single line strip as np.ndarray of shape (N, 3)
+        - Multiple named line strips as dict[str, np.ndarray]
+
         Parameters:
         - path: The hierarchical path for the line strips.
-        - line_strips: The 3D line strips as a NumPy array of shape (N, 3).
+        - line_strips: The 3D line strips.
         """
-        fig = go.Figure(
-            data=[
+        lines: dict[str, np.ndarray]
+        if isinstance(line_strips, np.ndarray):
+            lines = {"trajectory": line_strips}
+        elif isinstance(line_strips, dict):
+            lines = {str(name): np.asarray(points) for name, points in line_strips.items()}
+        else:
+            raise TypeError("line_strips must be np.ndarray or dict[str, np.ndarray]")
+
+        colors = kwargs.get("colors", {})
+        default_colors = ["#1f77b4", "#d62728", "#2ca02c", "#ff7f0e", "#9467bd", "#8c564b"]
+        fig = go.Figure()
+        all_points: list[np.ndarray] = []
+
+        for idx, (name, points) in enumerate(lines.items()):
+            if points.ndim != 2 or points.shape[1] != 3:
+                raise ValueError(f"Line strip '{name}' must have shape (N, 3), got {points.shape}")
+            color = colors.get(name, default_colors[idx % len(default_colors)])
+            fig.add_trace(
                 go.Scatter3d(
-                    x=line_strips[:, 0],
-                    y=line_strips[:, 1],
-                    z=line_strips[:, 2],
+                    x=points[:, 0],
+                    y=points[:, 1],
+                    z=points[:, 2],
                     mode="lines+markers",
-                    line=dict(width=4),
-                    marker=dict(size=3),
+                    line=dict(width=5, color=color),
+                    marker=dict(size=2, color=color),
+                    name=name,
+                    showlegend=True,
                 )
-            ]
-        )
+            )
+            all_points.append(points)
+
+        if not all_points:
+            raise ValueError("No line strips to log")
+
+        stacked_points = np.concatenate(all_points, axis=0)
         # Set consistent axis ranges based on data bounds
-        padding = 0.1 * max(line_strips.max() - line_strips.min(), 1.0)
+        padding = 0.1 * max(stacked_points.max() - stacked_points.min(), 1.0)
         fig.update_layout(
             title=f"3D Line Strip: {path}",
             scene=dict(
                 aspectmode="cube",
-                xaxis=dict(title="X", range=[line_strips[:, 0].min() - padding, line_strips[:, 0].max() + padding]),
-                yaxis=dict(title="Y", range=[line_strips[:, 1].min() - padding, line_strips[:, 1].max() + padding]),
-                zaxis=dict(title="Z", range=[line_strips[:, 2].min() - padding, line_strips[:, 2].max() + padding]),
+                xaxis=dict(
+                    title="X",
+                    range=[stacked_points[:, 0].min() - padding, stacked_points[:, 0].max() + padding],
+                ),
+                yaxis=dict(
+                    title="Y",
+                    range=[stacked_points[:, 1].min() - padding, stacked_points[:, 1].max() + padding],
+                ),
+                zaxis=dict(
+                    title="Z",
+                    range=[stacked_points[:, 2].min() - padding, stacked_points[:, 2].max() + padding],
+                ),
             ),
         )
         wandb.log({path: fig})
