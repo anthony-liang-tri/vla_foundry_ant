@@ -137,15 +137,26 @@ class RerunBackend:
             ),
         )
 
-    def log_line_strips3d(self, path: str, line_strips: np.ndarray, **kwargs) -> None:
+    def log_line_strips3d(self, path: str, line_strips: np.ndarray | dict[str, np.ndarray], **kwargs) -> None:
         """
         Log 3D line strips to the Rerun backend.
 
-        Args:
-            path: The hierarchical path for the line strips.
-            line_strips: The 3D line strips as a NumPy array of shape (N, 3).
+        Parameters
+        ----------
+        path : str
+            The hierarchical path for the line strips.
+        line_strips : np.ndarray | dict[str, np.ndarray]
+            The 3D line strips as a NumPy array of shape (N, 3),
+            or multiple named line strips as a dictionary.
         """
-        rr.log(path, rr.LineStrips3D([line_strips]))
+        if isinstance(line_strips, np.ndarray):
+            rr.log(path, rr.LineStrips3D([line_strips]))
+            return
+        if isinstance(line_strips, dict):
+            for name, points in line_strips.items():
+                rr.log(f"{path}/{name}", rr.LineStrips3D([np.asarray(points)]))
+            return
+        raise TypeError("line_strips must be np.ndarray or dict[str, np.ndarray]")
 
     def log_text(self, path: str, text: str, **kwargs) -> None:
         """

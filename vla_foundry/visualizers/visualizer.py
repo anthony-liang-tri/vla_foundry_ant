@@ -391,12 +391,13 @@ class Visualizer:
         self.log_line_strips3d(f"{path}/path", trajectory_points, **kwargs)
 
     @ensure_initialized_and_enabled
-    def log_line_strips3d(self, path: str, line_strips: np.ndarray, **kwargs) -> None:
+    def log_line_strips3d(self, path: str, line_strips: np.ndarray | dict[str, np.ndarray], **kwargs) -> None:
         """Log 3D line strips to the active backend.
 
         Args:
             path: Path in the visualization hierarchy (e.g., "lines/trajectory").
-            line_strips: Line strips as a NumPy array of shape (N, 3).
+            line_strips: Line strips as a NumPy array of shape (N, 3),
+                or multiple named line strips as a dictionary.
         """
         every_n = _pop_every_n(kwargs)
         full_path = _prefix(path)
