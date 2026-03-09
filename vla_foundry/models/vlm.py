@@ -75,7 +75,14 @@ class VLM(TransformerBase):
         self.projection = ModalityProjector(model_params.vit, model_params.transformer.hidden_dim)
 
     def forward(
-        self, input_ids, pixel_values, attention_mask=None, output_hidden_states=False, use_cache=False, **kwargs
+        self,
+        input_ids,
+        pixel_values,
+        attention_mask=None,
+        output_hidden_states=False,
+        use_cache=False,
+        attention_mask_images=None,  # ignored: image tokens are handled via image_token_id masking
+        **kwargs,
     ):
         # image shape [bsz, 3, image_size, image_size]
         # input_ids and attention_mask should already allot tokens for the image
