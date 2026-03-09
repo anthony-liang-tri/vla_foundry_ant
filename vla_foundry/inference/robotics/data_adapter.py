@@ -9,7 +9,7 @@ processor, and policy-facing outputs.
 
 import copy
 import logging
-from typing import Any
+from typing import Any, Tuple
 
 import numpy as np
 import torch
@@ -97,11 +97,13 @@ class PolicyDataAdapter:
         self.total_action_timesteps = self.num_past_timesteps + 1 + self.num_future_timesteps
 
         self.action_buffer = []
+        self.action_buffer_mask = []
         self.proprioception_buffer = []
         self.image_buffer = []
         self.raw_obs_buffer = []  # Store raw observations for generating point clouds
         self.reference = {}
         self.reference_initialized = False
+        self.last_model_output = None  # Cache raw normalized model output for guidance
 
     def initialize_action_buffer(self, observation) -> None:
         logging.debug("Initializing action buffer")
@@ -116,6 +118,7 @@ class PolicyDataAdapter:
             action[absolute_field] = np.asarray(robot_data, dtype=np.float64)
 
         self.action_buffer = [copy.deepcopy(action) for _ in range(self.total_action_timesteps)]
+        self.action_buffer_mask = [True] + [False] * (len(self.action_buffer) - 1)
 
     def initialize_proprioception_buffer(self, observation) -> None:
         logging.debug("Initializing proprioception buffer")
@@ -171,10 +174,12 @@ class PolicyDataAdapter:
     def reset(self, initial_observation):
         logging.debug("Resetting data adapter")
         self.action_buffer = []
+        self.action_buffer_mask = []
         self.proprioception_buffer = []
         self.image_buffer = []
         self.raw_obs_buffer = []
         self.reference_initialized = False
+        self.last_model_output = None
         self.initialize_action_buffer(initial_observation)
         self.initialize_proprioception_buffer(initial_observation)
         self.initialize_image_buffer(initial_observation)
@@ -201,10 +206,19 @@ class PolicyDataAdapter:
         last_action = copy.deepcopy(self.action_buffer[-1])
         self.action_buffer.pop(0)
         self.action_buffer.append(last_action)
+        self.action_buffer_mask.pop(0)
+        self.action_buffer_mask.append(False)
 
         output = self.action_mapping.create_pose_and_gripper(current_action_dict)
         vz.log_robot_gym_poses_and_grippers("current_action_arm_poses", output)
         return output
+
+    def get_remaining_actions_in_buffer(self) -> Tuple[int, int]:
+        """Return remaining valid actions and total remaining slots from current execution index."""
+        start_idx = min(self.num_past_timesteps, len(self.action_buffer_mask))
+        remaining_slots = max(0, len(self.action_buffer_mask) - start_idx)
+        remaining_actions = int(sum(self.action_buffer_mask[start_idx:]))
+        return remaining_actions, remaining_slots
 
     def update_reference(self, observation):
         """
@@ -628,6 +642,12 @@ class PolicyDataAdapter:
     def update_action(self, observation, model_output: torch.Tensor):
         logging.debug("Updating action buffer with fresh predictions")
         model_output = model_output.cpu()
+        n_missing_actions = max(0, len(self.action_buffer) - model_output.shape[1])
+        if n_missing_actions > 0:
+            filler = model_output[:, -1:].expand(-1, n_missing_actions, -1)
+            model_output = torch.cat((model_output, filler), dim=1)
+        # Cache the normalized model output for guidance in async mode
+        self.last_model_output = model_output.clone()
         action_list = self.action_mapping.from_action_model(
             model_output,
             self.robotics_processor.normalizer,
@@ -635,6 +655,7 @@ class PolicyDataAdapter:
         )
         # Update the action buffer with the new actions from the model
         self.action_buffer = [copy.deepcopy(action) for action in action_list]
+        self.action_buffer_mask = [True] * (len(self.action_buffer) - n_missing_actions) + [False] * n_missing_actions
         vz.log_robot_gym_action_predictions(
             "action_predictions", [self.action_mapping.create_pose_and_gripper(action) for action in self.action_buffer]
         )

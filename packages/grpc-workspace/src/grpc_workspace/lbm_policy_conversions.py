@@ -378,7 +378,7 @@ def poses_and_grippers_to_grpc_msg(
     for gripper_name in source.grippers:
         robot_gripper_status_msg = RobotGripperStatusMsg(
             gripper_name=gripper_name,
-            gripper_position=float(source.grippers[gripper_name]),
+            gripper_position=float(np.asarray(source.grippers[gripper_name]).flatten()[0]),
         )
         robot_gripper_status_msg_list.append(robot_gripper_status_msg)
 

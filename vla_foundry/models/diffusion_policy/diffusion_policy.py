@@ -1,3 +1,5 @@
+from typing import Optional
+
 import torch
 
 from vla_foundry.models.base_model import BaseModel
@@ -154,6 +156,10 @@ class DiffusionPolicy(BaseModel):
         num_inference_steps=None,
         past_mask=None,
         proprioception=None,
+        guidance_target: Optional[torch.Tensor] = None,
+        guidance_scale: float = 0.0,
+        guidance_mask: Optional[torch.Tensor] = None,
+        sigma_d_obs: float = 0.2,
         **kwargs,  # Ignore extra params like point_cloud (used by other models)
     ):
         """
@@ -168,6 +174,10 @@ class DiffusionPolicy(BaseModel):
             num_inference_steps: Number of denoising steps (defaults to scheduler.num_timesteps)
             past_mask: Optional mask indicating which actions are from past (1) vs future (0)
             proprioception: Optional proprioception input
+            guidance_target: Target actions for Pi-GDM guidance (previous chunk predictions)
+            guidance_scale: Multiplier for β = guidance_scale * n (1.0 = recommended default)
+            guidance_mask: Per-timestep mask weighting the guidance residual
+            sigma_d_obs: Observation noise std for Pi-GDM (default 0.2)
             **kwargs: Model-specific args
 
         Returns:
@@ -175,6 +185,14 @@ class DiffusionPolicy(BaseModel):
         """
         if num_inference_steps is None:
             num_inference_steps = self.scheduler.num_timesteps
+        num_inference_steps = int(num_inference_steps)
+        if num_inference_steps <= 0:
+            raise ValueError(f"num_inference_steps must be > 0, got {num_inference_steps}")
+
+        use_guidance = guidance_scale > 0 and guidance_target is not None
+        # β = guidance_scale * n (num_inference_steps) as in the RTC paper.
+        # This gives critically-damped guidance: β·dt = guidance_scale ≈ 1.
+        beta = guidance_scale * num_inference_steps
 
         batch_size = actions.shape[0]
         device = actions.device
@@ -232,6 +250,25 @@ class DiffusionPolicy(BaseModel):
             # Extract predicted direction to denoise the action
             action_seq_len = actions.shape[1]
             predicted_direction = self.output_layer(transformer_output.hidden_states[-1][:, -action_seq_len:, :])
+
+            # Pi-GDM guidance (replace approximation, J ≈ I).
+            # Weight = min(β, raw_weight) with β = guidance_scale (fixed).
+            # Fixed β gives step-count invariance (see generate_actions docstring).
+            if use_guidance:
+                tau = step / self.scheduler.num_timesteps
+                x0_hat = actions - tau * predicted_direction
+                residual = guidance_target - x0_hat
+                if guidance_mask is not None:
+                    if guidance_mask.dim() == 1:
+                        guidance_mask = guidance_mask.unsqueeze(0).unsqueeze(-1)  # [1, T, 1]
+                    elif guidance_mask.dim() == 2:
+                        guidance_mask = guidance_mask.unsqueeze(0)  # [1, T, D]
+                    residual = residual * guidance_mask
+                sigma_sq = sigma_d_obs**2
+                denom = (1 - tau) * tau * sigma_sq + 1e-8
+                raw_weight = (tau**2 + sigma_sq * (1 - tau) ** 2) / denom
+                adaptive_scale = min(beta, raw_weight)
+                predicted_direction = predicted_direction - adaptive_scale * residual
 
             # Denoise actions using scheduler step
             predicted_actions = self.scheduler.step(predicted_direction, step, actions, step_size=step_size)

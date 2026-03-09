@@ -8,6 +8,7 @@ visual observations and language instructions.
 
 import argparse
 import logging
+import math
 import os
 import uuid
 from collections import defaultdict
@@ -63,6 +64,8 @@ class InferenceDiffusionPolicy(Policy):
         open_loop_steps: int = 4,
         device: str = "cuda",
         num_flow_steps: int = 10,
+        guidance_scale: float = 0.0,
+        sigma_d_obs: float = 0.2,
     ):
         self.model_config_path = os.path.join(checkpoint_directory, "config.yaml")
 
@@ -94,6 +97,8 @@ class InferenceDiffusionPolicy(Policy):
         self.open_loop_steps = open_loop_steps
         self.current_open_loop_step = defaultdict(int)
         self.num_flow_steps = num_flow_steps
+        self.guidance_scale = guidance_scale
+        self.sigma_d_obs = sigma_d_obs
 
         # Load model configuration and create model
         self.cfg = load_experiment_params_from_yaml(
@@ -145,9 +150,9 @@ class InferenceDiffusionPolicy(Policy):
         self.preprocessor_image_resize_method = preprocessing_config.get(
             "preprocessor_image_resize_method", ImageResizingMethod.CENTER_CROP
         )
-        total_timesteps = self.num_past_timesteps + 1 + self.future_timesteps
+        self.total_timesteps = self.num_past_timesteps + 1 + self.future_timesteps
         logging.info(
-            f"Timestep configuration: total={total_timesteps}, "
+            f"Timestep configuration: total={self.total_timesteps}, "
             f"past={self.num_past_timesteps}, current=1, future={self.future_timesteps}"
         )
 
@@ -176,6 +181,39 @@ class InferenceDiffusionPolicy(Policy):
         metadata.checkpoint_path = self.checkpoint_path
         return metadata
 
+    def _build_guidance(self, adapter, actions_tensor, action_buffer_mask_snapshot):
+        """Build guidance target and mask from previous predictions, or return (None, None)."""
+        if adapter.last_model_output is None or self.guidance_scale <= 0:
+            return None, None
+
+        guide_start = self.num_past_timesteps
+        # Find last valid (non-filler) position in the old buffer.
+        valid_indices = [i for i, keep in enumerate(action_buffer_mask_snapshot) if keep]
+        overlap_end = (max(valid_indices) + 1) if valid_indices else guide_start
+        if overlap_end <= guide_start:
+            return None, None
+
+        guidance_target = actions_tensor.clone()
+
+        # In open-loop mode, we know exactly how many steps are consumed between inferences.
+        expected_k = self.open_loop_steps
+
+        # Mask: 1.0 on already-executed positions, decay from splice onward.
+        mask = torch.zeros(self.total_timesteps, device=actions_tensor.device)
+        execute_end = min(guide_start + expected_k, overlap_end)
+        mask[guide_start:execute_end] = 1.0
+        decay_span = overlap_end - execute_end
+        if decay_span > 0:
+            for i in range(execute_end, overlap_end):
+                t = (i - execute_end + 1) / (decay_span + 1)
+                mask[i] = math.exp(-3.0 * t)
+        # Zero out filler positions.
+        for i, keep in enumerate(action_buffer_mask_snapshot):
+            if not keep:
+                mask[i] = 0
+
+        return guidance_target, mask
+
     def step(self, observation: MultiarmObservation, client_id: uuid.UUID) -> PosesAndGrippers:
         """Generate robot actions based on a single observation."""
         logging.debug(f"Stepping with {client_id}")
@@ -195,6 +233,12 @@ class InferenceDiffusionPolicy(Policy):
             attention_mask = model_input["attention_mask"].to(self.device) if "attention_mask" in model_input else None
             pixel_values = model_input["pixel_values"].to(self.device) if "pixel_values" in model_input else None
             actions_tensor = model_input["actions"].to(self.device) if "actions" in model_input else None
+
+            guidance_target, guidance_mask = self._build_guidance(
+                self.data_adapter[client_id],
+                actions_tensor,
+                self.data_adapter[client_id].action_buffer_mask,
+            )
 
             # Log processed images going into the model (every 10 steps)
             if pixel_values is not None:
@@ -224,6 +268,10 @@ class InferenceDiffusionPolicy(Policy):
                     past_mask=model_input["past_mask"].to(self.device),
                     proprioception=proprioception,
                     point_cloud=point_cloud,
+                    guidance_target=guidance_target,
+                    guidance_scale=self.guidance_scale,
+                    guidance_mask=guidance_mask,
+                    sigma_d_obs=self.sigma_d_obs,
                 )
 
                 # The model outputs need to be interpreted in context to have denormalized absolute actions
@@ -233,6 +281,8 @@ class InferenceDiffusionPolicy(Policy):
             self.current_open_loop_step[client_id] = 0
 
         actions = self.data_adapter[client_id].step_action()
+        remaining_actions, remaining_slots = self.data_adapter[client_id].get_remaining_actions_in_buffer()
+        logging.info(f"Client {client_id}: actions remaining in buffer={remaining_actions}/{remaining_slots}")
         self.current_open_loop_step[client_id] += 1
         self._step_count[client_id] += 1
 
@@ -298,6 +348,7 @@ class InferenceDiffusionPolicy(Policy):
                     field_mapping_path=self.field_mapping_path,
                     image_names=self.image_names,
                     preprocessor_image_size=self.preprocessor_image_size,
+                    preprocessor_image_resize_method=self.preprocessor_image_resize_method,
                     num_past_timesteps=self.num_past_timesteps,
                     num_future_timesteps=self.future_timesteps,
                     image_indices=self.cfg.data.image_indices,
@@ -319,6 +370,8 @@ def main():
     parser.add_argument("--device", type=str, default="cuda", help="Device to run the model on (cuda/cpu)")
     parser.add_argument("--num_flow_steps", type=int, default=10, help="Number of diffusion steps to use")
     parser.add_argument("--open_loop_steps", type=int, default=4, help="Number of open loop steps to use")
+    parser.add_argument("--guidance_scale", type=float, default=0.0, help="Pi-GDM guidance scale (0 = disabled)")
+    parser.add_argument("--sigma_d_obs", type=float, default=0.2, help="Conditioned prior std for Pi-GDM guidance")
 
     args = parser.parse_args()
 
@@ -333,6 +386,8 @@ def main():
         device=args.device,
         num_flow_steps=args.num_flow_steps,
         open_loop_steps=args.open_loop_steps,
+        guidance_scale=args.guidance_scale,
+        sigma_d_obs=args.sigma_d_obs,
     )
 
     # Create run name with date identifier
