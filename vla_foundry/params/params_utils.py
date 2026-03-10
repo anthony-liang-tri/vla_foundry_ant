@@ -66,7 +66,7 @@ def _strip_unknown_keys(raw_value: Any, cls: type[Any], path: SequenceType[str])
         field_name = field_info.name
         if field_name in cleaned and isinstance(cleaned[field_name], dict):
             field_type = field_info.type
-            # Resolve the actual type (handle Optional, Union, etc.)
+            # Resolve the actual type
             field_cls = _resolve_dataclass(field_type)
             if field_cls is not None:
                 # Recursively strip unknown keys from nested dataclass

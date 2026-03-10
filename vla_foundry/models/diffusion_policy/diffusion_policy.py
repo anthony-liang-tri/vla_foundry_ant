@@ -1,5 +1,3 @@
-from typing import Optional
-
 import torch
 
 from vla_foundry.models.base_model import BaseModel
@@ -156,9 +154,9 @@ class DiffusionPolicy(BaseModel):
         num_inference_steps=None,
         past_mask=None,
         proprioception=None,
-        guidance_target: Optional[torch.Tensor] = None,
+        guidance_target: torch.Tensor | None = None,
         guidance_scale: float = 0.0,
-        guidance_mask: Optional[torch.Tensor] = None,
+        guidance_mask: torch.Tensor | None = None,
         sigma_d_obs: float = 0.2,
         **kwargs,  # Ignore extra params like point_cloud (used by other models)
     ):

@@ -153,9 +153,9 @@ def scale_intrinsics_3x3_for_resize_and_crop(
     ----------
     original_intrinsics : np.ndarray
         Camera intrinsics containing (fx, fy, cx, cy). Accepts shape (3, 3) or (N, 3, 3).
-    original_image_size : Tuple[int, int]
+    original_image_size : tuple[int, int]
         Original image size as (width, height).
-    processed_image_size : Tuple[int, int]
+    processed_image_size : tuple[int, int]
         Processed image size as (width, height).
 
     Returns

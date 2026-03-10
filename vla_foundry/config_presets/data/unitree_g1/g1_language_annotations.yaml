@@ -2,15 +2,11 @@
 # Meant for training.
 #   original: human prompt
 #   randomized: versions of the original created with ChatGPT
-# Meant for evaluation.
-#   alternative: alternative and valid versions created from the original prompt
-#   nonsense: non sensical prompt
-#   original_with_nonsense_nouns: original prompt with the nouns swapped to nonsense words
 language_dict:
   # This is used to populate language instruction for skills with no hints
   # at all. I.e. datagram from oxe with no "task_description" in their
   # metadata file.
-  DoSomethingUseful:
+  do_something_useful:
     original:
     - perform some useful task
     randomized:
@@ -34,13 +30,9 @@ language_dict:
     - manage a constructive task
     - deliver a helpful performance
     - handle a helpful undertaking
-  StackOxoContainers:
+  move_block_on_plate:
     original:
-    - stack the light container on top of the colorful one
-    randomized:
-    - Stack the white container on top of the colorful one
-    - stack the container containing lens wipes on top of the container containing paper clips
-    - get the lens wipe container and place it on top of the paper clip container
-    - pick up the container with lens wipes and put it on top of the container with paper clips
-    - lift the container of lens wipes and set it on top of the container of paper clips
-    - take the lens wipe container and stack it on top of the paper clip container
+    - move the red block on the blue plate using the left hand
+  stack_cubes_ordered:
+    original:
+    - stack a green block on the top of a blue block, and stack a red block on the top of the green block

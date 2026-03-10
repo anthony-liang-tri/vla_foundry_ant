@@ -9,7 +9,7 @@ processor, and policy-facing outputs.
 
 import copy
 import logging
-from typing import Any, Tuple
+from typing import Any
 
 import numpy as np
 import torch
@@ -213,7 +213,7 @@ class PolicyDataAdapter:
         vz.log_robot_gym_poses_and_grippers("current_action_arm_poses", output)
         return output
 
-    def get_remaining_actions_in_buffer(self) -> Tuple[int, int]:
+    def get_remaining_actions_in_buffer(self) -> tuple[int, int]:
         """Return remaining valid actions and total remaining slots from current execution index."""
         start_idx = min(self.num_past_timesteps, len(self.action_buffer_mask))
         remaining_slots = max(0, len(self.action_buffer_mask) - start_idx)

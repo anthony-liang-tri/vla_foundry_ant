@@ -1,7 +1,7 @@
 """
 MCAP Converter for VLA Foundry
 
-Converts MCAP ROS2 recordings to preprocessed samples. Uses rosbags for
+Converts MCAP ROS 2 recordings to preprocessed samples. Uses rosbags for
 automatic deserialization with structured extraction for standard messages
 (JointState, PoseStamped) producing composite keys compatible with LBM
 training (e.g. "action_ee_left__xyz", "action_ee_left__rot_6d").
@@ -11,7 +11,7 @@ Supported ROS 2 Message Types
 
 Message type detection uses attribute inspection rather than importing
 ROS 2 message definitions. This avoids ROS 2 dependencies but relies on
-assumptions that may break for custom messages with similar attribute 
+assumptions that may break for custom messages with similar attribute
 signatures.
 
 TODO (naveen): Consider importing message types from rosbags.typesys or adding
@@ -30,7 +30,7 @@ FLAT EXTRACTION (extract_array_from_msg -> single array):
     Custom messages             -> all numeric fields (recursive)
 
 FIELD PATH EXTRACTION (extract_field_path -> config-driven):
-    Any message with field_extraction config in topics YAML.
+    Any message with field_extraction config in topics YAML config.
     Used for: Dex3 tactile, lowstate, PolicyKeyframe, etc.
 
 IMAGE EXTRACTION (extract_image_from_msg -> numpy):
@@ -40,48 +40,119 @@ IMAGE EXTRACTION (extract_image_from_msg -> numpy):
 
 Usage
 -----
-uv run python vla_foundry/data/preprocessing/preprocess_robotics_to_tar.py \\
-    --type mcap \\
-    --source_episodes "['<path>/']" \\
-    --output_dir s3://bucket/path \\
-    --camera_names "include config.yaml" \\
-    --action_fields_config_path action_topics.yaml \\
-    --config_path config_path.yaml
+uv run --group preprocessing vla_foundry/data/preprocessing/preprocess_robotics_to_tar.py \
+    --type mcap \
+    --source_episodes <s3 or local/path/to/episodes> \
+    --output_dir <s3 or local/path/to/output> \
+    --output_dir_fixed_path <s3 path to fixed dataset bucket> \
+    --config_path <local path to preprocessing_config.yaml> \
+    --action_fields_config_path <local path to action_fields_config.yaml> \
+    --topics_to_fields_path <local path to topics_to_fields_config.yaml> \
+    --camera_names "include <local path to camera_names_config.yaml>" \
+    --task_filter '["<task_name>"]' \
+    --domain_filter '["<sim_or_real>"]' \
+    --source_filter '["<teleop_or_filtered>"]'
 """
 
-import json
-import logging
+import os
+import uuid
 from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import cv2
+import fsspec
 import numpy as np
+import ray
 import yaml
+from numpy.typing import NDArray
 from rosbags.highlevel import AnyReader
-from scipy.interpolate import interp1d
-from scipy.signal import butter, filtfilt
 from scipy.spatial.transform import Rotation as R
 
 from vla_foundry.data.preprocessing.robotics.converters.base import BaseRoboticsConverter
 from vla_foundry.data.preprocessing.robotics.preprocess_masks import create_past_and_future_masks
-from vla_foundry.data.preprocessing.utils import is_still_sample
-from vla_foundry.data.robotics.utils import matrix_to_rot_6d
-from vla_foundry.file_utils import file_exists, is_dir, list_directory_recursive, yaml_load
+from vla_foundry.data.preprocessing.temporal_resampler import TemporalResampler
+from vla_foundry.data.preprocessing.utils import is_still_sample, validate_pose_groups
+from vla_foundry.data.robotics.utils import load_action_field_config, matrix_to_rot_6d
+from vla_foundry.file_utils import copy_to_temp_file, file_exists, yaml_load
 
-logger = logging.getLogger(__name__)
 
-# Minimum number of samples required to compute reliable median for anti-aliasing filter
-MIN_SAMPLES_FOR_ANTIALIASING = 8
-MIN_EPISODE_DURATION = 0.001
+@dataclass
+class SampleMetadata:
+    """Metadata for each preprocessed sample extracted from an MCAP episode.
+
+    Attributes:
+        episode_id: Unique identifier for the source episode (derived from the
+            episode directory name).
+        sample_id: Globally unique identifier for this sample, combining a UUID
+            with the episode_id and zero-padded anchor timestep.
+        anchor_timestep: The absolute timestep index within the episode that
+            this sample is centred on. None if the sample has no anchor.
+        anchor_episode_timestamp: The resampled wall-clock timestamp (relative
+            to episode start) at the anchor timestep. None if unavailable.
+        anchor_relative_idx: Index of the anchor within the extracted lowdim
+            window (i.e. ``past_lowdim_steps``). None if the sample has no anchor.
+        image_timesteps: Absolute episode timestep indices for each image frame
+            in the sample, one per entry in ``cfg.image_indices``.
+        lowdim_start_timestep: Absolute episode index of the first lowdim
+            timestep in the temporal window (may be negative before padding).
+        lowdim_end_timestep: Absolute episode index of the last lowdim timestep
+            in the temporal window (may exceed episode length before padding).
+        past_padding: Number of timesteps that were left-padded to fill the
+            window when the anchor is near the start of the episode.
+        future_padding: Number of timesteps that were right-padded to fill the
+            window when the anchor is near the end of the episode.
+        camera_names: Ordered list of camera field names present in this sample
+            (keys into the camera data dictionary).
+        original_episode_length: Total number of resampled timesteps in the
+            source episode before any windowing or padding.
+        original_episode_duration_s: Wall-clock duration of the source episode
+            in seconds, as recorded in the episode metadata. None if unavailable.
+        original_image_sizes: Mapping from camera name to native (height, width)
+            resolution. Populated downstream by ``upload_sample_to_s3``.
+        is_padded: True if the sample required any temporal padding (past or
+            future) to fill the lowdim window.
+        task_name: Semantic task label(s) for the episode (e.g. skill name from
+            the episode metadata). None if not specified.
+        teleop_or_rollout: Whether the episode was collected via teleoperation
+            or autonomous rollout. None if not specified.
+        robot: Robot platform identifier(s) from the episode metadata. None if
+            not specified.
+        station_name: Name of the physical recording station or workstation.
+            None if not specified.
+        domain: ``"sim"`` or ``"real"``, indicating whether the episode was
+            recorded in simulation or on a physical robot. None if not specified.
+    """
+
+    episode_id: str
+    sample_id: str
+    anchor_timestep: int | None
+    anchor_episode_timestamp: float | None
+    anchor_relative_idx: int | None
+    image_timesteps: list[int]
+    lowdim_start_timestep: int
+    lowdim_end_timestep: int
+    past_padding: int
+    future_padding: int
+    camera_names: list[str]
+    original_episode_length: int
+    original_episode_duration_s: float | None
+    original_image_sizes: dict[str, tuple[int, int]]
+    is_padded: bool
+    task_name: str | None
+    teleop_or_rollout: str | None
+    robot: str | None
+    station_name: str | None
+    domain: str | None
 
 
 def extract_image_from_msg(msg: Any, return_numpy: bool = True) -> bytes | np.ndarray:
     """
-    Extract image data from ROS2 image message. Raises exceptions for unsupported formats.
+    Extract image data from ROS 2 image types. Raises exceptions for unsupported formats.
 
     Args:
-        msg: ROS2 image message (CompressedImage or Image)
+        msg: ROS 2 image message (CompressedImage or Image).
         return_numpy: If True, return RGB numpy array. If False, return JPEG bytes.
 
     Returns:
@@ -90,85 +161,84 @@ def extract_image_from_msg(msg: Any, return_numpy: bool = True) -> bytes | np.nd
     # 1. Handle CompressedImage
     if hasattr(msg, "format") and hasattr(msg, "data") and not hasattr(msg, "height"):
         fmt = msg.format.lower()
-        if "jpeg" in fmt or "jpg" in fmt or "png" in fmt:
-            img = cv2.imdecode(np.frombuffer(bytes(msg.data), dtype=np.uint8), cv2.IMREAD_COLOR)
-            if img is None:
-                raise ValueError(f"Failed to decode {fmt.upper()} CompressedImage")
+        if not any(ext in fmt for ext in ("jpeg", "jpg", "png")):
+            raise ValueError(f"Unsupported CompressedImage format: {fmt}")
 
-            rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            if return_numpy:
-                return rgb_img
+        img = cv2.imdecode(np.frombuffer(bytes(msg.data), dtype=np.uint8), cv2.IMREAD_COLOR)
+        if img is None:
+            raise ValueError(f"Failed to decode {fmt.upper()} CompressedImage")
 
-            success, jpeg_data = cv2.imencode(".jpg", rgb_img, [cv2.IMWRITE_JPEG_QUALITY, 95])
-            if not success:
-                raise ValueError("Failed to re-encode image to JPEG")
-            return jpeg_data.tobytes()
-
-        raise ValueError(f"Unsupported CompressedImage format: {fmt}")
-
+        rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     # 2. Handle Raw Image
-    if not all(hasattr(msg, a) for a in ("height", "width", "encoding", "data")):
-        raise TypeError(f"Message is not a valid Image or CompressedImage: {type(msg)}")
-
-    encoding = msg.encoding.lower()
-    if "uc1" in encoding or "fc1" in encoding:
-        raise ValueError(f"Depth images ({encoding}) are not supported in the RGB pipeline.")
-
-    if "rgb8" in encoding:
-        img_array = np.frombuffer(msg.data, dtype=np.uint8).reshape(msg.height, msg.width, 3).copy()
-    elif "bgr8" in encoding:
-        img = np.frombuffer(msg.data, dtype=np.uint8).reshape(msg.height, msg.width, 3)
-        img_array = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    elif "mono8" in encoding or "gray" in encoding or encoding == "8uc1":
-        img = np.frombuffer(msg.data, dtype=np.uint8).reshape(msg.height, msg.width)
-        img_array = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
     else:
-        raise ValueError(f"Unsupported raw image encoding: {encoding}")
+        if not all(hasattr(msg, a) for a in ("height", "width", "encoding", "data")):
+            raise TypeError(f"Message is not a valid Image or CompressedImage: {type(msg)}")
+
+        encoding = msg.encoding.lower()
+        h, w = msg.height, msg.width
+        raw = np.frombuffer(msg.data, dtype=np.uint8)
+        if encoding == "rgb8":
+            rgb_img = raw.reshape(h, w, 3).copy()
+        elif encoding == "bgr8":
+            rgb_img = cv2.cvtColor(raw.reshape(h, w, 3), cv2.COLOR_BGR2RGB)
+        elif encoding in ("mono8", "8uc1"):
+            rgb_img = cv2.cvtColor(raw.reshape(h, w), cv2.COLOR_GRAY2RGB)
+        elif "16uc1" in encoding or "32fc1" in encoding:
+            raise ValueError(f"Depth images ({encoding}) are not supported in the RGB pipeline")
+        else:
+            raise ValueError(f"Unsupported raw image encoding: {encoding}")
 
     if return_numpy:
-        return img_array
+        return rgb_img
 
-    success, jpeg_data = cv2.imencode(".jpg", img_array, [cv2.IMWRITE_JPEG_QUALITY, 95])
+    success, jpeg_data = cv2.imencode(".jpg", cv2.cvtColor(rgb_img, cv2.COLOR_BGR2RGB), [cv2.IMWRITE_JPEG_QUALITY, 95])
     if not success:
         raise ValueError("Failed to encode raw image to JPEG")
+
     return jpeg_data.tobytes()
 
 
 def extract_structured_msg(msg: Any) -> dict[str, np.ndarray] | None:
     """
-    Extract structured key-value data with 6D rotation.
+    Extract structured key-value data. Raises an exception for errors in extraction.
 
     Handles:
     - sensor_msgs/JointState: Returns dict with __<joint_name> keys
     - geometry_msgs/PoseStamped, Pose: Returns __xyz and __rot_6d keys
 
     Returns:
-        Dictionary mapping field names to float32 arrays, or None if not a structured message
+        Dictionary mapping field names to float32 arrays, or None if not a structured message.
     """
-    if hasattr(msg, "name") and hasattr(msg, "position") and hasattr(msg, "velocity"):
-        if not msg.name:
-            return None
-        return {f"__{n}": np.asarray([p], dtype=np.float32) for n, p in zip(msg.name, msg.position, strict=True)}
+    msg_type = type(msg).__name__
 
-    pose = None
-    if hasattr(msg, "pose") and hasattr(msg.pose, "position"):
-        pose = msg.pose
-    elif hasattr(msg, "position") and hasattr(msg, "orientation") and not hasattr(msg, "velocity"):
-        pose = msg
+    try:
+        # sensor_msgs/JointState
+        if hasattr(msg, "name") and hasattr(msg, "position") and hasattr(msg, "velocity") and hasattr(msg, "effort"):
+            # Extract only position data for now
+            return {f"__{n}": np.asarray([p], dtype=np.float32) for n, p in zip(msg.name, msg.position, strict=True)}
 
-    if pose is not None:
-        xyz = np.array([pose.position.x, pose.position.y, pose.position.z], dtype=np.float32)
-        quat = np.array([pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w])
-        rot_matrix = R.from_quat(quat).as_matrix()
-        rot_6d = matrix_to_rot_6d(rot_matrix).astype(np.float32)
-        return {"__xyz": xyz, "__rot_6d": rot_6d}
+        # Unwrap geometry_msgs/PoseStamped -> geometry_msgs/Pose
+        if hasattr(msg, "pose") and hasattr(msg.pose, "position"):
+            msg = msg.pose
 
-    return None
+        # Handling geometry_msgs/Pose (`velocity` guard against Odometry-like messages)
+        if hasattr(msg, "position") and hasattr(msg, "orientation") and not hasattr(msg, "velocity"):
+            xyz = np.array([msg.position.x, msg.position.y, msg.position.z], dtype=np.float32)
+            quat = np.array([msg.orientation.x, msg.orientation.y, msg.orientation.z, msg.orientation.w])
+            rot_matrix = R.from_quat(quat).as_matrix()
+            rot_6d = matrix_to_rot_6d(rot_matrix).astype(np.float32)
+            return {"__xyz": xyz, "__rot_6d": rot_6d}
+
+        # Will fallback to extracting an array
+        return None
+    except Exception as e:
+        print(f"⚠️  Structured message extraction failed for message type {msg_type}: {e}")
+        return None
 
 
 def extract_array_from_msg(msg: Any) -> np.ndarray | None:
     """
-    Fallback: extract flat numeric array from ROS2 message using attribute inspection.
+    Fallback: extract flat numeric array from ROS 2 message using attribute inspection.
 
     Handles common message types:
     - geometry_msgs/WrenchStamped, Wrench: [force(3), torque(3)]
@@ -178,19 +248,21 @@ def extract_array_from_msg(msg: Any) -> np.ndarray | None:
     Returns:
         Flattened float32 array or None if extraction fails
     """
-    arrays = []
-    if hasattr(msg, "wrench") and hasattr(msg.wrench, "force"):
-        w = msg.wrench
-        arrays.extend([np.array([w.force.x, w.force.y, w.force.z]), np.array([w.torque.x, w.torque.y, w.torque.z])])
-    elif hasattr(msg, "force") and hasattr(msg, "torque") and hasattr(msg.force, "x"):
-        arrays.extend(
-            [np.array([msg.force.x, msg.force.y, msg.force.z]), np.array([msg.torque.x, msg.torque.y, msg.torque.z])]
-        )
-    else:
-        try:
-            attrs = [a for a in dir(msg) if not a.startswith("_")]
-            for a in attrs:
-                val = getattr(msg, a)
+    msg_type = type(msg).__name__
+    try:
+        arrays = []
+        # Unwrap geometry_msgs/WrenchStamped -> geometry_msgs/`Wrench
+        if hasattr(msg, "wrench"):
+            msg = msg.wrench
+        if hasattr(msg, "force") and hasattr(msg, "torque"):
+            f, t = msg.force, msg.torque
+            arrays.extend([np.array([f.x, f.y, f.z]), np.array([t.x, t.y, t.z])])
+        else:
+            # Generic collection of all numeric attributes
+            for name in dir(msg):
+                if name.startswith("_"):
+                    continue
+                val = getattr(msg, name)
                 if isinstance(val, (int, float, np.number)):
                     arrays.append(np.array([val]))
                 elif isinstance(val, (list, tuple)):
@@ -199,10 +271,17 @@ def extract_array_from_msg(msg: Any) -> np.ndarray | None:
                         if arr.size > 0:
                             arrays.append(arr.flatten())
                     except (ValueError, TypeError):
+                        # Non-numeric list so skip
                         pass
-        except Exception:
-            pass
-    return np.concatenate(arrays).astype(np.float32) if arrays else None
+
+        if not arrays:
+            print(f"🐛 No numeric fields in {msg_type}")
+            return None
+
+        return np.concatenate(arrays).astype(np.float32)
+    except Exception as e:
+        print(f"⚠️  Failed to extract array for message type {msg_type}: {e}")
+        return None
 
 
 def extract_field_path(msg: Any, path: str) -> np.ndarray | None:
@@ -215,280 +294,366 @@ def extract_field_path(msg: Any, path: str) -> np.ndarray | None:
     - Array iteration: "motor_state[*].q"
 
     Args:
-        msg: ROS2 message
+        msg: Any ROS message with field_extraction config in topics YAML.
         path: Dot-notation field path
 
     Returns:
         Float32 array or None if path is invalid
-
-    Raises:
-        AttributeError: If field path is invalid (fail-fast pattern for debugging)
     """
-    parts = path.split(".")
-    obj = msg
+    try:
+        parts = path.split(".")
+        obj = msg
 
-    for i, part in enumerate(parts):
-        if "[*]" in part:
-            field = part.replace("[*]", "")
-            items = getattr(obj, field)
+        for i, part in enumerate(parts):
+            if "[*]" in part:
+                field = part.replace("[*]", "")
+                items = getattr(obj, field)
 
-            # If there's more path after [*], e.g. "press_sensor_state[*].pressure"
-            if i + 1 < len(parts):
-                remaining_path = parts[i + 1 :]
-                extracted = []
-                for item in items:
-                    val = item
-                    for sub_part in remaining_path:
-                        val = getattr(val, sub_part)
-                    extracted.append(val)
-                return np.array(extracted, dtype=np.float32).flatten()
+                # Traverse remaining path for each item, e.g. "motor_state[*].q"
+                remaining = parts[i + 1 :]
+                if remaining:
+                    extracted = []
+                    for item in items:
+                        val = item
+                        for sub_part in remaining:
+                            val = getattr(val, sub_part)
+                        extracted.append(val)
+                    return np.array(extracted, dtype=np.float32).flatten()
 
-            # Default behavior for simple iterators (e.g. joints with .q)
-            return np.array([getattr(item, "q", item) for item in items], dtype=np.float32).flatten()
+                # No remaining path, could be an array of primitives, e.g. "positions[*]"
+                return np.array(list(items), dtype=np.float32).flatten()
 
-        obj = getattr(obj, part)
+            obj = getattr(obj, part)
 
-    return np.array([obj]).astype(np.float32) if np.isscalar(obj) else np.array(obj).astype(np.float32)
+        if np.isscalar(obj):
+            return np.array([obj], dtype=np.float32)
+        return np.array(obj, dtype=np.float32).flatten()
+    except Exception as e:
+        print(f"⚠️  Failed to extract path {path} from {type(msg).__name__}: {e}")
+        return None
 
 
-class TemporalResampler:
+def parse_episode_path(episode_path: str) -> dict[str, Any] | None:
     """
-    Resamples multi-rate signals to uniform target frequency with anti-aliasing.
+    Parse episode path components assuming .../task/domain/source/episode_id suffix convention.
+    Extracts the numeric episode index from the directory name prefix (e.g. "0026_20260129_161531" -> 26).
 
-    Supports:
-    - Continuous signals (linear interpolation with anti-aliasing filter)
-    - Images (nearest-neighbor selection)
+    Returns:
+        Dict with keys {task, domain, source, episode}, or None if the path has too few components.
     """
+    parts = episode_path.rstrip("/").split("/")
+    # Need at least 4 components: task/domain/source/episode_id
+    if len(parts) < 4:
+        return None
 
-    def __init__(self, target_hz: float):
-        """
-        Initialize resampler.
+    episode_dir = parts[-1]
+    # Extract leading numeric index from directory name (e.g. "0026_..." -> 26)
+    prefix = episode_dir.split("_")[0]
+    try:
+        episode_index = int(prefix)
+    except ValueError:
+        print(f"⚠️  Could not parse episode index from directory name: {episode_dir}")
+        return None
 
-        Args:
-            target_hz: Target sampling frequency in Hz
-        """
-        self.target_hz = target_hz
+    return {
+        "task": parts[-4],
+        "domain": parts[-3],
+        "source": parts[-2],
+        "episode_dir": episode_dir,
+        "episode_index": episode_index,
+    }
 
-    def create_target_timeline(self, start_time: float, end_time: float) -> np.ndarray:
-        """
-        Create target timeline with truly uniform frequency spacing.
 
-        Args:
-            start_time: Start time in seconds
-            end_time: End time in seconds
+@ray.remote
+def check_mcap_episode_validity_ray(episode_path: str) -> str | None:
+    """Check if an episode directory has valid processed data. Returns episode path if valid, None otherwise."""
+    fs, fs_path = fsspec.core.url_to_fs(episode_path)
+    fs_path = fs_path.rstrip("/")
 
-        Returns:
-            Array of target timestamps
-        """
-        return np.arange(start_time, end_time, 1.0 / self.target_hz)
+    try:
+        # Check for required files
+        dir_name = os.path.basename(fs_path)
+        mcap_path = f"{fs_path}/{dir_name}_0.mcap"
+        metadata_path = f"{fs_path}/metadata.yaml"
+        info_path = f"{fs_path}/info.yaml"
+        for required_file in [mcap_path, metadata_path, info_path]:
+            if not fs.exists(required_file):
+                return None
+        return episode_path
+    except Exception as e:
+        print(f"⚠️  Could not validate {episode_path}: {e}")
+        return None
 
-    def _apply_antialiasing_filter(self, values: np.ndarray, source_hz: float) -> np.ndarray:
-        """
-        Apply 4th-order Butterworth low-pass filter to prevent aliasing when downsampling.
 
-        Args:
-            values: Source values to filter
-            source_hz: Source sampling frequency
+@ray.remote
+def discover_and_validate_mcap_episodes_in_directory(mcap_dirs_path: str) -> list[str]:
+    """Discover and validate episodes from a directory of MCAP files in parallel."""
 
-        Returns:
-            Filtered values
-        """
-        nyquist = source_hz / 2.0
-        cutoff = self.target_hz / 2.0
-        norm_cutoff = cutoff / nyquist
-        if 0 < norm_cutoff < 1:
-            b, a = butter(4, norm_cutoff, btype="low")
-            if values.ndim == 1:
-                return filtfilt(b, a, values)
-            filtered = values.copy()
-            for i in range(values.shape[1]):
-                filtered[:, i] = filtfilt(b, a, values[:, i])
-            return filtered
-        return values
+    fs, fs_path = fsspec.core.url_to_fs(mcap_dirs_path)
+    fs_path = fs_path.rstrip("/")
 
-    def resample_continuous(
-        self, source_times: np.ndarray, source_values: np.ndarray, target_times: np.ndarray, method: str = "linear"
-    ) -> np.ndarray:
-        """
-        Resample continuous signals with Nyquist-aware anti-aliasing.
+    # Determine protocol prefix (e.g. "s3://")
+    protocol = fs.protocol
+    if isinstance(protocol, (list, tuple)):
+        protocol = protocol[0]
+    protocol_prefix = f"{protocol}://"
 
-        Applies anti-aliasing filter when source frequency > 2x target frequency
-        to prevent aliasing artifacts during downsampling.
+    # Recursively list all objects under the path
+    all_files = fs.find(fs_path)
 
-        Args:
-            source_times: Source timestamps
-            source_values: Source values (1D or 2D)
-            target_times: Target timestamps
-            method: Interpolation method ('linear', 'cubic', etc.)
+    # Collect parent paths of .mcap files
+    episode_paths = {f"{protocol_prefix}{os.path.dirname(p)}" for p in all_files if p.lower().endswith(".mcap")}
 
-        Returns:
-            Resampled values at target times
-        """
-        values = source_values
+    if not episode_paths:
+        return []
 
-        # Apply anti-aliasing if downsampling significantly
-        if len(source_times) > MIN_SAMPLES_FOR_ANTIALIASING:
-            dt_median = np.median(np.diff(source_times))
-            if dt_median > 0 and (1.0 / dt_median) > self.target_hz * 2.0:
-                values = self._apply_antialiasing_filter(values, 1.0 / dt_median)
+    # Validate episode
+    validation_futures = [check_mcap_episode_validity_ray.remote(ep_path) for ep_path in episode_paths]
+    validation_results = ray.get(validation_futures)
 
-        # Interpolate
-        if values.ndim == 1:
-            return interp1d(source_times, values, kind=method, fill_value="extrapolate")(target_times)
+    # Filter out None results (invalid episodes)
+    valid_episodes = [ep for ep in validation_results if ep is not None]
 
-        resampled = np.zeros((len(target_times), values.shape[1]))
-        for i in range(values.shape[1]):
-            resampled[:, i] = interp1d(source_times, values[:, i], kind=method, fill_value="extrapolate")(target_times)
-        return resampled
-
-    def resample_discrete(
-        self, source_times: np.ndarray, source_values: np.ndarray, target_times: np.ndarray
-    ) -> np.ndarray:
-        """
-        Resample discrete signal using zero-order hold.
-
-        Args:
-            source_times: Source timestamps
-            source_values: Source values
-            target_times: Target timestamps
-
-        Returns:
-            Resampled values (held from previous source value)
-        """
-        resampled = np.zeros((len(target_times),) + source_values.shape[1:], dtype=source_values.dtype)
-        source_idx = 0
-
-        for target_idx, target_time in enumerate(target_times):
-            while source_idx < len(source_times) - 1 and source_times[source_idx + 1] <= target_time:
-                source_idx += 1
-            resampled[target_idx] = source_values[source_idx]
-
-        return resampled
-
-    def resample_images(
-        self, source_times: np.ndarray, source_images: list[Any], target_times: np.ndarray
-    ) -> list[Any]:
-        """
-        Temporal resampling for images using nearest-neighbor lookup.
-
-        Args:
-            source_times: Source timestamps
-            source_images: List of images (bytes or arrays)
-            target_times: Target timestamps
-
-        Returns:
-            List of resampled images
-        """
-        return [source_images[np.argmin(np.abs(source_times - t))] for t in target_times]
+    return valid_episodes
 
 
 class MCAPConverter(BaseRoboticsConverter):
     """
-    MCAP converter for ROS2 bag files.
+    Converter to .tar for robot logs stored in the MCAP file format.
 
-    Converts MCAP recordings to VLA Foundry format with:
-    - Multi-camera RGB images
-    - Low-dimensional state and actions
-    - Temporal resampling to uniform frequency
-    - Episode metadata and language instructions
+    The converter handles:
+      - Multi-camera RGB images
+      - Low-dimensional state and actions
+      - Temporal resampling to a uniform frequency
+      - Episode metadata and language instructions
     """
 
-    def __init__(self, cfg):
-        """
-        Initialize MCAP converter.
+    VALID_DOMAINS = {"sim", "real"}
+    # TODO(mark.zolotas): Processing a "filtered" folder is a temporary solution
+    # to handle our QAed data, but this will be deprecated once we have a better
+    # solution of querying QAed data based on the updated episode metadata
+    VALID_SOURCES = {"teleop", "filtered"}
 
-        Args:
-            cfg: Configuration object with preprocessing parameters
-        """
+    def __init__(self, cfg):
         super().__init__(cfg)
         self.cfg = cfg
 
-        # Load topics configuration
-        topics_config_path = cfg.action_fields_config_path
-        if not file_exists(topics_config_path):
-            raise FileNotFoundError(f"Topics config not found: {topics_config_path}")
+        # Load language annotations
+        print("📚 Loading language annotations...")
+        with open(cfg.language_annotations_path) as f:
+            data = yaml.safe_load(f)
+        self.language_annotations = data.get("language_dict", {})
+        print(f"Loaded language annotations for {len(self.language_annotations)} tasks")
 
-        topics_cfg = yaml_load(topics_config_path)
+        # Load MCAP-specific settings from topics config
+        if not getattr(cfg, "topics_to_fields_path", None):
+            raise ValueError("No `topics_to_fields_path` specified in cfg")
+        if not file_exists(cfg.topics_to_fields_path):
+            raise FileNotFoundError(f"Topics config not found: {cfg.topics_to_fields_path}")
 
-        # Parse topics configuration
-        self.target_hz = float(topics_cfg.get("target_hz", 30.0))
-        self.output_mode = topics_cfg.get("output_mode", "separate")
+        topics_cfg = yaml_load(cfg.topics_to_fields_path)
 
+        self._init_topics(topics_cfg)
+        self._init_field_mappings(topics_cfg)
+        self._init_action_fields(cfg)
+        self._validate_filters(cfg)
+
+        # Image indices for temporal window
+        self.image_indices = getattr(cfg, "image_indices", [0])
+
+        # Configure temporal resampler for time-alignment across channels
+        self.target_hz = topics_cfg.get("target_hz", 30.0)
+        if self.target_hz <= 0:
+            raise ValueError(f"target_hz must be positive, got {self.target_hz}")
+
+        self.resampler = TemporalResampler(self.target_hz)
+
+        print(f"🧭 MCAP Converter initialized: {self.target_hz} Hz, {self.output_mode} mode")
+        print(f"🧭 Action topics: {self.action_topics}")
+        print(f"🧭 State topics: {self.state_topics}")
+        print(f"🧭 Camera topics: {self.camera_topics}")
+
+    def _init_topics(self, topics_cfg):
         # Only two supported output modes:
         # - 'separate': Returns dict with individual field keys
         # - 'concatenated': Returns dict with 'state' and 'actions' keys
-        if self.output_mode not in ["separate", "concatenated"]:
+        self.output_mode = topics_cfg.get("output_mode", "separate")
+        if self.output_mode not in ("separate", "concatenated"):
             raise ValueError(f"output_mode must be 'separate' or 'concatenated', got: {self.output_mode}")
 
         self.action_topics = topics_cfg.get("action_topics", [])
         self.state_topics = topics_cfg.get("state_topics", [])
         self.camera_topics = topics_cfg.get("camera_topics", {})
 
-        self.state_field_extraction = topics_cfg.get("state_field_extraction", {})
-        self.state_subfield_names = topics_cfg.get("state_subfield_names", {})
+        # Validate topic configurations
+        for name, topics in [
+            ("action_topics", self.action_topics),
+            ("state_topics", self.state_topics),
+            ("camera_topics", self.camera_topics),
+        ]:
+            if topics and not all(isinstance(t, str) and t for t in topics):
+                raise ValueError(f"{name} must be a list of non-empty strings")
+
+    def _init_field_mappings(self, topics_cfg):
+        self.state_topic_subfield_extraction = topics_cfg.get("state_topic_subfield_extraction", {})
         self.reference_field_prefixes = topics_cfg.get("reference_field_prefixes", {})
 
-        # Field name mappings
-        self.action_field_names = topics_cfg.get("action_field_names", {})
-        self.state_field_names = topics_cfg.get("state_field_names", {})
+        self.action_field_map = topics_cfg.get("action_field_map", {})
+        self.state_field_map = topics_cfg.get("state_field_map", {})
+        self.state_topic_subfield_map = topics_cfg.get("state_topic_subfield_map", {})
+        self.camera_topics_field_map = topics_cfg.get("camera_topics_field_map", {})
 
-        # For concatenated mode
-        self.action_key_fields = topics_cfg.get("action_key_fields", [])
         self.state_key_fields = topics_cfg.get("state_key_fields", [])
+        if self.output_mode == "concatenated" and not self.state_key_fields:
+            raise ValueError("state_key_fields must be provided when output_mode is 'concatenated'")
 
-        # Setup resampler
-        self.resampler = TemporalResampler(self.target_hz)
+    def _init_action_fields(self, cfg):
+        print("📘 Loading action field configuration...")
+        action_field_config = load_action_field_config(cfg.action_fields_config_path)
+        self.action_key_fields = action_field_config["action_key_fields"]
+        self.action_index_fields = action_field_config["action_index_fields"]
 
-        # Image indices for temporal window
-        self.image_indices = getattr(cfg, "image_indices", [0])
+        # Load and validate pose groups for relative coordinate computation
+        if "pose_groups" not in action_field_config:
+            raise ValueError(
+                "pose_groups not found in action field config. "
+                "Please add pose_groups to enable relative coordinate computation."
+            )
+        self.pose_groups = action_field_config["pose_groups"]
+        validate_pose_groups(self.pose_groups)
 
-        # Load pose groups for relative coordinate computation
-        self.pose_groups = topics_cfg.get("pose_groups", [])
-        if self.pose_groups:
-            logger.info(f"Loaded {len(self.pose_groups)} pose groups for relative coordinates")
-        logger.info(f"MCAP Converter initialized: {self.target_hz}Hz, {self.output_mode} mode")
-        logger.info(f"Action topics: {len(self.action_topics)}, State topics: {len(self.state_topics)}")
-        logger.info(f"Camera topics: {len(self.camera_topics)}")
+        # Compute per-field sizes from cumulative index boundaries
+        self.action_field_sizes = []
+        prev_idx = 0
+        for key, cumulative_idx in zip(self.action_key_fields, self.action_index_fields, strict=True):
+            size = cumulative_idx - prev_idx
+            if size <= 0:
+                raise ValueError(
+                    f"Action field indices must be strictly increasing. Field '{key}' produced size {size}."
+                )
+            self.action_field_sizes.append(size)
+            prev_idx = cumulative_idx
 
-    def discover_episodes(self, source_episode_paths: list[str], max_episodes_to_process: int = -1) -> list[str]:
+        print(f"Loaded {len(self.action_key_fields)} action fields, {len(self.pose_groups)} pose groups")
+        if self.action_field_sizes:
+            slices = [
+                f"{name} (dim={size})"
+                for name, size in zip(self.action_key_fields, self.action_field_sizes, strict=True)
+            ]
+            print(f"🧭 Action field slices: {slices}")
+
+    def _validate_filters(self, cfg):
+        """Validate episode filter values at init time."""
+        if getattr(cfg, "domain_filter", None):
+            invalid = set(cfg.domain_filter) - self.VALID_DOMAINS
+            if invalid:
+                raise ValueError(f"Invalid domain_filter values: {invalid}. Must be one of {self.VALID_DOMAINS}")
+
+        if getattr(cfg, "source_filter", None):
+            invalid = set(cfg.source_filter) - self.VALID_SOURCES
+            if invalid:
+                raise ValueError(f"Invalid source_filter values: {invalid}. Must be one of {self.VALID_SOURCES}")
+
+    def _filter_episodes(self, episodes: list[str]) -> list[str]:
+        """Apply filters to discovered episode paths."""
+        source_filter = getattr(self.cfg, "source_filter", None)
+        task_filter = getattr(self.cfg, "task_filter", None)
+        domain_filter = getattr(self.cfg, "domain_filter", None)
+
+        # No filters active, return as-is
+        if not any([source_filter, task_filter, domain_filter]):
+            return episodes
+
+        filtered = []
+        for ep in episodes:
+            components = parse_episode_path(ep)
+            if components is None:
+                print(f"⚠️  Could not parse path components for filtering, skipping: {ep}")
+                continue
+            if source_filter and components["source"] not in source_filter:
+                continue
+            if task_filter and components["task"] not in task_filter:
+                continue
+            if domain_filter and components["domain"] not in domain_filter:
+                continue
+            filtered.append(ep)
+
+        print(
+            f"🔍 Filtered from {len(episodes)} to {len(filtered)} episodes "
+            f"(source={source_filter}, task={task_filter}, domain={domain_filter})"
+        )
+        return filtered
+
+    def get_output_subdir(self) -> str:
         """
-        Discover MCAP episode files.
+        Build output subdirectories from active filters.
+
+        Naming conventions:
+        - task: single value used directly, multiple/no filter becomes "multitask"
+        - domain: single value used directly, multiple/no filter joins all valid domains
+        - source: single value used directly, multiple/no filter joins all valid sources
+        """
+        parts = []
+        task_filter = getattr(self.cfg, "task_filter", None)
+        domain_filter = getattr(self.cfg, "domain_filter", None)
+        source_filter = getattr(self.cfg, "source_filter", None)
+
+        # Task
+        if task_filter and len(task_filter) == 1:
+            parts.append(task_filter[0])
+        else:
+            parts.append("multitask")
+
+        # Domain (sorting to ensure deterministic paths)
+        if domain_filter and len(domain_filter) == 1:
+            parts.append(domain_filter[0])
+        else:
+            parts.append("_and_".join(sorted(domain_filter or self.VALID_DOMAINS)))
+
+        # Source (sorting to ensure deterministic paths)
+        if source_filter and len(source_filter) == 1:
+            parts.append(source_filter[0])
+        else:
+            parts.append("_and_".join(sorted(source_filter or self.VALID_SOURCES)))
+
+        return "/".join(parts)
+
+    def discover_episodes(self, source_paths: list[str], max_episodes_to_process: int = -1) -> list[str]:
+        """
+        Discover MCAP episodes from source paths.
 
         Args:
-            source_episode_paths: List of directories or S3 paths containing MCAP files
-            max_episodes_to_process: Maximum number of episodes to process (-1 for all)
-
+            source_paths: List of paths to MCAP files or directories
+            max_episodes_to_process: Maximum number of episodes to return (-1 for all)
         Returns:
-            List of MCAP file paths
+            List of episode paths (MCAP files or directories containing MCAP files)
         """
-        episode_paths = []
+        if isinstance(source_paths, str):
+            source_paths = [source_paths]
 
-        for source_path in source_episode_paths:
-            # 1. Handle case where a single MCAP file is provided directly
-            if source_path.endswith(".mcap") and file_exists(source_path):
-                episode_paths.append(source_path)
-                continue
+        # Discover and validate episodes in parallel using Ray
+        discover_futures = [
+            discover_and_validate_mcap_episodes_in_directory.remote(dir_path) for dir_path in source_paths
+        ]
+        discover_results = ray.get(discover_futures)
 
-            # 2. Handle directory (Local or S3)
-            if is_dir(source_path):
-                # list_directory_recursive handles S3 pagination and local os.walk
-                # It returns paths relative to the source_path
-                relative_files = list_directory_recursive(source_path)
+        # Merge results from all directories
+        all_episodes = []
+        for result in discover_results:
+            all_episodes.extend(result)
 
-                # Reconstruct full URIs for any .mcap files found
-                base = source_path if source_path.endswith("/") else source_path + "/"
-                for rel_f in relative_files:
-                    if rel_f.endswith(".mcap"):
-                        episode_paths.append(base + rel_f)
-            else:
-                logger.error(f"Path does not exist or is not a directory: {source_path}")
+        # Apply path-based filters (task, domain, source, episode)
+        all_episodes = self._filter_episodes(all_episodes)
 
-        # Apply max episodes limit
-        if max_episodes_to_process > 0:
-            episode_paths = episode_paths[:max_episodes_to_process]
+        # Sorted for deterministic processing order across runs
+        all_episodes = sorted(all_episodes)
 
-        logger.info(f"Discovered {len(episode_paths)} MCAP episodes")
-        return episode_paths
+        # Apply max_episodes_to_process limit if specified
+        if max_episodes_to_process > 0 and len(all_episodes) > max_episodes_to_process:
+            all_episodes = all_episodes[:max_episodes_to_process]
+
+        print(f"Total episodes discovered: {len(all_episodes)}")
+        return sorted(all_episodes)
 
     def load_episode_data(self, episode_path: str) -> dict[str, Any]:
         """
@@ -504,203 +669,222 @@ class MCAPConverter(BaseRoboticsConverter):
             - Timestamps
             - Episode metadata
         """
-        logger.info(f"Loading MCAP: {episode_path}")
+        dir_name = os.path.basename(episode_path.rstrip("/"))
+        # TODO(mark.zolotas): Assumption of single `_0`.mcap might need to change
+        # in the near future, especially if we version mcaps
+        mcap_file = os.path.join(episode_path, f"{dir_name}_0.mcap")
+        print(f"Loading MCAP: {mcap_file}")
 
-        # Handle S3 vs local paths
+        # Extract raw topic data from MCAP (handles S3 or local path)
         if episode_path.startswith("s3://"):
-            from vla_foundry.file_utils import copy_to_temp_file
-
             # copy_to_temp_file is a context manager that auto-cleans up
-            with copy_to_temp_file(episode_path) as local_mcap_path:
-                return self._process_mcap_file(local_mcap_path, episode_path)
+            with copy_to_temp_file(mcap_file) as local_mcap_path:
+                raw = self._extract_raw_data(local_mcap_path)
         else:
-            return self._process_mcap_file(episode_path, episode_path)
+            raw = self._extract_raw_data(mcap_file)
 
-    def _process_mcap_file(self, mcap_path: str, original_path: str) -> dict[str, Any]:
+        if raw is None:
+            return {}
+
+        resampled = self._resample_to_target_hz(raw)
+        metadata = self._load_episode_metadata(episode_path)
+
+        return {
+            "metadata": metadata,
+            "observations": resampled["observations"],
+            "actions": resampled["actions"],
+            "timestamps": resampled["timestamps"],
+        }
+
+    def _extract_raw_data(self, mcap_path: str) -> dict[str, Any] | None:
         """
-        Process a local MCAP file and resample to target frequency.
-
-        Args:
-            mcap_path: Local path to MCAP file
-            original_path: Original path (for metadata)
+        Read an MCAP file and extract raw per-topic data and timestamps.
 
         Returns:
-            Dictionary containing resampled episode data
+            Dict with keys {state_data, action_data, camera_data, per_topic_timestamps,
+            t_min, t_max}, or None if extraction fails.
         """
-        # Read MCAP file
+        state_data = defaultdict(list)
+        action_data = defaultdict(list)
+        camera_data = defaultdict(list)
+        per_topic_timestamps = defaultdict(list)
+        # To later be used to set the episode relative target timeline
+        t_min, t_max = float("inf"), float("-inf")
+
         with AnyReader([Path(mcap_path)]) as reader:
-            raw_data = defaultdict(lambda: {"timestamps": [], "data": []})
-
-            for connection, timestamp, rawdata in reader.messages():
-                msg = reader.deserialize(rawdata, connection.msgtype)
-                time_sec = timestamp / 1e9
-
+            for connection, t, rawdata in reader.messages():
+                t_sec = t * 1e-9
+                t_min = min(t_min, t_sec)
+                t_max = max(t_max, t_sec)
                 topic = connection.topic
 
-                # Process based on topic type
-                if topic in self.camera_topics.values():
-                    img = extract_image_from_msg(msg, return_numpy=False)
-                    if img is not None:
-                        raw_data[topic]["timestamps"].append(time_sec)
-                        raw_data[topic]["data"].append(img)
+                try:
+                    msg = reader.deserialize(rawdata, connection.msgtype)
+                    is_camera = topic in self.camera_topics_field_map
+                    is_state = topic in self.state_field_map
+                    is_action = topic in self.action_field_map
 
-                # 2. Process State and Action Topics
-                elif topic in self.action_topics or topic in self.state_topics:
-                    # Get the base alias (e.g., /ee_target_left -> action_ee_pose_left)
-                    base_name = self.action_field_names.get(topic, self.state_field_names.get(topic, topic))
+                    if is_camera:
+                        img = extract_image_from_msg(msg, return_numpy=True)
+                        field = self.camera_topics_field_map[topic]
+                        camera_data[field].append(img)
+                        per_topic_timestamps[field].append(t_sec)
 
-                    # A. Handle Config-Driven Sub-field Extraction (e.g. Dex3 hands)
-                    if topic in self.state_field_extraction:
-                        for sub_key, path in self.state_field_extraction[topic].items():
-                            val = extract_field_path(msg, path)
-                            virtual_topic = f"{topic}.{sub_key}"
-                            final_name = self.state_subfield_names.get(virtual_topic, virtual_topic)
-                            raw_data[final_name]["timestamps"].append(time_sec)
-                            raw_data[final_name]["data"].append(val)
-
-                    # B. Handle Structured Messages (Pose/JointState -> __xyz, __rot_6d)
-                    else:
-                        structured_data = extract_structured_msg(msg)
-                        if structured_data:
-                            for suffix, val in structured_data.items():
-                                final_name = f"{base_name}{suffix}"
-                                raw_data[final_name]["timestamps"].append(time_sec)
-                                raw_data[final_name]["data"].append(val)
+                    if is_state or is_action:
+                        # Config-driven sub-field extraction (e.g., /dex3/* topics)
+                        if topic in self.state_topic_subfield_extraction:
+                            for sub_key, path in self.state_topic_subfield_extraction[topic].items():
+                                val = extract_field_path(msg, path)
+                                if val is not None:
+                                    virtual_topic = f"{topic}.{sub_key}"
+                                    final_name = self.state_topic_subfield_map.get(virtual_topic, virtual_topic)
+                                    state_data[final_name].append(val)
+                                    per_topic_timestamps[final_name].append(t_sec)
+                        # Structured messages (Pose/JointState -> __xyz, __rot_6d)
                         else:
-                            # C. Fallback to flat array
-                            arr = extract_array_from_msg(msg)
-                            if arr is not None:
-                                raw_data[base_name]["timestamps"].append(time_sec)
-                                raw_data[base_name]["data"].append(arr)
+                            base_name = self.action_field_map.get(topic, self.state_field_map.get(topic, topic))
+                            target = action_data if is_action else state_data
+                            structured_data = extract_structured_msg(msg)
+                            if structured_data:
+                                for suffix, val in structured_data.items():
+                                    final_name = f"{base_name}{suffix}"
+                                    target[final_name].append(val)
+                                    per_topic_timestamps[final_name].append(t_sec)
+                            else:
+                                arr = extract_array_from_msg(msg)
+                                if arr is not None:
+                                    target[base_name].append(arr)
+                                    per_topic_timestamps[base_name].append(t_sec)
+                except Exception as e:
+                    print(f"⚠️  Skipping message on {topic}: {e}")
+                    continue
 
-        if not raw_data:
-            logger.error(f"No data extracted from: {original_path}")
-            return {}
+        if not per_topic_timestamps:
+            print(f"❌ No data extracted from: {mcap_path}")
+            return None
 
-        # Determine episode time range
-        all_times = []
-        for topic_data in raw_data.values():
-            all_times.extend(topic_data["timestamps"])
+        # Sanity check: ensure we actually converted some messages, not just
+        # recorded timestamps while every extraction silently failed/was skipped.
+        has_any_data = any(len(v) > 0 for v in (*state_data.values(), *action_data.values(), *camera_data.values()))
+        if not has_any_data:
+            print(
+                f"❌ Messages were read from {mcap_path} but all extractions failed. "
+                f"Topics with timestamps: {list(per_topic_timestamps.keys())}"
+            )
+            return None
 
-        if not all_times:
-            logger.error(f"No timestamps found in: {original_path}")
-            return {}
+        return {
+            "state_data": state_data,
+            "action_data": action_data,
+            "camera_data": camera_data,
+            "per_topic_timestamps": per_topic_timestamps,
+            "t_min": t_min,
+            "t_max": t_max,
+        }
 
-        start_time = min(all_times)
-        end_time = max(all_times)
-        target_timeline = self.resampler.create_target_timeline(start_time, end_time)
-
-        logger.info(f"Episode duration: {end_time - start_time:.2f}s, Target samples: {len(target_timeline)}")
-
-        # Resample all data to target frequency
-        episode_data = {}
-
-        # Resample camera data
-        for _camera_name, camera_topic in self.camera_topics.items():
-            if camera_topic in raw_data:
-                source_times = np.array(raw_data[camera_topic]["timestamps"])
-                source_images = raw_data[camera_topic]["data"]
-
-                resampled_images = self.resampler.resample_images(source_times, source_images, target_timeline)
-
-                # Map to camera name
-                episode_data[camera_topic] = resampled_images
-
-        # Resample all extracted state/action data
-        episode_data = {}
-        for field_name, data_info in raw_data.items():
-            # Skip cameras (handled via image resampling logic if needed elsewhere)
-            if field_name in self.camera_topics.values():
-                continue
-
-            src_ts = np.array(data_info["timestamps"])
-            src_val = data_info["data"]
-
-            # Sanity check: need at least 2 points to interpolate
-            if len(src_ts) < 2:
-                continue
-
-            episode_data[field_name] = self.resampler.resample_continuous(src_ts, np.array(src_val), target_timeline)
-
-        # Store timestamps and metadata
-        episode_data["timestamps"] = target_timeline
-        episode_data["_episode_metadata"] = self._load_episode_metadata(original_path)
-
-        logger.info(f"Resampled to {len(target_timeline)} timesteps at {self.target_hz}Hz")
-        return episode_data
-
-    def _load_episode_metadata(self, episode_path: str | Path) -> dict:
+    def _resample_to_target_hz(self, raw: dict[str, Any]) -> dict[str, Any]:
         """
-        Load episode metadata from accompanying files.
-
-        Looks for metadata.yaml, info.yaml, metadata.json, info.json
-        in the same directory as the MCAP file.
+        Resample raw extracted data to a uniform target timeline.
 
         Args:
-            episode_path: Path to MCAP file
+            raw: Output from _extract_raw_data
 
         Returns:
-            Metadata dictionary (contains at minimum episode_id)
+            Dict with keys {observations, actions, timestamps}
         """
-        episode_path = Path(episode_path)
+        state_data = raw["state_data"]
+        action_data = raw["action_data"]
+        camera_data = raw["camera_data"]
+        per_topic_timestamps = raw["per_topic_timestamps"]
 
-        if episode_path.is_file():
-            episode_path = episode_path.parent
+        # Convert to episode-relative time
+        t0 = raw["t_min"]
+        per_topic_timestamps = {k: (np.asarray(v) - t0) for k, v in per_topic_timestamps.items()}
 
-        # Try various metadata file names
-        for metadata_file in ["metadata.yaml", "info.yaml", "metadata.json", "info.json"]:
-            metadata_path = episode_path / metadata_file
-            if metadata_path.exists():
-                if metadata_path.suffix == ".yaml":
-                    with open(metadata_path) as f:
-                        return yaml.safe_load(f)
-                else:
-                    with open(metadata_path) as f:
-                        return json.load(f)
+        t_start = min(ts[0] for ts in per_topic_timestamps.values())
+        t_end = max(ts[-1] for ts in per_topic_timestamps.values())
+        target_timeline = self.resampler.create_target_timeline(t_start, t_end).astype(np.float32)
 
-        # Default metadata
-        return {"episode_id": episode_path.name}
+        # Stack low-dim data
+        state_data = {k: np.stack(v) for k, v in state_data.items()}
+        action_data = {k: np.stack(v) for k, v in action_data.items()}
+
+        # Resample lowdim data to target frequency
+        for data in (state_data, action_data):
+            for k, v in data.items():
+                data[k] = self.resampler.resample_continuous(per_topic_timestamps[k], v, target_timeline).astype(
+                    np.float32
+                )
+
+        # Resample and stack images
+        for k, imgs in camera_data.items():
+            resampled = self.resampler.resample_images(per_topic_timestamps[k], imgs, target_timeline)
+            camera_data[k] = np.stack(resampled, axis=0)
+
+        # Merge state and camera into observations
+        observations = {**state_data, **camera_data}
+
+        # Reorder actions to match action_key_fields and concatenate
+        actions = {
+            "actions": np.concatenate([action_data[k] for k in self.action_key_fields], axis=1).astype(np.float32)
+        }
+
+        print(
+            f"Episode duration: {t_end - t_start:.2f}s, resampled "
+            f"to {len(target_timeline)} timesteps at {self.target_hz} Hz"
+        )
+
+        return {
+            "observations": observations,
+            "actions": actions,
+            "timestamps": target_timeline,
+        }
+
+    def _load_episode_metadata(self, episode_path: str) -> dict[str, Any]:
+        """Load episode metadata from info.yaml in the episode directory."""
+        # TODO(mark.zolotas): account for versioning of metadata files
+        metadata_path = os.path.join(episode_path.rstrip("/"), "info.yaml")
+        try:
+            with fsspec.open(metadata_path, "r") as f:
+                return yaml.safe_load(f)
+        except Exception as e:
+            print(f"⚠️  Could not load metadata from {metadata_path}: {e}")
+            return {"episode_id": os.path.basename(episode_path.rstrip("/"))}
 
     def get_episode_length(self, episode_data: dict[str, Any]) -> int:
-        """
-        Get number of timesteps in episode.
-
-        Args:
-            episode_data: Episode data dictionary
-
-        Returns:
-            Number of timesteps
-        """
+        """Get episode length from episode data."""
         return len(episode_data["timestamps"])
 
-    def extract_camera_data(self, episode_data: dict[str, Any]) -> dict[str, list[bytes]]:
-        """
-        Extract camera data for ALL timesteps.
+    def extract_camera_data(self, episode_data: dict[str, Any]) -> dict[str, np.ndarray]:
+        """Extract camera data and return a dict of camera names to RGB images."""
+        result = {}
+        camera_names = self.cfg.camera_names
+        if not camera_names:
+            # Attempt to automatically extract camera names from topic-camera mapping
+            if not self.camera_topics_field_map:
+                raise ValueError(
+                    "No camera names can be extracted without either specifying "
+                    "then in the cfg or populating camera_topics_to_fields "
+                )
 
-        Args:
-            episode_data: Episode data dictionary
+            camera_names = list(self.camera_topics_field_map.values())
+            if len(camera_names) != len(set(camera_names)):
+                raise ValueError("camera_topics_fields_map must be one-to-one: duplicate values found")
 
-        Returns:
-            Dictionary mapping camera names to lists of JPEG bytes [T]
-        """
-        camera_data = {}
+        for cname in camera_names:
+            # Add RGB image
+            if cname in episode_data["observations"]:
+                result[cname] = episode_data["observations"][cname]
 
-        if self.camera_topics:
-            for camera_name, camera_topic in self.camera_topics.items():
-                if camera_topic in episode_data:
-                    camera_data[camera_name] = episode_data[camera_topic]
-                else:
-                    logger.debug(f"Camera topic not found: {camera_topic}")
-
-        return camera_data
+        return result
 
     def extract_lowdim_data(self, episode_data: dict[str, Any]) -> dict[str, np.ndarray]:
         """
         Extract lowdim data for ALL timesteps.
 
         Two output modes:
-        - 'separate': Returns dict with individual field keys
         - 'concatenated': Returns dict with 'state' and 'actions' keys
+        - 'separate': Returns dict with individual field keys
 
         Args:
             episode_data: Episode data dictionary
@@ -708,41 +892,59 @@ class MCAPConverter(BaseRoboticsConverter):
         Returns:
             Dictionary with lowdim data arrays of shape [T, dim]
         """
+        result = {}
         if self.output_mode == "concatenated":
-            state_components = []
-            # Ensure we match the keys exactly as they exist in episode_data
-            for key in self.state_key_fields:
-                if key in episode_data:
-                    data = episode_data[key]
-                    state_components.append(data if data.ndim > 1 else data[:, np.newaxis])
+            if episode_data["observations"]:
+                state_components = []
+                # Ensure we match the keys exactly as they exist in episode_data
+                for key in self.state_key_fields:
+                    if key in episode_data["observations"]:
+                        data = episode_data["observations"][key]
+                        state_components.append(data if data.ndim > 1 else data[:, np.newaxis])
+                if state_components:
+                    result["state"] = np.concatenate(state_components, axis=1).astype(np.float32)
 
-            action_components = []
-            for key in self.action_key_fields:
-                if key in episode_data:
-                    data = episode_data[key]
-                    action_components.append(data if data.ndim > 1 else data[:, np.newaxis])
+            # Actions already concatenated
+            if episode_data["actions"] and "actions" in episode_data["actions"]:
+                result["actions"] = next(iter(episode_data["actions"].values()))
+        else:
+            # Extract low-dimensional observations
+            if episode_data["observations"]:
+                result.update(
+                    {
+                        key: value
+                        for key, value in episode_data["observations"].items()
+                        if len(value.shape) <= 2 or key.startswith("language_")
+                    }
+                )
 
-            return {
-                "state": np.concatenate(state_components, axis=1) if state_components else np.array([]),
-                "actions": np.concatenate(action_components, axis=1) if action_components else np.array([]),
-            }
+            # Extract 'actions' if available
+            if episode_data["actions"] and "actions" in episode_data["actions"] and self.action_key_fields:
+                total_action_dim = episode_data["actions"]["actions"].shape[1]
+                expected_action_dim = self.action_index_fields[-1]
+                if total_action_dim < expected_action_dim:
+                    raise ValueError(
+                        "Action tensor has insufficient dimension.\n "
+                        f"Expected at least {expected_action_dim}, got {total_action_dim}."
+                    )
 
-        else:  # separate mode
-            # Return all fields individually
-            lowdim_data = {}
+                prev_index = 0
+                for key, index in zip(self.action_key_fields, self.action_index_fields, strict=False):
+                    result[key] = episode_data["actions"]["actions"][:, prev_index:index]
+                    prev_index = index
 
-            for field_name in list(episode_data.keys()):
-                # Skip non-lowdim fields
-                if field_name in ["timestamps", "_episode_metadata"] or field_name in self.camera_topics.values():
-                    continue
+                if prev_index != expected_action_dim:
+                    raise ValueError(
+                        "Action slicing did not consume expected dimensions. "
+                        f"Expected {expected_action_dim}, consumed {prev_index}."
+                    )
+            elif self.action_key_fields:
+                raise ValueError(
+                    "Configured action fields but no actions were found in episode data. "
+                    "Ensure actions.npz is present for each episode."
+                )
 
-                data = episode_data[field_name]
-                if isinstance(data, np.ndarray):
-                    if len(data.shape) == 1:
-                        data = data[:, np.newaxis]
-                    lowdim_data[field_name] = data
-
-            return lowdim_data
+        return result
 
     def extract_intrinsics_extrinsics_data(self, episode_data: dict[str, Any]) -> tuple[dict | None, dict | None]:
         """
@@ -766,9 +968,10 @@ class MCAPConverter(BaseRoboticsConverter):
         Returns:
             Metadata dictionary including timestamps
         """
-        metadata = episode_data.get("_episode_metadata", {})
-        metadata["timestamps"] = episode_data["timestamps"]
-        return metadata
+        return {
+            **episode_data.get("metadata", {}),
+            "timestamps": episode_data["timestamps"],
+        }
 
     def _any_field_to_actual_key(self, field: str) -> str:
         """
@@ -779,6 +982,40 @@ class MCAPConverter(BaseRoboticsConverter):
                 return obs_prefix + field[len(action_prefix) :]
 
         return field
+
+    def get_language_instructions(self, episode_path: str, instruction_types: list[str] = None) -> dict[str, list[str]]:
+        """Get language instructions for a given task, organized by type.
+
+        Args:
+            episode_path: Path to the episode
+            instruction_types: List of instruction types to include. If None, includes all types.
+                            Valid types: "original", "randomized", "verbose", "alternative"
+
+        Returns:
+            Dictionary mapping instruction type to list of instructions
+        """
+        components = parse_episode_path(episode_path)
+        if components is None:
+            print(f"⚠️  Could not parse task name from episode path: {episode_path}")
+            return {}
+
+        task_name = components.get("task")
+        if task_name not in self.language_annotations:
+            return {}
+
+        task_annotations = self.language_annotations[task_name]
+        instructions_by_type = {}
+
+        # Default to all types if none specified
+        if instruction_types is None:
+            instruction_types = ["original", "randomized", "verbose", "alternative"]
+
+        # Add instructions for each requested type
+        for instruction_type in instruction_types:
+            if instruction_type in task_annotations:
+                instructions_by_type[instruction_type] = task_annotations[instruction_type]
+
+        return instructions_by_type
 
     def extract_sample_data(
         self,
@@ -792,165 +1029,125 @@ class MCAPConverter(BaseRoboticsConverter):
         metadata_data: dict[str, Any],
         statistics_ray_actor,
         logger_actor,
-    ) -> tuple[dict | None, dict | None, dict | None, dict | None, int | None, dict | None]:
+    ) -> tuple[dict | None, dict | None, SampleMetadata | None, dict | None, NDArray | None, dict | None, dict | None]:
         """
         Extract sample data for a single timestep with temporal windowing and stillness filtering.
 
         Args:
-            anchor_timestep: Central timestep index for the sample.
-            episode_path: Source file path for metadata logging.
-            episode_length: Total timesteps in episode.
-            camera_data: Map of camera names to lists of JPEG bytes.
-            lowdim_data: Map of field names to resampled [T, D] numpy arrays.
-            metadata_data: Dictionary containing task/language instructions and timestamps.
+            anchor_timestep: The timestep to extract the sample data for.
+            episode_path: Path to the episode directory containing data.json.
+            episode_length: The number of timesteps in the episode.
+            camera_data: dict of camera data.
+            lowdim_data: dict of lowdim data.
+            intrinsics_data: dict of intrinsics data.
+            extrinsics_data: dict of extrinsics data.
+            metadata_data: dict of metadata data.
+            statistics_ray_actor: Ray actor for statistics.
+            logger_actor: Logger actor.
 
         Returns:
-            A tuple containing:
-            - sample_images: Dict mapping camera names to image bytes (or list of bytes for history).
-            - sample_lowdim: Dict containing windowed state, actions, and masks.
-            - sample_metadata: Dict with episode/step identifiers and timestamps.
-            - language_instructions: Dict with "original" key containing the task instruction.
-            - anchor_timestep: The index of the central frame.
-            - episode_info: Dict containing high-level episode stats (e.g., episode_length).
-            Returns (None,)*6 if the sample is filtered (e.g., stillness or boundary conditions).
+            Tuple of (sample_images, sample_lowdim, sample_metadata, language_instructions, *extra).
+            We don't yet process camera intrinsics/extrinsics so the sample_point_clouds (point clouds
+            from depth & RGB images) and sample_point_maps (camera coordinates in image space) in *extra
+            are returned as None. However, de do return sample_stats if there is a statistics ray actor.
         """
-        if logger_actor is not None:
-            try:  # noqa: SIM105
-                logger_actor.increment_total_potential_samples.remote()
-            except Exception:
-                pass
+        logger_actor.increment_total_potential_samples.remote()
 
-        # Define temporal window: [anchor - past, anchor + future]
-        past_steps = self.cfg.past_lowdim_steps
-        future_steps = self.cfg.future_lowdim_steps
-        window_size = past_steps + 1 + future_steps
+        # Calculate windows
+        lowdim_start = anchor_timestep - self.cfg.past_lowdim_steps
+        lowdim_end = anchor_timestep + self.cfg.future_lowdim_steps
 
-        start_idx = anchor_timestep - past_steps
-        end_idx = anchor_timestep + future_steps + 1
+        # Check padding
+        past_padding = max(0, -lowdim_start)
+        future_padding = max(0, lowdim_end - episode_length + 1)
 
+        if past_padding > self.cfg.max_padding_left or future_padding > self.cfg.max_padding_right:
+            logger_actor.increment_padding_samples_filtered.remote()
+            return None, None, None, None, None, None, None
+
+        valid_start = max(0, lowdim_start)
+        valid_end = min(episode_length - 1, lowdim_end)
+
+        # Check if robot is stationary (e.g. to filter pauses)
+        if self.cfg.filter_still_samples and is_still_sample(
+            lowdim_data, valid_start, valid_end, self.cfg.still_threshold
+        ):
+            logger_actor.increment_still_samples_filtered.remote()
+            return None, None, None, None, None, None, None
+
+        # Extract images
+        sample_images = {}
+        actual_image_timesteps = []
+        for img_offset in self.cfg.image_indices:
+            img_timestep = np.clip(anchor_timestep + img_offset, 0, episode_length - 1)
+            actual_image_timesteps.append(int(img_timestep))
+
+            for camera_name, camera_images in camera_data.items():
+                key = f"{camera_name}_t{img_offset}"
+                sample_images[key] = camera_images[img_timestep]
+
+        # Process lowdim data (which includes actions)
         sample_lowdim = {}
+        reference_data = {}
+        for key, data in lowdim_data.items():
+            valid_data = data[valid_start : valid_end + 1]
+            if past_padding > 0 or future_padding > 0:
+                valid_data = self.pad_fn(valid_data, past_padding, future_padding)
+            sample_lowdim[key] = valid_data
+            actual_key = self._any_field_to_actual_key(key)
+            if actual_key is not None and actual_key in lowdim_data:
+                reference_data[key] = lowdim_data[actual_key][anchor_timestep]
 
-        if self.output_mode == "concatenated":
-            states_window = self._extract_window(lowdim_data["state"], start_idx, end_idx, window_size)
-            actions_window = self._extract_window(lowdim_data["actions"], start_idx, end_idx, window_size)
+        # Add relative lowdim data wrt the actual position at the current timestep
+        # Doesn't work for concatenated mode yet as needs action_index_fields organization
+        if self.output_mode != "concatenated":
+            sample_lowdim_relative = self.create_relative_lowdim_data(sample_lowdim, reference_data)
+            sample_lowdim.update(sample_lowdim_relative)
 
-            # Stillness filtering: uses standard LBM thresholding logic
-            if self.cfg.filter_still_samples:
-                # Wrap in dict to match vla_foundry utility signature
-                temp_dict = {"actions": actions_window}
-                if is_still_sample(
-                    temp_dict, start_idx=0, end_idx=window_size - 1, still_threshold=self.cfg.still_threshold
-                ):
-                    if logger_actor is not None:
-                        try:  # noqa: SIM105
-                            logger_actor.increment_still_samples_filtered.remote()
-                        except Exception:
-                            pass
-                    return (None,) * 6
-
-            sample_lowdim["state"] = states_window
-            sample_lowdim["actions"] = actions_window
-
-        else:  # separate mode
-            for field_name, field_data in lowdim_data.items():
-                sample_lowdim[field_name] = self._extract_window(field_data, start_idx, end_idx, window_size)
-
-            # Build reference data from current observations at anchor timestep for all applicable keys
-            # Build reference data using matching keys for deltas
-            reference_data = {}
-            for key in sample_lowdim:
-                if key.startswith("action_"):
-                    # Simply swap the prefix. YAML naming now ensures they match.
-                    obs_key = key.replace("action_", "obs_")
-                    if obs_key in lowdim_data:
-                        reference_data[key] = lowdim_data[obs_key][anchor_timestep]
-
-            # Compute relative coordinates (deltas) using the base class method
-            if reference_data:
-                sample_lowdim.update(self.create_relative_lowdim_data(sample_lowdim, reference_data))
-
-            if self.cfg.filter_still_samples:
-                action_fields = [k for k in sample_lowdim if k.startswith("action_")]
-                for action_field in action_fields:
-                    # Wrap the specific field window in a dict for the utility
-                    temp_dict = {action_field: sample_lowdim[action_field]}
-                    if is_still_sample(temp_dict, 0, window_size - 1, self.cfg.still_threshold):
-                        if logger_actor is not None:
-                            try:  # noqa: SIM105
-                                logger_actor.increment_still_samples_filtered.remote()
-                            except Exception:
-                                pass
-                        return (None,) * 6
-
-        # Masking for padded steps at episode boundaries
+        # Create masks
         past_mask, future_mask = create_past_and_future_masks(
-            idx=anchor_timestep,
-            num_past=self.cfg.past_lowdim_steps,
-            num_future=self.cfg.future_lowdim_steps,
-            episode_length=episode_length,
+            anchor_timestep, self.cfg.past_lowdim_steps, self.cfg.future_lowdim_steps, episode_length
         )
 
-        sample_lowdim["past_mask"] = past_mask
-        sample_lowdim["future_mask"] = future_mask
-
-        # Image extraction: unique keys (e.g. head_t-1) fix the 'list has no attribute dtype' error
-        sample_images = {}
-        for img_offset in self.cfg.image_indices:
-            img_t = np.clip(anchor_timestep + img_offset, 0, episode_length - 1)
-            for camera_name, images in camera_data.items():
-                key = f"{camera_name}_t{img_offset}"
-                sample_images[key] = images[img_t]
-
-        # Define language and metadata
-        lang = metadata_data.get("language_instruction", metadata_data.get("task", "robot manipulation"))
-        sample_metadata = {
-            "episode_id": metadata_data.get("episode_id", "unknown"),
-            "anchor_timestep": anchor_timestep,
-            "timestamp": metadata_data["timestamps"][anchor_timestep],
-            "camera_names": list(camera_data.keys()),
-        }
+        # Create metadata
+        episode_id = self.get_episode_id(episode_path)
+        sample_metadata = SampleMetadata(
+            episode_id=episode_id,
+            sample_id=f"{uuid.uuid4()}_{episode_id}_t{anchor_timestep:04d}",
+            anchor_timestep=int(anchor_timestep),
+            anchor_episode_timestamp=metadata_data["timestamps"][anchor_timestep],
+            anchor_relative_idx=int(self.cfg.past_lowdim_steps),
+            image_timesteps=actual_image_timesteps,
+            lowdim_start_timestep=int(lowdim_start),
+            lowdim_end_timestep=int(lowdim_end),
+            past_padding=int(past_padding),
+            future_padding=int(future_padding),
+            camera_names=list(camera_data.keys()),
+            original_episode_length=int(episode_length),
+            original_episode_duration_s=metadata_data.get("episode_duration"),
+            original_image_sizes={},  # Filled by upload_sample_to_s3
+            is_padded=bool(past_padding > 0 or future_padding > 0),
+            task_name=metadata_data.get("skill"),
+            teleop_or_rollout=metadata_data.get("teleop_or_rollout"),
+            robot=metadata_data.get("robot"),
+            station_name=metadata_data.get("station_name"),
+            domain=metadata_data.get("domain"),
+        )
 
         # Build stats_sample for batched statistics update (don't send immediately)
         stats_sample = None
         if statistics_ray_actor is not None:
             stats_sample = {
-                "lowdim": {k: v.copy() for k, v in sample_lowdim.items()},
+                "lowdim": {k: v.copy() for k, v in sample_lowdim.items()},  # Copy before modifying
                 "past_mask": past_mask,
                 "future_mask": future_mask,
             }
 
-        return (
-            sample_images,
-            sample_lowdim,
-            sample_metadata,
-            {"original": lang},
-            anchor_timestep,
-            stats_sample,
-        )
+        # Add past_mask, future_mask to lowdim (after building stats_sample)
+        sample_lowdim["past_mask"] = past_mask
+        sample_lowdim["future_mask"] = future_mask
 
-    def _extract_window(self, data: np.ndarray, start_idx: int, end_idx: int, window_size: int) -> np.ndarray:
-        """
-        Extract temporal window with edge-padding if needed.
+        # Language instructions with only `original` instructions for now
+        language_instructions = self.get_language_instructions(episode_path)
 
-        Args:
-            data: Full episode data [T, dim]
-            start_idx: Window start index (can be negative)
-            end_idx: Window end index (can exceed data length)
-            window_size: Expected window size
-
-        Returns:
-            Window data [window_size, dim] with edge-padding if needed
-        """
-        if len(data.shape) == 1:
-            data = data[:, np.newaxis]
-
-        # Extract available window
-        window_data = data[max(0, start_idx) : min(len(data), end_idx)]
-
-        # Pad if needed
-        if len(window_data) < window_size:
-            pad_before = max(0, -start_idx)
-            pad_after = max(0, end_idx - len(data))
-            window_data = np.pad(window_data, ((pad_before, pad_after), (0, 0)), mode="edge")
-
-        return window_data
+        return sample_images, sample_lowdim, sample_metadata, language_instructions, None, None, stats_sample

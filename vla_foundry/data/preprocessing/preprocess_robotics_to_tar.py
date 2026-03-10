@@ -83,6 +83,18 @@ def main():
     # Create converter
     converter = get_converter(cfg)
 
+    # Create the derived output subdirectory that may update the full output path
+    output_subdir = cfg.output_dir.rstrip("/")
+    if hasattr(converter, "get_output_subdir"):
+        subdir = converter.get_output_subdir()
+        if subdir:
+            output_subdir = f"{output_subdir}/{subdir}"
+            print(f"📂 Output subdirectory: {output_subdir}")
+
+    # Point the converter's output to the subdirectory so process_episode
+    # writes frames to the same location that create_shard reads from
+    converter.output_dir = output_subdir
+
     # Discover episodes
     print("🔍 Discovering episodes...")
     episodes = converter.discover_episodes(cfg.source_episodes, cfg.max_episodes_to_process)
@@ -142,7 +154,7 @@ def main():
     random.shuffle(results)
     shards = [results[i : i + cfg.samples_per_shard] for i in range(0, len(results), cfg.samples_per_shard)]
     print(f"Creating {len(shards)} shards with up to {cfg.samples_per_shard} samples each")
-    shard_futures = [create_shard.remote(shard_files, i, cfg.output_dir) for i, shard_files in enumerate(shards)]
+    shard_futures = [create_shard.remote(shard_files, i, output_subdir) for i, shard_files in enumerate(shards)]
     shard_results = ray.get(shard_futures)
     print(f"✅ Created {len(shard_results)} shards.")
 
@@ -154,7 +166,7 @@ def main():
         episode_groups.setdefault(episode_key, []).append(filename)
     print(f"Creating {len(episode_groups)} episode shards")
     episode_shard_futures = [
-        create_episode_shard.remote(files, episode_key, cfg.output_dir) for episode_key, files in episode_groups.items()
+        create_episode_shard.remote(files, episode_key, output_subdir) for episode_key, files in episode_groups.items()
     ]
     episode_shard_results = ray.get(episode_shard_futures)
     print(f"✅ Created {len(episode_shard_results)} episode shards.")
@@ -163,32 +175,30 @@ def main():
     episode_manifest_lines = []
     for shard_name, num_sequences in episode_shard_results:
         episode_manifest_lines.append({"shard": shard_name, "num_sequences": num_sequences})
-    save_and_upload_dict(episode_manifest_lines, f"{cfg.output_dir.rstrip('/')}/episodes", "manifest.jsonl")
+    save_and_upload_dict(episode_manifest_lines, f"{output_subdir}/episodes", "manifest.jsonl")
 
     # Upload shards manifest to S3 in the shards/ directory
     manifest_lines = []
     for shard_name, num_sequences in shard_results:
         manifest_entry = {"shard": shard_name, "num_sequences": num_sequences}
         manifest_lines.append(manifest_entry)
-    save_and_upload_dict(manifest_lines, f"{cfg.output_dir.rstrip('/')}/shards", "manifest.jsonl")
+    save_and_upload_dict(manifest_lines, f"{output_subdir}/shards", "manifest.jsonl")
 
     # Upload statistics to S3 in the shards/ directory and the episodes/ directory
     if cfg.compute_statistics:
         statistics_state = statistics_ray_actor.get_statistics.remote()
         statistics_state = ray.get(statistics_state)
-        save_and_upload_dict(statistics_state, f"{cfg.output_dir.rstrip('/')}/shards", "stats.json")
-        save_and_upload_dict(statistics_state, f"{cfg.output_dir.rstrip('/')}/episodes", "stats.json")
+        save_and_upload_dict(statistics_state, f"{output_subdir}/shards", "stats.json")
+        save_and_upload_dict(statistics_state, f"{output_subdir}/episodes", "stats.json")
 
     # Update and save processing metadata with final statistics
     metadata["processing"]["total_samples_created"] = sum(num_sequences for _, num_sequences in shard_results)
     metadata["processing"]["timestamp_end"] = datetime.datetime.now().isoformat()
     metadata["processing"]["sample_counts"] = ray.get(logger_actor.get_values.remote())
     print("Sample counts:", metadata["processing"]["sample_counts"])
-    save_and_upload_dict(metadata, f"{cfg.output_dir.rstrip('/')}/shards", "processing_metadata.json")
+    save_and_upload_dict(metadata, f"{output_subdir}/shards", "processing_metadata.json")
     preprocessing_config_dict = vars(cfg).copy()
-    save_and_upload_config(
-        preprocessing_config_dict, f"{cfg.output_dir.rstrip('/')}/shards", "preprocessing_config.yaml"
-    )
+    save_and_upload_config(preprocessing_config_dict, f"{output_subdir}/shards", "preprocessing_config.yaml")
 
     # Make a copy of the output directory when source/destination backends match
     dataset_uuid = str(uuid.uuid4())
@@ -201,7 +211,7 @@ def main():
         cfg=cfg,
         dataset_type=cfg.type,
         source_paths=cfg.source_episodes if isinstance(cfg.source_episodes, list) else [cfg.source_episodes],
-        target_path=f"{cfg.output_dir.rstrip('/')}/shards",
+        target_path=f"{output_subdir}/shards",
         fixed_path=f"{fixed_path}/shards",
         episode_count=len(episodes),
         frame_count=sample_counts.get("total_frames", 0) if sample_counts else 0,
@@ -210,12 +220,12 @@ def main():
         total_samples=metadata["processing"]["total_samples_created"],
         enabled=cfg.db_logging,
     )
-    src_is_s3 = cfg.output_dir.startswith("s3://")
+    src_is_s3 = output_subdir.startswith("s3://")
     dst_is_s3 = fixed_path.startswith("s3://")
     if src_is_s3 and dst_is_s3:
-        recursive_s3_copy(cfg.output_dir, fixed_path)
+        recursive_s3_copy(output_subdir, fixed_path)
     else:
-        print(f"⚠️ Skipping fixed-path copy (only enabled for S3 -> S3): {cfg.output_dir} -> {fixed_path}")
+        print(f"⚠️ Skipping fixed-path copy (only enabled for S3 -> S3): {output_subdir} -> {fixed_path}")
 
     ray.shutdown()
     print("🎉 Complete! All samples uploaded and sharded.")

@@ -16,6 +16,7 @@ from vla_foundry.data.preprocessing.utils import (
     depth_images_to_point_cloud,
     depth_images_to_point_maps,
     is_still_sample,
+    validate_pose_groups,
 )
 from vla_foundry.data.robotics.utils import any_to_actual_key, load_action_field_config
 
@@ -137,7 +138,7 @@ class SpartanConverter(BaseRoboticsConverter):
             print(f"Loaded {len(action_field_config['pose_groups'])} pose groups from action field config")
 
             # Validate pose groups are complete
-            self._validate_pose_groups()
+            validate_pose_groups(self.pose_groups)
         else:
             # Pose groups must be explicitly provided in action field config
             raise ValueError(
@@ -184,44 +185,6 @@ class SpartanConverter(BaseRoboticsConverter):
                     for name, size in zip(self.action_key_fields, self.action_field_sizes, strict=False)
                 ],
             )
-
-    def _validate_pose_groups(self):
-        """Validate that pose groups are complete with required fields."""
-        if not self.pose_groups:
-            return
-
-        errors = []
-        valid_pose_groups = []
-
-        for i, pose_group in enumerate(self.pose_groups):
-            group_errors = []
-
-            # Check required fields
-            if "name" not in pose_group:
-                group_errors.append("missing 'name' field")
-            if "position_key" not in pose_group:
-                group_errors.append("missing 'position_key' field")
-            if "rotation_key" not in pose_group:
-                group_errors.append("missing 'rotation_key' field")
-
-            if group_errors:
-                errors.append(f"Pose group {i}: {', '.join(group_errors)}")
-                continue
-
-            # Pose group has all required fields
-            valid_pose_groups.append(pose_group)
-            position_key = pose_group["position_key"]
-            rotation_key = pose_group["rotation_key"]
-            print(f"  ✅ Valid pose group: {pose_group['name']} ({position_key}, {rotation_key})")
-
-        if errors:
-            error_msg = "Pose group validation failed:\n" + "\n".join(f"  - {error}" for error in errors)
-            raise ValueError(error_msg)
-
-        if valid_pose_groups:
-            print(f"✅ All {len(valid_pose_groups)} pose groups are valid")
-        else:
-            print("⚠️  No valid pose groups found")
 
     def discover_episodes(self, source_paths: list[str], max_episodes_to_process: int = -1) -> list[str]:
         """

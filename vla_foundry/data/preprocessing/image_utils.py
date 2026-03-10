@@ -74,6 +74,38 @@ def resize_and_crop_image(
     return pil_image if is_pil else np.array(pil_image)
 
 
+def rotate_image(image: np.ndarray | Image.Image, k: int) -> np.ndarray | Image.Image:
+    """
+    Rotate an image by 90 degrees k times clockwise.
+
+    Args:
+        image: Image to rotate (numpy array or PIL Image)
+        k: Number of times to rotate by 90 degrees clockwise.
+           k=1 rotates 90° clockwise
+           k=2 rotates 180°
+           k=3 rotates 270° clockwise (90° counterclockwise)
+           k=0 or k=4 returns image unchanged
+
+    Returns:
+        Rotated image in the same format as input
+    """
+    if k % 4 == 0:
+        return image
+
+    k = k % 4  # Normalize to [0, 1, 2, 3]
+    if isinstance(image, Image.Image):
+        rotation_map = {
+            1: Image.ROTATE_270,  # 90° clockwise
+            2: Image.ROTATE_180,  # 180°
+            3: Image.ROTATE_90,  # 270° clockwise (90° counterclockwise)
+        }
+        return image.transpose(rotation_map[k])
+    else:
+        # NumPy rotation: rot90 with k=1 rotates counterclockwise by default
+        # To rotate clockwise, we use k=-k or equivalently (4-k)
+        return np.rot90(image, k=-k)
+
+
 def depth_image_to_bytes(
     image: np.ndarray, target_size: tuple[int, int] | None = None
 ) -> tuple[bytes, tuple[int, int]]:

@@ -122,24 +122,30 @@ Data ripped from MMT robots is stored as npz files, named as `ep\d{4}_t\d{4}\.np
 For `--type mmt_npz`, local output paths sanitize episode IDs for filesystem safety. S3 output keeps legacy naming.
 
 # Converting CAM mcaps to tar shards
-For robots such as the Unitree G1, or the CAM TZK, or even vendor-sourced UMI data, teleop / trainable data is available as a ROS 2 MCAP. To convert this data you can use the `type` argument as `mcap` and specify a `--action_fields_config_path` to a yaml config file listing topics. Eg. For the unitree g1 you can run something like this:
+For robots such as the Unitree G1, the CAM TZK, or vendor-sourced UMI data, teleop/trainable data is available as ROS 2 MCAPs. To convert this data, use `--type mcap` and point to the relevant config files for topics, action fields, and language annotations. You can optionally filter by task, domain (`sim`/`real`), source (`teleop`/`filtered`), and episode index. The output directory will automatically include subdirectories reflecting the active filters (**NOTE** that converting more than one task produces an output directory called `multitask`).
+
+Example Unitree G1 conversion:
 ```
-python vla_foundry/data/preprocessing/preprocess_robotics_to_tar.py \
+uv run --group preprocessing vla_foundry/data/preprocessing/preprocess_robotics_to_tar.py \
     --type mcap \
     --source_episodes <s3 or local/path/to/episodes> \
-    --output_dir s3://<path_to_bucket>/ \
-    --config_path vla_foundry/config_presets/data/unitree_g1/robotics_preprocessing_params_1past_47future_30hz.yaml \
-    --action_fields_config_path vla_foundry/config_presets/data/unitree_g1/g1_mcap_topics.yaml \
+    --output_dir <s3 or local/path/to/output> \
+    --output_dir_fixed_path <s3 path to fixed dataset bucket> \
+    --config_path vla_foundry/config_presets/data/g1_preprocessing_params_1past_47future_30hz.yaml \
+    --action_fields_config_path vla_foundry/config_presets/data/unitree_g1/g1_action_fields.yaml \
+    --topics_to_fields_path vla_foundry/config_presets/data/unitree_g1/g1_mcap_topics.yaml \
     --camera_names "include vla_foundry/config_presets/data/unitree_g1/g1_data_camera_names.yaml" \
-    --task_name "do_the_task"
+    --samples_per_shard 100 \
+    --task_filter '["stack_cubes_ordered"]' \
+    --domain_filter '["sim"]' \
+    --source_filter '["teleop"]'
 ```
-For convenience, wrapper scripts have been provided for the Unitree G1:
+A ready-to-run example script that preprocesses Unitree G1 Dex3 teleop data for the `move_block_on_plate` sim task at 30 Hz (1 past + 47 future steps) is available at:
 ```
-./examples/preprocessing/extended/preprocess_robotics_data_mcap_g1.sh \
-    --source <s3:/src/s3/path> \
-    --output <s3:/dest/s3/path> \
-    --task-name <task name>
+./examples/preprocessing/extended/preprocess_robotics_data_mcap_g1.sh
 ```
+
+**NOTE**: Running this converter locally can be memory-intensive on your machine, so considering tuning the number of Ray workers (`--ray_num_cpus`) or defaulting to an EC2 instance.
 
 ##### Supported ROS 2 Message Types
 

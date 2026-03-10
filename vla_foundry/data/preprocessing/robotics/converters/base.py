@@ -27,8 +27,10 @@ class BaseRoboticsConverter:
 
     def __init__(self, cfg):
         self.cfg = cfg
+        self.output_dir = cfg.output_dir
         self.resize_images_size = cfg.resize_images_size
         self.image_resizing_method = cfg.image_resizing_method
+        self.camera_rotations = cfg.camera_rotations
         self.image_indices = sorted(cfg.image_indices) if cfg.image_indices is not None else [-1, 0]
 
         # Initialize JPEG encoder
@@ -256,13 +258,14 @@ class BaseRoboticsConverter:
                     future = executor.submit(
                         upload_sample_to_s3,
                         sample_data=sample_data,
-                        output_dir=self.cfg.output_dir,
+                        output_dir=self.output_dir,
                         episode_path=episode_path,
                         episode_id=self.get_episode_id(episode_path),
                         frame_idx=anchor_timestep,
                         jpeg_quality=self.cfg.jpeg_quality,
                         resize_images_size=self.resize_images_size,
                         image_resizing_method=self.image_resizing_method,
+                        camera_rotations=self.camera_rotations,
                     )
                     futures.add(future)
 

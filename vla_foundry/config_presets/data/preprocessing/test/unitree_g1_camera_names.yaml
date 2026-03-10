@@ -1,6 +1,0 @@
-# Unitree G1 Camera Names
-# Used with: --camera_names "include path/to/this/file.yaml"
-
-- head
-- left_wrist
-- right_wrist

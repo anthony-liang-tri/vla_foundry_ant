@@ -194,8 +194,8 @@ class ZzkPolicyInference:
 
         Returns:
             Dictionary with observations separated by modality:
-            - "images": Dict[camera_name, np.ndarray] - Image data
-            - "proprioception": Dict[field_name, np.ndarray] - State data
+            - "images": dict[camera_name, np.ndarray] - Image data
+            - "proprioception": dict[field_name, np.ndarray] - State data
             - "timestamp": int - Observation timestamp
         """
         obs = {

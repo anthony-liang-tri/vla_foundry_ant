@@ -29,6 +29,7 @@ from vla_foundry.data.preprocessing.image_utils import (
     depth_image_to_bytes,
     image_to_bytes,
     point_map_to_bytes,
+    rotate_image,
 )
 from vla_foundry.data.robotics.cv_utils import scale_intrinsics_3x3_for_resize_and_crop
 from vla_foundry.file_utils import list_s3_directory_recursive
@@ -108,8 +109,52 @@ def upload_sample_to_s3(
     jpeg_quality: int = 95,
     resize_images_size: list[int] | None = None,
     image_resizing_method: ImageResizingMethod = ImageResizingMethod.CENTER_CROP,
-) -> None:
-    """Upload sample data to S3 as tar file. (or save locally)"""
+    camera_rotations: dict[str, int] | None = None,
+) -> str:
+    """
+    Package a single sample as a tar file and write it to S3 or local disk.
+
+    Builds a tar file containing:
+    - Camera images (JPEG for RGB, PNG for depth), optionally resized and rotated
+    - Point maps as 3-channel uint16 TIFF files, if present
+    - Low-dimensional data (state, actions, masks) as compressed NPZ
+    - Metadata and language instructions as JSON
+    - Rescaled camera intrinsics when original intrinsics are provided
+
+    Args:
+        sample_data: Dictionary built by BaseRoboticsConverter.process_episode() with keys:
+            - "images": dict mapping "{camera_name}_t{offset}" keys to RGB numpy
+              arrays (H, W, 3) uint8 or pre-encoded JPEG bytes
+            - "lowdim": dict mapping field names to numpy arrays, including
+              actions, state, masks, and optionally original/rescaled intrinsics
+            - "metadata": SampleMetadata dataclass or equivalent dict with
+              sample_id, camera_names, original_image_sizes, etc.
+            - "language_instructions": dict mapping instruction type (e.g.
+              "original", "randomized") to list of strings, or None
+            - "point_cloud" (optional): numpy array (T, N, 6) with [x,y,z,r,g,b]
+            - "point_maps" (optional): dict mapping "{camera_name}_t{offset}"
+              keys to (H, W, 3) uint16 arrays with XYZ coordinates
+        output_dir: S3 URI (s3://bucket/prefix) or local directory path.
+        episode_path: Original episode path, used to derive a unique ID for the tar filename.
+        episode_id: Episode identifier included in the tar filename.
+        frame_idx: Frame index within the episode, included in the tar filename.
+        jpeg_quality: JPEG compression quality for RGB images (0-100).
+        resize_images_size: Target [width, height] for image resizing. Required when
+            images are numpy arrays, must be None when images are pre-encoded bytes.
+        image_resizing_method: Resizing strategy (e.g. center crop) applied to numpy images.
+        camera_rotations: Optional mapping of camera name to number of 90-degree
+            counter-clockwise rotations to apply before encoding.
+
+    Returns:
+        Filename of the written tar archive.
+
+    Raises:
+        ValueError: If images are numpy arrays but resize_images_size is None,
+            or if images are pre-encoded bytes but resize_images_size is set.
+        AssertionError: If a camera name in the images is not found in
+            metadata.camera_names, or if point map arrays have unexpected
+            dtype or shape.
+    """
     s3_client = create_s3_client() if is_s3_path(output_dir) else None
     tar_buffer = io.BytesIO()
     uuid_prefix = str(uuid.uuid4())
@@ -120,8 +165,15 @@ def upload_sample_to_s3(
         for img_key, img_data in sample_data["images"].items():
             # Check if this is a depth image
             is_depth = "depth" in img_key
+            camera_name_without_timestep = img_key.rsplit("_t", 1)[0]
 
             if not isinstance(img_data, bytes):
+                # Apply camera-specific rotation if configured
+                if camera_rotations and camera_name_without_timestep in camera_rotations:
+                    k = camera_rotations[camera_name_without_timestep]
+                    if k != 0:
+                        img_data = rotate_image(img_data, k)
+
                 if resize_images_size is None:
                     raise ValueError(
                         f"Image '{img_key}' is a numpy array but resize_images_size is not configured. "
@@ -154,7 +206,6 @@ def upload_sample_to_s3(
                 file_extension = "jpg"  # Assume pre-encoded bytes are JPEG
 
             # Log original image sizes
-            camera_name_without_timestep = img_key.rsplit("_t", 1)[0]
             if isinstance(sample_data["metadata"], dict):
                 assert camera_name_without_timestep in sample_data["metadata"].get("camera_names")
             else:
@@ -835,6 +886,61 @@ def depth_images_to_point_cloud(
         point_cloud = np.concatenate([point_cloud, padding], axis=0)
 
     return point_cloud.astype(np.float16)
+
+
+def validate_pose_groups(pose_groups: list[dict[str, str]]):
+    """
+    Validate that pose groups are complete with required fields.
+
+    Each pose group must contain "name", "position_key", and "rotation_key"
+    entries. Used during converter initialization to catch configuration
+    errors before processing begins.
+
+    Args:
+        pose_groups: List of pose group dicts, each requiring keys "name",
+            "position_key", and "rotation_key". An empty list is valid and
+            returns immediately.
+
+    Raises:
+        TypeError: If pose_groups is not a list.
+        ValueError: If any pose group is missing required fields. The error
+            message lists all invalid groups and their missing fields.
+    """
+    if not pose_groups:
+        return
+
+    if not isinstance(pose_groups, list):
+        raise TypeError("pose_groups must be a list of dicts")
+
+    errors = []
+    valid_pose_groups = []
+
+    for i, pose_group in enumerate(pose_groups):
+        group_errors = []
+
+        # Check required fields
+        if "name" not in pose_group:
+            group_errors.append("missing 'name' field")
+        if "position_key" not in pose_group:
+            group_errors.append("missing 'position_key' field")
+        if "rotation_key" not in pose_group:
+            group_errors.append("missing 'rotation_key' field")
+
+        if group_errors:
+            errors.append(f"Pose group {i}: {', '.join(group_errors)}")
+            continue
+
+        # Pose group has all required fields
+        valid_pose_groups.append(pose_group)
+        position_key = pose_group["position_key"]
+        rotation_key = pose_group["rotation_key"]
+        print(f"  ✅ Valid pose group: {pose_group['name']} ({position_key}, {rotation_key})")
+
+    if errors:
+        error_msg = "Pose group validation failed:\n" + "\n".join(f"  - {error}" for error in errors)
+        raise ValueError(error_msg)
+
+    print(f"✅ All {len(valid_pose_groups)} pose groups are valid")
 
 
 def depth_images_to_point_maps(

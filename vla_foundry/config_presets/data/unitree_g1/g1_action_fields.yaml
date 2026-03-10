@@ -1,5 +1,3 @@
-# action field specifications for the Lerobot training pipeline.
-
 action_key_fields:
   - action_ee_pose_left__xyz # 3
   - action_ee_pose_left__rot_6d # 6

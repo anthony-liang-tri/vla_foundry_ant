@@ -62,6 +62,7 @@ class PreprocessParams(draccus.ChoiceRegistry, BaseParams):
     # Image preprocessing
     resize_images_size: list[int] | None = field(default=None)
     image_resizing_method: ImageResizingMethod = ImageResizingMethod.CENTER_CROP
+    camera_rotations: dict[str, int] | None = field(default=None)
     jpeg_quality: int = field(default=95)
 
     # Depth and point cloud control
@@ -206,18 +207,25 @@ class MCAPPreprocessParams(PreprocessParams):
     """Configuration for MCAP ROS 2 bag preprocessing."""
 
     # Path to topics config (action_topics, state_topics, camera_topics, target_hz)
+    topics_to_fields_path: str = field(
+        default="vla_foundry/config_presets/data/unitree_g1/g1_mcap_topics.yaml",
+    )
+    # Path to the action fields and slices config
     action_fields_config_path: str = field(
-        default="vla_foundry/config_presets/data/preprocessing/test/unitree_g1_mcap_topics.yaml",
+        default="vla_foundry/config_presets/data/unitree_g1/g1_action_fields.yaml",
+    )
+    # Path to the language annotations as a fallback if not available in the metadata
+    language_annotations_path: str = field(
+        default="vla_foundry/config_presets/data/unitree_g1/g1_language_annotations.yaml",
     )
 
-    # Path to camera names config (list of camera names)
-    camera_names_config_path: str = field(
-        default="vla_foundry/config_presets/data/preprocessing/test/unitree_g1_camera_names.yaml",
-    )
-
-    task_name: str | None = field(
-        default=None, metadata={"help": "Task name for language instruction (overrides config default_task_name)"}
-    )
+    # Filtering: restrict to specific data sources, tasks, domains, and/or episodes
+    # e.g. source_filter: ["teleop"] to only process teleop episodes
+    source_filter: list[str] = field(default_factory=lambda: ["teleop"])
+    # e.g., task_filter: ["do_something_useful"] to only process that task
+    task_filter: list[str] | None = field(default=None)
+    # e.g. domain_filter: ["sim"] to only process simulation episodes
+    domain_filter: list[str] | None = field(default=None)
 
 
 TYPE_MAPPER = {

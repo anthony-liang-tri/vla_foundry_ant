@@ -551,7 +551,7 @@ def merge_percentiles_from_tdigest(states_list: list[dict[str, Any]], target_p: 
                         selector = (slice(0, cnt),) + idx
                         buffer_samples.extend(buffer[selector].tolist())
                 elif state.get("buffers") and idx_str in state["buffers"]:
-                    # Intermediate sparse buffer format (Dict[str, List])
+                    # Intermediate sparse buffer format (dict[str, List])
                     buffer_samples.extend(state["buffers"][idx_str])
 
         # Create t-digest from buffer samples if any

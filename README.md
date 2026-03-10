@@ -166,8 +166,8 @@ Consider the following definition of the `VLMParams`
 @register_model_params("vlm")
 @dataclass(frozen=True)
 class VLMParams(ModelParams):
-    vit: Union[ViTParams, ViTHFParams] = field(default_factory=ViTParams)
-    transformer: Union[TransformerParams, TransformerHFParams] = field(default_factory=TransformerParams)
+    vit: ViTParams | ViTHFParams = field(default_factory=ViTParams)
+    transformer: TransformerParams | TransformerHFParams = field(default_factory=TransformerParams)
 ```
 
 Here, the ViT can either be `ViTParams` or `ViTHFParams`. We can dynamically pick between the two by directly supplying the necessary arguments. For example, indicating `--model.vit.hf_pretrained=vit_base_patch16_siglip_224` will automatically instantiate `cfg.model.vit` as a `ViTHFParams` object, while `--model.vit.hidden_dim=1152` will automatically instantiate `cfg.model.vit` as a `ViTParams` object. No need to indicate `--model.vit.type` in this case.

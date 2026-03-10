@@ -1,10 +1,14 @@
-source .venv/bin/activate && python vla_foundry/data/scripts/preprocessing/preprocess_robotics_to_tar.py \
---source_type "lerobot" \
---source_episodes "['s3://tri-ml-datasets/vla_foundry_scratch/tmp/aykut/humanoid/unitree_g1_dex3/real/converted/StackOxoContainers/']" \
---output_dir s3://tri-ml-datasets/vla_foundry_scratch/tmp/aykut/StackOxoContainers \
---camera_names "include vla_foundry/config_presets/data/unitree_g1/g1_data_camera_names.yaml" \
---language_annotations_path vla_foundry/config_presets/data/unitree_g1/g1_language_annotations.yaml \
---action_fields_config_path vla_foundry/config_presets/data/unitree_g1/g1_action_fields.yaml \
+# NOTE: Needs the StackOxoContainers task dataset to be updated to 
+# include image data, does not work at the moment!
+uv run --group preprocessing vla_foundry/data/preprocessing/preprocess_robotics_to_tar.py \
+--type "lerobot" \
+--source_episodes "['s3://robotics-cam-data/platform/unitree_g1_dex3/lerobot/StackOxoContainers/real/teleop']" \
+--output_dir "s3://robotics-cam-data/platform/unitree_g1_dex3/tarfile/v0/StackOxoContainers/real/teleop/" \
+--output_dir_fixed_path "s3://robotics-cam-data/platform/unitree_g1_dex3/dataset_fixed/" \
+--config_path "vla_foundry/config_presets/data/robotics_preprocessing_params_1past_47future_30hz.yaml" \
+--camera_names "['observation.images.cam_left_high', 'observation.images.cam_right_high', 'observation.images.cam_left_wrist', 'observation.images.cam_right_wrist']" \
+--observation_keys "['observation.state']" \
+--action_keys "['actions']" \
 --samples_per_shard 100 \
---config_path "vla_foundry/config_presets/data/robotics_preprocessing_params_1past_14future.yaml" \  # needs change for 30 Hz
---ray_address local
+--ray_address local \
+--ray_num_cpus 32
