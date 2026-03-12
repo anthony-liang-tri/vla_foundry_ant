@@ -60,7 +60,10 @@ def main():
     if os.environ.get("USER"):
         runtime_env["env_vars"]["VLA_LAUNCHED_BY"] = os.environ["USER"]
     # Forward AWS credentials from head node to workers (avoids flaky IMDS on workers)
-    runtime_env["env_vars"].update(get_aws_credentials_env())
+    # Only fetch credentials when S3 paths are involved
+    uses_s3 = cfg.output_dir.startswith("s3://") or any(ep.startswith("s3://") for ep in cfg.source_episodes)
+    if uses_s3:
+        runtime_env["env_vars"].update(get_aws_credentials_env())
 
     if cfg.ray_address:
         ray.init(address=cfg.ray_address, runtime_env=runtime_env)
