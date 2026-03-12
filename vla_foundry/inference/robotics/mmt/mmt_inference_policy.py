@@ -27,7 +27,7 @@ from collections import deque
 import numpy as np
 import torch
 
-from vla_foundry.data.preprocessing.image_utils import resize_image
+from vla_foundry.data.preprocessing.image_utils import ImageResizingMethod, resize_and_crop_image
 from vla_foundry.data.processor.robotics_processor import RoboticsProcessor
 from vla_foundry.file_utils import get_latest_checkpoint, load_ema_checkpoint, load_model_checkpoint, yaml_load
 from vla_foundry.logger import setup_logging
@@ -219,7 +219,11 @@ class ZzkPolicyInference:
                 image = status[zzk_image_name]
                 if image is not None and image.size > 0:
                     # Resize image to expected size (same as training data preprocessing)
-                    resized_image = resize_image(image, self.image_size)
+                    resized_image = resize_and_crop_image(
+                        image,
+                        self.image_size,
+                        resize_method=ImageResizingMethod.CENTER_CROP,
+                    )
                     # Store in images dict
                     obs["images"][model_image_base_name] = np.array(resized_image)
                     logging.debug(
