@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 
@@ -108,7 +109,17 @@ class MMTNPZConverter(BaseRoboticsConverter):
                 with fs.open(npz_file, "rb") as f:
                     npz_data = np.load(f)
                     # Create a copy of all arrays to avoid file handle dependencies
-                    data[timestamp] = {key: np.array(npz_data[key]) for key in npz_data.files}
+                    # Skip keys with corrupted/invalid shapes
+                    arrays = {}
+                    skipped_keys = []
+                    for key in npz_data.files:
+                        try:
+                            arrays[key] = np.array(npz_data[key])
+                        except (ValueError, RuntimeError):
+                            skipped_keys.append(key)
+                    if skipped_keys:
+                        logging.getLogger(__name__).warning(f"{npz_file}: skipped corrupted keys: {skipped_keys}")
+                    data[timestamp] = arrays
             else:
                 raise ValueError(f"Filename {filename} does not match expected pattern.")
 
@@ -349,4 +360,4 @@ class MMTNPZConverter(BaseRoboticsConverter):
 
         language_instructions = self.get_language_instructions(sample_metadata)
 
-        return sample_images, sample_lowdim, sample_metadata, language_instructions, None, stats_sample
+        return sample_images, sample_lowdim, sample_metadata, language_instructions, None, None, stats_sample
