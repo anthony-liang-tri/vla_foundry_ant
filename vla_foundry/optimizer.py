@@ -49,6 +49,8 @@ def load_optimizer(optimizer, checkpoint_path, use_fsdp):
                 for pid, full_pid in zip(param_group["params"], full_param_group["params"], strict=False):
                     if pid not in state:
                         continue
+                    if full_pid not in full_state:
+                        continue
                     param_state = state[pid]
                     full_param_state = full_state[full_pid]
                     for attr, full_tensor in full_param_state.items():

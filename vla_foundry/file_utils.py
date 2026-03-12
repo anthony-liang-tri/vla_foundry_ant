@@ -467,7 +467,7 @@ def load_ema_checkpoint(model_or_ema, resume_from_checkpoint):
         FileNotFoundError: If checkpoint doesn't exist.
         ValueError: If checkpoint doesn't contain ema_state_dict.
     """
-    if not os.path.exists(resume_from_checkpoint):
+    if not file_exists(resume_from_checkpoint):
         raise FileNotFoundError(
             f"EMA checkpoint not found at '{resume_from_checkpoint}'. Make sure the model was trained with EMA enabled."
         )
