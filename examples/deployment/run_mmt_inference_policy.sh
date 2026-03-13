@@ -4,8 +4,12 @@
 # ============================================================
 # This script serves as both configuration and execution wrapper.
 # All settings can be overridden via environment variables or CLI args.
+# Activate the intended Python environment before running this script.
 #
 # Usage:
+#   # Activate the target environment first
+#   source <venv_path>/bin/activate
+#
 #   # Default settings
 #   bash examples/deployment/run_mmt_inference_policy.sh
 #
@@ -52,8 +56,9 @@ LOG_LEVEL="${LOG_LEVEL:-INFO}"
 # ============================================================
 # Run Inference
 # ============================================================
-# Build command with all arguments
-CMD="uv run python vla_foundry/inference/robotics/mmt/mmt_inference_policy.py"
+# Build command with all arguments. Assumes `python` resolves to the
+# already-activated target environment.
+CMD="python vla_foundry/inference/robotics/mmt/mmt_inference_policy.py"
 CMD="$CMD --checkpoint_dir \"${CHECKPOINT_DIR}\""
 CMD="$CMD --device \"${DEVICE}\""
 CMD="$CMD --num_flow_steps ${NUM_FLOW_STEPS}"
