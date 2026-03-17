@@ -45,11 +45,12 @@ class TrainExperimentParams(BaseParams):
     remote_sync_fixed_path: str = field(default="s3://tri-ml-datasets-uw2/vla_foundry_models_fixed/")
 
     # --Training
-    # total number of samples to train on. Mutually exclusive with `num_epochs`.
+    # Total number of samples to train on. If `num_epochs` is also set, it must
+    # resolve to the same value.
     total_train_samples: int = field(default=None)
     # Number of epochs over the input datasets. If set, it is converted to
-    # `total_train_samples` using `epochs_to_samples`. Mutually exclusive with
-    # `total_train_samples`.
+    # `total_train_samples` using `epochs_to_samples`. If
+    # `total_train_samples` is also set, the two must agree.
     num_epochs: int = field(default=None)
     # Number of checkpoint windows the total budget is split into.
     num_checkpoints: int = field(default=5)
@@ -75,18 +76,26 @@ class TrainExperimentParams(BaseParams):
         # Allow sub-params to read the full config and set shared/derived fields.
         self.init_shared_attributes(self)
 
-        # Mutual exclusivity check for training budget specification.
-        if self.num_epochs is not None and self.total_train_samples is not None:
-            raise ValueError("Set either num_epochs or total_train_samples, not both.")
-
-        # If epochs were specified, derive the total sample budget now.
+        derived_total_train_samples = None
         if self.num_epochs is not None:
-            logging.info(
-                f"Setting total_train_samples based on self.num_epochs={self.num_epochs} epochs. "
-                "If you have already set total_train_samples, this will be ignored."
+            derived_total_train_samples = epochs_to_samples(self.data.dataset_manifest, self.num_epochs)
+
+        if self.total_train_samples is not None and derived_total_train_samples is not None:
+            assert self.total_train_samples == derived_total_train_samples, (
+                "Both total_train_samples and num_epochs are set, but they resolve to different training budgets: "
+                f"total_train_samples={self.total_train_samples}, "
+                f"derived_total_train_samples={derived_total_train_samples}."
             )
-            total_train_samples = epochs_to_samples(self.data.dataset_manifest, self.num_epochs)
-            object.__setattr__(self, "total_train_samples", total_train_samples)
+            logging.warning(
+                "Both total_train_samples and num_epochs are set and consistent; "
+                "using the explicit total_train_samples value."
+            )
+
+        # If total_train_samples is already provided, keep it as the source of truth.
+        # Otherwise derive it from num_epochs.
+        if self.total_train_samples is None and derived_total_train_samples is not None:
+            logging.info(f"Setting total_train_samples based on self.num_epochs={self.num_epochs} epochs.")
+            object.__setattr__(self, "total_train_samples", derived_total_train_samples)
 
         self.check_asserts()
 
