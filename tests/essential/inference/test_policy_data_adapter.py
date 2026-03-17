@@ -181,14 +181,23 @@ def mock_robotics_processor():
         return {
             "std": [0.1] * dim,
             "std_per_timestep": [[0.1] * dim for _ in range(timesteps)],
+            "min": [0.0] * dim,
+            "max": [1.0] * dim,
         }
 
     normalizer.stats = {}
     for action_field in action_fields:
         dim = processor.get_field_dimension(action_field)
-        normalizer.stats[action_field] = _make_stats_entry(dim)
+        if "gripper" in action_field:
+            # Use min/max matching actual test gripper values (0.2 closed, 0.4 open)
+            stats = _make_stats_entry(dim)
+            stats["min"] = [0.2] * dim
+            stats["max"] = [0.4] * dim
+            normalizer.stats[action_field] = stats
+        else:
+            normalizer.stats[action_field] = _make_stats_entry(dim)
         actual_field = action_field.replace("robot__action__", "robot__actual__")
-        normalizer.stats[actual_field] = _make_stats_entry(dim)
+        normalizer.stats[actual_field] = normalizer.stats[action_field]
 
     processor.normalizer = normalizer
 
@@ -306,12 +315,21 @@ class TrackingNormalizer:
             "robot__action__poses__left::panda__xyz": {
                 "std": [0.1, 0.1, 0.1],
                 "std_per_timestep": [[0.1, 0.1, 0.1], [0.1, 0.1, 0.1]],
+                "min": [0.0, 0.0, 0.0],
+                "max": [1.0, 1.0, 1.0],
             },
             "robot__action__poses__left::panda__rot_6d": {
                 "std": [0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
                 "std_per_timestep": [[0.1, 0.1, 0.1, 0.1, 0.1, 0.1], [0.1, 0.1, 0.1, 0.1, 0.1, 0.1]],
+                "min": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                "max": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
             },
-            "robot__action__grippers__left::panda_hand": {"std": [0.1], "std_per_timestep": [[0.1], [0.1]]},
+            "robot__action__grippers__left::panda_hand": {
+                "std": [0.1],
+                "std_per_timestep": [[0.1], [0.1]],
+                "min": [0.0],
+                "max": [1.0],
+            },
         }
         self._field_dims = field_dims or {}
 
@@ -555,7 +573,10 @@ def test_policy_data_adapter_end_to_end_flow(field_mapping_file):
     executed_action = adapter.step_action()
     assert isinstance(executed_action, PosesAndGrippers)
     np.testing.assert_allclose(executed_action.poses["left::panda"].translation(), translation0, atol=1e-6)
-    assert executed_action.grippers["left::panda_hand"] == pytest.approx(gripper0, abs=1e-6)
+    # gripper0=0.2 normalizes to 0.2 in [0,1] (stats min=0.0, max=1.0),
+    # which is below close_threshold=0.4, so debouncer snaps to min (closed)
+    gripper_stats = processor.normalizer.stats["robot__action__grippers__left::panda_hand"]
+    assert executed_action.grippers["left::panda_hand"] == pytest.approx(gripper_stats["min"][0], abs=1e-6)
 
     for idx in range(adapter.num_past_timesteps):
         np.testing.assert_allclose(

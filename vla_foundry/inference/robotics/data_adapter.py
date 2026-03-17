@@ -60,6 +60,8 @@ class PolicyDataAdapter:
         num_past_timesteps: int = 1,
         num_future_timesteps: int = 14,
         image_indices: tuple[int, ...] = (-1, 0),
+        gripper_debounce_open_threshold: float = 0.6,
+        gripper_debounce_close_threshold: float = 0.4,
     ):
         self.robotics_processor = robotics_processor
         self.data_config = data_config
@@ -104,7 +106,29 @@ class PolicyDataAdapter:
         self.raw_obs_buffer = []  # Store raw observations for generating point clouds
         self.reference = {}
         self.reference_initialized = False
-        self.last_model_output = None  # Cache raw normalized model output for guidance
+        self.has_predicted = False  # Whether at least one inference has been done
+
+        # Gripper hysteresis debouncer: when open, value must drop below close_threshold to close;
+        # when closed, value must rise above open_threshold to open.
+        # Both thresholds must be set to enable debouncing (None = disabled).
+        self.gripper_debounce_close_threshold = gripper_debounce_close_threshold
+        self.gripper_debounce_open_threshold = gripper_debounce_open_threshold
+        # Per-field gripper state: True = open, False = closed
+        self.gripper_state: dict[str, bool] = {}
+        self.gripper_fields = [field for field in self.action_fields if "gripper" in field]
+        # Precompute snap values (min=closed, max=open) from normalizer stats
+        self.gripper_snap_values: dict[str, tuple[float, float]] = {}
+        normalizer = self.robotics_processor.normalizer
+        for field in self.gripper_fields:
+            absolute_field = relative_to_absolute_map(field)
+            if absolute_field in normalizer.stats:
+                field_stats = normalizer.stats[absolute_field]
+                snap_closed = float(np.min(field_stats["min"]))
+                snap_open = float(np.max(field_stats["max"]))
+                self.gripper_snap_values[absolute_field] = (snap_closed, snap_open)
+                logging.info(
+                    f"Gripper debounce for '{absolute_field}': snap_closed={snap_closed:.4f}, snap_open={snap_open:.4f}"
+                )
 
     def initialize_action_buffer(self, observation) -> None:
         logging.debug("Initializing action buffer")
@@ -180,7 +204,8 @@ class PolicyDataAdapter:
         self.image_buffer = []
         self.raw_obs_buffer = []
         self.reference_initialized = False
-        self.last_model_output = None
+        self.has_predicted = False
+        self.gripper_state = {}
         self.initialize_action_buffer(initial_observation)
         self.initialize_proprioception_buffer(initial_observation)
         self.initialize_image_buffer(initial_observation)
@@ -228,9 +253,46 @@ class PolicyDataAdapter:
         self.action_buffer_mask.pop(0)
         self.action_buffer_mask.append(False)
 
+        self._debounce_gripper(current_action_dict)
+
         output = self.action_mapping.create_pose_and_gripper(current_action_dict)
         vz.log_robot_gym_poses_and_grippers("current_action_arm_poses", output)
         return output
+
+    def _debounce_gripper(self, action_dict: dict) -> None:
+        """Apply hysteresis debouncing to gripper fields in-place.
+
+        Thresholds are in normalized [0, 1] space (0 = closed, 1 = open).
+        When currently open, the value must drop below close_threshold to close.
+        When currently closed, the value must rise above open_threshold to open.
+        Snap values are taken from the normalizer stats (min = closed, max = open).
+        """
+        for field in self.gripper_fields:
+            absolute_field = relative_to_absolute_map(field)
+            if absolute_field not in action_dict or absolute_field not in self.gripper_snap_values:
+                continue
+
+            snap_closed, snap_open = self.gripper_snap_values[absolute_field]
+            raw_value = float(np.asarray(action_dict[absolute_field]).flatten()[0])
+
+            # Normalize raw value to [0, 1] for threshold comparison
+            value_range = snap_open - snap_closed
+            if abs(value_range) < 1e-8:
+                continue
+            normalized = (raw_value - snap_closed) / value_range
+
+            if absolute_field not in self.gripper_state:
+                midpoint = (self.gripper_debounce_close_threshold + self.gripper_debounce_open_threshold) / 2
+                self.gripper_state[absolute_field] = normalized > midpoint
+
+            is_open = self.gripper_state[absolute_field]
+            if is_open and normalized < self.gripper_debounce_close_threshold:
+                self.gripper_state[absolute_field] = False
+            elif not is_open and normalized > self.gripper_debounce_open_threshold:
+                self.gripper_state[absolute_field] = True
+
+            snapped = snap_open if self.gripper_state[absolute_field] else snap_closed
+            action_dict[absolute_field] = np.array([snapped], dtype=np.float64)
 
     def get_remaining_actions_in_buffer(self) -> tuple[int, int]:
         """Return remaining valid actions and total remaining slots from current execution index."""
@@ -665,8 +727,7 @@ class PolicyDataAdapter:
         if n_missing_actions > 0:
             filler = model_output[:, -1:].expand(-1, n_missing_actions, -1)
             model_output = torch.cat((model_output, filler), dim=1)
-        # Cache the normalized model output for guidance in async mode
-        self.last_model_output = model_output.clone()
+        self.has_predicted = True
         action_list = self.action_mapping.from_action_model(
             model_output,
             self.robotics_processor.normalizer,

@@ -67,6 +67,8 @@ class InferenceDiffusionPolicy(Policy):
         lag_compensation: float = 0.0,
         guidance_scale: float = 0.0,
         sigma_d_obs: float = 0.2,
+        gripper_debounce_open_threshold: float = 0.6,
+        gripper_debounce_close_threshold: float = 0.4,
     ):
         self.model_config_path = os.path.join(checkpoint_directory, "config.yaml")
 
@@ -101,6 +103,8 @@ class InferenceDiffusionPolicy(Policy):
         self.lag_compensation = lag_compensation
         self.guidance_scale = guidance_scale
         self.sigma_d_obs = sigma_d_obs
+        self.gripper_debounce_open_threshold = gripper_debounce_open_threshold
+        self.gripper_debounce_close_threshold = gripper_debounce_close_threshold
 
         # Load model configuration and create model
         self.cfg = load_experiment_params_from_yaml(
@@ -185,7 +189,7 @@ class InferenceDiffusionPolicy(Policy):
 
     def _build_guidance(self, adapter, actions_tensor, action_buffer_mask_snapshot):
         """Build guidance target and mask from previous predictions, or return (None, None)."""
-        if adapter.last_model_output is None or self.guidance_scale <= 0:
+        if (not adapter.has_predicted) or self.guidance_scale <= 0:
             return None, None
 
         guide_start = self.num_past_timesteps
@@ -284,7 +288,6 @@ class InferenceDiffusionPolicy(Policy):
 
         actions = self.data_adapter[client_id].step_action(lag_compensation=self.lag_compensation)
         remaining_actions, remaining_slots = self.data_adapter[client_id].get_remaining_actions_in_buffer()
-        logging.info(f"Client {client_id}: actions remaining in buffer={remaining_actions}/{remaining_slots}")
         self.current_open_loop_step[client_id] += 1
         self._step_count[client_id] += 1
 
@@ -319,6 +322,8 @@ class InferenceDiffusionPolicy(Policy):
                     num_past_timesteps=self.num_past_timesteps,
                     num_future_timesteps=self.future_timesteps,
                     image_indices=self.cfg.data.image_indices,
+                    gripper_debounce_open_threshold=self.gripper_debounce_open_threshold,
+                    gripper_debounce_close_threshold=self.gripper_debounce_close_threshold,
                 )
                 self.should_reset[client_id] = True
 
@@ -354,6 +359,8 @@ class InferenceDiffusionPolicy(Policy):
                     num_past_timesteps=self.num_past_timesteps,
                     num_future_timesteps=self.future_timesteps,
                     image_indices=self.cfg.data.image_indices,
+                    gripper_debounce_open_threshold=self.gripper_debounce_open_threshold,
+                    gripper_debounce_close_threshold=self.gripper_debounce_close_threshold,
                 )
             self.should_reset[uuid_value] = True
 
@@ -380,6 +387,18 @@ def main():
     )
     parser.add_argument("--guidance_scale", type=float, default=0.0, help="Pi-GDM guidance scale (0 = disabled)")
     parser.add_argument("--sigma_d_obs", type=float, default=0.2, help="Conditioned prior std for Pi-GDM guidance")
+    parser.add_argument(
+        "--gripper_debounce_open_threshold",
+        type=float,
+        default=0.6,
+        help="Gripper value (0-1) above which a closed gripper opens (e.g. 0.6). Both thresholds needed to enable.",
+    )
+    parser.add_argument(
+        "--gripper_debounce_close_threshold",
+        type=float,
+        default=0.4,
+        help="Gripper value (0-1) below which an open gripper closes (e.g. 0.4). Both thresholds needed to enable.",
+    )
 
     args = parser.parse_args()
 
@@ -397,6 +416,8 @@ def main():
         lag_compensation=args.lag_compensation,
         guidance_scale=args.guidance_scale,
         sigma_d_obs=args.sigma_d_obs,
+        gripper_debounce_open_threshold=args.gripper_debounce_open_threshold,
+        gripper_debounce_close_threshold=args.gripper_debounce_close_threshold,
     )
 
     # Create run name with date identifier

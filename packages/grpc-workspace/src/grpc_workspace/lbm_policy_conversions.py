@@ -111,7 +111,7 @@ def possibly_empty_str_to_optional_str(
 
 def optional_str_to_str(optional_string: str | None) -> str:
     """Return the supplied string if not None or create an empty string."""
-    return optional_string or str()
+    return optional_string or ""
 
 
 def policy_metadata_to_grpc_msg(source: PolicyMetadata) -> PolicyMetadataMsg:
@@ -497,7 +497,7 @@ def policy_observation_to_grpc_msg(
         language_instruction = obs.language_instruction
     else:
         use_language_instruction = False
-        language_instruction = str()
+        language_instruction = ""
     return MultiarmObservationMsg(
         robot=poses_and_grippers_actual_and_desired_to_grpc_msg(obs.robot),
         visuo=camera_image_set_map_to_grpc_msg(obs.visuo),
