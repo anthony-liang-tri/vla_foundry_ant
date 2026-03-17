@@ -201,44 +201,45 @@ class RoboticsDataParams(DataParams):
         # Need to import here to avoid circular import
         from vla_foundry.data.robotics.normalization import RoboticsNormalizer
 
-        if not self.dataset_statistics:
-            raise ValueError("Robotics datasets require dataset_statistics to be provided.")
+        if self.action_dim is None or self.proprioception_dim is None:
+            if not self.dataset_statistics:
+                raise ValueError("Robotics datasets require dataset_statistics to be provided.")
 
-        normalizer = RoboticsNormalizer(
-            normalization_params=self.normalization,
-            statistics_path=self.dataset_statistics,
-        )
+            normalizer = RoboticsNormalizer(
+                normalization_params=self.normalization,
+                statistics_path=self.dataset_statistics,
+            )
 
-        action_dim = 0
-        for field_name in self.action_fields:
-            if field_name not in normalizer.stats:
-                raise ValueError(f"Action field '{field_name}' missing from normalization statistics.")
-            action_dim += len(normalizer.stats[field_name]["mean"])
-        if self.action_dim is None:
-            object.__setattr__(self, "action_dim", action_dim)
-        else:
-            assert self.action_dim == action_dim, (
-                f"Action dimension mismatch, \
+            action_dim = 0
+            for field_name in self.action_fields:
+                if field_name not in normalizer.stats:
+                    raise ValueError(f"Action field '{field_name}' missing from normalization statistics.")
+                action_dim += len(normalizer.stats[field_name]["mean"])
+            if self.action_dim is None:
+                object.__setattr__(self, "action_dim", action_dim)
+            else:
+                assert self.action_dim == action_dim, (
+                    f"Action dimension mismatch, \
             the user-provided action dimension {self.action_dim} does not match \
             the computed action dimension {action_dim}. Please provide the correct action dimension or \
             set action_dim to None to automatically compute it from the action fields. \
             This could also be a discrepancy between the action fields and the normalization parameters."
-            )
+                )
 
-        proprioception_dim = 0
-        for field_name in self.proprioception_fields:
-            if field_name not in normalizer.stats:
-                raise ValueError(f"Proprioception field '{field_name}' missing from normalization statistics.")
-            proprioception_dim += len(normalizer.stats[field_name]["mean"])
-        if self.proprioception_dim is None:
-            object.__setattr__(self, "proprioception_dim", proprioception_dim)
-        else:
-            assert self.proprioception_dim == proprioception_dim, (
-                f"Proprioception dimension mismatch, \
+            proprioception_dim = 0
+            for field_name in self.proprioception_fields:
+                if field_name not in normalizer.stats:
+                    raise ValueError(f"Proprioception field '{field_name}' missing from normalization statistics.")
+                proprioception_dim += len(normalizer.stats[field_name]["mean"])
+            if self.proprioception_dim is None:
+                object.__setattr__(self, "proprioception_dim", proprioception_dim)
+            else:
+                assert self.proprioception_dim == proprioception_dim, (
+                    f"Proprioception dimension mismatch, \
             the user-provided proprioception dimension {self.proprioception_dim} does not match \
             the computed proprioception dimension {proprioception_dim}. Please provide the correct proprioception \
             dimension or set proprioception_dim to None to automatically compute it from the proprioception fields."
-            )
+                )
 
     def init_shared_attributes(self, cfg):
         super().init_shared_attributes(cfg)

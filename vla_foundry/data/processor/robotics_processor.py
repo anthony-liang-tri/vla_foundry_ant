@@ -25,7 +25,7 @@ class RoboticsProcessor:
 
         # Normalize contained entirely within the processor
         statistics_entries = [json_load(stats_path) for stats_path in data_params.dataset_statistics]
-        if self.data_params.normalization.enabled:
+        if self.data_params.normalization.enabled and statistics_entries:
             self.normalizer = RoboticsNormalizer(
                 normalization_params=self.data_params.normalization,
                 statistics_data=statistics_entries,
@@ -43,7 +43,14 @@ class RoboticsProcessor:
 
     @classmethod
     def from_pretrained(cls, config_path: str):
-        return cls(RoboticsDataParams.from_file(os.path.join(config_path, "config_processor.yaml")))
+        data_params = RoboticsDataParams.from_file(os.path.join(config_path, "config_processor.yaml"))
+        processor = cls.__new__(cls)
+        processor.data_params = data_params
+        processor.vlm_processor = get_processor(data_params)
+        processor.normalizer = (
+            RoboticsNormalizer.from_pretrained(config_path) if data_params.normalization.enabled else None
+        )
+        return processor
 
     def add_action_and_proprioception_fields(self, batch, action_fields=None, proprioception_fields=None):
         # Pre-extract concatenated actions if action fields are provided

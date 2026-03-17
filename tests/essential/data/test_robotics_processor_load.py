@@ -159,6 +159,16 @@ class TestRoboticsProcessorLoad:
             with open(config_path, "w") as f:
                 yaml.safe_dump(config_data, f)
 
+            # Create config_normalizer.yaml and stats.json required by RoboticsNormalizer.from_pretrained
+            normalizer_config_path = os.path.join(temp_dir, "config_normalizer.yaml")
+            with open(normalizer_config_path, "w") as f:
+                yaml.safe_dump(normalization_cfg, f)
+
+            with open(dataset_stats_path) as f:
+                stats_data = json.load(f)
+            with open(os.path.join(temp_dir, "stats.json"), "w") as f:
+                json.dump(stats_data, f)
+
             yield temp_dir
 
     @patch("vla_foundry.data.processor.robotics_processor.get_processor")
