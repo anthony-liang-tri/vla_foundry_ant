@@ -4,7 +4,7 @@ import torch
 import webdataset as wds
 
 from vla_foundry.data.pipelines.base import BaseWebDatasetPipeline
-from vla_foundry.data.utils import deterministic_shuffle, log_and_continue
+from vla_foundry.data.utils import deterministic_shuffle, log_and_continue, tarfile_to_samples_closing
 
 
 def filter_lt_seqlen(seq_len: int, x: list) -> bool:
@@ -29,7 +29,7 @@ class TextPipeline(BaseWebDatasetPipeline):
             ),
             wds.split_by_node,
             wds.split_by_worker,
-            wds.tarfile_to_samples(handler=log_and_continue),
+            tarfile_to_samples_closing(handler=log_and_continue),
             wds.decode(handler=log_and_continue),
             wds.map(lambda sample: {"input_ids": sample["json.gz"]}, handler=log_and_continue),
             wds.select(lambda x: filter_lt_seqlen(self.data_params.seq_len, x["input_ids"])),

@@ -3,7 +3,7 @@ import webdataset as wds
 from vla_foundry.data.augmentations.base import Augmentations
 from vla_foundry.data.pipelines.base import BaseWebDatasetPipeline
 from vla_foundry.data.processor import get_processor
-from vla_foundry.data.utils import deterministic_shuffle, log_and_continue
+from vla_foundry.data.utils import deterministic_shuffle, log_and_continue, tarfile_to_samples_closing
 from vla_foundry.params.base_data_params import DataParams
 
 
@@ -30,7 +30,7 @@ class ImageCaptionPipeline(BaseWebDatasetPipeline):
             ),
             wds.split_by_node,
             wds.split_by_worker,
-            wds.tarfile_to_samples(handler=log_and_continue),
+            tarfile_to_samples_closing(handler=log_and_continue),
             wds.decode("pilrgb", handler=log_and_continue),
             wds.select(filter_no_caption_or_no_image),
             wds.map(

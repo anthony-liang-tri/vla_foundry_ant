@@ -136,6 +136,13 @@ def get_wds_dataloader(
     return dataloader
 
 
+def _shuffle_manifest_inplace(manifest, seed):
+    """Shuffle manifest entries in-place with a deterministic seed, matching load_dataset_manifest."""
+    if seed is not None:
+        np.random.default_rng(seed).shuffle(manifest)
+    return manifest
+
+
 def get_datastring_input(
     num_samples: int,
     curr_shard_idx_per_dataset: int,
@@ -176,10 +183,12 @@ def get_datastring_input(
             for selected shards.
         next_shard_shuffle_seed_per_dataset: Updated shuffle seeds.
     """
-    # Load/reshuffle manifests per dataset with the provided seeds.
+    # Load raw manifests once (for potential in-memory re-shuffling in multi-epoch),
+    # then apply the initial shuffle to get the working copies.
+    raw_manifests = [load_dataset_manifest(path, shard_shuffle_seed=None) for path in manifest_paths]
     manifests = [
-        load_dataset_manifest(path, shard_shuffle_seed=seed)
-        for path, seed in zip(manifest_paths, shard_shuffle_seed_per_dataset, strict=False)
+        _shuffle_manifest_inplace(list(raw), seed)
+        for raw, seed in zip(raw_manifests, shard_shuffle_seed_per_dataset, strict=False)
     ]
 
     # Default to uniform weighting if not provided.
@@ -207,43 +216,86 @@ def get_datastring_input(
     # (a) enough samples for the weighting target, and
     # (b) at least one shard per worker (to balance work).
     for i in range(len(manifests)):
-        while (
-            len(shard_list_per_dataset[i]) < total_num_workers
-            or sum(num_samples_list_per_dataset[i]) < needed_samples_per_dataset[i]
-            or needed_samples_per_dataset[i] == -1
-        ):
-            if sum(num_samples_list_per_dataset[i]) >= needed_samples_per_dataset[i]:
-                logging.warning(
-                    "num_samples requirement satisfied but not all workers have shards. "
-                    "Adding data to ensure each worker has a shard."
+        needed = needed_samples_per_dataset[i]
+        manifest = manifests[i]
+        accumulated_samples = 0
+
+        if needed == -1:
+            # Use all remaining shards in a single pass (no multi-epoch).
+            start_idx = curr_shard_idx_per_dataset[i]
+            for idx in range(start_idx, len(manifest)):
+                shard_list_per_dataset[i].append(manifest[idx]["shard"])
+                num_samples_list_per_dataset[i].append(manifest[idx]["num_sequences"])
+            curr_shard_idx_per_dataset[i] = len(manifest)
+            continue
+
+        # Phase 1: Add remaining shards from current position in the current epoch.
+        start_idx = curr_shard_idx_per_dataset[i]
+        for idx in range(start_idx, len(manifest)):
+            shard_list_per_dataset[i].append(manifest[idx]["shard"])
+            num_samples_list_per_dataset[i].append(manifest[idx]["num_sequences"])
+            accumulated_samples += manifest[idx]["num_sequences"]
+            curr_shard_idx_per_dataset[i] = idx + 1
+            if accumulated_samples >= needed and len(shard_list_per_dataset[i]) >= total_num_workers:
+                break
+
+        # Phase 2: If we still need more samples, handle multi-epoch wrapping in bulk.
+        if accumulated_samples < needed or len(shard_list_per_dataset[i]) < total_num_workers:
+            if not allow_multiple_epochs:
+                logging.error(
+                    "Number of shards requested for a single epoch is more than the number of shards available. "
+                    "Consider using --allow-multiple-epochs."
                 )
-            try:
-                # Take the next shard from the manifest and advance the cursor.
-                shard_idx = curr_shard_idx_per_dataset[i]
-                shard_list_per_dataset[i].append(manifests[i][shard_idx]["shard"])
-                num_samples_list_per_dataset[i].append(manifests[i][shard_idx]["num_sequences"])
-                curr_shard_idx_per_dataset[i] += 1
-            except IndexError as e:
-                if allow_multiple_epochs:
-                    # Reload manifest and set index back to 0.
-                    # Increment seed to reshuffle, or keep None to preserve order.
-                    if shard_shuffle_seed_per_dataset[i] is not None:
-                        shard_shuffle_seed_per_dataset[i] += 1
-                    manifests[i] = load_dataset_manifest(
-                        manifest_paths[i], shard_shuffle_seed=shard_shuffle_seed_per_dataset[i]
-                    )
-                    curr_shard_idx_per_dataset[i] = 0
-                    continue
-                else:
-                    # If num_samples is -1, we don't need to raise an error,
-                    # just break the loop to continue with the next dataset
-                    if needed_samples_per_dataset[i] == -1:
+                raise IndexError(
+                    f"Dataset {i}: needed {needed} samples but only {accumulated_samples} available "
+                    f"in {len(manifest)} shards without multi-epoch."
+                )
+
+            # Pre-compute samples per full epoch to skip in bulk.
+            samples_per_epoch = sum(entry["num_sequences"] for entry in manifest)
+            shards_per_epoch = len(manifest)
+
+            remaining_needed = needed - accumulated_samples
+            remaining_shards = max(0, total_num_workers - len(shard_list_per_dataset[i]))
+
+            # Calculate how many full epochs we can add in bulk.
+            if samples_per_epoch > 0:
+                full_epochs = remaining_needed // samples_per_epoch
+                # Ensure we also satisfy the minimum-shards-per-worker constraint.
+                if remaining_shards > full_epochs * shards_per_epoch:
+                    full_epochs = max(full_epochs, (remaining_shards + shards_per_epoch - 1) // shards_per_epoch)
+            else:
+                full_epochs = 0
+
+            if full_epochs > 0:
+                logging.info(
+                    f"Dataset {i}: adding {full_epochs} full epochs in bulk "
+                    f"({full_epochs * shards_per_epoch} shards, {full_epochs * samples_per_epoch} samples)"
+                )
+
+            # Add full epochs using in-memory shuffling (no repeated S3 loads).
+            raw = raw_manifests[i]
+            for _ in range(full_epochs):
+                if shard_shuffle_seed_per_dataset[i] is not None:
+                    shard_shuffle_seed_per_dataset[i] += 1
+                shuffled = _shuffle_manifest_inplace(list(raw), shard_shuffle_seed_per_dataset[i])
+                for entry in shuffled:
+                    shard_list_per_dataset[i].append(entry["shard"])
+                    num_samples_list_per_dataset[i].append(entry["num_sequences"])
+                accumulated_samples += samples_per_epoch
+
+            # Phase 3: Add shards from one more partial epoch if still needed.
+            if accumulated_samples < needed or len(shard_list_per_dataset[i]) < total_num_workers:
+                if shard_shuffle_seed_per_dataset[i] is not None:
+                    shard_shuffle_seed_per_dataset[i] += 1
+                shuffled = _shuffle_manifest_inplace(list(raw), shard_shuffle_seed_per_dataset[i])
+                for j, entry in enumerate(shuffled):
+                    shard_list_per_dataset[i].append(entry["shard"])
+                    num_samples_list_per_dataset[i].append(entry["num_sequences"])
+                    accumulated_samples += entry["num_sequences"]
+                    curr_shard_idx_per_dataset[i] = j + 1
+                    if accumulated_samples >= needed and len(shard_list_per_dataset[i]) >= total_num_workers:
                         break
-                    logging.error(
-                        "Number of shards requested for a single epoch is more than the number of shards available. "
-                        "Consider using --allow-multiple-epochs."
-                    )
-                    raise e
 
     # Normalize shard lists: ensure each dataset's shard count is divisible by total workers.
     for i in range(len(manifests)):

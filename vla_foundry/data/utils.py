@@ -1,3 +1,4 @@
+import contextlib
 import hashlib
 import importlib
 import logging
@@ -13,17 +14,23 @@ from torch.utils.data import get_worker_info
 from vla_foundry.file_utils import load_dataset_manifest, pt_load
 
 
-def _install_webdataset_broken_pipe_guard() -> None:
-    """Extend webdataset Pipe ignore_status to skip benign AWS broken pipes."""
+def _install_webdataset_patches() -> None:
+    """Patch webdataset to handle broken pipes, fd leaks, and close streams."""
 
     wds_gopen = importlib.import_module("webdataset.gopen")
-    # If we've already patched the constructor, skip re-applying it.
-    if getattr(wds_gopen.Pipe, "_lbm_ignore_status_patch", False):
+
+    if getattr(wds_gopen.Pipe, "_lbm_patched", False):
         return
 
+    # --- Patch 1: ignore benign AWS broken-pipe exit codes + fix fd leak. ---
     original_init = wds_gopen.Pipe.__init__
 
     def patched_init(self, *args, ignore_status=None, **kwargs):  # type: ignore[override]
+        # Pre-initialise so __del__/close never hit AttributeError.
+        self.stream = None
+        self.proc = None
+        self.status = None
+
         ignore = list(ignore_status or [])
         if 1 not in ignore:
             ignore.append(1)
@@ -33,10 +40,77 @@ def _install_webdataset_broken_pipe_guard() -> None:
         original_init(self, *args, ignore_status=ignore, **kwargs)
 
     wds_gopen.Pipe.__init__ = patched_init  # type: ignore[assignment]
-    wds_gopen.Pipe._lbm_ignore_status_patch = True
+
+    # --- Patch 2: make close() safe when __init__ failed partway. ---
+    original_close = wds_gopen.Pipe.close
+
+    def patched_close(self):
+        if self.stream is None:
+            # __init__ never finished — kill the process if it exists.
+            if self.proc is not None:
+                try:
+                    self.proc.kill()
+                    self.proc.wait()
+                except Exception:
+                    pass
+            return
+        original_close(self)
+
+    wds_gopen.Pipe.close = patched_close
+
+    wds_gopen.Pipe._lbm_patched = True
 
 
-_install_webdataset_broken_pipe_guard()
+_install_webdataset_patches()
+
+
+class tarfile_to_samples_closing(wds.PipelineStage):
+    """Drop-in replacement for wds.tarfile_to_samples that closes each shard stream after reading.
+
+    The standard wds.tarfile_to_samples never explicitly closes Pipe streams,
+    relying on GC / __del__.  When iterating over thousands of S3 shards the
+    file-descriptor table fills up before the garbage collector runs.  This
+    version closes each stream in a ``finally`` block immediately after the
+    shard has been consumed.
+    """
+
+    def __init__(self, handler=None):
+        self.handler = handler if handler is not None else log_and_continue
+
+    def run(self, src):
+        from webdataset.gopen import gopen
+        from webdataset.tariterators import group_by_keys, tar_file_iterator
+
+        handler = self.handler
+
+        def _open_and_read():
+            for sample in src:
+                url = sample["url"]
+                stream = None
+                try:
+                    stream = gopen(url)
+                    for s in tar_file_iterator(stream, handler=handler):
+                        if not (isinstance(s, dict) and "data" in s and "fname" in s):
+                            raise ValueError(
+                                f"Unexpected sample format from tar_file_iterator: "
+                                f"type={type(s)}, keys={list(s.keys()) if isinstance(s, dict) else 'N/A'}"
+                            )
+                        s["__url__"] = url
+                        yield s
+                    # Shard boundary marker (consumed by group_by_keys).
+                    yield {}
+                except Exception as exn:
+                    exn.args = exn.args + (url,)
+                    if handler(exn):
+                        continue
+                    else:
+                        break
+                finally:
+                    if stream is not None:
+                        with contextlib.suppress(Exception):
+                            stream.close()
+
+        return group_by_keys(_open_and_read(), handler=handler)
 
 
 class SharedCheckpointCounter:

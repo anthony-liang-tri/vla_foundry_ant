@@ -4,7 +4,7 @@ import webdataset as wds
 
 from vla_foundry.data.pipelines.base import BaseWebDatasetPipeline
 from vla_foundry.data.tokenizer import get_tokenizer
-from vla_foundry.data.utils import deterministic_shuffle, log_and_continue
+from vla_foundry.data.utils import deterministic_shuffle, log_and_continue, tarfile_to_samples_closing
 from vla_foundry.params.base_data_params import DataParams
 
 
@@ -48,7 +48,7 @@ class TextUntokenizedPipeline(BaseWebDatasetPipeline):
             ),
             wds.split_by_node,
             wds.split_by_worker,
-            wds.tarfile_to_samples(handler=log_and_continue),
+            tarfile_to_samples_closing(handler=log_and_continue),
             wds.to_tuple("json", handler=log_and_continue),
             wds.batched(self.batch_size, partial=False),
             wds.map(self.tokenize_wrapper),
