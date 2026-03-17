@@ -64,6 +64,7 @@ class InferenceDiffusionPolicy(Policy):
         open_loop_steps: int = 4,
         device: str = "cuda",
         num_flow_steps: int = 10,
+        lag_compensation: float = 0.0,
         guidance_scale: float = 0.0,
         sigma_d_obs: float = 0.2,
     ):
@@ -97,6 +98,7 @@ class InferenceDiffusionPolicy(Policy):
         self.open_loop_steps = open_loop_steps
         self.current_open_loop_step = defaultdict(int)
         self.num_flow_steps = num_flow_steps
+        self.lag_compensation = lag_compensation
         self.guidance_scale = guidance_scale
         self.sigma_d_obs = sigma_d_obs
 
@@ -280,7 +282,7 @@ class InferenceDiffusionPolicy(Policy):
             # Reset the open loop step counter for this client
             self.current_open_loop_step[client_id] = 0
 
-        actions = self.data_adapter[client_id].step_action()
+        actions = self.data_adapter[client_id].step_action(lag_compensation=self.lag_compensation)
         remaining_actions, remaining_slots = self.data_adapter[client_id].get_remaining_actions_in_buffer()
         logging.info(f"Client {client_id}: actions remaining in buffer={remaining_actions}/{remaining_slots}")
         self.current_open_loop_step[client_id] += 1
@@ -370,6 +372,12 @@ def main():
     parser.add_argument("--device", type=str, default="cuda", help="Device to run the model on (cuda/cpu)")
     parser.add_argument("--num_flow_steps", type=int, default=10, help="Number of diffusion steps to use")
     parser.add_argument("--open_loop_steps", type=int, default=4, help="Number of open loop steps to use")
+    parser.add_argument(
+        "--lag_compensation",
+        type=float,
+        default=0.0,
+        help="Fractional timesteps to look ahead in the action buffer to compensate for lag (async_smooth only)",
+    )
     parser.add_argument("--guidance_scale", type=float, default=0.0, help="Pi-GDM guidance scale (0 = disabled)")
     parser.add_argument("--sigma_d_obs", type=float, default=0.2, help="Conditioned prior std for Pi-GDM guidance")
 
@@ -386,6 +394,7 @@ def main():
         device=args.device,
         num_flow_steps=args.num_flow_steps,
         open_loop_steps=args.open_loop_steps,
+        lag_compensation=args.lag_compensation,
         guidance_scale=args.guidance_scale,
         sigma_d_obs=args.sigma_d_obs,
     )

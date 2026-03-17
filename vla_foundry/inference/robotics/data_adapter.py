@@ -9,6 +9,7 @@ processor, and policy-facing outputs.
 
 import copy
 import logging
+import math
 from typing import Any
 
 import numpy as np
@@ -201,8 +202,26 @@ class PolicyDataAdapter:
         if len(self.proprioception_buffer) > self.num_past_timesteps + 1:
             self.proprioception_buffer.pop(0)
 
-    def step_action(self):
-        current_action_dict = copy.deepcopy(self.action_buffer[self.num_past_timesteps])
+    def step_action(self, lag_compensation: float = 0.0):
+        # Compute the read position with lag compensation (fractional offset into the future)
+        base_idx = self.num_past_timesteps
+        offset_idx = base_idx + lag_compensation
+        lo = int(math.floor(offset_idx))
+        hi = int(math.ceil(offset_idx))
+        frac = offset_idx - lo
+
+        # Clamp to valid buffer range
+        max_idx = len(self.action_buffer) - 1
+        lo = max(0, min(lo, max_idx))
+        hi = max(0, min(hi, max_idx))
+
+        if frac < 1e-9 or lo == hi:
+            current_action_dict = copy.deepcopy(self.action_buffer[lo])
+        else:
+            a, b = self.action_buffer[lo], self.action_buffer[hi]
+            current_action_dict = {k: a[k] * (1.0 - frac) + b[k] * frac for k in a}
+
+        # Shift buffer left by 1 (consume one timestep)
         last_action = copy.deepcopy(self.action_buffer[-1])
         self.action_buffer.pop(0)
         self.action_buffer.append(last_action)
