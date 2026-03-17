@@ -190,6 +190,12 @@ class BaseRoboticsConverter:
             episode_data = self.load_episode_data(episode_path)
             episode_length = self.get_episode_length(episode_data)
             camera_data = self.extract_camera_data(episode_data)
+
+            # Skip episode if no camera data was found
+            if not camera_data:
+                print(f"⚠️  Skipping episode {episode_path} - no matching cameras found")
+                return []
+
             lowdim_data = self.extract_lowdim_data(episode_data)
             intrinsics_data, extrinsics_data = self.extract_intrinsics_extrinsics_data(episode_data)
             metadata_data = self.extract_metadata_data(episode_data)

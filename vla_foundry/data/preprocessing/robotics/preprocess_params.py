@@ -34,6 +34,9 @@ class PreprocessParams(draccus.ChoiceRegistry, BaseParams):
     past_lowdim_steps: int = field(default=1)
     future_lowdim_steps: int = field(default=14)
     camera_names: list[str] | None = field(default=None)
+    # If True, skip episodes that don't have ALL requested cameras.
+    # If False (default), process episodes with whatever cameras are available and warn about missing ones.
+    skip_episodes_missing_cameras: bool = field(default=False)
     image_indices: list[int] = field(default_factory=lambda: [-1, 0])
     stride: int = field(default=1)
     max_padding_left: int = field(default=1)

@@ -385,14 +385,28 @@ class SpartanConverter(BaseRoboticsConverter):
         return episode_length
 
     def extract_camera_data(self, episode_data: dict[str, Any]) -> dict[str, np.ndarray]:
-        """Extract camera data with filtering, including depth images."""
+        """Extract camera data with filtering, including depth images.
+
+        Behavior controlled by cfg.skip_episodes_missing_cameras:
+        - If False (default): Process with available cameras, warn about missing ones
+        - If True: Return empty dict (skip episode) if any requested cameras are missing
+        """
         camera_mapping = episode_data["metadata"].get("camera_id_to_semantic_name", {})
 
         if self.cfg.camera_names:
-            # Fail loudly if camera_name argument is incompatible with existing camera_mapping
-            for camera_name in self.cfg.camera_names:
-                if camera_name not in list(camera_mapping.values()):
-                    raise ValueError(f"Camera name {camera_name} not found in camera mapping")
+            available_cameras = set(camera_mapping.values())
+            missing_cameras = [cam for cam in self.cfg.camera_names if cam not in available_cameras]
+
+            if missing_cameras:
+                if self.cfg.skip_episodes_missing_cameras:
+                    # Skip this episode entirely
+                    print(f"⚠️  Skipping episode - missing cameras: {missing_cameras}")
+                    print(f"   Available cameras: {list(available_cameras)}")
+                    return {}
+                else:
+                    # Continue with available cameras
+                    print(f"⚠️  Warning: Processing with partial cameras. Missing: {missing_cameras}")
+                    print(f"   Available cameras: {list(available_cameras)}")
 
             filtered_mapping = {
                 cid: sname
@@ -403,6 +417,14 @@ class SpartanConverter(BaseRoboticsConverter):
             filtered_mapping = {
                 cid: sname for cid, sname in camera_mapping.items() if cid in episode_data["observations"]
             }
+
+        # Check if any cameras matched
+        if not filtered_mapping:
+            available_cameras = set(camera_mapping.values())
+            print("⚠️  Warning: No cameras matched for this episode!")
+            print(f"   Requested cameras: {self.cfg.camera_names}")
+            print(f"   Available cameras: {list(available_cameras)}")
+            return {}
 
         # Extract RGB and depth images for each camera
         result = {}
