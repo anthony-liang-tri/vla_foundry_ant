@@ -828,6 +828,20 @@ def main() -> None:
         else:
             print(f"  All {len(run_summary_by_task)} cross-referenced tasks match")
 
+    # Summary sections (COMPLETION MARKERS, EPISODE FAILURES, CROSS-REFERENCE)
+    # are printed once above; duplicate block removed.
+    if run_summary_by_task:
+        print()
+        print("=" * 60)
+        print("CROSS-REFERENCE (run_summary.json)")
+        print("=" * 60)
+        if tasks_with_xref_mismatch:
+            print(f"  Mismatches found: {len(tasks_with_xref_mismatch)}")
+            for t, desc in sorted(tasks_with_xref_mismatch):
+                print(f"    - {t}: {desc}")
+        else:
+            print(f"  All {len(run_summary_by_task)} cross-referenced tasks match")
+
     # Print settings coherence report
     print()
     print("=" * 60)
