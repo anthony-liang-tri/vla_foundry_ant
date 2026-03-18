@@ -1,0 +1,80 @@
+# Nominal (base) configuration for ablation experiments
+# These are the default parameters that ablations will modify
+
+# Tasks to run ablations on
+tasks:
+  - BimanualPlaceAppleFromBowlIntoBin
+  - BimanualPlaceFruitFromBowlIntoBin
+  - BimanualPutRedBellPepperInBin
+  - BimanualPutSpatulaOnPlateFromDryingRack
+  - BimanualPutSpatulaOnPlateFromTable
+  - BimanualStackPlatesOnTableFromDryingRack
+  - BimanualStoreCerealBoxUnderShelf
+  - PlaceCupByCoaster
+  - PushCoasterToCenterOfTable
+  - PushCoasterToMug
+  - PutBananaOnSaucer
+  - PutKiwiInCenterOfTable
+  - PutMugOnSaucer
+  - PutSpatulaInUtensilCrock
+  - TurnCupUpsideDown
+  - TurnMugRightsideUp
+
+# S3 paths
+base_s3_path: s3://tri-ml-datasets-uw2/vla_foundry_datasets/v0.4.1
+checkpoint_base: s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_1
+
+# Output directory
+output_base: vla_foundry/tri/ablations/vla/ablation_configs_v04_1
+
+# Base arguments for all experiments
+# Derived from vla_foundry/config_presets/training_jobs/vla_diffusion_bellpepper_smolvlm_256m.yaml
+base_args:
+  # Model configuration
+  model: include vla_foundry/config_presets/models/vla_smolvlm_256m.yaml
+  model.transformer.is_causal: true
+
+  # Data configuration (normalization, action_fields, proprioception_fields come from lbm_data_params)
+  data: include vla_foundry/config_presets/data/lbm/lbm_data_params.yaml
+  # From vla_diffusion_smolvlm_256m.yaml (second include in training job)
+  data.use_hf_fast_tokenizer: true
+  data.hf_fast_tokenizers_parallelism: true
+  data.dataset_cache.enabled: true
+  # Augmentation
+  data.augmentation.enabled: true
+  data.augmentation.image: include vla_foundry/config_presets/data/lbm/lbm_image_augmentation_params.yaml
+  # Task data settings
+  data.dataset_weighting: "[1.0]"
+  data.dataset_modality: '["robotics"]'
+  data.action_fields: '["robot__action__poses__left::panda__xyz_relative", "robot__action__poses__right::panda__xyz_relative", "robot__action__poses__left::panda__rot_6d_relative", "robot__action__poses__right::panda__rot_6d_relative", "robot__action__grippers__left::panda_hand", "robot__action__grippers__right::panda_hand"]'
+  data.proprioception_fields: '[]'
+  data.camera_names: '["scene_right_0", "scene_left_0", "wrist_left_plus", "wrist_right_minus"]'
+  data.image_indices: "[-1, 0]"
+  data.lowdim_past_timesteps: 1
+  data.lowdim_future_timesteps: 8
+  data.image_size: 224
+  data.processor: HuggingFaceTB/SmolVLM2-256M-Video-Instruct
+  data.allow_multiple_epochs: true
+  data.num_workers: 24
+  data.prefetch_factor: 16
+  data.seq_len: 2048
+  data.img_num_tokens: 256
+
+  # Distributed configuration
+  distributed.fsdp: true
+  distributed.use_distributed: false
+
+  # Hyperparameters (loss_function, grad_clip_norm, precision, lr, lr_cooldown_end come from include)
+  hparams: include vla_foundry/config_presets/hparams/vla_diffusion_policy_smolvlm256m.yaml
+  hparams.torchcompile: true
+  hparams.per_gpu_batch_size: 20
+  hparams.global_batch_size: 160
+  hparams.lr: 0.00005
+  hparams.lr_cooldown_end: 0.0
+  hparams.wd: 0.00000001
+  hparams.torchcompile_language_model_only: true
+  # Other
+  total_train_samples: 2_000_000
+  wandb: false
+  wandb_entity: tri
+  num_checkpoints: 1

@@ -5,7 +5,7 @@ diffusion_step_conditioning: add
 vision_language_backbone:
   freeze: false
   num_vlm_layers_to_use: 1
-  hf_pretrained: google/paligemma2-3b-pt-224
+  hf_pretrained: HuggingFaceTB/SmolVLM2-256M-Video-Instruct
   resume_from_checkpoint: null
   resume_weights_only: false
   type: vlm_backbone
@@ -18,4 +18,3 @@ noise_scheduler:
   beta_end: 0.02
   clamp_range: [-1.5, 1.5]
 use_flow_matching_scheduler: true
-
