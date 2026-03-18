@@ -145,7 +145,9 @@ def train_one_checkpoint(
                 if model_inputs_ii["input_ids"].shape[0] == 0:
                     break
 
-                targets_ii = targets[start_idx:end_idx]
+                targets_ii = batch_handler.slice_targets_for_accumulation(
+                    targets, start_idx, end_idx, sliced_inputs=model_inputs_ii
+                )
                 # Get mask for microbatch: use mask if present, otherwise use future_mask (diffusion policy)
                 mask_ii = mask[start_idx:end_idx] if mask is not None else model_inputs_ii.get("future_mask", None)
 

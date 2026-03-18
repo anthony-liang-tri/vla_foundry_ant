@@ -35,6 +35,7 @@ class DiffusionPolicy(BaseModel):
 
         self.diffusion_step_conditioning = model_params.diffusion_step_conditioning
         self.input_noise_std = model_params.input_noise_std
+        self.num_action_head_repeats = model_params.num_action_head_repeats
         self.initialize_weights()
 
     def initialize_weights(self):
@@ -112,10 +113,32 @@ class DiffusionPolicy(BaseModel):
             **kwargs,
         )
 
-        # Time embeddings (B, 1, backbone_dim)
+        backbone_embeddings = backbone_output.embeddings
+        num_repeats = self.num_action_head_repeats
+        if num_repeats is not None and num_repeats > 1:
+            # Verify action-side inputs were tiled to [B*N] by the batch handler
+            vlm_batch_size = input_ids.shape[0]
+            assert actions.shape[0] == vlm_batch_size * num_repeats, (
+                f"Expected actions batch size {vlm_batch_size * num_repeats} (vlm_batch={vlm_batch_size} * "
+                f"num_repeats={num_repeats}), got {actions.shape[0]}"
+            )
+            assert noise.shape[0] == vlm_batch_size * num_repeats, (
+                f"Expected noise batch size {vlm_batch_size * num_repeats}, got {noise.shape[0]}"
+            )
+            assert future_mask.shape[0] == vlm_batch_size * num_repeats, (
+                f"Expected future_mask batch size {vlm_batch_size * num_repeats}, got {future_mask.shape[0]}"
+            )
+            if proprioception is not None:
+                assert proprioception.shape[0] == vlm_batch_size * num_repeats, (
+                    f"Expected proprioception batch size {vlm_batch_size * num_repeats}, got {proprioception.shape[0]}"
+                )
+            # Tile backbone embeddings to match the action batch size [B*N]
+            backbone_embeddings = backbone_embeddings.repeat_interleave(num_repeats, dim=0)
+
+        # Time embeddings (batch, 1, backbone_dim) — batch is [B*N] when repeating, else [B]
         time_embeddings = self.time_encoding(timesteps).unsqueeze(1)
 
-        # Proprioception embeddings
+        # Proprioception embeddings (already tiled to [B*N] by the batch handler when num_repeats > 1)
         proprio_embeddings = None
         if self.proprioception_encode is not None and proprioception is not None:
             proprio_embeddings = self.proprioception_encode(proprioception)
@@ -124,7 +147,7 @@ class DiffusionPolicy(BaseModel):
 
         # Build transformer input using time conditioning strategy
         transformer_input = self._build_transformer_input(
-            backbone_embeddings=backbone_output.embeddings,
+            backbone_embeddings=backbone_embeddings,
             time_embeddings=time_embeddings,
             noisy_action=noisy_action,
             proprio_embeddings=proprio_embeddings,

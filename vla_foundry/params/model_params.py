@@ -271,6 +271,7 @@ class DiffusionPolicyParams(ModelParams):
     use_flow_matching_scheduler: bool = field(default=False)
     input_noise_std: float = field(default=0.0)
     diffusion_step_conditioning: Literal["add", "concat"] = field(default="concat")
+    num_action_head_repeats: int = field(default=None)
 
     # Shared attributes. Overwritten in init_shared_attributes.
     action_dim: int = field(default=None)

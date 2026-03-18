@@ -851,6 +851,93 @@ class TestDiffusionPolicy:
         )
         diffusion_policy.diffusion_step_conditioning = original_diffusion_step_conditioning
 
+    # ------------------------------------------------------------------
+    # num_action_head_repeats tests
+    # ------------------------------------------------------------------
+
+    @pytest.fixture
+    def diffusion_policy_with_repeats(self, diffusion_policy_config):
+        """Diffusion policy fixture with num_action_head_repeats=3."""
+        object.__setattr__(diffusion_policy_config, "num_action_head_repeats", 3)
+        with patch("vla_foundry.models.diffusion_policy.clip_hf.CLIPModel.from_pretrained") as mock_clip_pretrained:
+            mock_hf_clip_model = Mock()
+            mock_hf_clip_model.projection_dim = 512
+            mock_clip_pretrained.return_value = mock_hf_clip_model
+            return create_model(diffusion_policy_config)
+
+    def test_forward_with_num_action_head_repeats_output_shape(self, diffusion_policy_with_repeats):
+        """forward() with [B*N] action inputs should return [B*N, T, A] and call the backbone once."""
+        num_repeats = 3
+        vlm_batch_size, seq_len = 2, 10
+        action_batch_size = vlm_batch_size * num_repeats
+        action_dim = diffusion_policy_with_repeats.model_params.action_dim
+        backbone_dim = 512  # projection_dim from mock
+
+        # VLM inputs at [B]
+        input_ids = torch.randint(0, 1000, (vlm_batch_size, seq_len))
+        pixel_values = torch.randn(vlm_batch_size, 3, 224, 224)
+        attention_mask = torch.ones(vlm_batch_size, seq_len, dtype=torch.bool)
+
+        # Action-side inputs tiled to [B*N] (as the batch handler would produce)
+        actions = torch.randn(action_batch_size, seq_len, action_dim)
+        noise = torch.randn(action_batch_size, seq_len, action_dim)
+        past_mask = torch.zeros(action_batch_size, seq_len, dtype=torch.bool)
+        future_mask = torch.ones(action_batch_size, seq_len, dtype=torch.bool)
+
+        mock_backbone_output = VisionLanguageBackboneOutput(embeddings=torch.randn(vlm_batch_size, 2, backbone_dim))
+        with patch.object(
+            diffusion_policy_with_repeats.vision_language_backbone,
+            "get_action_conditioning",
+            return_value=mock_backbone_output,
+        ) as mock_get_conditioning:
+            output = diffusion_policy_with_repeats(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                attention_mask=attention_mask,
+                attention_mask_images=None,
+                actions=actions,
+                noise=noise,
+                past_mask=past_mask,
+                future_mask=future_mask,
+            )
+
+        assert output.shape == (action_batch_size, seq_len, action_dim)
+        # Backbone must be called exactly once regardless of num_repeats
+        mock_get_conditioning.assert_called_once()
+
+    def test_forward_with_num_action_head_repeats_asserts_batch_size_mismatch(self, diffusion_policy_with_repeats):
+        """forward() should raise AssertionError when action inputs are not tiled to [B*N]."""
+        vlm_batch_size, seq_len = 2, 10
+        action_dim = diffusion_policy_with_repeats.model_params.action_dim
+        backbone_dim = 512
+
+        # VLM inputs at [B], action inputs NOT tiled (still [B] — wrong)
+        input_ids = torch.randint(0, 1000, (vlm_batch_size, seq_len))
+        actions = torch.randn(vlm_batch_size, seq_len, action_dim)
+        noise = torch.randn(vlm_batch_size, seq_len, action_dim)
+        past_mask = torch.zeros(vlm_batch_size, seq_len, dtype=torch.bool)
+        future_mask = torch.ones(vlm_batch_size, seq_len, dtype=torch.bool)
+
+        mock_backbone_output = VisionLanguageBackboneOutput(embeddings=torch.randn(vlm_batch_size, 2, backbone_dim))
+        with (
+            patch.object(
+                diffusion_policy_with_repeats.vision_language_backbone,
+                "get_action_conditioning",
+                return_value=mock_backbone_output,
+            ),
+            pytest.raises(AssertionError, match="Expected actions batch size"),
+        ):
+            diffusion_policy_with_repeats(
+                input_ids=input_ids,
+                pixel_values=None,
+                attention_mask=None,
+                attention_mask_images=None,
+                actions=actions,
+                noise=noise,
+                past_mask=past_mask,
+                future_mask=future_mask,
+            )
+
 
 class TestBuildTransformerInput:
     """Test _build_transformer_input with different time conditioning strategies."""

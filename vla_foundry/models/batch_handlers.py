@@ -84,6 +84,19 @@ class BatchHandler(ABC):
                 sliced_inputs[key] = value
         return sliced_inputs
 
+    def slice_targets_for_accumulation(self, targets, start_idx, end_idx, sliced_inputs=None):
+        """Slice targets for gradient accumulation microbatches.
+
+        Args:
+            targets: Full targets tensor.
+            start_idx: Start index for slicing.
+            end_idx: End index for slicing.
+            sliced_inputs: The already-sliced model inputs (from slice_inputs_for_accumulation).
+                Subclasses may use this to recompute targets when slicing changes inputs
+                (e.g., fresh noise generation with num_action_head_repeats).
+        """
+        return targets[start_idx:end_idx]
+
 
 @register_batch_handler("transformer")
 @register_batch_handler("transformer_hf")
@@ -239,7 +252,6 @@ class DiffusionPolicyBatchHandler(BatchHandler):
 
     def prepare_inputs(self, batch, device, model_dtype, cfg):
         actions = batch["actions"].to(device, non_blocking=True, dtype=model_dtype)
-        noise = torch.randn_like(actions)
         pixel_values = batch["pixel_values"].to(device, non_blocking=True, dtype=model_dtype)
         input_ids = batch["input_ids"].to(device, non_blocking=True, dtype=torch.long)
         attention_mask = (
@@ -257,6 +269,9 @@ class DiffusionPolicyBatchHandler(BatchHandler):
         proprioception = batch.get("proprioception")
         if proprioception is not None:
             proprioception = proprioception.to(device, non_blocking=True, dtype=model_dtype)
+
+        noise = torch.randn_like(actions)
+        self._num_action_head_repeats = getattr(cfg.model, "num_action_head_repeats", None)
         inputs = {
             "input_ids": input_ids,
             "pixel_values": pixel_values,
@@ -275,6 +290,50 @@ class DiffusionPolicyBatchHandler(BatchHandler):
         inputs = self.prepare_inputs(batch, device, model_dtype, cfg)
         targets = inputs["noise"] - inputs["actions"]
         return inputs, targets, None
+
+    # Keys whose batch dimension corresponds to the action head (tiled to [B*N]).
+    _ACTION_SIDE_KEYS = frozenset({"actions", "noise", "past_mask", "future_mask", "proprioception"})
+
+    def slice_inputs_for_accumulation(self, model_inputs, start_idx, end_idx):
+        """Slice inputs for gradient accumulation, then apply num_repeats tiling.
+
+        All tensors in model_inputs are at uniform batch size [B_full].
+        After slicing the microbatch [start_idx:end_idx], action-side tensors
+        are repeat_interleaved to [micro_batch * N] and N distinct noises are
+        generated, while VLM-side tensors stay at [micro_batch].
+        """
+        sliced = super().slice_inputs_for_accumulation(model_inputs, start_idx, end_idx)
+
+        num_repeats = getattr(self, "_num_action_head_repeats", None)
+        if num_repeats is not None and num_repeats > 1:
+            for key in self._ACTION_SIDE_KEYS:
+                if key in sliced and isinstance(sliced[key], torch.Tensor):
+                    sliced[key] = sliced[key].repeat_interleave(num_repeats, dim=0)
+            # Generate N distinct noise samples per microbatch element.
+            actions = sliced["actions"]
+            sliced["noise"] = torch.randn(
+                actions.shape,
+                device=actions.device,
+                dtype=actions.dtype,
+            )
+
+        return sliced
+
+    def slice_targets_for_accumulation(self, targets, start_idx, end_idx, sliced_inputs=None):
+        """Recompute targets from sliced inputs when num_repeats > 1.
+
+        Fresh noise is generated in slice_inputs_for_accumulation, so the
+        pre-computed targets (from the original noise) are stale.  Recompute
+        as ``noise - actions`` from the already-sliced (and possibly repeated)
+        model inputs.
+        """
+        num_repeats = getattr(self, "_num_action_head_repeats", None)
+        if num_repeats is not None and num_repeats > 1:
+            assert sliced_inputs is not None, (
+                "sliced_inputs is required to recompute targets with num_action_head_repeats"
+            )
+            return sliced_inputs["noise"] - sliced_inputs["actions"]
+        return targets[start_idx:end_idx]
 
     def compute_loss(self, outputs, targets, loss_fn, cfg, mask=None):
         # Reshape inputs and masks to match shapes

@@ -544,6 +544,7 @@ class TestDiffusionPolicyBatchHandler:
     def mock_cfg_diffusion_policy(self):
         cfg = Mock()
         cfg.model.type = "diffusion_policy"
+        cfg.model.num_action_head_repeats = None
         return cfg
 
     @pytest.fixture
@@ -733,6 +734,89 @@ class TestDiffusionPolicyBatchHandler:
         inputs_no_mask["attention_mask"] = None
         sliced_inputs_no_mask = handler.slice_inputs_for_accumulation(inputs_no_mask, 0, 1)
         assert sliced_inputs_no_mask["attention_mask"] is None
+
+    @pytest.fixture
+    def mock_cfg_with_repeats(self):
+        cfg = Mock()
+        cfg.model.type = "diffusion_policy"
+        cfg.model.num_action_head_repeats = 3
+        return cfg
+
+    def test_prepare_inputs_with_num_action_head_repeats(
+        self, handler, sample_diffusion_policy_batch, mock_cfg_with_repeats
+    ):
+        """With num_action_head_repeats, prepare_inputs keeps all tensors at [B].
+        Tiling happens later in slice_inputs_for_accumulation."""
+        device = torch.device("cpu")
+        model_dtype = torch.float32
+        batch_size = 2
+
+        inputs = handler.prepare_inputs(sample_diffusion_policy_batch, device, model_dtype, mock_cfg_with_repeats)
+
+        # All tensors stay at [B] — no tiling at this stage
+        assert inputs["input_ids"].shape == (batch_size, 10)
+        assert inputs["pixel_values"].shape == (batch_size, 3, 224, 224)
+        assert inputs["attention_mask"].shape == (batch_size, 10)
+        assert inputs["actions"].shape == (batch_size, 16, 7)
+        assert inputs["noise"].shape == (batch_size, 16, 7)
+        assert inputs["past_mask"].shape == (batch_size, 16)
+        assert inputs["future_mask"].shape == (batch_size, 16)
+
+    def test_slice_inputs_for_accumulation_with_num_action_head_repeats(
+        self, handler, sample_diffusion_policy_batch, mock_cfg_with_repeats
+    ):
+        """slice_inputs_for_accumulation tiles action-side inputs to [micro*N]
+        and generates N distinct noises, while VLM inputs stay at [micro]."""
+        device = torch.device("cpu")
+        model_dtype = torch.float32
+        num_repeats = 3
+
+        inputs = handler.prepare_inputs(sample_diffusion_policy_batch, device, model_dtype, mock_cfg_with_repeats)
+
+        # Simulate slicing a microbatch of size 1 from a full batch of 2
+        sliced = handler.slice_inputs_for_accumulation(inputs, 0, 1)
+
+        # VLM inputs stay at [micro_batch]
+        assert sliced["input_ids"].shape == (1, 10)
+        assert sliced["pixel_values"].shape == (1, 3, 224, 224)
+        assert sliced["attention_mask"].shape == (1, 10)
+
+        # Action-side inputs are tiled to [micro_batch * N]
+        assert sliced["actions"].shape == (1 * num_repeats, 16, 7)
+        assert sliced["noise"].shape == (1 * num_repeats, 16, 7)
+        assert sliced["past_mask"].shape == (1 * num_repeats, 16)
+        assert sliced["future_mask"].shape == (1 * num_repeats, 16)
+
+        # repeat_interleave layout: each repeat copies the same original action
+        original_actions = sample_diffusion_policy_batch["actions"].float()
+        for r in range(num_repeats):
+            assert torch.allclose(sliced["actions"][r], original_actions[0])
+
+        # Each repeat has an independently sampled noise (distinct within same obs)
+        for r in range(1, num_repeats):
+            assert not torch.allclose(sliced["noise"][0], sliced["noise"][r])
+
+    def test_slice_targets_for_accumulation_with_num_action_head_repeats(
+        self, handler, sample_diffusion_policy_batch, mock_cfg_with_repeats
+    ):
+        """slice_targets_for_accumulation recomputes targets from sliced inputs
+        (fresh noise) when num_repeats > 1."""
+        device = torch.device("cpu")
+        model_dtype = torch.float32
+        num_repeats = 3
+
+        inputs, targets, mask = handler.prepare_inputs_and_targets(
+            sample_diffusion_policy_batch, device, model_dtype, mock_cfg_with_repeats
+        )
+        assert mask is None
+
+        # Slice microbatch and targets
+        sliced = handler.slice_inputs_for_accumulation(inputs, 0, 1)
+        targets_ii = handler.slice_targets_for_accumulation(targets, 0, 1, sliced_inputs=sliced)
+
+        # Targets are [micro * N] and match the fresh noise - repeated actions
+        assert targets_ii.shape == (1 * num_repeats, 16, 7)
+        assert torch.allclose(targets_ii, sliced["noise"] - sliced["actions"])
 
 
 class TestBatchHandlerFactory:
