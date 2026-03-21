@@ -2,7 +2,7 @@ model:
   <<: !include ../models/vla_smolvlm_256m.yaml
 data:
   <<: !include ../data/lbm/lbm_data_params.yaml
-  <<: !include ../data/vla_diffusion_smolvlm_256m.yaml
+  <<: !include ../data/vla_smolvlm_256m.yaml
   dataset_manifest:
     - s3://tri-ml-datasets-uw2/vla_foundry_datasets/stage3_singletask_sim/BimanualPutRedBellPepperInBin/shards/manifest.jsonl
   dataset_statistics:
