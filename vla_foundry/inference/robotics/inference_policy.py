@@ -234,12 +234,12 @@ class InferenceDiffusionPolicy(Policy):
             # Step the data adapter before getting the model input that needs to be updated for current step
             # Get the model input
             model_input = self.data_adapter[client_id].get_model_input(observation)
-            # Move all tensors to device
-            for key, value in model_input.items():
-                if isinstance(value, torch.Tensor):
-                    model_input[key] = value.to(self.device)
+            # Move to device
+            input_ids = model_input["input_ids"].to(self.device) if "input_ids" in model_input else None
+            attention_mask = model_input["attention_mask"].to(self.device) if "attention_mask" in model_input else None
+            pixel_values = model_input["pixel_values"].to(self.device) if "pixel_values" in model_input else None
+            actions_tensor = model_input["actions"].to(self.device) if "actions" in model_input else None
 
-            actions_tensor = model_input.get("actions")
             guidance_target, guidance_mask = self._build_guidance(
                 self.data_adapter[client_id],
                 actions_tensor,
@@ -247,19 +247,33 @@ class InferenceDiffusionPolicy(Policy):
             )
 
             # Log processed images going into the model (every 10 steps)
-            pixel_values = model_input.get("pixel_values")
-            if not self.model.vision_language_backbone._is_qwen_style and pixel_values is not None:
+            if pixel_values is not None:
                 # pixel_values shape: [batch, num_cameras * timesteps, channels, height, width]
-                imgs = self.robotics_processor.denormalize_pixel_values(pixel_values[0])
-                for i in range(imgs.shape[0]):
-                    visualizer.log_images(f"model_input/image_{i}", imgs[i], every_n=10)
-
+                pv = pixel_values.cpu().numpy()
+                for i in range(pv.shape[1]):
+                    # Convert from CHW to HWC and denormalize from [-1,1] or [0,1] to [0,255]
+                    img = pv[0, i].transpose(1, 2, 0)  # CHW -> HWC
+                    img = ((img - img.min()) / (img.max() - img.min() + 1e-8) * 255).astype("uint8")
+                    visualizer.log_images(f"model_input/image_{i}", img, every_n=10)
+            proprioception = None
+            if "proprioception" in model_input and model_input["proprioception"] is not None:
+                proprioception = model_input["proprioception"].to(self.device)
+            point_cloud = None
+            if "point_cloud" in model_input and model_input["point_cloud"] is not None:
+                point_cloud = model_input["point_cloud"].to(self.device)
             # Generate the next chunk of actions using the model
             autocast = get_autocast(self.cfg.hparams.precision)
             with torch.no_grad(), autocast():
+                # Use the model's generate_actions method (DiffusionPolicy interface)
                 model_output = self.model.generate_actions(
-                    **model_input,
+                    input_ids=input_ids,
+                    pixel_values=pixel_values,
+                    actions=actions_tensor,
+                    attention_mask=attention_mask,
                     num_inference_steps=self.num_flow_steps,
+                    past_mask=model_input["past_mask"].to(self.device),
+                    proprioception=proprioception,
+                    point_cloud=point_cloud,
                     guidance_target=guidance_target,
                     guidance_scale=self.guidance_scale,
                     guidance_mask=guidance_mask,

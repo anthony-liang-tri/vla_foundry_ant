@@ -13,33 +13,11 @@ def filter_no_caption_or_no_image(sample):
     return has_caption and has_image
 
 
-def _apply_chat_template(processor, text, num_images=1):
-    """Format text with image placeholders using the processor's chat template.
-
-    Uses the chat template (from processor or tokenizer) when available so that
-    model-specific image tokens (e.g. Qwen's <|vision_start|>/<|image_pad|>)
-    are inserted correctly.  Falls back to a plain ``<image>`` prefix for
-    processors without a chat template (e.g. PaliGemma).
-    """
-    content = [{"type": "image"} for _ in range(num_images)]
-    content.append({"type": "text", "text": text})
-    messages = [{"role": "user", "content": content}]
-
-    if getattr(processor, "chat_template", None):
-        return processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
-    elif hasattr(processor, "tokenizer") and getattr(processor.tokenizer, "chat_template", None):
-        return processor.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
-    else:
-        return "<image> " + text
-
-
 class ImageCaptionPipeline(BaseWebDatasetPipeline):
-    def __init__(self, modality: str, data_params: DataParams, batch_size: int, profile_train_steps=False):
+    def __init__(self, modality: str, data_params: DataParams, batch_size: int):
         super().__init__(modality, data_params, batch_size)
         self.processor = get_processor(data_params)
         self.augmentations = Augmentations(data_params.augmentation)
-        self.profile_train_steps = profile_train_steps
-
 
     def create_pipeline(self, datastring: str, checkpoint_num: int):
         pipeline = [
@@ -60,10 +38,7 @@ class ImageCaptionPipeline(BaseWebDatasetPipeline):
                 handler=log_and_continue,
             ),
             wds.rename(image="jpg;png;jpeg;webp", text="txt"),
-            wds.map(lambda sample: {
-                **sample,
-                "text": _apply_chat_template(self.processor, sample["text"]),
-            }),
+            wds.map(lambda sample: {**sample, "text": "<image> " + sample["text"]}),
             wds.batched(self.batch_size, partial=False),
             wds.map(
                 lambda sample: self.processor(
@@ -76,8 +51,12 @@ class ImageCaptionPipeline(BaseWebDatasetPipeline):
                 ),
                 handler=log_and_continue,
             ),
-            # BatchFeature is preserved so batch_handlers can use .to(device)
-            # to forward all VLM-specific tensor keys automatically.
-            wds.map(lambda sample: (sample.pop("text", None), sample)[1]),
+            wds.map(
+                lambda sample: {
+                    "input_ids": sample["input_ids"],
+                    "attention_mask": sample["attention_mask"],
+                    "pixel_values": sample["pixel_values"],
+                }
+            ),
         ]
         return pipeline

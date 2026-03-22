@@ -15,9 +15,3 @@ ablations:
     hparams.per_gpu_batch_size: 4
     hparams.global_batch_size: 128
     hparams.torchcompile: true
-  
-  qwen3_5_2b:
-      model.vision_language_backbone.hf_pretrained: "Qwen/Qwen3-VL-2B-Thinking"
-      data.processor: "Qwen/Qwen3-VL-2B-Thinking"
-      hparams.per_gpu_batch_size: 12
-      hparams.global_batch_size: 384

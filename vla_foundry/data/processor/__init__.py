@@ -78,9 +78,6 @@ def get_processor(data_params: DataParams):
                 logging.debug(
                     f"Set processor image_processor.size to {{'height': {image_size}, 'width': {image_size}}}"
                 )
-            elif "qwen" in processor_name.lower():
-                # For Qwen, we let the default values be used.
-                pass
             else:
                 # SmolVLM and others expect longest_edge
                 processor.image_processor.size = {"longest_edge": int(image_size)}

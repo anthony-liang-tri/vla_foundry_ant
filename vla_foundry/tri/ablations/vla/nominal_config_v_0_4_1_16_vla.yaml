@@ -52,7 +52,7 @@ base_args:
   data.processor: HuggingFaceTB/SmolVLM2-256M-Video-Instruct
   data.allow_multiple_epochs: true
   data.num_workers: 24
-  data.prefetch_factor: 2
+  data.prefetch_factor: 16
   data.seq_len: 2048
   data.img_num_tokens: 256
 
