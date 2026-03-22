@@ -74,14 +74,50 @@ class BatchHandler(ABC):
         pass
 
     def slice_inputs_for_accumulation(self, model_inputs, start_idx, end_idx):
-        """Slice model inputs for gradient accumulation microbatches."""
+        """Slice model inputs for gradient accumulation microbatches.
+
+        Slices tensors whose first dimension matches the batch size.
+        Non-tensors pass through unchanged.
+
+        Qwen is a special case: its processor returns pixel_values as a flat
+        (total_patches, patch_dim) tensor instead of (B, ...), with a companion
+        image_grid_thw tensor describing per-image patch counts. Both must be
+        sliced together using the grid metadata.
+        """
+        batch_size = model_inputs["input_ids"].shape[0]
         sliced_inputs = {}
+        unsliced_keys = set()
         for key, value in model_inputs.items():
-            if isinstance(value, torch.Tensor) and value.dim() > 0:
+            if isinstance(value, torch.Tensor) and value.dim() > 0 and value.shape[0] == batch_size:
                 sliced_inputs[key] = value[start_idx:end_idx]
             else:
-                # Non-tensor values or scalars pass through unchanged
                 sliced_inputs[key] = value
+                unsliced_keys.add(key)
+
+        # Qwen: pixel_values is flat (total_patches, patch_dim) and not batch-indexed.
+        # Use image_grid_thw to compute per-sample patch boundaries.
+        if (
+            "pixel_values" in unsliced_keys
+            and "image_grid_thw" in model_inputs
+        ):
+            grid = model_inputs["image_grid_thw"]
+            images_per_sample = grid.shape[0] // batch_size
+            img_start = start_idx * images_per_sample
+            img_end = end_idx * images_per_sample
+            sliced_inputs["image_grid_thw"] = grid[img_start:img_end]
+
+            # Each row in image_grid_thw is (t, h, w) for one image. The number of
+            # patches for that image is h * w (spatial grid). pixel_values rows are
+            # ordered to match image_grid_thw, so we can compute cumulative offsets:
+            #   patch_start = sum of patches for all images before this microbatch
+            #   patch_end   = patch_start + sum of patches for images in this microbatch
+            # Example: 3 images with 64, 128, 96 patches, microbatch selects image 1:
+            #   patch_start = 64, patch_end = 64 + 128 = 192
+            patches_per_image = grid[:, 1] * grid[:, 2]
+            patch_start = patches_per_image[:img_start].sum().item()
+            patch_end = patch_start + patches_per_image[img_start:img_end].sum().item()
+            sliced_inputs["pixel_values"] = model_inputs["pixel_values"][patch_start:patch_end]
+
         return sliced_inputs
 
     def slice_targets_for_accumulation(self, targets, start_idx, end_idx, sliced_inputs=None):
@@ -154,17 +190,21 @@ class VLMBatchHandler(BatchHandler):
     """Handles batch preparation for vlm and vlm_hf models."""
 
     def prepare_inputs(self, batch, device, model_dtype, cfg):
-        inputs = {
-            "input_ids": batch["input_ids"].to(device, non_blocking=True, dtype=torch.long),
-            "output_hidden_states": False,
-        }
+        # Forward all tensor keys from the VLM processor output (BatchFeature)
+        # automatically — no hardcoded skip-list needed.
+        inputs = {}
+        for key, value in batch.items():
+            if isinstance(value, torch.Tensor):
+                inputs[key] = value.to(device, non_blocking=True)
 
-        if "pixel_values" in batch:
-            inputs["pixel_values"] = batch["pixel_values"].to(device, non_blocking=True, dtype=model_dtype)
+        # Fix specific dtypes
+        inputs["input_ids"] = inputs["input_ids"].to(dtype=torch.long)
+        if "pixel_values" in inputs:
+            inputs["pixel_values"] = inputs["pixel_values"].to(dtype=model_dtype)
+        if "attention_mask" in inputs:
+            inputs["attention_mask"] = inputs["attention_mask"].to(dtype=torch.bool)
 
-        if "attention_mask" in batch and batch["attention_mask"] is not None:
-            inputs["attention_mask"] = batch["attention_mask"].to(device, non_blocking=True, dtype=torch.bool)
-
+        inputs["output_hidden_states"] = False
         return inputs
 
     def prepare_inputs_and_targets(self, batch, device, model_dtype, cfg):
@@ -187,6 +227,11 @@ class VLMBatchHandler(BatchHandler):
 
         if attention_mask is not None:
             model_inputs["attention_mask"] = attention_mask
+
+        # Forward additional VLM processor tensor keys (e.g., image_grid_thw for Qwen)
+        for key, value in batch.items():
+            if key not in model_inputs and isinstance(value, torch.Tensor):
+                model_inputs[key] = value.to(device, non_blocking=True)
 
         mask = (targets == cfg.data.pad_token_id) | (targets == cfg.data.image_token_id)
 
@@ -251,39 +296,18 @@ class DiffusionPolicyBatchHandler(BatchHandler):
     """Handles batch preparation for diffusion policy models."""
 
     def prepare_inputs(self, batch, device, model_dtype, cfg):
-        actions = batch["actions"].to(device, non_blocking=True, dtype=model_dtype)
-        pixel_values = batch["pixel_values"].to(device, non_blocking=True, dtype=model_dtype)
-        input_ids = batch["input_ids"].to(device, non_blocking=True, dtype=torch.long)
-        attention_mask = (
-            batch["attention_mask"].to(device, non_blocking=True, dtype=torch.bool)
-            if "attention_mask" in batch and batch["attention_mask"] is not None
-            else None
-        )
-        attention_mask_images = (
-            batch["attention_mask_images"].to(device, non_blocking=True, dtype=torch.bool)
-            if "attention_mask_images" in batch and batch["attention_mask_images"] is not None
-            else None
-        )
-        past_mask = batch["past_mask"].to(device, non_blocking=True, dtype=torch.bool)
-        future_mask = batch["future_mask"].to(device, non_blocking=True, dtype=torch.bool)
-        proprioception = batch.get("proprioception")
-        if proprioception is not None:
-            proprioception = proprioception.to(device, non_blocking=True, dtype=model_dtype)
+        # Move all tensor values to device — non-tensor metadata (camera_names,
+        # language_instruction, lowdim dicts, etc.) is naturally skipped by the
+        # isinstance check, so no hardcoded skip-list is needed.
+        inputs = {}
+        for key, value in batch.items():
+            if value is None:
+                continue
+            if isinstance(value, torch.Tensor):
+                inputs[key] = value.to(device, non_blocking=True)
 
-        noise = torch.randn_like(actions)
+        inputs["noise"] = torch.randn_like(inputs["actions"])
         self._num_action_head_repeats = getattr(cfg.model, "num_action_head_repeats", None)
-        inputs = {
-            "input_ids": input_ids,
-            "pixel_values": pixel_values,
-            "actions": actions,
-            "noise": noise,
-            "attention_mask": attention_mask,
-            "attention_mask_images": attention_mask_images,
-            "past_mask": past_mask,
-            "future_mask": future_mask,
-        }
-        if proprioception is not None:
-            inputs["proprioception"] = proprioception
         return inputs
 
     def prepare_inputs_and_targets(self, batch, device, model_dtype, cfg):

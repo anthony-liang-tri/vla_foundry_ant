@@ -52,6 +52,31 @@ class RoboticsProcessor:
         )
         return processor
 
+    def denormalize_pixel_values(self, pixel_values):
+        """Invert VLM image preprocessing: convert normalized pixel_values back to uint8 images.
+
+        Only works for standard (non-Qwen) processors that produce (..., C, H, W) tensors.
+        Qwen returns flat (total_patches, patch_dim) which cannot be trivially reconstructed
+        into images without image_grid_thw.
+
+        Args:
+            pixel_values: Tensor of shape (..., C, H, W) with VLM-normalized values.
+
+        Returns:
+            numpy array of shape (..., H, W, C) with uint8 values in [0, 255].
+        """
+        image_processor = self.vlm_processor.image_processor
+        mean = torch.tensor(image_processor.image_mean, dtype=pixel_values.dtype, device=pixel_values.device)
+        std = torch.tensor(image_processor.image_std, dtype=pixel_values.dtype, device=pixel_values.device)
+        # Reshape for broadcasting over (..., C, H, W)
+        mean = mean.view(*([1] * (pixel_values.ndim - 3)), 3, 1, 1)
+        std = std.view(*([1] * (pixel_values.ndim - 3)), 3, 1, 1)
+        img = pixel_values * std + mean
+        img = img.clamp(0, 1).mul(255).byte()
+        # Move channels to last dim: (..., C, H, W) -> (..., H, W, C)
+        img = img.permute(*range(img.ndim - 3), img.ndim - 2, img.ndim - 1, img.ndim - 3)
+        return img.cpu().numpy()
+
     def add_action_and_proprioception_fields(self, batch, action_fields=None, proprioception_fields=None):
         # Pre-extract concatenated actions if action fields are provided
         if action_fields:
@@ -187,8 +212,10 @@ class RoboticsProcessor:
         else:
             batch_attention_mask_images = torch.tensor(batch_attention_mask_images, dtype=torch.bool)  # [B, num_images]
 
-        # Run processor on entire batch
-        processed = self.vlm_processor(
+        # Run processor on entire batch — start from its output so all VLM-specific
+        # keys (pixel_values, input_ids, attention_mask, image_grid_thw, etc.) are
+        # automatically carried forward without explicit per-key copying.
+        processed_batch = self.vlm_processor(
             images=batch_images,
             text=batch_text,
             padding=True,
@@ -197,13 +224,13 @@ class RoboticsProcessor:
             return_tensors="pt",
         )
 
-        processed_batch = batch.copy()
-        processed_batch["input_ids"] = processed["input_ids"]
-        processed_batch["attention_mask"] = processed["attention_mask"]
+        # Copy over non-VLM fields from the original batch (past_mask, future_mask,
+        # metadata, language_instruction, intrinsics, extrinsics, etc.)
+        for key, value in batch.items():
+            if key not in processed_batch:
+                processed_batch[key] = value
+
         processed_batch["attention_mask_images"] = batch_attention_mask_images
-        if "pixel_values" in processed:
-            c, h, w = processed["pixel_values"].shape[-3:]
-            processed_batch["pixel_values"] = processed["pixel_values"].reshape(len(batch_images), -1, c, h, w)
         processed_batch["camera_names"] = self.data_params.camera_names
         processed_batch["images"] = batch_images
         processed_batch["lowdim"] = {}
