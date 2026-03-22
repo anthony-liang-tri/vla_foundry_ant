@@ -373,7 +373,7 @@ def expand_ablation(name: str, params: dict) -> list[tuple[str, dict]]:
 
 
 def generate_config(
-    task: str | None,
+    task: str,
     ablation_name: str,
     base_args: dict,
     ablation_args: dict,
@@ -381,22 +381,15 @@ def generate_config(
     checkpoint_base: str,
     output_base: str,
     runset_hash: str | None = None,
-    multitask: bool = False,
 ) -> tuple[str, bool, str]:
     """
     Generate config for a specific task and ablation.
 
-    When multitask is True, task must be None.
-
-    Returns (config_label, success, message).
+    Returns (ablation_name, success, message).
     """
-    if multitask:
-        assert task is None, "task must be None when multitask=True"
-        output_dir = Path(output_base) / ablation_name / "mt"
-        config_label = ablation_name
-    else:
-        output_dir = Path(output_base) / ablation_name / task
-        config_label = f"{task}/{ablation_name}"
+
+    manifest_path = f"{base_s3_path}/{task}/shards/manifest.jsonl"
+    output_dir = Path(output_base) / ablation_name / task
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Merge base_args and ablation_args (ablation overrides base)
@@ -414,30 +407,19 @@ def generate_config(
         # Update merged_args to point to local copy
         merged_args["config_path"] = str(local_config_path)
 
-    if multitask:
-        # Multitask mode: construct manifest/stats from base_s3_path root
-        if "data.dataset_manifest" not in merged_args:
-            merged_args["data.dataset_manifest"] = [f"{base_s3_path}/manifest.jsonl"]
-        if "data.dataset_statistics" not in merged_args:
-            merged_args["data.dataset_statistics"] = [f"{base_s3_path}/stats.json"]        
-        merged_args["remote_sync"] = f"{checkpoint_base}/mt/{ablation_name}"
-    else:
-        # Single-task mode: construct per-task manifest/stats/remote_sync
-        manifest_path = f"{base_s3_path}/{task}/shards/manifest.jsonl"
-        merged_args["data.dataset_manifest"] = [manifest_path]
-        merged_args["remote_sync"] = f"{checkpoint_base}/{task}/{ablation_name}"
+    # Set task-specific values
+    merged_args["data.dataset_manifest"] = [manifest_path]
+    merged_args["remote_sync"] = f"{checkpoint_base}/{task}/{ablation_name}"
 
-        if "data.dataset_statistics" not in merged_args:
-            merged_args["data.dataset_statistics"] = [f"{base_s3_path}/{task}/shards/stats.json"]
+    # Add task-specific stats if not already specified
+    if "data.dataset_statistics" not in merged_args:
+        merged_args["data.dataset_statistics"] = [f"{base_s3_path}/{task}/shards/stats.json"]
 
     # Build wandb tags
     yaml_tags = _normalize_wandb_tags_value(base_args.get("wandb_tags")) + _normalize_wandb_tags_value(
         ablation_args.get("wandb_tags")
     )
-    if multitask:
-        generated_tags = ["multitask", "ablation"] + split_long_tag(ablation_name)
-    else:
-        generated_tags = [task, "ablation"] + split_long_tag(ablation_name)
+    generated_tags = [task, "ablation"] + split_long_tag(ablation_name)
     if runset_hash:
         generated_tags.append(runset_hash)
     merged_args["wandb_tags"] = _dedupe_preserve_order([t for t in (yaml_tags + generated_tags) if str(t) != ""])
@@ -451,10 +433,8 @@ def generate_config(
         if key.startswith("sagemaker."):
             continue
         formatted_value = _format_value_for_cmdline(value)
-        # For shell execution, quote values that need protection:
-        # - list syntax (to protect single quotes inside)
-        # - values with spaces (e.g. "include path/to/config.yaml")
-        if formatted_value.startswith("[") or " " in formatted_value:
+        # For shell execution, wrap list syntax in double quotes to protect single quotes
+        if formatted_value.startswith("["):
             formatted_value = f'"{formatted_value}"'
         cmd.extend([f"--{key}", formatted_value])
 
@@ -476,10 +456,10 @@ def generate_config(
             content = re.sub(r"^resolve_configs_path:.*\n", "", content, flags=re.MULTILINE)
             config_file.write_text(content)
 
-        return (output_dir,  True, "Generated successfully")
+        return (f"{task}/{ablation_name}", True, "Generated successfully")
 
     except subprocess.CalledProcessError as e:
-        return (output_dir, False, f"Failed: {e.stderr}")
+        return (f"{task}/{ablation_name}", False, f"Failed: {e.stderr}")
 
 
 def main():
@@ -522,20 +502,13 @@ def main():
     with open(args.ablations_config) as f:
         ablations_config = yaml.safe_load(f)
 
-    multitask = nominal.get("multitask", False)
-    
+    # Tasks can be overridden in the ablations YAML for convenience.
+    # If not provided there, fall back to the nominal config tasks.
+    tasks = ablations_config.get("tasks", nominal["tasks"])
     base_args = nominal["base_args"]
-    base_s3_path = nominal.get("base_s3_path", "")
+    base_s3_path = nominal["base_s3_path"]
     checkpoint_base = nominal["checkpoint_base"]
     output_base = nominal["output_base"]
-
-    if multitask:
-        # Multitask mode: no per-task iteration, manifest/stats come from base_args
-        tasks = [None]
-    else:
-        # Tasks can be overridden in the ablations YAML for convenience.
-        # If not provided there, fall back to the nominal config tasks.
-        tasks = ablations_config.get("tasks", nominal["tasks"])
 
     # Expand all ablations (handle sweeps)
     expanded_ablations = []
@@ -547,10 +520,7 @@ def main():
 
     # Report what will be generated
     total_configs = len(tasks) * len(expanded_ablations)
-    if multitask:
-        print("Mode: multitask")
-    else:
-        print(f"Tasks: {len(tasks)}")
+    print(f"Tasks: {len(tasks)}")
     print(f"Ablations: {len(expanded_ablations)} (from {len(ablations_config['ablations'])} definitions)")
     print(f"Total configs to generate: {total_configs}")
 
@@ -558,10 +528,7 @@ def main():
         print("\n=== Dry Run - Would generate: ===")
         for ablation_name, _ in expanded_ablations:
             for task in tasks:
-                if task is not None:
-                    print(f"  {output_base}/{ablation_name}/{task}/resolved_config.yaml")
-                else:
-                    print(f"  {output_base}/{ablation_name}/mt/resolved_config.yaml")
+                print(f"  {output_base}/{ablation_name}/{task}/resolved_config.yaml")
         return
 
     print("\n=== Generating configs ===")
@@ -582,7 +549,6 @@ def main():
                     checkpoint_base,
                     output_base,
                     args.runset_hash,
-                    multitask,
                 )
                 futures[future] = (task, ablation_name)
 
