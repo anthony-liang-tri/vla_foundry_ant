@@ -65,7 +65,12 @@ def get_processor(data_params: DataParams):
         return PassthroughProcessor()
     elif data_params.processor is not None:
         processor = AutoProcessor.from_pretrained(data_params.processor)
-        processor.image_seq_length = data_params.img_num_tokens
+        # Different processors use different attribute names for image sequence length.
+        # PaliGemma uses image_seq_length; SmolVLM (and others) use image_seq_len.
+        if hasattr(processor, "image_seq_length"):
+            processor.image_seq_length = data_params.img_num_tokens
+        else:
+            processor.image_seq_len = data_params.img_num_tokens
 
         # Set image size for processors if specified in config
         processor_name = str(data_params.processor) if hasattr(data_params, "processor") else ""
