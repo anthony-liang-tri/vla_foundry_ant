@@ -151,10 +151,8 @@ def process_task(
     # Set memory constraints on actors to prevent OOM
     print(f"[{task_name}] 🚀 Processing {len(discovered_episodes)} episodes...")
     if cfg.compute_statistics:
-        # Use max_concurrency to handle many concurrent updates without timeouts
         statistics_ray_actor = StreamingDatasetStatisticsRayActor.options(
             num_cpus=1,
-            max_concurrency=1000,  # Allow large queue to prevent timeouts
         ).remote(compute_stats=cfg.compute_statistics)
     else:
         statistics_ray_actor = None
