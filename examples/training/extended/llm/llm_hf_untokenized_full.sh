@@ -1,0 +1,24 @@
+uv run --group sagemaker sagemaker/launch_training.py \
+--sagemaker.user sedrick.keh \
+--sagemaker.instance_type p5 \
+--sagemaker.queue_name tri-cam-humanoid \
+--sagemaker.instance_count 16 \
+--model "include vla_foundry/config_presets/models/transformer_1b.yaml" \
+--model.vocab_size 256000 \
+--distributed.fsdp True \
+--data.type text_untokenized \
+--data.dataset_manifest ["s3://tri-ml-datasets/vla_foundry_datasets/dclm-baseline-1.0-tarshards/manifest.jsonl"] \
+--data.dataset_modality ["text_untokenized"] \
+--data.dataset_weighting [1.0] \
+--data.tokenizer google/gemma-2-2b \
+--data.seq_len 2048 \
+--data.allow_multiple_epochs True \
+--total_train_samples 200_000_000 \
+--num_checkpoints 10 \
+--hparams.per_gpu_batch_size 4 \
+--hparams.global_batch_size 512 \
+--hparams.lr 3e-4 \
+--hparams.grad_clip_norm 1.0 \
+--remote_sync s3://tri-ml-datasets-uw2/vla_foundry_scratch/models/llm_hf_untokenized_full_1b_samples200m \
+--model.resume_from_checkpoint s3://tri-ml-datasets-uw2/vla_foundry_scratch/models/llm_hf_untokenized_full_1b_samples200m/2026_01_30-09_45_06-model_transformer-lr_0.0003-bsz_512/checkpoints/checkpoint_9.pt \
+"$@"

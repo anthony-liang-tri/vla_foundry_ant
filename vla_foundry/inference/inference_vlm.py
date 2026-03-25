@@ -1,31 +1,26 @@
 import requests
 from PIL import Image
-from transformers import AutoProcessor
 
+from vla_foundry.data.processor import get_processor
 from vla_foundry.file_utils import load_model_checkpoint
 from vla_foundry.models import create_model
-from vla_foundry.params.model_params import ModelParams
-from vla_foundry.params.train_experiment_params import load_params_from_yaml
+from vla_foundry.params.train_experiment_params import TrainExperimentParams, load_params_from_yaml
 
-model_params = load_params_from_yaml(
-    ModelParams,
-    "s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/vlm_paligemma_3b/2025_07_04-01_38_18-model_vlm-lr_0.0001-bsz_128/config_model.yaml",
-)
-model = create_model(model_params)
-ckpt = "s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/vlm_paligemma_3b/2025_07_04-01_38_18-model_vlm-lr_0.0001-bsz_128/checkpoints/checkpoint_2.pt"
-load_model_checkpoint(model, ckpt)
+BASE_PATH = "s3://tri-ml-datasets/vla_foundry_scratch/models/vlm_smolvlm_fromllm_samples50m/2026_03_05-00_34_13-model_vlm-lr_0.0001-bsz_512"
+train_params = load_params_from_yaml(TrainExperimentParams, f"{BASE_PATH}/config.yaml")
+model = create_model(train_params.model)
+print("model: ", model)
+load_model_checkpoint(model, f"{BASE_PATH}/checkpoints/checkpoint_14.pt")
 
-processor = AutoProcessor.from_pretrained("google/paligemma-3b-pt-224")
+processor = get_processor(train_params.data)
 
-prompt = "<image>"
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
-# inputs = processor(image, prompt, return_tensors="pt", padding='max_length', padding_side='right', max_length=2048)
-inputs = processor(image, prompt, return_tensors="pt")
-print(inputs)
+image_token = processor.image_token if hasattr(processor, "image_token") else "<image>"
+inputs = processor(image, image_token, return_tensors="pt")
+print("inputs: ", inputs)
+if inputs["pixel_values"].dim() == 5:
+    inputs["pixel_values"] = inputs["pixel_values"].squeeze(1)
 
-out = model.generate(
-    input_ids=inputs["input_ids"], image=inputs["pixel_values"], attention_mask=inputs["attention_mask"]
-)
-print(out)
+out = model.generate(**inputs)
 print(processor.decode(out[0], skip_special_tokens=True))

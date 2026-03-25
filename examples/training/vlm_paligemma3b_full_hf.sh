@@ -1,0 +1,19 @@
+uv run --group sagemaker sagemaker/launch_training.py \
+--sagemaker.user sedrick.keh \
+--sagemaker.instance_type p5 \
+--sagemaker.queue_name vla \
+--sagemaker.instance_count 16 \
+--model "include vla_foundry/config_presets/models/vlm_3b_gemma2_2b.yaml" \
+--distributed.fsdp True \
+--data.type image_caption \
+--data.processor google/paligemma-3b-pt-224 \
+--data.dataset_manifest ["s3://tri-ml-datasets/datasets/datacompdr_1b/manifest.jsonl"] \
+--data.dataset_modality ["image_caption"] \
+--data.dataset_weighting [1.0] \
+--data.seq_len 2048 \
+--data.img_num_tokens 256 \
+--total_train_samples 100_000_000 \
+--num_checkpoints 10 \
+--hparams.per_gpu_batch_size 2 \
+--hparams.global_batch_size 256 \
+--remote_sync s3://tri-ml-datasets/vla_foundry_scratch/models/vlm_paligemma_3b_samples100m_gemma2llm

@@ -1,0 +1,24 @@
+uv run --group sagemaker sagemaker/launch_training.py \
+--sagemaker.user sedrick.keh \
+--sagemaker.instance_type p5 \
+--sagemaker.queue_name vla \
+--sagemaker.instance_count 16 \
+--sagemaker.priority 1234 \
+--model "include vla_foundry/config_presets/models/smolvlm_load_llm.yaml" \
+--model.transformer.resume_from_checkpoint s3://tri-ml-datasets-uw2/vla_foundry_scratch/models/llm_hf_untokenized_full_1b_samples200m/2026_01_30-09_45_06-model_transformer-lr_0.0003-bsz_512/checkpoints/checkpoint_11.pt \
+--model.transformer.resume_weights_only True \
+--distributed.fsdp True \
+--data.type image_caption \
+--data.processor HuggingFaceTB/SmolVLM2-256M-Video-Instruct \
+--data.dataset_manifest ["s3://tri-ml-datasets/datasets/datacompdr_1b/manifest.jsonl"] \
+--data.dataset_modality ["image_caption"] \
+--data.dataset_weighting [1.0] \
+--data.seq_len 2048 \
+--data.img_num_tokens 196 \
+--data.image_size 224 \
+--total_train_samples 50_000_000 \
+--num_checkpoints 10 \
+--hparams.per_gpu_batch_size 8 \
+--hparams.global_batch_size 1024 \
+--hparams.torchcompile True \
+--remote_sync s3://tri-ml-datasets/vla_foundry_scratch/models/vlm_smolvlm_fromllm_samples50m

@@ -93,7 +93,7 @@ class VLM(TransformerBase):
         safe_input_ids[special_image_mask] = 0
         token_embd = self.transformer.embeddings(safe_input_ids).to(image_embd.dtype)
         special_image_mask = special_image_mask.unsqueeze(-1)
-        assert special_image_mask.sum().item() == image_embd.shape[0] * image_embd.shape[1]
+        assert special_image_mask.sum() == image_embd.shape[0] * image_embd.shape[1]
         special_image_mask = special_image_mask.expand_as(token_embd).to(token_embd.device)
         inputs_embeds = token_embd.masked_scatter(special_image_mask, image_embd)
 

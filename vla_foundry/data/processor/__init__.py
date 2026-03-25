@@ -83,11 +83,14 @@ def get_processor(data_params: DataParams):
                 logging.debug(
                     f"Set processor image_processor.size to {{'height': {image_size}, 'width': {image_size}}}"
                 )
-            else:
-                # SmolVLM and others expect longest_edge
+            elif hasattr(processor.image_processor, "max_image_size"):
+                # SmolVLM uses max_image_size for the tile/ViT input size.
+                # Also set size (input cap) to image_size so the image fits in exactly 1 tile.
+                processor.image_processor.max_image_size = {"longest_edge": int(image_size)}
                 processor.image_processor.size = {"longest_edge": int(image_size)}
-                logging.debug(f"Set processor image_processor.size to {{'longest_edge': {image_size}}}")
-
+                logging.debug(
+                    f"Set processor image_processor.max_image_size and size to {{'longest_edge': {image_size}}}"
+                )
         return processor
     else:
         raise ValueError(f"{data_params.processor} not yet supported.")

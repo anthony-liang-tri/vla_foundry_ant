@@ -42,7 +42,7 @@ class ImageCaptionPipeline(BaseWebDatasetPipeline):
             wds.batched(self.batch_size, partial=False),
             wds.map(
                 lambda sample: self.processor(
-                    images=sample["image"],
+                    images=[[img] for img in sample["image"]],
                     text=sample["text"],
                     return_tensors="pt",
                     padding="max_length",
