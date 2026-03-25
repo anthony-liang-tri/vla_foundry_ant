@@ -175,10 +175,8 @@ def process_task(task_name: str, episodes: list[str], camera_names: list[str], f
     print(f"[{task_name}] 🚀 Processing {len(discovered_episodes)} episodes...")
     if cfg.compute_statistics:
         # Statistics actor needs ~15GB, reserve 18GB to be safe
-        # Use max_concurrency to handle many concurrent updates without timeouts
         statistics_ray_actor = StreamingDatasetStatisticsRayActor.options(
             memory=18 * 1024 * 1024 * 1024,
-            max_concurrency=1000,  # Allow large queue to prevent timeouts
         ).remote(compute_stats=cfg.compute_statistics)
     else:
         statistics_ray_actor = None

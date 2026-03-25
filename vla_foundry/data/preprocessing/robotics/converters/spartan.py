@@ -754,7 +754,6 @@ class SpartanConverter(BaseRoboticsConverter):
             if sample_point_maps is not None:
                 stats_sample["point_maps"] = sample_point_maps
 
-            statistics_ray_actor.merge_from_samples.remote([stats_sample])
         # Add intrinsics, extrinsics, past_mask, future_mask to lowdim (after building stats_sample)
         for key, value in sample_intrinsics.items():
             sample_lowdim[f"original_intrinsics.{key}"] = value
