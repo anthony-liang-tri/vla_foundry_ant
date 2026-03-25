@@ -1,0 +1,296 @@
+data:
+  action_dim: 20
+  action_fields:
+  - robot__action__poses__left::panda__xyz_relative
+  - robot__action__poses__right::panda__xyz_relative
+  - robot__action__poses__left::panda__rot_6d_relative
+  - robot__action__poses__right::panda__rot_6d_relative
+  - robot__action__grippers__left::panda_hand
+  - robot__action__grippers__right::panda_hand
+  allow_multiple_epochs: true
+  augmentation:
+    enabled: true
+    image:
+      color_jitter:
+        brightness: 0.2
+        contrast: 0.4
+        enabled: true
+        hue:
+        - -0.05
+        - 0.05
+        saturation: 0.2
+      crop:
+        enabled: true
+        mode: random
+        shape:
+        - 224
+        - 224
+    point_cloud:
+      color_jitter:
+        brightness: 0.2
+        contrast: 0.4
+        enabled: false
+        hue:
+        - -0.05
+        - 0.05
+        saturation: 0.2
+  camera_names:
+  - scene_right_0
+  - scene_left_0
+  - wrist_left_plus
+  - wrist_right_minus
+  dataset_manifest:
+  - s3://tri-ml-datasets-uw2/vla_foundry_datasets/hardware_experiments/mar_11/real/BimanualPutScrewdriverOnPegboard/shards/manifest.jsonl
+  dataset_modality:
+  - robotics
+  dataset_statistics:
+  - s3://tri-ml-datasets-uw2/vla_foundry_datasets_test/v0.4.3.9/stats.json
+  dataset_weighting:
+  - 1.0
+  extrinsics_fields:
+  - extrinsics.scene_right_0
+  - extrinsics.scene_left_0
+  - extrinsics.wrist_left_plus
+  - extrinsics.wrist_right_minus
+  image_indices:
+  - -1
+  - 0
+  image_names:
+  - scene_right_0_t-1
+  - scene_left_0_t-1
+  - wrist_left_plus_t-1
+  - wrist_right_minus_t-1
+  - scene_right_0_t0
+  - scene_left_0_t0
+  - wrist_left_plus_t0
+  - wrist_right_minus_t0
+  image_size: 224
+  img_num_tokens: 64
+  intrinsics_fields:
+  - intrinsics.scene_right_0
+  - intrinsics.scene_left_0
+  - intrinsics.wrist_left_plus
+  - intrinsics.wrist_right_minus
+  language_instruction_types:
+  - original
+  - randomized
+  - verbose
+  - alternative
+  lowdim_future_timesteps: 14
+  lowdim_past_timesteps: 1
+  mask_padded_images: true
+  normalization:
+    centered_norm: true
+    enabled: true
+    epsilon: 0.01
+    field_configs:
+      robot__action__grippers__left::panda_hand:
+        enabled: true
+        epsilon: 0.01
+        method: percentile_1_99
+        scope: per_timestep
+      robot__action__grippers__right::panda_hand:
+        enabled: true
+        epsilon: 0.01
+        method: percentile_1_99
+        scope: per_timestep
+      robot__action__poses__left::panda__rot_6d_relative:
+        enabled: true
+        epsilon: 0.01
+        method: percentile_1_99
+        scope: per_timestep
+      robot__action__poses__left::panda__xyz_relative:
+        enabled: true
+        epsilon: 0.01
+        method: percentile_1_99
+        scope: per_timestep
+      robot__action__poses__right::panda__rot_6d_relative:
+        enabled: true
+        epsilon: 0.01
+        method: percentile_1_99
+        scope: per_timestep
+      robot__action__poses__right::panda__xyz_relative:
+        enabled: true
+        epsilon: 0.01
+        method: percentile_1_99
+        scope: per_timestep
+      robot__actual__poses__left::panda__rot_6d:
+        enabled: true
+        epsilon: 0.01
+        method: percentile_1_99
+        scope: per_timestep
+      robot__actual__poses__left::panda__xyz:
+        enabled: true
+        epsilon: 0.01
+        method: percentile_1_99
+        scope: per_timestep
+      robot__actual__poses__right::panda__rot_6d:
+        enabled: true
+        epsilon: 0.01
+        method: percentile_1_99
+        scope: per_timestep
+      robot__actual__poses__right::panda__xyz:
+        enabled: true
+        epsilon: 0.01
+        method: percentile_1_99
+        scope: per_timestep
+    include_fields:
+    - robot__actual__poses__left::panda__xyz
+    - robot__actual__poses__right::panda__xyz
+    - robot__actual__poses__left::panda__rot_6d
+    - robot__actual__poses__right::panda__rot_6d
+    - robot__action__poses__left::panda__xyz_relative
+    - robot__action__poses__right::panda__xyz_relative
+    - robot__action__poses__left::panda__rot_6d_relative
+    - robot__action__poses__right::panda__rot_6d_relative
+    - robot__action__grippers__left::panda_hand
+    - robot__action__grippers__right::panda_hand
+    lowdim_future_timesteps: 19
+    lowdim_past_timesteps: 3
+    method: percentile_1_99
+    scope: per_timestep
+  num_workers: 8
+  pad_missing_images: true
+  point_cloud_num_points: 4096
+  pose_groups:
+  - name: left_panda_action
+    position_key: robot__action__poses__left::panda__xyz
+    rotation_key: robot__action__poses__left::panda__rot_6d
+  - name: right_panda_action
+    position_key: robot__action__poses__right::panda__xyz
+    rotation_key: robot__action__poses__right::panda__rot_6d
+  prefetch_factor: 8
+  processor: HuggingFaceTB/SmolVLM2-256M-Video-Instruct
+  proprioception_dim: 18
+  proprioception_fields:
+  - robot__actual__poses__left::panda__xyz
+  - robot__actual__poses__right::panda__xyz
+  - robot__actual__poses__left::panda__rot_6d
+  - robot__actual__poses__right::panda__rot_6d
+  seed: 42
+  seq_len: 2048
+  shuffle: true
+  shuffle_buffer_size: 2000
+  shuffle_initial: 500
+  type: robotics
+  use_point_cloud: false
+  val_dataset_manifest: []
+  val_dataset_statistics: []
+  val_dataset_weighting: []
+db_logging: true
+distributed:
+  ddp_static_graph: false
+  device: cuda:0
+  dist_backend: nccl
+  dist_url: env://
+  fsdp: true
+  fsdp_cpu_offload: false
+  fsdp_reshard_after_forward: false
+  local_rank: 0
+  rank: 0
+  use_distributed: false
+  world_size: 1
+ema:
+  alpha: 0.999
+  enabled: false
+  inv_gamma: 1.0
+  max_value: 0.9999
+  min_value: 0.0
+  power: 0.75
+  type: ema
+  update_after_step: 0
+hparams:
+  beta1: 0.9
+  beta2: 0.95
+  decay: '0.3'
+  eps: 1.0e-08
+  force_min_lr: 0.0
+  global_batch_size: 512
+  grad_checkpointing: false
+  grad_clip_norm: 1.0
+  loss_function: mse
+  lr: 0.00005
+  lr_cooldown_end: 0
+  lr_scheduler: cosine
+  optimizer: adamw
+  per_gpu_batch_size: 16
+  precision: amp_bf16
+  seed: 42
+  torchcompile: false
+  warmup: '1000'
+  wd: 1.0e-08
+  world_size: 1
+  z_loss_coefficient: 0.0
+log_every_n_steps: 20
+log_level: INFO
+max_checkpoint_limit: null
+model:
+  action_dim: 20
+  freeze: false
+  input_noise_std: 0.0
+  noise_scheduler:
+    beta_end: 0.02
+    beta_start: 0.0001
+    clamp_range:
+    - -3.0
+    - 3.0
+    freeze: false
+    num_timesteps: 1000
+    resume_from_checkpoint: null
+    resume_weights_only: false
+    type: noise_scheduler
+  proprioception_dim: 18
+  resume_from_checkpoint: s3://tri-ml-datasets-uw2/lbm2_vla/model_checkpoints/vla_diffusion/llm_to_vlm_to_vla/multitask/600m_samples_300k_steps_lr5e-5_floor0/2026_03_08-08_18_17-model_diffusion_policy-lr_5e-05-bsz_2048/checkpoints/checkpoint_11.pt
+  resume_weights_only: true
+  diffusion_step_conditioning: concat
+  transformer:
+    attn_name: torch_attn
+    cast_output_to_float32: false
+    ffn_type: swiglu
+    freeze: false
+    hidden_dim: 512
+    is_causal: false
+    max_seq_len: 2048
+    n_heads: 8
+    n_layers: 12
+    norm_eps: 1.0e-05
+    norm_type: default_layer_norm
+    positional_embedding_type: rotary
+    post_embed_norm: true
+    qk_norm: false
+    resume_from_checkpoint: null
+    resume_weights_only: false
+    type: transformer
+    vocab_size: 50432
+    weight_tying: false
+  type: diffusion_policy
+  use_diffusers_scheduler: false
+  use_flow_matching_scheduler: true
+  vision_language_backbone:
+    freeze: false
+    num_vlm_layers_to_use: 4
+    resume_from_checkpoint: s3://tri-ml-datasets-uw2/vla_foundry_scratch/models/vlm_smolvlm_fromllm_samples50m/2026_03_07-15_27_13-model_vlm-lr_0.0001-bsz_512/checkpoints/checkpoint_13.pt
+    resume_weights_only: false
+    type: vlm_foundry_backbone
+name: null
+num_checkpoints: 10
+num_epochs: null
+remote_sync: s3://tri-ml-datasets-uw2/vla_foundry_checkpoints/hardware_experiments/mar_11/BimanualPutScrewdriverOnPegboard/mt_600ksteps_ft_5ksteps_sharedstats
+remote_sync_fixed_path: s3://tri-ml-datasets-uw2/vla_foundry_models_fixed/
+resolve_configs: false
+save_path: null
+total_train_samples: 3_000_000
+total_val_samples: null
+val_every_n_checkpoints: 1
+wandb: false
+wandb_entity: null
+wandb_project_name: vla_foundry
+wandb_tags:
+- vla
+- multitask_ft
+- sharedstats
+- 4_cameras
+- llm_to_vlm_to_vla
+- 600m_mt_5k_steps_ft_sharedstats
+- lr5e-5_floor0
+- BimanualPutScrewdriverOnPegboard
