@@ -42,6 +42,7 @@ class PosesAndGrippers:
 
     debugging_output: dict[str, Any] | None = None
 
+
 @dc.dataclass
 class PosesAndGrippersActualAndDesired:
     actual: PosesAndGrippers
@@ -62,7 +63,8 @@ class PosesAndGrippersActualAndDesired:
 
     version: float | None = None
 
-# N.B. We ddefer setting the current version to `multiarm.py`.
+
+# N.B. We defer setting the current version to `multiarm.py`.
 CURRENT_VERSION = float(20241212)
 
 
@@ -79,11 +81,13 @@ class CameraRgbImage(CameraImage):
 
     timestamp: float | None = None
 
+
 @dc.dataclass
 class CameraDepthImage(CameraImage):
     array: np.ndarray  # (H, W), dtype=uint16
 
     timestamp: float | None = None
+
 
 @dc.dataclass
 class CameraLabelImage(CameraImage):
@@ -91,12 +95,14 @@ class CameraLabelImage(CameraImage):
 
     timestamp: float | None = None
 
+
 @dc.dataclass
 class CameraImageSet:
     rgb: CameraRgbImage
 
     depth: CameraDepthImage | None = None
     label: CameraLabelImage | None = None
+
 
 # Camera Id -> Camera images
 CameraImageSetMap = dict[str, CameraImageSet]
@@ -111,6 +117,7 @@ class MultiarmObservation:
     timestamp_packaged: float | None = None
 
     language_instruction: str | None = None
+
 
 @dc.dataclass
 class RestorePosesAndGrippersConfig:

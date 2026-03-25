@@ -45,6 +45,7 @@ class PolicyMetadata:
 
     runtime_information: dict[str, str] = dc.field(default_factory=dict)
 
+
 class Policy:
     """
     Base interface for a policy.
