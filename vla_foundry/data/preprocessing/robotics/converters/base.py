@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 import numpy as np
+import ray
 
 from vla_foundry.data.preprocessing.image_utils import init_jpeg_encoder
 from vla_foundry.data.preprocessing.robotics.preprocess_masks import PaddingStrategy
@@ -200,11 +201,30 @@ class BaseRoboticsConverter:
             intrinsics_data, extrinsics_data = self.extract_intrinsics_extrinsics_data(episode_data)
             metadata_data = self.extract_metadata_data(episode_data)
 
+            # Free episode_data — camera_data/lowdim_data now hold what we need
+            del episode_data
+
+            # Convert camera arrays to lists of per-frame copies so old frames
+            # can be individually freed as we iterate (numpy views would keep the
+            # entire contiguous array alive).
+            if camera_data is not None:
+                for cam_name in list(camera_data.keys()):
+                    arr = camera_data[cam_name]
+                    if isinstance(arr, np.ndarray):
+                        camera_data[cam_name] = [arr[i].copy() for i in range(len(arr))]
+                        del arr
+
+            # Determine minimum image offset for frame eviction
+            min_img_offset = min(self.image_indices) if self.image_indices else 0
+            last_evicted_up_to = -1
+
             # Use ThreadPoolExecutor with bounded queue to prevent memory blowup
             with ThreadPoolExecutor(max_workers=self.cfg.num_workers) as executor:
                 futures = set()
                 results = []
                 stats_samples_batch = []  # Collect stats samples for batched update
+                stats_flush_size = 100  # Flush stats every N samples to bound memory
+                stats_futures = []  # Track stats actor calls to ensure completion
 
                 for anchor_timestep in range(0, episode_length, self.cfg.stride):
                     # If we have max_workers futures in flight, wait for one to complete
@@ -216,7 +236,7 @@ class BaseRoboticsConverter:
                         results.append(result)
 
                     # Create sample_images, sample_lowdim, sample_metadata, language_instructions,
-                    # and optionally point_clouds and stats_sample
+                    # and optionally point_clouds, point_maps, and stats_sample
                     result = self.extract_sample_data(
                         anchor_timestep,
                         episode_path,
@@ -230,7 +250,18 @@ class BaseRoboticsConverter:
                         logger_actor,
                     )
 
-                    # Handle 4+ tuple returns (sample_point_clouds, sample_point_maps and stats_sample are optional 5th
+                    # Evict camera frames no longer needed by future anchors.
+                    # Next anchor needs frame >= (anchor + stride + min_img_offset).
+                    if camera_data is not None:
+                        evict_below = max(0, anchor_timestep + self.cfg.stride + min_img_offset)
+                        if evict_below > last_evicted_up_to + 1:
+                            for cam_name in camera_data:
+                                num_frames = len(camera_data[cam_name])
+                                for idx in range(last_evicted_up_to + 1, min(evict_below, num_frames)):
+                                    camera_data[cam_name][idx] = None
+                            last_evicted_up_to = evict_below - 1
+
+                    # Handle 4+ tuple returns (sample_point_clouds, sample_point_maps and stats_sample are optional 5th,
                     # 6th, and 7th elements)
                     sample_images, sample_lowdim, sample_metadata, language_instructions, *extra = result
                     sample_point_cloud = extra[0] if len(extra) >= 1 else None
@@ -241,9 +272,15 @@ class BaseRoboticsConverter:
                         # Filtered out either by max_padding or still_samples
                         continue
 
-                    # Collect stats sample for batched update
+                    # Collect stats sample for batched update, flush periodically to bound memory
                     if stats_sample is not None:
                         stats_samples_batch.append(stats_sample)
+                        if len(stats_samples_batch) >= stats_flush_size:
+                            if statistics_ray_actor is not None:
+                                stats_futures.append(
+                                    statistics_ray_actor.merge_from_samples.remote(stats_samples_batch)
+                                )
+                            stats_samples_batch = []
 
                     sample_data = {
                         "images": sample_images,
@@ -280,9 +317,14 @@ class BaseRoboticsConverter:
                     result = future.result()  # Raise any exceptions
                     results.append(result)
 
-            # Send batched statistics update (one call per episode instead of per sample)
+            # Flush any remaining stats samples
             if statistics_ray_actor is not None and stats_samples_batch:
-                statistics_ray_actor.merge_from_samples.remote(stats_samples_batch)
+                stats_futures.append(statistics_ray_actor.merge_from_samples.remote(stats_samples_batch))
+
+            # Wait for all stats calls to complete before returning,
+            # so the stats actor has all data when get_statistics() is called later.
+            if stats_futures:
+                ray.get(stats_futures)
 
             return results
 
