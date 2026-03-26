@@ -121,8 +121,17 @@ class VLM(TransformerBase):
         return self.model_params.transformer.hidden_dim
 
     @property
+    def lm_hidden_dim(self) -> int:
+        return self.model_params.transformer.hidden_dim
+
+    @property
     def num_hidden_layers(self) -> int:
         return self.model_params.transformer.n_layers
+
+    def get_input_embeddings(self):
+        if hasattr(self.transformer, "embeddings"):
+            return self.transformer.embeddings
+        return self.transformer.model.get_input_embeddings()
 
     def generate(
         self,

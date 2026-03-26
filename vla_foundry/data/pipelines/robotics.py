@@ -2,10 +2,10 @@ import os
 import random
 
 import numpy as np
-import torch
 import webdataset as wds
 
-from vla_foundry.data.augmentations.decode_and_augment import Augmentations
+from vla_foundry.data.augmentations.base import Augmentations
+from vla_foundry.data.fast_decode import fast_image_decoder
 from vla_foundry.data.pipelines.base import BaseWebDatasetPipeline
 from vla_foundry.data.processor.robotics_processor import RoboticsProcessor
 from vla_foundry.data.robotics.utils import crop_sequence
@@ -65,11 +65,7 @@ def extract_robotics_fields(
         if key.endswith(".jpg"):
             # Extract camera name and timestep from key (format: {sample_id}.{camera}_{timestep}.jpg)
             img_key = key.split(".")[-2]  # e.g., "wrist_camera_t-1"
-            # Keep tensor images as tensors for tensor-native downstream paths.
-            if isinstance(value, torch.Tensor):
-                images[img_key] = value
-            else:
-                images[img_key] = np.asarray(value)
+            images[img_key] = np.array(value)
         elif key.endswith(".tiff"):
             # Point map: {sample_id}.{camera}_point_map_t{offset}.tiff
             pm_key_with_suffix = key.split(".")[-2]  # e.g., "scene_right_0_point_map_t0"
@@ -159,9 +155,7 @@ class RoboticsPipeline(BaseWebDatasetPipeline):
         os.environ["TOKENIZERS_PARALLELISM"] = "true"
         self.data_params = data_params
         self.robotics_processor = RoboticsProcessor(data_params)
-        self.augmentations = Augmentations(
-            data_params.augmentation, image_size=getattr(data_params, "image_size", None)
-        )
+        self.augmentations = Augmentations(data_params.augmentation)
 
     def __len__(self):
         """Return the number of samples in the dataset (cached)."""
@@ -184,8 +178,12 @@ class RoboticsPipeline(BaseWebDatasetPipeline):
             wds.split_by_node,
             wds.split_by_worker,
             wds.tarfile_to_samples(handler=log_and_continue),
-            wds.map(self.augmentations.decode_and_augment_sample, handler=log_and_continue),
+            wds.decode(fast_image_decoder, handler=log_and_continue),
             wds.select(filter_robotics_sample),
+            wds.map(
+                lambda sample: self.augmentations.apply_transforms(sample),
+                handler=log_and_continue,
+            ),
             wds.map(
                 lambda sample: extract_robotics_fields(
                     sample,

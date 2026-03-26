@@ -238,6 +238,13 @@ class VLMBackboneParams(BackboneParams, VLMHFParams):
     num_vlm_layers_to_use: int = field(default=4)
 
 
+@register_model_params("vlm_foundry_backbone")
+@dataclass(frozen=True)
+class VLMFoundryBackboneParams(BackboneParams):
+    # Number of last VLM layers to extract hidden states from for diffusion
+    num_vlm_layers_to_use: int = field(default=4)
+
+
 @register_model_params("stable_diffusion")
 @dataclass(frozen=True)
 class StableDiffusionParams(ModelParams):
@@ -263,7 +270,9 @@ class StableDiffusionParams(ModelParams):
 @register_model_params("diffusion_policy")
 @dataclass(frozen=True)
 class DiffusionPolicyParams(ModelParams):
-    vision_language_backbone: VLMBackboneParams | CLIPBackboneParams = field(default_factory=CLIPBackboneParams)
+    vision_language_backbone: VLMBackboneParams | CLIPBackboneParams | VLMFoundryBackboneParams = field(
+        default_factory=CLIPBackboneParams
+    )
     transformer: TransformerParams | TransformerHFParams = field(default_factory=ModelParams)
     noise_scheduler: NoiseSchedulerParams = field(default_factory=NoiseSchedulerParams)
 
