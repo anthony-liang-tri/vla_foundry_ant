@@ -7,6 +7,7 @@ import ray
 
 from vla_foundry.data.preprocessing.image_utils import init_jpeg_encoder
 from vla_foundry.data.preprocessing.robotics.preprocess_masks import PaddingStrategy
+from vla_foundry.data.preprocessing.robotics.preprocess_statistics import StreamingDatasetStatistics
 from vla_foundry.data.preprocessing.utils import upload_sample_to_s3
 from vla_foundry.data.robotics.utils import (
     calculate_relative_pose,
@@ -277,9 +278,8 @@ class BaseRoboticsConverter:
                         stats_samples_batch.append(stats_sample)
                         if len(stats_samples_batch) >= stats_flush_size:
                             if statistics_ray_actor is not None:
-                                stats_futures.append(
-                                    statistics_ray_actor.merge_from_samples.remote(stats_samples_batch)
-                                )
+                                aggregates = StreamingDatasetStatistics.compute_batch_aggregates(stats_samples_batch)
+                                stats_futures.append(statistics_ray_actor.merge_from_aggregates.remote(aggregates))
                             stats_samples_batch = []
 
                     sample_data = {
@@ -319,7 +319,8 @@ class BaseRoboticsConverter:
 
             # Flush any remaining stats samples
             if statistics_ray_actor is not None and stats_samples_batch:
-                stats_futures.append(statistics_ray_actor.merge_from_samples.remote(stats_samples_batch))
+                aggregates = StreamingDatasetStatistics.compute_batch_aggregates(stats_samples_batch)
+                stats_futures.append(statistics_ray_actor.merge_from_aggregates.remote(aggregates))
 
             # Wait for all stats calls to complete before returning,
             # so the stats actor has all data when get_statistics() is called later.
