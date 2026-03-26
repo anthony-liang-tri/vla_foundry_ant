@@ -1,0 +1,100 @@
+# Preprocessing configuration for LBM robotics data
+# Used by data_generation_ray.py
+# Based on v0.4.2-sim preprocessing parameters
+
+type: spartan
+
+# Output location (task name will be appended)
+output_prefix: s3://tri-ml-datasets-uw2/vla_foundry_datasets_test/v0.4.3.1/
+
+# Sampling/windowing
+past_lowdim_steps: 5
+future_lowdim_steps: 19
+image_indices: [-1, 0]
+stride: 1
+max_padding_left: 4
+max_padding_right: 18
+padding_strategy: copy
+
+# Filtering
+filter_still_samples: false
+still_threshold: 0.05
+
+# Sharding
+samples_per_shard: 100
+
+# Runtime
+max_episodes_to_process: -1
+fail_on_nan: false
+
+# Statistics
+compute_statistics: true
+auto_tag: true
+skip_git_tagging: false
+stats_actor_memory_gb: 8  # Memory limit for statistics actor (only stores aggregates now)
+episode_worker_memory_gb: 16  # Memory reservation per episode worker (128GB node / 16GB = 8 workers per node)
+
+# Camera names
+camera_names:
+  - scene_right_0
+  - scene_left_0
+  - wrist_left_minus
+  - wrist_left_plus
+  - wrist_right_minus
+  - wrist_right_plus
+
+# Image preprocessing
+resize_images_size: [342, 256]
+jpeg_quality: 95
+
+# Depth/point cloud
+use_depth_data: false
+point_cloud_num_points: 50000
+
+# Database logging
+db_logging: true
+
+# Fixed output path for dataset registry
+output_dir_fixed_path: s3://tri-ml-datasets-uw2/vla_foundry_datasets_fixed/
+
+# Spartan-specific configs
+data_discard_keys:
+  - robot__desired__wrench__right::panda
+  - robot__desired__joint_torque__right::panda
+  - robot__desired__joint_torque__left::panda
+  - robot__desired__wrench__left::panda
+  - robot__desired__external_wrench__right::panda
+  - robot__desired__external_wrench__left::panda
+  - robot__desired__joint_torque_external__right::panda
+  - robot__desired__joint_torque_external__left::panda
+language_annotations_path: vla_foundry/config_presets/data/lbm/lbm_language_annotations.yaml
+action_fields_config_path: vla_foundry/config_presets/data/lbm/lbm_action_fields.yaml
+
+# Ray runtime_env excludes (patterns to exclude from uploads to workers)
+runtime_env_excludes:
+  - ".git"
+  - "*.pt"
+  - "*.pyc"
+  - "__pycache__"
+  - ".pytest_cache"
+  - ".venv"
+  - "*.egg-info"
+  - "*.rrd"
+  - "*.mp4"
+  - "*.tar"
+  - "*.npz"
+  - "*.png"
+  - "*.jpg"
+  - "*.jpeg"
+  - "*.csv"
+  - "*.zip"
+  - "tests"
+  - "examples"
+  - "tutorials"
+  - "assets"
+  - "sagemaker"
+  - "worktrees"
+  - "tri-ml-datasets-uw2"
+  - "downloaded_results"
+  - "wandb_export_*.csv"
+  - "output_gen_*"

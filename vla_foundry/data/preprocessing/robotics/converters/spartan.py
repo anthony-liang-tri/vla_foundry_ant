@@ -755,10 +755,14 @@ class SpartanConverter(BaseRoboticsConverter):
                 stats_sample["point_maps"] = sample_point_maps
 
         # Add intrinsics, extrinsics, past_mask, future_mask to lowdim (after building stats_sample)
+        # Only include cameras that have images (camera_data keys are semantic names)
+        available_camera_names = set(camera_data.keys()) if camera_data else set()
         for key, value in sample_intrinsics.items():
-            sample_lowdim[f"original_intrinsics.{key}"] = value
+            if not available_camera_names or key in available_camera_names:
+                sample_lowdim[f"original_intrinsics.{key}"] = value
         for key, value in sample_extrinsics.items():
-            sample_lowdim[f"extrinsics.{key}"] = value
+            if not available_camera_names or key in available_camera_names:
+                sample_lowdim[f"extrinsics.{key}"] = value
         sample_lowdim["past_mask"] = past_mask
         sample_lowdim["future_mask"] = future_mask
 
