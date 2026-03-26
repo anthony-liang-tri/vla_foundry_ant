@@ -214,8 +214,9 @@ def init(
     _STATE.enabled = not _STATE.user_disabled
     _STATE.initialized = True
 
-    # Ensure we shut down cleanly
-    atexit.register(shutdown)
+    # Ensure we shut down cleanly (but not in Colab/notebook mode where spawn=False)
+    if spawn:
+        atexit.register(shutdown)
 
 
 def enabled() -> bool:
@@ -559,6 +560,20 @@ class Visualizer:
 
         self.log_points3d(path, pts, colors=colors, **kwargs)
 
+    def set_time(self, timeline: str, sequence: int) -> None:
+        """Set the current time sequence for the visualization timeline.
+
+        Args:
+            timeline: Name of the timeline (e.g., "step", "sample").
+            sequence: Integer sequence number for this timeline.
+        """
+        if not _STATE.initialized:
+            init()
+        if not enabled():
+            return
+        if _STATE.backend and hasattr(_STATE.backend, "set_time"):
+            _STATE.backend.set_time(timeline, sequence=sequence)
+
     def flush(self) -> None:
         # Flushing should still work even if sparse logging is temporarily disabled.
         if not _STATE.initialized or _STATE.backend is None:
@@ -699,6 +714,7 @@ log_line_strips3d = _default_visualizer.log_line_strips3d
 log_text = _default_visualizer.log_text
 log_pose = _default_visualizer.log_pose
 log_point_cloud = _default_visualizer.log_point_cloud
+set_time = _default_visualizer.set_time
 flush = _default_visualizer.flush
 shutdown = _default_visualizer.shutdown
 

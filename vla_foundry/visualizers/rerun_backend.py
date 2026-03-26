@@ -35,12 +35,41 @@ class RerunBackend:
             **kwargs: Additional arguments (ignored).
         """
         if not self._initialized:
-            rr.init(run_name)
-            server_uri = rr.serve_grpc()
-            rr.serve_web_viewer(open_browser=open_browser, web_port=9090, connect_to=server_uri)
-            encoded_uri = server_uri.replace("+", "%2B")
-            print(f"[rerun_backend] Open in browser: http://localhost:9090/?url={encoded_uri}")
-            self._initialized = True
+            # Detect if running in a notebook environment (Colab, Jupyter, JupyterLab)
+            # These environments need spawn=False to keep recordings in-process
+            is_notebook = False
+
+            # Check for Google Colab specifically
+            try:
+                import importlib.util
+
+                if importlib.util.find_spec("google.colab") is not None:
+                    is_notebook = True
+            except (ImportError, ValueError):
+                pass
+
+            # Check for general Jupyter/IPython kernel environment if not Colab
+            if not is_notebook:
+                try:
+                    from IPython import get_ipython
+
+                    ipython = get_ipython()
+                    if ipython is not None and hasattr(ipython, "config"):
+                        # Running in IPython kernel (Jupyter, JupyterLab, etc.)
+                        is_notebook = "IPKernelApp" in ipython.config
+                except (ImportError, AttributeError):
+                    pass
+
+            if is_notebook:
+                rr.init(run_name, spawn=False)
+                self._initialized = True
+            else:
+                rr.init(run_name)
+                server_uri = rr.serve_grpc()
+                rr.serve_web_viewer(open_browser=open_browser, web_port=9090, connect_to=server_uri)
+                encoded_uri = server_uri.replace("+", "%2B")
+                print(f"[rerun_backend] Open in browser: http://localhost:9090/?url={encoded_uri}")
+                self._initialized = True
 
     def flush(self) -> None:
         # rerun flush is implicit; no-op here
@@ -167,3 +196,13 @@ class RerunBackend:
             text: Text value to log.
         """
         rr.log(path, rr.TextLog(text))
+
+    def set_time(self, timeline: str, sequence: int) -> None:
+        """
+        Set the current time for the timeline.
+
+        Args:
+            timeline: Name of the timeline (e.g., "step", "sample").
+            sequence: Integer sequence number for this timeline.
+        """
+        rr.set_time(timeline, sequence=sequence)
