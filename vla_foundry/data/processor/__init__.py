@@ -1,4 +1,5 @@
 import logging
+import os
 from types import SimpleNamespace
 
 import numpy as np
@@ -64,7 +65,17 @@ def get_processor(data_params: DataParams):
     elif data_params.processor == "none":
         return PassthroughProcessor()
     elif data_params.processor is not None:
-        processor = AutoProcessor.from_pretrained(data_params.processor)
+        # When using the rust-based fast tokenizer, each process spawns #cpu rayon threads
+        # by default. With many GPUs and workers this causes resource contention.
+        # Only override env vars when the fast tokenizer is explicitly enabled to avoid
+        # clobbering user/job-level settings.
+        if data_params.use_hf_fast_tokenizer:
+            if data_params.hf_fast_tokenizer_rayon_threads is not None:
+                os.environ.setdefault("RAYON_NUM_THREADS", str(data_params.hf_fast_tokenizer_rayon_threads))
+            os.environ.setdefault(
+                "TOKENIZERS_PARALLELISM", "true" if data_params.hf_fast_tokenizers_parallelism else "false"
+            )
+        processor = AutoProcessor.from_pretrained(data_params.processor, use_fast=data_params.use_hf_fast_tokenizer)
         # Different processors use different attribute names for image sequence length.
         # PaliGemma uses image_seq_length; SmolVLM (and others) use image_seq_len.
         if hasattr(processor, "image_seq_length"):

@@ -21,7 +21,9 @@ class DataParams(draccus.ChoiceRegistry, BaseParams):
     shuffle: bool = field(default=True)
     shuffle_buffer_size: int = field(default=2000)
     shuffle_initial: int = field(default=500)
-
+    use_hf_fast_tokenizer: bool = True
+    hf_fast_tokenizers_parallelism: bool = True
+    hf_fast_tokenizer_rayon_threads: int | None = None
     # Shared attributes. Overwritten in init_shared_attributes.
     seed: int = field(default=42)
 
