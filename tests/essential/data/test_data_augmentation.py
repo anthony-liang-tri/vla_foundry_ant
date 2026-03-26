@@ -3,19 +3,23 @@
 Pytest tests for augmentation_params.py.
 """
 
+import io
+
 import numpy as np
 import pytest
+import tifffile
 import torch
 from PIL import Image
-from torchvision import transforms
+from torchvision.transforms import v2 as transforms
 
-from vla_foundry.data.augmentations.base import Augmentations
+from vla_foundry.data.augmentations.decode_and_augment import Augmentations
 from vla_foundry.data.augmentations.random_ratio_crop import RandomRatioCrop
 from vla_foundry.params.robotics.augmentation_params import (
     ColorJitterParams,
     CropParams,
     DataAugmentationParams,
     ImageAugmentationParams,
+    PointCloudAugmentationParams,
 )
 
 
@@ -202,9 +206,7 @@ def test_augmentations_class_creation(augmentation_params, has_transforms):
         assert isinstance(augmentations.image_transforms, transforms.Compose)
         assert len(augmentations.image_transforms.transforms) > 0
     else:
-        # Should either be empty Compose or have no transforms
-        if isinstance(augmentations.image_transforms, transforms.Compose):
-            assert len(augmentations.image_transforms.transforms) == 0
+        assert augmentations.image_transforms is None
 
 
 def test_augmentations_class_invalid_params():
@@ -312,38 +314,6 @@ def test_combined_augmentations():
     # and that the transforms were applied in sequence
 
 
-def test_apply_transforms_method():
-    """
-    Test the apply_transforms method that processes samples with image files.
-    """
-    augmentation_params = DataAugmentationParams(
-        image=ImageAugmentationParams(
-            crop=CropParams(shape=(128, 128), enabled=True),
-        )
-    )
-    augmentations = Augmentations(augmentation_params)
-
-    # Create a sample with image files
-    img = create_dummy_image(size=(256, 256))
-    sample = {
-        "image1.jpg": img,
-        "image2.png": img,
-        "non_image_data": "some text",
-        "metadata": {"key": "value"},
-    }
-
-    # Apply transforms
-    transformed_sample = augmentations.apply_transforms(sample)
-
-    # Verify that image files were transformed
-    assert transformed_sample["image1.jpg"].size == (128, 128)
-    assert transformed_sample["image2.png"].size == (128, 128)
-
-    # Verify that non-image data was not modified
-    assert transformed_sample["non_image_data"] == "some text"
-    assert transformed_sample["metadata"] == {"key": "value"}
-
-
 # Tests for RandomRatioCrop
 
 
@@ -435,6 +405,20 @@ def test_random_ratio_crop_torch_tensor_different_ratios():
     assert cropped_tensor.shape == (3, expected_height, expected_width)
 
 
+def test_random_ratio_crop_batched_torch_tensor():
+    """Test RandomRatioCrop with batched image tensors (..., H, W)."""
+    transform = RandomRatioCrop((0.5, 0.25))
+    # Shape: (B, T, C, H, W)
+    img_tensor = torch.rand(2, 4, 3, 120, 200)
+
+    cropped_tensor = transform(img_tensor)
+
+    expected_height = int(120 * 0.5)  # 60
+    expected_width = int(200 * 0.25)  # 50
+    assert cropped_tensor.shape == (2, 4, 3, expected_height, expected_width)
+    assert isinstance(cropped_tensor, torch.Tensor)
+
+
 def test_random_ratio_crop_randomness():
     """Test that RandomRatioCrop produces different crops on multiple calls."""
     transform = RandomRatioCrop(0.5)
@@ -479,6 +463,168 @@ def test_random_ratio_crop_repr():
     repr_str2 = repr(transform2)
     assert "ratio_h=0.7" in repr_str2
     assert "ratio_w=0.9" in repr_str2
+
+
+# ---------------------------------------------------------------------------
+# decode_and_augment_sample tests
+# ---------------------------------------------------------------------------
+
+
+def _make_png_bytes(h=4, w=6):
+    """Create minimal PNG bytes for testing."""
+    from PIL import Image as PILImage
+
+    buf = io.BytesIO()
+    PILImage.fromarray(np.random.randint(0, 255, (h, w, 3), dtype=np.uint8)).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _make_tiff_bytes(h=4, w=6, dtype=np.uint16):
+    """Create minimal TIFF bytes for testing."""
+    buf = io.BytesIO()
+    tifffile.imwrite(buf, np.random.randint(0, 1000, (h, w, 3), dtype=dtype))
+    return buf.getvalue()
+
+
+def test_decode_and_augment_sample_decodes_all_field_types():
+    """decode_and_augment_sample should handle images, JSON, NPZ, TIFF, txt, and passthrough."""
+    import json
+
+    augmentations = Augmentations(None)  # no transforms
+
+    npz_buf = io.BytesIO()
+    np.savez(npz_buf, data=np.array([1.0, 2.0]))
+    npz_bytes = npz_buf.getvalue()
+
+    sample = {
+        "__key__": "sample_001",  # non-bytes passthrough
+        "cam0_t0.jpg": _make_png_bytes(8, 10),
+        "cam1_t0.png": _make_png_bytes(8, 10),
+        "scene_right_0_point_map_t0.tiff": _make_tiff_bytes(8, 10),
+        "lowdim.npz": npz_bytes,
+        "metadata.json": json.dumps({"anchor": 3}).encode("utf-8"),
+        "caption.txt": b"a photo of a robot",
+        "other.bin": b"raw-bytes",
+    }
+
+    result = augmentations.decode_and_augment_sample(sample)
+
+    # Non-bytes passthrough
+    assert result["__key__"] == "sample_001"
+    # Images decoded to CHW uint8 tensors
+    assert isinstance(result["cam0_t0.jpg"], torch.Tensor)
+    assert result["cam0_t0.jpg"].shape == (3, 8, 10)
+    assert result["cam0_t0.jpg"].dtype == torch.uint8
+    assert isinstance(result["cam1_t0.png"], torch.Tensor)
+    # TIFF decoded to numpy array
+    assert isinstance(result["scene_right_0_point_map_t0.tiff"], np.ndarray)
+    assert result["scene_right_0_point_map_t0.tiff"].shape == (8, 10, 3)
+    assert result["scene_right_0_point_map_t0.tiff"].dtype == np.uint16
+    # NPZ decoded to dict
+    assert isinstance(result["lowdim.npz"], dict)
+    np.testing.assert_array_equal(result["lowdim.npz"]["data"], [1.0, 2.0])
+    # JSON decoded
+    assert result["metadata.json"] == {"anchor": 3}
+    # Text decoded to string
+    assert result["caption.txt"] == "a photo of a robot"
+    # Unknown bytes passed through
+    assert result["other.bin"] == b"raw-bytes"
+
+
+def test_decode_and_augment_sample_applies_transforms():
+    """decode_and_augment_sample should apply image transforms when configured."""
+    augmentation_params = DataAugmentationParams(
+        enabled=True,
+        image={"crop": CropParams(enabled=True, mode="center", shape=[4, 4])},
+    )
+    augmentations = Augmentations(augmentation_params)
+
+    sample = {
+        "__key__": "s1",
+        "cam.jpg": _make_png_bytes(8, 10),
+    }
+
+    result = augmentations.decode_and_augment_sample(sample)
+
+    assert isinstance(result["cam.jpg"], torch.Tensor)
+    # Center crop to 4x4
+    assert result["cam.jpg"].shape == (3, 4, 4)
+
+
+def test_decode_and_augment_sample_applies_point_cloud_transforms():
+    """decode_and_augment_sample should apply point cloud transforms when configured."""
+    augmentation_params = DataAugmentationParams(
+        enabled=True,
+        point_cloud=PointCloudAugmentationParams(
+            color_jitter=ColorJitterParams(brightness=0.5, contrast=0.5, saturation=0.5, hue=(-0.1, 0.1), enabled=True),
+        ),
+    )
+    augmentations = Augmentations(augmentation_params)
+    assert augmentations.point_cloud_transforms is not None
+
+    # Create a point cloud with XYZRGB format (T, N, 6)
+    T, N = 2, 10
+    xyz = np.random.rand(T, N, 3).astype(np.float32)
+    rgb = np.full((T, N, 3), 0.5, dtype=np.float32)  # constant RGB to detect jitter
+    point_cloud = np.concatenate([xyz, rgb], axis=-1)
+
+    npz_buf = io.BytesIO()
+    np.savez(npz_buf, data=point_cloud)
+    npz_bytes = npz_buf.getvalue()
+
+    sample = {
+        "__key__": "s1",
+        "point_cloud.npz": npz_bytes,
+    }
+
+    result = augmentations.decode_and_augment_sample(sample)
+
+    result_pc = result["point_cloud.npz"]["data"]
+    assert result_pc.shape == (T, N, 6)
+    # XYZ should be unchanged
+    np.testing.assert_array_equal(result_pc[..., :3], xyz)
+    # RGB should be modified by color jitter (very unlikely to remain identical)
+    assert not np.array_equal(result_pc[..., 3:6], rgb), "Point cloud RGB should be jittered"
+
+
+def test_decode_and_augment_sample_skips_point_cloud_transforms_when_disabled():
+    """decode_and_augment_sample should not modify point clouds when transforms are disabled."""
+    augmentations = Augmentations(None)
+    assert augmentations.point_cloud_transforms is None
+
+    T, N = 2, 10
+    point_cloud = np.random.rand(T, N, 6).astype(np.float32)
+
+    npz_buf = io.BytesIO()
+    np.savez(npz_buf, data=point_cloud)
+    npz_bytes = npz_buf.getvalue()
+
+    sample = {
+        "__key__": "s1",
+        "point_cloud.npz": npz_bytes,
+    }
+
+    result = augmentations.decode_and_augment_sample(sample)
+
+    np.testing.assert_array_equal(result["point_cloud.npz"]["data"], point_cloud)
+
+
+def test_decode_and_augment_sample_extension_only_keys():
+    """decode_and_augment_sample should handle bare extension keys like 'jpg' and 'txt'."""
+    augmentations = Augmentations(None)
+
+    sample = {
+        "__key__": "000000",
+        "jpg": _make_png_bytes(8, 10),
+        "txt": b"a caption",
+    }
+
+    result = augmentations.decode_and_augment_sample(sample)
+
+    assert result["__key__"] == "000000"
+    assert isinstance(result["jpg"], torch.Tensor)
+    assert result["jpg"].shape == (3, 8, 10)
+    assert result["txt"] == "a caption"
 
 
 def test_random_ratio_crop_maintains_content():
