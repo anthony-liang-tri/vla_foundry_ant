@@ -24,6 +24,12 @@ class DataParams(draccus.ChoiceRegistry, BaseParams):
     use_hf_fast_tokenizer: bool = True
     hf_fast_tokenizers_parallelism: bool = True
     hf_fast_tokenizer_rayon_threads: int | None = None
+    # Whether the dataloader returns batches in strict worker order. Robotics data pipelines
+    # involve heavy per-sample processing (decoding, augmentation), so workers often finish at
+    # different rates. Setting this to False allows batches to be yielded as soon as any worker
+    # is ready, avoiding idle time waiting for the next in-order worker. The trade-off is that
+    # batch ordering becomes non-deterministic across runs.
+    dataloader_in_order: bool = False
     # Shared attributes. Overwritten in init_shared_attributes.
     seed: int = field(default=42)
 

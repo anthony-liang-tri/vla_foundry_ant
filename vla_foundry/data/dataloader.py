@@ -113,6 +113,7 @@ def get_wds_dataloader(
         prefetch_factor=prefetch_factor,
         generator=generator,
         worker_init_fn=worker_init_fn,
+        in_order=cfg.data.dataloader_in_order,
     )
 
     # Compute total batches/samples this loader will emit in this window.
