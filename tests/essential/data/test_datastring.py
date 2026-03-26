@@ -31,6 +31,37 @@ def test_get_datastring_input_basic():
     assert shard_shuffle_seed_per_dataset == [123]
 
 
+def test_get_datastring_input_s3_uses_s3_urls(monkeypatch):
+    manifest = [
+        {"shard": "00000000", "num_sequences": 1},
+        {"shard": "00000001", "num_sequences": 1},
+        {"shard": "00000002", "num_sequences": 1},
+    ]
+
+    monkeypatch.setattr(
+        "vla_foundry.data.dataloader.load_dataset_manifest",
+        lambda path, shard_shuffle_seed=None: manifest,
+    )
+
+    datastrings, num_samples_per_dataset, curr_shard_idx_per_dataset, shard_shuffle_seed_per_dataset = (
+        get_datastring_input(
+            num_samples=2,
+            curr_shard_idx_per_dataset=[0],
+            shard_shuffle_seed_per_dataset=[None],
+            manifest_paths=["s3://bucket/train/manifest.jsonl"],
+            dataset_weighting=None,
+            allow_multiple_epochs=False,
+            num_workers_per_gpu=1,
+            world_size=1,
+        )
+    )
+
+    assert datastrings == ["s3://bucket/train/{00000000,00000001}.tar"]
+    assert num_samples_per_dataset == [2]
+    assert curr_shard_idx_per_dataset == [2]
+    assert shard_shuffle_seed_per_dataset == [None]
+
+
 def test_get_datastring_input_smalldata_multiple_epochs():
     datastrings_1, num_samples_per_dataset, curr_shard_idx_per_dataset, shard_shuffle_seed_per_dataset = (
         get_datastring_input(

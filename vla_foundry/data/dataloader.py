@@ -326,9 +326,6 @@ def get_datastring_input(
         else:
             logging.debug(f"No shards found for dataset {i} in {manifest_path}")
             continue
-        if manifest_path.startswith("s3"):
-            # Stream from S3 via pipe so WebDataset can read tar files from stdin.
-            curr_datastring = f"pipe:aws s3 cp {curr_datastring} -"
         datastrings.append(curr_datastring)
 
     # Collapse per-shard sample counts into per-dataset totals.

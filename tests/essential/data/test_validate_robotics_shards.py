@@ -26,6 +26,7 @@ import numpy as np
 import pytest
 import webdataset as wds
 
+import vla_foundry.data.utils  # noqa: F401  # Ensure s3:// gopen hook is installed.
 from vla_foundry.file_utils import json_load, load_dataset_manifest
 
 
@@ -284,11 +285,6 @@ class TestDatasetValidation:
         shard_urls = []
         for entry in manifest[:3]:  # Test first 3 shards
             shard_path = os.path.join(dataset_path, f"{entry['shard']}.tar")
-
-            # Use pipe: prefix for S3
-            if dataset_path.startswith("s3://"):
-                shard_path = f"pipe:aws s3 cp {shard_path} -"
-
             shard_urls.append(shard_path)
 
         # Create dataset

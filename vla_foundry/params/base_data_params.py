@@ -7,6 +7,16 @@ from vla_foundry.params.base_params import BaseParams
 
 
 @dataclass(frozen=True)
+class DatasetCacheParams(BaseParams):
+    """Controls WebDataset shard caching behavior."""
+
+    enabled: bool = field(default=False)
+    cache_dir: str | None = field(default=None)
+    cache_size_gb: int | None = field(default=None)
+    cache_verbose: bool | None = field(default=None)
+
+
+@dataclass(frozen=True)
 class DataParams(draccus.ChoiceRegistry, BaseParams):
     type: str = field(default=None)
     dataset_manifest: list[str] = field(default_factory=list)
@@ -30,6 +40,7 @@ class DataParams(draccus.ChoiceRegistry, BaseParams):
     # is ready, avoiding idle time waiting for the next in-order worker. The trade-off is that
     # batch ordering becomes non-deterministic across runs.
     dataloader_in_order: bool = False
+    dataset_cache: DatasetCacheParams = field(default_factory=DatasetCacheParams)
     # Shared attributes. Overwritten in init_shared_attributes.
     seed: int = field(default=42)
 

@@ -7,6 +7,7 @@ import webdataset as wds
 
 from vla_foundry.data.augmentations.decode_and_augment import Augmentations
 from vla_foundry.data.pipelines.base import BaseWebDatasetPipeline
+from vla_foundry.data.pipelines.webdataset_cache import get_tarfile_to_samples_stage
 from vla_foundry.data.processor.robotics_processor import RoboticsProcessor
 from vla_foundry.data.robotics.utils import crop_sequence
 from vla_foundry.data.utils import deterministic_shuffle, log_and_continue
@@ -173,6 +174,8 @@ class RoboticsPipeline(BaseWebDatasetPipeline):
         return self._cached_num_samples
 
     def create_pipeline(self, datastring, checkpoint_num):
+        cache_cfg = self.data_params.dataset_cache
+
         pipeline = [
             wds.SimpleShardList(datastring),
             deterministic_shuffle(
@@ -183,7 +186,10 @@ class RoboticsPipeline(BaseWebDatasetPipeline):
             ),
             wds.split_by_node,
             wds.split_by_worker,
-            wds.tarfile_to_samples(handler=log_and_continue),
+            get_tarfile_to_samples_stage(
+                cache_cfg=cache_cfg,
+                handler=log_and_continue,
+            ),
             wds.map(self.augmentations.decode_and_augment_sample, handler=log_and_continue),
             wds.select(filter_robotics_sample),
             wds.map(

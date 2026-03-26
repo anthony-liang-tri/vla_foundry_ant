@@ -2,8 +2,9 @@ import webdataset as wds
 
 from vla_foundry.data.augmentations.decode_and_augment import Augmentations
 from vla_foundry.data.pipelines.base import BaseWebDatasetPipeline
+from vla_foundry.data.pipelines.webdataset_cache import get_tarfile_to_samples_stage
 from vla_foundry.data.processor import get_processor
-from vla_foundry.data.utils import deterministic_shuffle, log_and_continue, tarfile_to_samples_closing
+from vla_foundry.data.utils import deterministic_shuffle, log_and_continue
 from vla_foundry.params.base_data_params import DataParams
 
 
@@ -22,6 +23,7 @@ class ImageCaptionPipeline(BaseWebDatasetPipeline):
         )
 
     def create_pipeline(self, datastring: str, checkpoint_num: int):
+        cache_cfg = self.data_params.dataset_cache
         pipeline = [
             wds.SimpleShardList(datastring),
             deterministic_shuffle(
@@ -32,7 +34,10 @@ class ImageCaptionPipeline(BaseWebDatasetPipeline):
             ),
             wds.split_by_node,
             wds.split_by_worker,
-            tarfile_to_samples_closing(handler=log_and_continue),
+            get_tarfile_to_samples_stage(
+                cache_cfg=cache_cfg,
+                handler=log_and_continue,
+            ),
             wds.select(filter_no_caption_or_no_image),
             wds.map(self.augmentations.decode_and_augment_sample, handler=log_and_continue),
             wds.rename(image="jpg;png;jpeg;webp", text="txt"),

@@ -3,8 +3,9 @@ import json
 import webdataset as wds
 
 from vla_foundry.data.pipelines.base import BaseWebDatasetPipeline
+from vla_foundry.data.pipelines.webdataset_cache import get_tarfile_to_samples_stage
 from vla_foundry.data.tokenizer import get_tokenizer
-from vla_foundry.data.utils import deterministic_shuffle, log_and_continue, tarfile_to_samples_closing
+from vla_foundry.data.utils import deterministic_shuffle, log_and_continue
 from vla_foundry.params.base_data_params import DataParams
 
 
@@ -38,6 +39,7 @@ class TextUntokenizedPipeline(BaseWebDatasetPipeline):
             self.tokenizer.add_special_tokens({"pad_token": "[PAD]"})
 
     def create_pipeline(self, datastring: str, checkpoint_num: int):
+        cache_cfg = self.data_params.dataset_cache
         pipeline = [
             wds.SimpleShardList(datastring),
             deterministic_shuffle(
@@ -48,7 +50,10 @@ class TextUntokenizedPipeline(BaseWebDatasetPipeline):
             ),
             wds.split_by_node,
             wds.split_by_worker,
-            tarfile_to_samples_closing(handler=log_and_continue),
+            get_tarfile_to_samples_stage(
+                cache_cfg=cache_cfg,
+                handler=log_and_continue,
+            ),
             wds.to_tuple("json", handler=log_and_continue),
             wds.batched(self.batch_size, partial=False),
             wds.map(self.tokenize_wrapper),

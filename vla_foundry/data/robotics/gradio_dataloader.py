@@ -386,11 +386,8 @@ class RoboticsDataLoader:
             shard_path = os.path.join(base_path, f"{shard_info['shard']}.tar")
 
             try:
-                # Handle S3 paths with pipe prefix for WebDataset
-                wds_path = f"pipe:aws s3 cp {shard_path} -" if shard_path.startswith("s3://") else shard_path
-
                 dataset = (
-                    wds.WebDataset(wds_path)
+                    wds.WebDataset(shard_path)
                     .decode("pilrgb")
                     .map(
                         lambda sample: extract_robotics_fields(

@@ -6,12 +6,60 @@ import random
 import subprocess
 import traceback
 from collections.abc import Iterable, Sequence
+from functools import lru_cache
 from multiprocessing import Value
+from urllib.parse import urlparse
 
+import boto3
 import webdataset as wds
+from botocore.config import Config
 from torch.utils.data import get_worker_info
 
 from vla_foundry.file_utils import load_dataset_manifest, pt_load
+
+
+def _parse_s3_url(url: str) -> tuple[str, str]:
+    """Parse s3://bucket/key URL into (bucket, key)."""
+    parsed = urlparse(url)
+    if parsed.scheme != "s3" or not parsed.netloc:
+        raise ValueError(f"Invalid S3 URL: {url}")
+    key = parsed.path.lstrip("/")
+    if not key:
+        raise ValueError(f"S3 URL is missing object key: {url}")
+    return parsed.netloc, key
+
+
+@lru_cache(maxsize=1)
+def _get_s3_client():
+    """Reuse a single boto3 S3 client per process."""
+    return boto3.client(
+        "s3",
+        config=Config(
+            retries={"max_attempts": 5, "mode": "adaptive"},
+            read_timeout=120,
+        ),
+    )
+
+
+def _gopen_s3_boto(url, mode="rb", bufsize=8192, **kwargs):  # noqa: ARG001
+    """WebDataset gopen handler for s3:// URLs backed by boto3."""
+    if mode != "rb":
+        raise ValueError(f"Unsupported mode for s3 gopen: {mode}")
+    bucket, key = _parse_s3_url(url)
+    response = _get_s3_client().get_object(Bucket=bucket, Key=key)
+    return response["Body"]
+
+
+def _install_webdataset_s3_gopen() -> None:
+    """Register boto3-backed `s3://` reader with webdataset.gopen."""
+    wds_gopen = importlib.import_module("webdataset.gopen")
+    if getattr(wds_gopen, "_lbm_s3_gopen_patch", False):
+        return
+    wds_gopen.gopen_schemes["s3"] = _gopen_s3_boto
+    wds_gopen._lbm_s3_gopen_patch = True
+
+
+_install_webdataset_s3_gopen()
 
 
 def _install_webdataset_patches() -> None:
@@ -64,6 +112,38 @@ def _install_webdataset_patches() -> None:
 _install_webdataset_patches()
 
 
+def _iter_tar_closing(url_stream_pairs, handler):
+    """Iterate tar entries from (url, stream) pairs, closing each stream in a finally block.
+
+    Yields individual file entries and empty-dict shard boundary markers suitable
+    for consumption by ``group_by_keys``.
+    """
+    from webdataset.tariterators import tar_file_iterator
+
+    for url, stream in url_stream_pairs:
+        try:
+            for s in tar_file_iterator(stream, handler=handler):
+                if not (isinstance(s, dict) and "data" in s and "fname" in s):
+                    raise ValueError(
+                        f"Unexpected sample format from tar_file_iterator: "
+                        f"type={type(s)}, keys={list(s.keys()) if isinstance(s, dict) else 'N/A'}"
+                    )
+                s["__url__"] = url
+                yield s
+            # Shard boundary marker (consumed by group_by_keys).
+            yield {}
+        except Exception as exn:
+            exn.args = exn.args + (url,)
+            if handler(exn):
+                continue
+            else:
+                break
+        finally:
+            if stream is not None:
+                with contextlib.suppress(Exception):
+                    stream.close()
+
+
 class tarfile_to_samples_closing(wds.PipelineStage):
     """Drop-in replacement for wds.tarfile_to_samples that closes each shard stream after reading.
 
@@ -79,38 +159,14 @@ class tarfile_to_samples_closing(wds.PipelineStage):
 
     def run(self, src):
         from webdataset.gopen import gopen
-        from webdataset.tariterators import group_by_keys, tar_file_iterator
+        from webdataset.tariterators import group_by_keys
 
-        handler = self.handler
-
-        def _open_and_read():
+        def _url_stream_pairs():
             for sample in src:
                 url = sample["url"]
-                stream = None
-                try:
-                    stream = gopen(url)
-                    for s in tar_file_iterator(stream, handler=handler):
-                        if not (isinstance(s, dict) and "data" in s and "fname" in s):
-                            raise ValueError(
-                                f"Unexpected sample format from tar_file_iterator: "
-                                f"type={type(s)}, keys={list(s.keys()) if isinstance(s, dict) else 'N/A'}"
-                            )
-                        s["__url__"] = url
-                        yield s
-                    # Shard boundary marker (consumed by group_by_keys).
-                    yield {}
-                except Exception as exn:
-                    exn.args = exn.args + (url,)
-                    if handler(exn):
-                        continue
-                    else:
-                        break
-                finally:
-                    if stream is not None:
-                        with contextlib.suppress(Exception):
-                            stream.close()
+                yield url, gopen(url)
 
-        return group_by_keys(_open_and_read(), handler=handler)
+        return group_by_keys(_iter_tar_closing(_url_stream_pairs(), self.handler), handler=self.handler)
 
 
 class SharedCheckpointCounter:

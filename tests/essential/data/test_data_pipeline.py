@@ -9,6 +9,7 @@ from vla_foundry.data.pipelines.image_caption import ImageCaptionPipeline, filte
 from vla_foundry.data.pipelines.text import TextPipeline, filter_lt_seqlen
 from vla_foundry.data.pipelines.text_untokenized import TextUntokenizedPipeline, batch_tokenize
 from vla_foundry.data.sampler import sample_chunk
+from vla_foundry.params.base_data_params import DatasetCacheParams
 from vla_foundry.params.train_experiment_params import load_experiment_params_from_yaml
 
 
@@ -151,6 +152,7 @@ class TestTextPipeline:
         data_params = Mock()
         data_params.seq_len = seq_len
         data_params.seed = 42
+        data_params.dataset_cache = DatasetCacheParams()
 
         pipeline = TextPipeline("text", data_params, batch_size)
         pipeline.create_pipeline("dummy_datastring", 0)
@@ -670,6 +672,8 @@ class TestPipelineCreation:
         cfg.data = Mock()
         cfg.data.seq_len = 128
         cfg.data.seed = 42
+        cfg.data.dataset_cache = DatasetCacheParams()
+        cfg.dataset_cache = DatasetCacheParams()
 
         if modality == "text_untokenized":
             cfg.data.tokenizer = "gpt2"

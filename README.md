@@ -285,7 +285,7 @@ for ckpt in range(num_checkpoints):
 - `create_model()` -- The [create_model](vla_foundry/models/__init__.py) function creates the appropriate model based on the `--model.type` model selector and the other `cfg.model` arguments.
 - `datastring` -- This is a string containing a list of the tar files to be loaded for the current checkpoint. A new datastring is created at the beginning of every checkpoint. If using multiple datasets, this is a list of comma-separated strings. A sample datastring is shown below.
 ```bash
-['pipe:aws s3 cp s3://tri-ml-datasets/datasets/datacompdr_1b/{00000037,00000078,00000005,00000099,00000015,00000007,00000063}.tar -']
+['s3://tri-ml-datasets/datasets/datacompdr_1b/{00000037,00000078,00000005,00000099,00000015,00000007,00000063}.tar']
 ```
 - `train_one_checkpoint()` -- This is defined in [vla_foundry/train.py](vla_foundry/train.py). Operations such as model forward, model backward, and loss calculation happen in here.
 
