@@ -24,28 +24,6 @@ def create_vlm_backbone(model_params: ModelParams, load_pretrained: bool = True)
     return VLMHF(model_params, load_pretrained=load_pretrained)
 
 
-@register_model("vlm_foundry_backbone")
-def create_vlm_foundry_backbone(model_params: ModelParams, load_pretrained: bool = True):
-    import os
-
-    from vla_foundry.file_utils import load_model_checkpoint
-    from vla_foundry.models.registry import create_model as _create_model
-    from vla_foundry.params.model_params import VLMParams
-    from vla_foundry.params.train_experiment_params import load_params_from_yaml
-
-    # Derive experiment dir from checkpoint path: <experiment_dir>/checkpoints/checkpoint_N.pt
-    ckpt_path = model_params.resume_from_checkpoint
-    experiment_dir = os.path.dirname(os.path.dirname(ckpt_path))
-    vlm_params = load_params_from_yaml(VLMParams, os.path.join(experiment_dir, "config_model.yaml"))
-
-    vlm = _create_model(vlm_params, load_pretrained=False)
-
-    if load_pretrained:
-        load_model_checkpoint(vlm, ckpt_path)
-
-    return vlm
-
-
 @register_model("diffusion_policy")
 def create_diffusion_policy(model_params: ModelParams, load_pretrained: bool = True):
     from vla_foundry.models.diffusion import create_noise_scheduler

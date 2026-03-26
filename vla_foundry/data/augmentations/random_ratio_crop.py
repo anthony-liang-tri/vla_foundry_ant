@@ -25,7 +25,7 @@ class RandomRatioCrop:
 
     def __call__(self, img):
         if isinstance(img, torch.Tensor):
-            _, h, w = img.shape
+            h, w = img.shape[-2:]
         else:  # PIL Image
             w, h = img.size
 
@@ -39,7 +39,7 @@ class RandomRatioCrop:
 
         # Crop
         if isinstance(img, torch.Tensor):
-            return img[:, top : top + crop_h, left : left + crop_w]
+            return img[..., top : top + crop_h, left : left + crop_w]
         else:  # PIL Image
             return img.crop((left, top, left + crop_w, top + crop_h))
 
