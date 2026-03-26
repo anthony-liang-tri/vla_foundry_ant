@@ -2,28 +2,56 @@
 # Generic LBM dataset visualizer that works with any S3 robotics dataset
 #
 # Usage:
-#   ./visualize_data.sh s3://tri-ml-datasets-uw2/vla_foundry_datasets/toolhang_202602/BimanualPlaceTtoolOnPegboard 5
-#   ./visualize_data.sh --ordered s3://tri-ml-datasets-uw2/vla_foundry_datasets/toolhang_202602/BimanualPlaceTtoolOnPegboard 5
+#   ./visualize_data.sh --num_episodes=5 s3://tri-ml-datasets-uw2/vla_foundry_datasets/toolhang_202602/BimanualPlaceTtoolOnPegboard
+#   ./visualize_data.sh --ordered --num_episodes=10 s3://...
+#   ./visualize_data.sh --subsample=10 --num_episodes=100 s3://...
+#   ./visualize_data.sh --print-command s3://...
+#
+# Flags:
+#   --num_episodes=N   Number of episodes (trajectories) to visualize (default: 5)
+#   --subsample=N      Visualize every Nth sample (default: 1, all samples)
+#   --ordered          Use ordered episode data instead of shuffled shards
+#   --print-command    Print Python command for Colab/Jupyter instead of executing
 
 set -e
+
+# Check for --print-command flag
+PRINT_COMMAND=false
+if [[ "$*" == *"--print-command"* ]]; then
+    PRINT_COMMAND=true
+fi
+
+# Parse --num_episodes flag (default: 5)
+NUM_EPISODES=5
+NUM_EPISODES_ARGS=$(echo "$@" | grep -o -- '--num_episodes=[0-9]*' || true)
+if [ -n "$NUM_EPISODES_ARGS" ]; then
+    NUM_EPISODES=$(echo "$NUM_EPISODES_ARGS" | cut -d'=' -f2)
+fi
 
 # Separate flags (forwarded to Python) from positional args
 FLAGS=()
 POSITIONAL=()
 for arg in "$@"; do
     case "$arg" in
+        --print-command) continue ;;  # Skip this flag
+        --num_episodes=*) continue ;;  # Skip, handled above
         --*) FLAGS+=("$arg") ;;
         *) POSITIONAL+=("$arg") ;;
     esac
 done
 
-if [ ${#POSITIONAL[@]} -lt 2 ]; then
-    echo "Usage: $0 [--ordered] <dataset_path> <num_samples>"
+if [ ${#POSITIONAL[@]} -lt 1 ]; then
+    echo "Usage: $0 [--num_episodes=N] [--subsample=N] [--ordered] [--print-command] <dataset_path>"
+    echo ""
+    echo "Flags:"
+    echo "  --num_episodes=N   Number of episodes to visualize (default: 5)"
+    echo "  --subsample=N      Visualize every Nth sample (default: 1)"
+    echo "  --ordered          Use ordered episode data instead of shuffled shards"
+    echo "  --print-command    Print Python command for Colab instead of executing"
     exit 1
 fi
 
 DATASET_PATH="${POSITIONAL[0]%/}"
-NUM_SAMPLES="${POSITIONAL[1]}"
 
 # Determine if shards directory exists in dataset path
 if [[ "$DATASET_PATH" == *"/shards" ]]; then
@@ -87,9 +115,40 @@ CONFIG_PATH="examples/visualization/visualization_params.yaml"
 # Generate image_names list string for draccus
 IMAGE_NAMES_STR=$(printf '%s, ' "${IMAGE_NAMES[@]}" | sed 's/, $//')
 
-# Always use shards paths; --ordered flag (forwarded to Python) rewrites manifest to episodes/
+# Determine which manifest to use for calculating timesteps
+if [[ " ${FLAGS[@]} " =~ " --ordered " ]]; then
+    # For ordered visualization, use episodes manifest
+    MANIFEST_FOR_COUNTING="$DATASET_PATH/episodes/manifest.jsonl"
+else
+    # For shuffled, use shards manifest (but episodes is better if available)
+    MANIFEST_FOR_COUNTING="$DATASET_PATH/shards/manifest.jsonl"
+fi
+
+# Always use shards paths for the actual data loading; --ordered flag rewrites to episodes/ in Python
 STATS_PATH="$DATASET_PATH/shards/stats.json"
 MANIFEST_PATH="$DATASET_PATH/shards/manifest.jsonl"
+
+# Calculate exact number of timesteps in first NUM_EPISODES episodes/shards
+# This ensures we get all timesteps from exactly N episodes, not an approximation
+if [[ "$MANIFEST_FOR_COUNTING" == s3://* ]]; then
+    # Download manifest temporarily
+    TEMP_MANIFEST=$(mktemp)
+    aws s3 cp "$MANIFEST_FOR_COUNTING" "$TEMP_MANIFEST" > /dev/null 2>&1
+    MANIFEST_FILE="$TEMP_MANIFEST"
+    CLEANUP_MANIFEST=true
+else
+    MANIFEST_FILE="$MANIFEST_FOR_COUNTING"
+    CLEANUP_MANIFEST=false
+fi
+
+# Sum up num_sequences from first NUM_EPISODES entries
+NUM_SAMPLES=$(head -n "$NUM_EPISODES" "$MANIFEST_FILE" | jq -s 'map(.num_sequences) | add')
+
+if [ "$CLEANUP_MANIFEST" = true ]; then
+    rm "$TEMP_MANIFEST"
+fi
+
+# echo "Visualizing $NUM_EPISODES episodes ($NUM_SAMPLES total timesteps)"
 
 # Build arguments dynamically from config
 ARGS=(
@@ -112,5 +171,24 @@ if [ "$CLEANUP" = true ]; then
     rm "$TEMP_CONFIG"
 fi
 
-# Call lbm_vis.py (FLAGS like --ordered are forwarded to Python)
-VISUALIZER="${VISUALIZER:-rerun}" uv run --group visualization vla_foundry/data/scripts/vis/lbm_vis.py "${FLAGS[@]}" "${ARGS[@]}"
+# Either print the command or execute it
+if [ "$PRINT_COMMAND" = true ]; then
+    echo "# For Colab, copy and paste this into a cell:"
+    echo "# (Make sure VISUALIZER='rerun' is set first)"
+    echo ""
+    echo "import sys"
+    echo "sys.argv = ["
+    echo "    'lbm_vis.py',"
+    for arg in "${FLAGS[@]}" "${ARGS[@]}"; do
+        # Escape single quotes in the argument
+        escaped_arg="${arg//\'/\\\'}"
+        echo "    '${escaped_arg}',"
+    done
+    echo "]"
+    echo ""
+    echo "from vla_foundry.data.scripts.vis.lbm_vis import main"
+    echo "main()"
+else
+    # Call lbm_vis.py (FLAGS like --ordered are forwarded to Python)
+    VISUALIZER="${VISUALIZER:-rerun}" uv run --group visualization vla_foundry/data/scripts/vis/lbm_vis.py "${FLAGS[@]}" "${ARGS[@]}"
+fi

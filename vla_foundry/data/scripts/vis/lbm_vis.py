@@ -220,10 +220,17 @@ class RerunSampleVisualizer:
 
 
 def main(argv: list[str] | None = None) -> None:
-    # Parse --ordered flag before draccus processes the rest of argv.
+    # Parse --ordered and --subsample flags before draccus processes the rest of argv.
     ordered = "--ordered" in sys.argv
     if ordered:
         sys.argv = [a for a in sys.argv if a != "--ordered"]
+
+    # Parse --subsample=N argument (default 1 = no subsampling)
+    subsample = 1
+    subsample_args = [arg for arg in sys.argv if arg.startswith("--subsample=")]
+    if subsample_args:
+        subsample = int(subsample_args[0].split("=")[1])
+        sys.argv = [a for a in sys.argv if not a.startswith("--subsample=")]
 
     # Use dataloader to iterate through samples.
     cfg = draccus.parse(config_class=TrainExperimentParams)
@@ -291,10 +298,35 @@ def main(argv: list[str] | None = None) -> None:
         else:
             logging.warning("RoboticsDataLoader: Failed to initialize normalizer for denormalization")
 
+    # Check if we're in notebook/Colab mode to prevent auto-shutdown
+    # The backend is hardcoded to colab=True, so use spawn=False to match
+    if not vz._STATE.initialized:
+        vz.init(run_name="lbm_visualization", spawn=False, open_browser=False)
+
     visualizer = RerunSampleVisualizer(normalizer)
+
+    print(f"Starting visualization loop for {cfg.total_train_samples} samples...")
+    if subsample > 1:
+        print(f"Subsampling: visualizing every {subsample} samples")
+
+    sample_count = 0
+    visualized_count = 0
     for idx, batch in enumerate(dataloader.dataloader):
-        visualizer.visualize_sample(idx, batch, cfg.data.image_names)
-        input("Sample visualized. Press Enter to continue...")
+        sample_count += 1
+
+        # Skip samples based on subsampling
+        if subsample > 1 and (idx % subsample != 0):
+            continue
+
+        if visualized_count % 10 == 0:  # Print progress every 10 visualized samples
+            print(f"Visualizing sample {idx}...")
+
+        vz.set_time("sample", sequence=idx)
+        visualizer.visualize_sample(str(idx), batch, cfg.data.image_names)
+        visualized_count += 1
+
+    print(f"Finished processing {sample_count} samples (visualized {visualized_count}).")
+    print("In Colab/Jupyter, call: rr.notebook_show().")
 
 
 if __name__ == "__main__":
