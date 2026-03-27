@@ -675,13 +675,27 @@ def merge_statistics(statistics: list[dict[str, Any]]) -> dict[str, Any]:
     for tensor_name in tensor_names:
         for stat_name in stat_names:
             for dataset_statistics in statistics:
-                val = dataset_statistics[tensor_name].get(stat_name)
+                val = dataset_statistics[tensor_name].get(stat_name) if tensor_name in dataset_statistics else None
                 batched_stats[tensor_name][stat_name].append(val)
 
-            if stat_name in ["psquared_state", "psquared_state_per_timestep"]:
+            has_none = any(v is None for v in batched_stats[tensor_name][stat_name])
+            if has_none:
+                pass
+            elif stat_name in [
+                "psquared_state",
+                "psquared_state_per_timestep",
+                "tdigest_state",
+                "tdigest_state_per_timestep",
+                "percentile_sample_count",
+            ]:
                 batched_stats[tensor_name][stat_name] = np.array(batched_stats[tensor_name][stat_name], dtype=object)
             else:
-                batched_stats[tensor_name][stat_name] = np.array(batched_stats[tensor_name][stat_name])
+                try:
+                    batched_stats[tensor_name][stat_name] = np.array(batched_stats[tensor_name][stat_name])
+                except (ValueError, TypeError):
+                    batched_stats[tensor_name][stat_name] = np.array(
+                        batched_stats[tensor_name][stat_name], dtype=object
+                    )
 
     merged_stats = {}
     for tensor_name in batched_stats:
@@ -689,6 +703,9 @@ def merge_statistics(statistics: list[dict[str, Any]]) -> dict[str, Any]:
         for stat_name in batched_stats[tensor_name]:
             merged_stats[tensor_name][stat_name] = merge_statistics_single_field(batched_stats[tensor_name], stat_name)
             if merged_stats[tensor_name][stat_name] is not None:
-                merged_stats[tensor_name][stat_name] = merged_stats[tensor_name][stat_name].tolist()
-
+                merged_stats[tensor_name][stat_name] = (
+                    merged_stats[tensor_name][stat_name].tolist()
+                    if not isinstance(merged_stats[tensor_name][stat_name], list)
+                    else merged_stats[tensor_name][stat_name]
+                )
     return merged_stats

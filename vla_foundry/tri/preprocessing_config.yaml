@@ -5,7 +5,7 @@
 type: spartan
 
 # Output location (task name will be appended)
-output_prefix: s3://tri-ml-datasets-uw2/vla_foundry_datasets_test/v0.4.3.1/
+output_prefix: s3://tri-ml-datasets-uw2/vla_foundry_datasets_test/v0.4.3.19/
 
 # Sampling/windowing
 past_lowdim_steps: 5
@@ -32,7 +32,7 @@ compute_statistics: true
 auto_tag: true
 skip_git_tagging: false
 stats_actor_memory_gb: 8  # Memory limit for statistics actor (only stores aggregates now)
-episode_worker_memory_gb: 16  # Memory reservation per episode worker (128GB node / 16GB = 8 workers per node)
+episode_worker_memory_gb: 8  # Memory reservation per episode worker (128GB node / 16GB = 8 workers per node)
 
 # Camera names
 camera_names:
@@ -98,3 +98,14 @@ runtime_env_excludes:
   - "downloaded_results"
   - "wandb_export_*.csv"
   - "output_gen_*"
+  - "rollouts"
+  - "experiments"
+  - "wandb"
+  - "results"
+  - "*.html"
+  - "s5cmd"
+  - "*.pdf"
+  - "*.tex"
+  - "*.aux"
+  - "*.out"
+  - "*.toc"
