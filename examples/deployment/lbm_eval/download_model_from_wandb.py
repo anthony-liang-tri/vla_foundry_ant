@@ -29,6 +29,14 @@ Usage:
 
     # AWS profile (defaults to $AWS_PROFILE when set)
     python download_model_from_wandb.py --run-name "my_experiment" --aws-profile default
+
+    # Download directly from an S3 folder (no W&B lookup)
+    python download_model_from_wandb.py --s3-path "s3://my-bucket/runs/my_experiment"
+
+    # Direct S3 path with a specific checkpoint and output directory
+    python download_model_from_wandb.py \
+        --s3-path "s3://my-bucket/runs/my_experiment" \
+        --checkpoint 50000 --output ./my_model
 """
 
 import argparse
@@ -247,6 +255,9 @@ def main() -> None:
     run_group.add_argument("--run-id", type=str, help="W&B run ID")
     run_group.add_argument("--run-url", type=str, help="Full W&B run URL")
     run_group.add_argument("--search", type=str, help="Search for runs matching this pattern")
+    run_group.add_argument(
+        "--s3-path", type=str, help="Direct S3 folder path (skips W&B lookup, e.g. s3://bucket/path/to/run)"
+    )
 
     # Project/entity configuration
     parser.add_argument(
@@ -291,73 +302,78 @@ def main() -> None:
     args = parser.parse_args()
 
     # Validate input
-    if not any([args.run_name, args.run_id, args.run_url, args.search]):
-        parser.error("One of --run-name, --run-id, --run-url, or --search is required")
+    if not any([args.run_name, args.run_id, args.run_url, args.search, args.s3_path]):
+        parser.error("One of --run-name, --run-id, --run-url, --search, or --s3-path is required")
 
-    try:
-        api = get_wandb_api()
-    except Exception as e:
-        print(f"Error: Failed to initialize W&B API: {e}", file=sys.stderr)
-        print("Make sure you have wandb installed and are logged in (wandb login)", file=sys.stderr)
-        sys.exit(1)
+    # Resolve S3 path and run name — either directly or via W&B lookup
+    if args.s3_path:
+        full_s3_path = args.s3_path.rstrip("/")
+        run_name = full_s3_path.split("/")[-1]
+        print(f"Using S3 path directly: {full_s3_path}")
+    else:
+        try:
+            api = get_wandb_api()
+        except Exception as e:
+            print(f"Error: Failed to initialize W&B API: {e}", file=sys.stderr)
+            print("Make sure you have wandb installed and are logged in (wandb login)", file=sys.stderr)
+            sys.exit(1)
 
-    # Search mode
-    if args.search:
-        print(f"Searching for runs matching '{args.search}'...")
-        runs = search_runs(api, args.project, args.search, args.entity)
+        # Search mode
+        if args.search:
+            print(f"Searching for runs matching '{args.search}'...")
+            runs = search_runs(api, args.project, args.search, args.entity)
 
-        if not runs:
-            print("No matching runs found.")
+            if not runs:
+                print("No matching runs found.")
+                sys.exit(0)
+
+            print(f"\nFound {len(runs)} matching runs:\n")
+            print(f"{'Name':<50} {'ID':<12} {'State':<10} {'Created'}")
+            print("-" * 90)
+            for run in runs:
+                created = run.created_at[:19] if run.created_at else "N/A"
+                print(f"{run.name:<50} {run.id:<12} {run.state:<10} {created}")
             sys.exit(0)
 
-        print(f"\nFound {len(runs)} matching runs:\n")
-        print(f"{'Name':<50} {'ID':<12} {'State':<10} {'Created'}")
-        print("-" * 90)
-        for run in runs:
-            created = run.created_at[:19] if run.created_at else "N/A"
-            print(f"{run.name:<50} {run.id:<12} {run.state:<10} {created}")
-        sys.exit(0)
+        # Find the run
+        try:
+            if args.run_url:
+                entity, project, run_id = parse_wandb_url(args.run_url)
+                print("Looking up run by URL...")
+                run = find_run_by_id(api, project, run_id, entity)
+            elif args.run_id:
+                print(f"Looking up run by ID: {args.run_id}")
+                run = find_run_by_id(api, args.project, args.run_id, args.entity)
+            else:
+                print(f"Looking up run by name: {args.run_name}")
+                run = find_run_by_name(api, args.project, args.run_name, args.entity)
 
-    # Find the run
-    try:
-        if args.run_url:
-            entity, project, run_id = parse_wandb_url(args.run_url)
-            print("Looking up run by URL...")
-            run = find_run_by_id(api, project, run_id, entity)
-        elif args.run_id:
-            print(f"Looking up run by ID: {args.run_id}")
-            run = find_run_by_id(api, args.project, args.run_id, args.entity)
-        else:
-            print(f"Looking up run by name: {args.run_name}")
-            run = find_run_by_name(api, args.project, args.run_name, args.entity)
+            print(f"Found run: {run.name} (ID: {run.id}, State: {run.state})")
 
-        print(f"Found run: {run.name} (ID: {run.id}, State: {run.state})")
+        except Exception as e:
+            print(f"Error: Failed to find run: {e}", file=sys.stderr)
+            sys.exit(1)
 
-    except Exception as e:
-        print(f"Error: Failed to find run: {e}", file=sys.stderr)
-        sys.exit(1)
+        # Extract S3 path
+        s3_path = extract_s3_path(run)
+        if not s3_path:
+            print("Error: Could not find S3 path (remote_sync) in run config", file=sys.stderr)
+            sys.exit(1)
 
-    # Extract S3 path
-    s3_path = extract_s3_path(run)
-    if not s3_path:
-        print("Error: Could not find S3 path (remote_sync) in run config", file=sys.stderr)
-        sys.exit(1)
+        full_s3_path = construct_full_s3_path(s3_path, run.name)
+        run_name = run.name
+        print(f"S3 path: {full_s3_path}")
 
-    full_s3_path = construct_full_s3_path(s3_path, run.name)
-    print(f"S3 path: {full_s3_path}")
-
-    # Determine output directory
+    # Download from S3 (common path for both direct S3 and W&B modes)
     output_dir = args.output
     if not output_dir:
-        safe_name = re.sub(r"[^\w\-_.]", "_", run.name)
+        safe_name = re.sub(r"[^\w\-_.]", "_", run_name)
         output_dir = f"experiments/{safe_name}"
 
-    # Create output directory
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     Path(f"{output_dir}/checkpoints").mkdir(parents=True, exist_ok=True)
     print(f"Output directory: {output_dir}")
 
-    # Find checkpoint number
     checkpoint_num = args.checkpoint
     if checkpoint_num is None:
         print("Finding highest checkpoint number...")
@@ -369,7 +385,6 @@ def main() -> None:
     else:
         print(f"Using provided checkpoint number: {checkpoint_num}")
 
-    # Download files
     print("\nDownloading config files...")
     download_files(full_s3_path, output_dir, args.aws_profile)
 

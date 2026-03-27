@@ -364,9 +364,10 @@ class InferenceDiffusionPolicy(Policy):
                 )
             self.should_reset[uuid_value] = True
 
-        # Reset the policy counters
-        self._step_count = defaultdict(int)
-        self.current_open_loop_step.clear()  # Clear all client counters
+        # Reset counters only for the clients being reset (not all clients)
+        for uuid_value in clients:
+            self._step_count[uuid_value] = 0
+            self.current_open_loop_step.pop(uuid_value, None)
 
 
 def main():

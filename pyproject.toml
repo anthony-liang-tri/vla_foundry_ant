@@ -79,6 +79,12 @@ visualization = [
     "rerun-sdk>=0.29.2"
 ]
 
+# Add `--group eval-viewer` to install the web-based evaluation results dashboard.
+eval-viewer = [
+    "gradio>=6.0.0",
+    "plotly>=6.0.0",
+]
+
 # Add `--group inference` to install runtime deps for GRPC policy serving and robot gym
 inference = [
     "robot-gym",
