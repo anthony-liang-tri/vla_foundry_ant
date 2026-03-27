@@ -99,8 +99,27 @@ def discover_image_columns(data_chunks: list[str], episode_file_pattern: str) ->
     return []
 
 
+def decode_video_frames(video_path: str) -> list[np.ndarray]:
+    """Decode all frames from a video file, returning a list of (H, W, 3) RGB uint8 numpy arrays."""
+    import av
+
+    if video_path.startswith("s3"):
+        with copy_to_temp_file(video_path) as local_path:
+            return decode_video_frames(local_path)
+
+    frames = []
+    with av.open(video_path) as container:
+        for frame in container.decode(video=0):
+            frames.append(frame.to_ndarray(format="rgb24"))
+    return frames
+
+
 def discover_cameras(video_chunks: list[str]) -> dict[str, str]:
-    """Discover available cameras by scanning video chunk directories."""
+    """Discover available cameras by scanning video chunk directories.
+
+    Returns a dict mapping camera directory name -> camera directory name.
+    The directory name is the full name as it appears on disk (e.g., 'observation.image').
+    """
     cameras = {}
 
     if not video_chunks:
@@ -108,8 +127,7 @@ def discover_cameras(video_chunks: list[str]) -> dict[str, str]:
 
     first_chunk = video_chunks[0]
     for item in list_directory(first_chunk):
-        camera_name = item.split(".")[-1] if "." in item else item
-        cameras[camera_name] = item
+        cameras[item] = item
 
     print(f"Discovered cameras: {list(cameras.keys())}")
     return cameras
@@ -181,6 +199,16 @@ class LeRobotConverter(BaseRoboticsConverter):
             assert len(self.cameras) > 0, "No cameras found"
             print(f"Discovered cameras: {list(self.cameras.keys())}")
 
+            if not cfg.camera_names:
+                raise ValueError(
+                    "camera_names must be specified for video-based LeRobot datasets. "
+                    f"Available cameras from video directories: {list(self.cameras.keys())}"
+                )
+
+            unknown = set(cfg.camera_names) - set(self.cameras)
+            if unknown:
+                raise KeyError(f"Camera(s) {unknown} not found in discovered cameras {list(self.cameras.keys())}")
+
             # Pre-build video lookup once and reuse it for all shards.
             self.video_lookup = build_video_lookup(self.video_chunks, self.cameras)
             print(f"Built video lookup with {len(self.video_lookup)} video files")
@@ -227,18 +255,43 @@ class LeRobotConverter(BaseRoboticsConverter):
 
     def extract_camera_data(self, episode_data: Any):
         """
-        Here, camera_data values are bytes.
+        Here, camera_data values are bytes (inline images) or numpy arrays (video frames).
         """
         camera_data = {}
-        for camera_name in self.cfg.camera_names:
-            images = episode_data[camera_name].to_list()
-            if isinstance(images[0], dict) and "bytes" in images[0]:
-                images = [image["bytes"] for image in images]
-            elif isinstance(images[0], bytes):
-                images = images
-            else:
-                raise ValueError(f"Unsupported image data format in column {camera_name}")
-            camera_data[camera_name] = images
+
+        if self.has_videos:
+            episode_index = int(episode_data["episode_index"].iloc[0])
+            num_rows = len(episode_data)
+            for camera_name in self.cfg.camera_names:
+                video_path = self.video_lookup.get((episode_index, camera_name))
+                if video_path is None:
+                    print(f"Warning: No video found for episode {episode_index}, camera {camera_name}")
+                    continue
+                frames = decode_video_frames(video_path)
+                if len(frames) != num_rows:
+                    if len(frames) < num_rows:
+                        raise ValueError(
+                            f"Video {video_path} has {len(frames)} frames but parquet has {num_rows} rows. "
+                            f"Video has fewer frames than expected — the dataset may be corrupted."
+                        )
+                    # Video has more frames than parquet rows, truncate to match
+                    print(
+                        f"Warning: Video has {len(frames)} frames but parquet has {num_rows} rows "
+                        f"for episode {episode_index}, camera {camera_name}. Truncating video to match parquet."
+                    )
+                    frames = frames[:num_rows]
+                camera_data[camera_name] = frames
+        else:
+            for camera_name in self.cfg.camera_names:
+                images = episode_data[camera_name].to_list()
+                if isinstance(images[0], dict) and "bytes" in images[0]:
+                    images = [image["bytes"] for image in images]
+                elif isinstance(images[0], bytes):
+                    images = images
+                else:
+                    raise ValueError(f"Unsupported image data format in column {camera_name}")
+                camera_data[camera_name] = images
+
         return camera_data
 
     def extract_lowdim_data(self, episode_data: Any):
@@ -351,4 +404,4 @@ class LeRobotConverter(BaseRoboticsConverter):
                 sample_metadata[key] = value
         language_instructions = self.get_language_instructions(sample_metadata)
 
-        return sample_images, sample_lowdim, sample_metadata, language_instructions, None, stats_sample
+        return sample_images, sample_lowdim, sample_metadata, language_instructions, None, None, stats_sample

@@ -64,16 +64,17 @@ def extract_robotics_fields(
 
     for key, value in sample.items():
         if key.endswith(".jpg"):
-            # Extract camera name and timestep from key (format: {sample_id}.{camera}_{timestep}.jpg)
-            img_key = key.split(".")[-2]  # e.g., "wrist_camera_t-1"
+            # Extract camera name and timestep from key.
+            # Use rsplit to handle camera names containing dots (e.g., "observation.image_t-1")
+            img_key = key.rsplit(".", 1)[0]  # e.g., "observation.image_t-1"
             # Keep tensor images as tensors for tensor-native downstream paths.
             if isinstance(value, torch.Tensor):
                 images[img_key] = value
             else:
                 images[img_key] = np.asarray(value)
         elif key.endswith(".tiff"):
-            # Point map: {sample_id}.{camera}_point_map_t{offset}.tiff
-            pm_key_with_suffix = key.split(".")[-2]  # e.g., "scene_right_0_point_map_t0"
+            # Point map: use rsplit to handle dotted camera names
+            pm_key_with_suffix = key.rsplit(".", 1)[0]  # e.g., "scene_right_0_point_map_t0"
             # Remove "_point_map" to get the standard key format: "scene_right_0_t0"
             pm_key = pm_key_with_suffix.replace("_point_map", "")
             # PIL Image already loaded, convert to numpy array (H, W, 3) uint16

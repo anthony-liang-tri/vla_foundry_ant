@@ -121,9 +121,16 @@ def get_wds_dataloader(
     if cfg.data.num_workers == 0:
         logging.warning("num_workers is <= 0, setting to 1 per GPU")
     num_workers_per_gpu = max(1, cfg.data.num_workers)
-    num_worker_batches = sum(num_samples_per_dataset) // (cfg.hparams.global_batch_size * num_workers_per_gpu)
+    total_samples = sum(num_samples_per_dataset)
+    denominator = cfg.hparams.global_batch_size * num_workers_per_gpu
+    num_worker_batches = total_samples // denominator
     if num_worker_batches == 0:
-        raise ValueError("The dataloader for has received zero batches.")
+        raise ValueError(
+            f"Zero batches: total_samples ({total_samples}) < "
+            f"global_batch_size ({cfg.hparams.global_batch_size}) × "
+            f"num_workers ({num_workers_per_gpu}) = {denominator}. "
+            f"Reduce global_batch_size or increase total_train_samples."
+        )
 
     num_batches = num_worker_batches * num_workers_per_gpu
     num_samples = num_batches * cfg.hparams.global_batch_size

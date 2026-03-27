@@ -59,6 +59,14 @@ preprocessing = [
     "imageio[ffmpeg]>=2.37.0",
 ]
 
+# Add `--group tutorials` to install tutorial deps (PushT sim, Jupyter kernel, etc.)
+tutorials = [
+    "gym-pusht",
+    "pymunk<7",
+    "ipykernel",
+    "ipywidgets",
+]
+
 libero = [
     "libero-wrapper",
 ]

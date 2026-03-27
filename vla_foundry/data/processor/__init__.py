@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import torch
+from PIL import Image
 from transformers import AutoProcessor
 
 from vla_foundry.data.processor.stable_diffusion_processor import StableDiffusionProcessor
@@ -12,12 +13,13 @@ from vla_foundry.params.base_data_params import DataParams
 
 
 class PassthroughProcessor:
-    """Converts images to tensors without any resizing or normalization."""
+    """Converts images to tensors without normalization. Optionally resizes to ``image_size``."""
 
-    def __init__(self):
+    def __init__(self, image_size: int | None = None):
         self.image_token_id = 0
         self.tokenizer = SimpleNamespace(pad_token_id=0, chat_template=None)
         self.chat_template = None
+        self.image_size = image_size
 
     def __call__(self, images, text, return_tensors="pt", padding=True, **kwargs):
         batch_size = len(text)
@@ -25,6 +27,21 @@ class PassthroughProcessor:
             pixel_values = []
             for sample_images in images:
                 for img in sample_images:
+                    if isinstance(img, torch.Tensor):
+                        # Already a tensor from the new torchvision decoder — skip PIL conversion
+                        if self.image_size is not None:
+                            img = torch.nn.functional.interpolate(
+                                img.unsqueeze(0).float(), size=(self.image_size, self.image_size), mode="bilinear"
+                            ).squeeze(0)
+                        t = img.float()
+                        if t.ndim == 3 and t.shape[0] not in (1, 3, 4):
+                            t = t.permute(2, 0, 1)  # HWC -> CHW
+                        pixel_values.append(t)
+                        continue
+                    if not isinstance(img, Image.Image):
+                        img = Image.fromarray(img)
+                    if self.image_size is not None:
+                        img = img.resize((self.image_size, self.image_size))
                     t = torch.as_tensor(np.array(img), dtype=torch.float32)
                     if t.ndim == 3:
                         t = t.permute(2, 0, 1)  # HWC -> CHW
@@ -63,7 +80,7 @@ def get_processor(data_params: DataParams):
     elif data_params.processor == "debug":
         return DebugProcessor()
     elif data_params.processor == "none":
-        return PassthroughProcessor()
+        return PassthroughProcessor(image_size=getattr(data_params, "image_size", None))
     elif data_params.processor is not None:
         # When using the rust-based fast tokenizer, each process spawns #cpu rayon threads
         # by default. With many GPUs and workers this causes resource contention.
