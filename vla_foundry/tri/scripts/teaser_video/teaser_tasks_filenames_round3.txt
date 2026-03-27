@@ -1,0 +1,5 @@
+s3://robotics-manip-lbm/efs/data/tasks/BimanualBreadInTheBag/davis/real/bc/teleop/2026-03-17T09-53-19-07-00/diffusion_spartan/
+s3://robotics-manip-lbm/efs/data/tasks/BimanualBreadInTheBag/davis/real/bc/teleop/2026-03-17T12-38-13-07-00/diffusion_spartan/
+s3://robotics-manip-lbm/efs/data/tasks/BimanualBreadInTheBag/davis/real/bc/teleop/2026-03-18T10-42-33-07-00/diffusion_spartan/
+s3://robotics-manip-lbm/efs/data/tasks/BimanualBreadInTheBag/davis/real/bc/teleop/2026-03-18T15-02-55-07-00/diffusion_spartan/
+s3://robotics-manip-lbm/efs/data/tasks/BimanualBreadInTheBag/davis/real/bc/teleop/2026-03-18T16-07-14-07-00/diffusion_spartan/
