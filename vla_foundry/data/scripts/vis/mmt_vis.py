@@ -274,26 +274,38 @@ class Plotter:
     @staticmethod
     def log_eef_actions(lowdim: Mapping[str, NDArray], frame_poses: Mapping[str, NDArray]) -> None:
         rr.set_time("sample", sequence=0)
-        arm_action = lowdim.get("arm_action")
-        if arm_action is None:
-            raise ValueError("'arm_action' not found in lowdim data")
+        left_arm_action = lowdim.get("left_arm_action")
+        right_arm_action = lowdim.get("right_arm_action")
 
-        left = arm_action[:, 1:7]
-        right = arm_action[:, 8:15]
+        # Fallback: support legacy 14-dim arm_action format
+        if left_arm_action is None and right_arm_action is None:
+            arm_action = lowdim.get("arm_action")
+            if arm_action is None:
+                raise ValueError("None of 'left_arm_action', 'right_arm_action', or 'arm_action' found in lowdim data")
+            left_arm_action = arm_action[:, :7]
+            right_arm_action = arm_action[:, 7:]
 
-        left_pts = np.cumsum(left[:, :3], axis=0) + frame_poses["chassis/left_eef"][0][:3, 3]
-        right_pts = np.cumsum(right[:, :3], axis=0) + frame_poses["chassis/right_eef"][0][:3, 3]
+        left_pts = None
+        right_pts = None
+        if left_arm_action is not None:
+            left = left_arm_action[:, 1:7]
+            left_pts = np.cumsum(left[:, :3], axis=0) + frame_poses["chassis/left_eef"][0][:3, 3]
+        if right_arm_action is not None:
+            right = right_arm_action[:, 1:7]
+            right_pts = np.cumsum(right[:, :3], axis=0) + frame_poses["chassis/right_eef"][0][:3, 3]
 
-        vz.log_points3d(
-            "chassis/left_eef_action",
-            left_pts,
-            radii=np.ones(left_pts.shape[0]) * BALL_RADIUS,
-        )
-        vz.log_points3d(
-            "chassis/right_eef_action",
-            right_pts,
-            radii=np.ones(right_pts.shape[0]) * BALL_RADIUS,
-        )
+        if left_pts is not None:
+            vz.log_points3d(
+                "chassis/left_eef_action",
+                left_pts,
+                radii=np.ones(left_pts.shape[0]) * BALL_RADIUS,
+            )
+        if right_pts is not None:
+            vz.log_points3d(
+                "chassis/right_eef_action",
+                right_pts,
+                radii=np.ones(right_pts.shape[0]) * BALL_RADIUS,
+            )
 
     def log_point_cloud(
         self,

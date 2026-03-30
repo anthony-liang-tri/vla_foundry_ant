@@ -13,6 +13,9 @@ from vla_foundry.data.preprocessing.utils import is_still_sample
 from vla_foundry.data.robotics.cv_utils import intrinsics_4_to_3x3
 from vla_foundry.data.robotics.utils import xyzrpy_to_T
 
+# Boundary for splitting raw bimanual arm_action (2, 7) into left/right after flatten.
+ARM_ACTION_SPLIT = 7
+
 
 def downsample_with_valid_depths(depth_image: np.ndarray, target_size: tuple[int, int], mask_threshold: float):
     """Downsample depth image while preserving valid depth pixels. Assumptions:
@@ -49,12 +52,27 @@ class MMTNPZConverter(BaseRoboticsConverter):
             else:
                 break
 
-        self.action_keys = ["arm_action", "base_action", "head_action", "lift_action"]
+        self.action_keys = [
+            "left_arm_action",
+            "right_arm_action",
+            "left_arm_action_at_gripper_tip",
+            "right_arm_action_at_gripper_tip",
+            "base_action",
+            "head_action",
+            "lift_action",
+        ]
         self.eef_state_keys = ["chest_T_eef_pose", "chassis_T_eef_pose"]
+        self.gripper_tip_state_keys = ["chassis_T_gripper_tip_pose", "chest_T_gripper_tip_pose"]
         self.base_state_keys = ["base_pose"]
         self.head_state_keys = ["chest_T_head_pose"]
         self.lift_state_keys = ["chassis_T_chest_pose"]
-        self.state_keys = self.eef_state_keys + self.base_state_keys + self.head_state_keys + self.lift_state_keys
+        self.state_keys = (
+            self.eef_state_keys
+            + self.gripper_tip_state_keys
+            + self.base_state_keys
+            + self.head_state_keys
+            + self.lift_state_keys
+        )
         self.wrench_keys = ["wrench"]
         self.item_bbox_keys = ["item_bounding_boxes", "index_of_center_bbox"]
 
@@ -145,42 +163,120 @@ class MMTNPZConverter(BaseRoboticsConverter):
         return camera_data
 
     def extract_lowdim_data(self, episode_data: dict):
+
         lowdim_data = {}
-        for key in self.action_keys + self.state_keys + self.wrench_keys + self.item_bbox_keys:
+        # Determine which raw keys are available in the NPZ data.
+        first_step_data = episode_data[min(episode_data.keys())]
+        available_raw_keys = set(first_step_data.keys())
+
+        all_keys = self.action_keys + self.state_keys + self.wrench_keys + self.item_bbox_keys
+        for key in all_keys:
+            # Map derived field names to their raw NPZ key for availability check.
+            if key in ("left_arm_action", "right_arm_action"):
+                raw_key = "arm_action"
+            elif key in ("left_arm_action_at_gripper_tip", "right_arm_action_at_gripper_tip"):
+                raw_key = "arm_action_at_gripper_tip"
+            else:
+                raw_key = key
+            if raw_key not in available_raw_keys:
+                continue
             lowdim_data[key] = []
-            for t in sorted(episode_data.keys()):
-                data = episode_data[t][key].flatten()
-                if key in self.cfg.mmt_lowdim_flatten_indices_selection:
-                    data = [data[i] for i in self.cfg.mmt_lowdim_flatten_indices_selection[key]]
-                lowdim_data[key].append(data)
+            # left/right arm actions are split from raw bimanual arrays in the NPZ
+            if key in ("left_arm_action", "right_arm_action"):
+                raw_key = "arm_action"
+                is_left = key == "left_arm_action"
+                for t in sorted(episode_data.keys()):
+                    raw = episode_data[t][raw_key].flatten()
+                    data = raw[:ARM_ACTION_SPLIT] if is_left else raw[ARM_ACTION_SPLIT:]
+                    if key in self.cfg.mmt_lowdim_flatten_indices_selection:
+                        data = [data[i] for i in self.cfg.mmt_lowdim_flatten_indices_selection[key]]
+                    lowdim_data[key].append(data)
+            elif key in ("left_arm_action_at_gripper_tip", "right_arm_action_at_gripper_tip"):
+                raw_key = "arm_action_at_gripper_tip"
+                is_left = key == "left_arm_action_at_gripper_tip"
+                for t in sorted(episode_data.keys()):
+                    raw = episode_data[t][raw_key].flatten()
+                    data = raw[:ARM_ACTION_SPLIT] if is_left else raw[ARM_ACTION_SPLIT:]
+                    if key in self.cfg.mmt_lowdim_flatten_indices_selection:
+                        data = [data[i] for i in self.cfg.mmt_lowdim_flatten_indices_selection[key]]
+                    lowdim_data[key].append(data)
+            else:
+                for t in sorted(episode_data.keys()):
+                    data = episode_data[t][key].flatten()
+                    if key in self.cfg.mmt_lowdim_flatten_indices_selection:
+                        data = [data[i] for i in self.cfg.mmt_lowdim_flatten_indices_selection[key]]
+                    lowdim_data[key].append(data)
             lowdim_data[key] = np.stack(lowdim_data[key])
 
         return lowdim_data
 
     def extract_intrinsics_extrinsics_data(self, episode_data):
-        intrinsics_cam_map = {"rgb": "cam_intrinsics", "depth": "cam_intrinsics"}
-        extrinsics_cam_map = {"rgb": "cam_pose", "depth": "cam_pose"}
+        intrinsics_cam_map = {
+            "rgb": "cam_intrinsics",
+            "depth": "cam_intrinsics",
+            "rgb_left_wrist": "cam_intrinsics_left_wrist",
+            "rgb_right_wrist": "cam_intrinsics_right_wrist",
+            "depth_left_wrist": "cam_intrinsics_left_wrist",
+            "depth_right_wrist": "cam_intrinsics_right_wrist",
+        }
+        # TODO: NPZ does not contain per-camera extrinsics (e.g. cam_pose_left_wrist).
+        # Wrist cameras currently fall back to head camera extrinsics ("cam_pose"),
+        # which is incorrect. Once NPZ recording provides per-camera extrinsics,
+        # update this map accordingly.
+        extrinsics_cam_map = {
+            "rgb": "cam_pose",
+            "depth": "cam_pose",
+            "rgb_left_wrist": "cam_pose",
+            "rgb_right_wrist": "cam_pose",
+            "depth_left_wrist": "cam_pose",
+            "depth_right_wrist": "cam_pose",
+        }
 
+        first_step_data = episode_data[min(episode_data.keys())]
         intrinsics_data, extrinsics_data = {}, {}
         for camera_name in self.cfg.camera_names:
             if camera_name not in intrinsics_cam_map or camera_name not in extrinsics_cam_map:
                 raise ValueError(f"Camera name {camera_name} not recognized for intrinsics/extrinsics extraction.")
-            intrinsics_data[camera_name] = []
-            extrinsics_data[camera_name] = []
+            intrinsics_raw_key = intrinsics_cam_map[camera_name]
+            extrinsics_raw_key = extrinsics_cam_map[camera_name]
+            has_intrinsics = intrinsics_raw_key in first_step_data
+            if not has_intrinsics:
+                logging.getLogger(__name__).warning(
+                    "Intrinsics key '%s' not found in NPZ for camera '%s'; omitting from output.",
+                    intrinsics_raw_key,
+                    camera_name,
+                )
+            has_extrinsics = extrinsics_raw_key in first_step_data
+            if not has_extrinsics:
+                logging.getLogger(__name__).warning(
+                    "Extrinsics key '%s' not found in NPZ for camera '%s'; omitting from output.",
+                    extrinsics_raw_key,
+                    camera_name,
+                )
+            if not has_intrinsics and not has_extrinsics:
+                continue
+            if has_intrinsics:
+                intrinsics_data[camera_name] = []
+            if has_extrinsics:
+                extrinsics_data[camera_name] = []
             for t in sorted(episode_data.keys()):
-                intrinsics_frame = episode_data[t][intrinsics_cam_map[camera_name]]
-                extrinsics_frame = episode_data[t][extrinsics_cam_map[camera_name]]
-                # Data preprocessing pipeline expectes 3x3 intrinsics and 4x4 extrinsics
-                if intrinsics_frame.shape == (4,):
-                    intrinsics_frame = intrinsics_4_to_3x3(intrinsics_frame)
-                if extrinsics_frame.shape == (6,):
-                    extrinsics_frame = xyzrpy_to_T(extrinsics_frame).squeeze()
-                assert intrinsics_frame.shape == (3, 3), f"Intrinsics shape mismatch: {intrinsics_frame.shape}"
-                assert extrinsics_frame.shape == (4, 4), f"Extrinsics shape mismatch: {extrinsics_frame.shape}"
-                intrinsics_data[camera_name].append(intrinsics_frame)
-                extrinsics_data[camera_name].append(extrinsics_frame)
-            intrinsics_data[camera_name] = np.stack(intrinsics_data[camera_name])
-            extrinsics_data[camera_name] = np.stack(extrinsics_data[camera_name])
+                if has_intrinsics:
+                    intrinsics_frame = episode_data[t][intrinsics_raw_key]
+                    # Data preprocessing pipeline expects 3x3 intrinsics and 4x4 extrinsics
+                    if intrinsics_frame.shape == (4,):
+                        intrinsics_frame = intrinsics_4_to_3x3(intrinsics_frame)
+                    assert intrinsics_frame.shape == (3, 3), f"Intrinsics shape mismatch: {intrinsics_frame.shape}"
+                    intrinsics_data[camera_name].append(intrinsics_frame)
+                if has_extrinsics:
+                    extrinsics_frame = episode_data[t][extrinsics_raw_key]
+                    if extrinsics_frame.shape == (6,):
+                        extrinsics_frame = xyzrpy_to_T(extrinsics_frame).squeeze()
+                    assert extrinsics_frame.shape == (4, 4), f"Extrinsics shape mismatch: {extrinsics_frame.shape}"
+                    extrinsics_data[camera_name].append(extrinsics_frame)
+            if has_intrinsics:
+                intrinsics_data[camera_name] = np.stack(intrinsics_data[camera_name])
+            if has_extrinsics:
+                extrinsics_data[camera_name] = np.stack(extrinsics_data[camera_name])
 
         return intrinsics_data, extrinsics_data
 
@@ -188,8 +284,11 @@ class MMTNPZConverter(BaseRoboticsConverter):
         metadata_keys = ["depth_scale"]
 
         metadata = {}
+        first_step_data = episode_data[min(episode_data.keys())]
         for key in metadata_keys:
-            first_value = episode_data[sorted(episode_data.keys())[0]][key]
+            if key not in first_step_data:
+                continue
+            first_value = first_step_data[key]
             metadata[key] = first_value
             # Verify all timesteps have the same value
             for t in sorted(episode_data.keys()):

@@ -12,8 +12,7 @@ Usage:
     # Or run directly with all required arguments
     python vla_foundry/inference/robotics/mmt/mmt_inference_policy.py \
         --checkpoint_dir experiments/2026_02_25-18_44_27-model_diffusion_policy-lr_0.0005-bsz_8 \
-        --zzk_api_client_py_path /path/to/zzk_api_client.py \
-        --zzk_api_client_ctypes_library_path /path/to/zzk_api_ctypes_client.so
+        --zzk_api_client_path /path/to/zzk_api_client_dir
 """
 
 import argparse
@@ -30,6 +29,11 @@ import torch
 from vla_foundry.data.preprocessing.image_utils import ImageResizingMethod, resize_and_crop_image
 from vla_foundry.data.processor.robotics_processor import RoboticsProcessor
 from vla_foundry.file_utils import get_latest_checkpoint, load_ema_checkpoint, load_model_checkpoint, yaml_load
+from vla_foundry.inference.robotics.mmt.action_handlers import (
+    MmtActionMapper,
+    load_lowdim_index_selection,
+)
+from vla_foundry.inference.robotics.mmt.field_layouts import MMT_FIELD_LAYOUTS, ZZK_STATE_COLS, ZZK_STATE_ROWS
 from vla_foundry.logger import setup_logging
 from vla_foundry.models import create_model
 from vla_foundry.params.train_experiment_params import load_experiment_params_from_yaml
@@ -48,8 +52,8 @@ class ZzkPolicyInference:
         num_flow_steps: int = 10,
         open_loop_steps: int = 4,
         language_instruction: str = "You are a helpful robot assistant finishing tasks to help people's daily lives.",
-        zzk_api_client_py_path: str | None = None,
-        zzk_api_client_ctypes_library_path: str | None = None,
+        zzk_api_client_path: str | None = None,
+        enable_compliance: bool = False,
     ):
         """Initialize the inference system.
 
@@ -63,8 +67,7 @@ class ZzkPolicyInference:
             open_loop_steps: Number of steps to execute before replanning
             TODO: Enable to change language_instruction every episode
             language_instruction: Task instruction for the robot
-            zzk_api_client_py_path: Path to directory containing zzk_api_client.py
-            zzk_api_client_ctypes_library_path: Path to directory containing zzk_api_ctypes_client.so
+            zzk_api_client_path: Path to directory containing zzk_api_client.py and ctypes .so library
         """
         self.checkpoint_directory = checkpoint_directory
         self.robot_hostname = robot_hostname
@@ -73,8 +76,8 @@ class ZzkPolicyInference:
         self.num_flow_steps = num_flow_steps
         self.open_loop_steps = open_loop_steps
         self.language_instruction = language_instruction
-        self.zzk_api_client_py_path = zzk_api_client_py_path
-        self.zzk_api_client_ctypes_library_path = zzk_api_client_ctypes_library_path
+        self.zzk_api_client_path = zzk_api_client_path
+        self.enable_compliance = enable_compliance
 
         # Load model configuration
         self.model_config_path = os.path.join(checkpoint_directory, "config.yaml")
@@ -86,8 +89,9 @@ class ZzkPolicyInference:
         self.ema_enabled = self.cfg.ema.enabled
         if checkpoint_name is None or checkpoint_name == "":
             checkpoint_name = get_latest_checkpoint(checkpoint_directory)
-            if checkpoint_name:
-                checkpoint_name = os.path.basename(checkpoint_name)
+            if not checkpoint_name:
+                raise FileNotFoundError(f"No checkpoint found in {checkpoint_directory}")
+            checkpoint_name = os.path.basename(checkpoint_name)
 
         if not checkpoint_name.endswith(".pt"):
             checkpoint_name = f"{checkpoint_name}.pt"
@@ -125,6 +129,7 @@ class ZzkPolicyInference:
             preprocessing_config_path = os.path.join(checkpoint_directory, "preprocessing_configs.yaml")
         self.preprocessing_config = yaml_load(preprocessing_config_path)
         self.image_size = self.preprocessing_config["resize_images_size"]
+        self.lowdim_index_selection = load_lowdim_index_selection(self.preprocessing_config)
 
         # Get data configuration
         self.image_names = self.cfg.data.image_names
@@ -133,42 +138,157 @@ class ZzkPolicyInference:
         self.num_past_timesteps = self.cfg.data.lowdim_past_timesteps
         self.num_future_timesteps = self.cfg.data.lowdim_future_timesteps
         self.total_timesteps = self.num_past_timesteps + 1 + self.num_future_timesteps
+        self.action_mapper = MmtActionMapper(self.lowdim_index_selection)
 
-        logging.info(f"Camera names: {self.image_names}")
+        # Derive unique base camera names from temporal image names (e.g. "rgb_t-1" → "rgb")
+        self.camera_base_names = sorted(set(name.rsplit("_t", 1)[0] for name in self.image_names))
+
+        logging.info(f"Camera names: {self.image_names} (base: {self.camera_base_names})")
         logging.info(f"Action fields: {self.action_fields}")
         logging.info(f"Timesteps: past={self.num_past_timesteps}, future={self.num_future_timesteps}")
 
         # Initialize ZZK API client
+        if not self.zzk_api_client_path:
+            raise ValueError(
+                "zzk_api_client_path is required. "
+                "Provide via --zzk_api_client_path CLI argument "
+                "or paths.zzk_api_client_path in config file."
+            )
+
         # Import zzk_api_client dynamically (path can be specified via config or CLI)
-        if zzk_api_client_py_path:
-            sys.path.insert(0, zzk_api_client_py_path)
-            logging.info(f"Added zzk_api_client path to sys.path: {zzk_api_client_py_path}")
+        sys.path.insert(0, self.zzk_api_client_path)
+        logging.info(f"Added zzk_api_client path to sys.path: {self.zzk_api_client_path}")
 
         try:
             import zzk_api_client
         except ImportError:
             logging.error(
-                "Failed to import zzk_api_client. Make sure zzk_api_client_py_path is provided "
-                "via --zzk_api_client_py_path CLI argument or paths.zzk_api_client_py_path in config."
+                "Failed to import zzk_api_client. Make sure zzk_api_client_path is correct "
+                "via --zzk_api_client_path CLI argument or paths.zzk_api_client_path in config."
             )
             raise
 
-        # Validate ctypes library path (can be specified via config or CLI)
-        if not self.zzk_api_client_ctypes_library_path:
-            raise ValueError(
-                "zzk_api_client_ctypes_library_path is required. "
-                "Provide via --zzk_api_client_ctypes_library_path CLI argument "
-                "or paths.zzk_api_client_ctypes_library_path in config file."
-            )
-
-        logging.info(f"Using ctypes library path: {self.zzk_api_client_ctypes_library_path}")
+        logging.info(f"Using zzk_api_client path: {self.zzk_api_client_path}")
         self.zzk_client = zzk_api_client.ZzkApiClient(
-            robot_hostname, port=robot_port, file_path=self.zzk_api_client_ctypes_library_path
+            robot_hostname, port=robot_port, file_path=self.zzk_api_client_path
         )
         logging.info("Connected to ZZK API")
 
         # Initialize buffers
+        self._missing_cameras_warned: set[str] = set()
         self.reset_buffers()
+
+    def _get_field_dim(self, field_name: str) -> int:
+        # Read the configured full dimension for a lowdim field from normalization stats.
+        if self.robotics_processor.normalizer and self.robotics_processor.normalizer.stats:
+            return self.robotics_processor.normalizer.get_field_dimension(field_name)
+        raise ValueError(f"Could not determine dimension for field '{field_name}' without normalization statistics.")
+
+    @staticmethod
+    def _apply_index_selection(values: np.ndarray, selection: list[int] | None) -> np.ndarray:
+        # Select the subset of lowdim entries configured during preprocessing.
+        if selection is None:
+            return values
+        return values[np.asarray(selection, dtype=np.int64)]
+
+    @staticmethod
+    def _build_full_eef_pose(
+        state: np.ndarray,
+        left_gripper_row: int,
+        left_pose_row: int,
+        right_gripper_row: int,
+        right_pose_row: int,
+    ) -> np.ndarray:
+        # Pack left/right gripper scalars and 6D poses into the training-time full EEF layout.
+        left_gripper = state[left_gripper_row, 2]
+        right_gripper = state[right_gripper_row, 2]
+        left_pose = state[left_pose_row, 0:6]
+        right_pose = state[right_pose_row, 0:6]
+        return np.concatenate([[left_gripper], left_pose, [right_gripper], right_pose]).astype(np.float32)
+
+    def _select_field_value_or_zero(self, field_name: str, full_values: np.ndarray) -> np.ndarray:
+        # Apply the preprocessing selection when present; otherwise fall back to the full field value.
+        selection = self.lowdim_index_selection.get(field_name)
+        if selection is not None:
+            return self._apply_index_selection(full_values, selection)
+        expected_dim = self._get_field_dim(field_name)
+        if len(full_values) == expected_dim:
+            return full_values
+        logging.warning(
+            "Dimension mismatch for '%s': got %s, expected %s; returning zeros.",
+            field_name,
+            len(full_values),
+            expected_dim,
+        )
+        return np.zeros(expected_dim, dtype=np.float32)
+
+    def _zero_proprioception_value(self, field_name: str) -> np.ndarray:
+        # Synthesize a zero vector with the configured dimension for missing runtime inputs.
+        return np.zeros(self._get_field_dim(field_name), dtype=np.float32)
+
+    def _get_optional_field(self, status: dict, key: str, expected_size: int) -> np.ndarray | None:
+        # Read an optional vector field from ZZK status when available and well-formed.
+        if key not in status or status[key] is None:
+            return None
+        values = np.asarray(status[key], dtype=np.float32).reshape(-1)
+        if values.size != expected_size:
+            logging.warning("Unexpected size for %s: got %s, expected %s.", key, values.size, expected_size)
+            return None
+        return values
+
+    @staticmethod
+    def _parse_zzk_state(status: dict) -> np.ndarray | None:
+        # Parse the 11x6 state matrix from ZZK status.
+        if "state" not in status:
+            logging.warning("No state in ZZK status")
+            return None
+        state = status["state"]
+        if state.size == 0:
+            logging.warning("Empty state in ZZK status")
+            return None
+        expected_size = ZZK_STATE_ROWS * ZZK_STATE_COLS
+        if state.size != expected_size:
+            logging.warning(
+                "Unexpected state size in ZZK status: got %s, expected %s.",
+                state.size,
+                expected_size,
+            )
+            return None
+        return state.reshape(ZZK_STATE_ROWS, ZZK_STATE_COLS)
+
+    def _extract_field_from_zzk(
+        self,
+        field_name: str,
+        state: np.ndarray | None,
+        status: dict,
+    ) -> np.ndarray | None:
+        # Extract a proprioception field from ZZK status using the layout's zzk_source definition.
+        layout = MMT_FIELD_LAYOUTS.get(field_name)
+        if layout is None or "zzk_source" not in layout:
+            return None
+        source = layout["zzk_source"]
+
+        if source["type"] == "eef_pose":
+            if state is None:
+                return None
+            return self._build_full_eef_pose(
+                state,
+                source["left_gripper_row"],
+                source["left_pose_row"],
+                source["right_gripper_row"],
+                source["right_pose_row"],
+            )
+
+        if source["type"] == "state_row":
+            if state is None:
+                return None
+            return state[source["row"]].astype(np.float32)
+
+        if source["type"] == "status_field":
+            return self._get_optional_field(status, source["key"], source["expected_size"])
+
+        logging.warning("Unknown zzk_source type '%s' for field '%s'.", source["type"], field_name)
+        return None
 
     def reset_buffers(self):
         """Reset observation and action buffers."""
@@ -204,80 +324,41 @@ class ZzkPolicyInference:
             "timestamp": status.get("timestamp", 0),
         }
 
-        # Extract images based on configured camera names
-        # ZZK API returns: "rgb"
-        # VLA model expects: "rgb_t-1", "rgb_t0" (temporal naming)
-
-        # Map ZZK camera names to base names
-        zzk_camera_map = {
-            "rgb": "rgb",  # Head camera
-        }
-
-        # Process each ZZK camera and store with base name
-        for zzk_image_name, model_image_base_name in zzk_camera_map.items():
-            if zzk_image_name in status:
-                image = status[zzk_image_name]
+        # Extract images for each base camera (derived from image_names in __init__)
+        for camera_name in self.camera_base_names:
+            if camera_name in status:
+                image = status[camera_name]
                 if image is not None and image.size > 0:
-                    # Resize image to expected size (same as training data preprocessing)
                     resized_image = resize_and_crop_image(
                         image,
                         self.image_size,
                         resize_method=ImageResizingMethod.CENTER_CROP,
                     )
-                    # Store in images dict
-                    obs["images"][model_image_base_name] = np.array(resized_image)
-                    logging.debug(
-                        f"Loaded image {model_image_base_name}: shape={obs['images'][model_image_base_name].shape}"
-                    )
+                    obs["images"][camera_name] = np.array(resized_image)
+                    logging.debug(f"Loaded image {camera_name}: shape={obs['images'][camera_name].shape}")
                 else:
-                    logging.warning(f"Empty or invalid image for {zzk_image_name}")
-                    obs["images"][model_image_base_name] = np.zeros(
-                        (self.image_size[1], self.image_size[0], 3), dtype=np.uint8
-                    )
+                    logging.warning(f"Empty or invalid image for {camera_name}")
+                    obs["images"][camera_name] = np.zeros((self.image_size[1], self.image_size[0], 3), dtype=np.uint8)
             else:
-                logging.debug(f"Camera {zzk_image_name} not in status (may not be available)")
+                # Warn once per missing camera to avoid log flooding; always insert
+                # a zero image to keep the observation shape consistent.
+                if camera_name not in self._missing_cameras_warned:
+                    logging.warning(f"Camera {camera_name} not in status (may not be available)")
+                    self._missing_cameras_warned.add(camera_name)
+                else:
+                    logging.debug(f"Camera {camera_name} still not in status; using zero image.")
+                obs["images"][camera_name] = np.zeros((self.image_size[1], self.image_size[0], 3), dtype=np.uint8)
 
-        # Extract proprioception (chassis_T_eef_pose)
-        # ZZK state format from zzk_api_ctypes_client.cc:
-        # state[0][0:6] = local_T_chassis (x, y, z, rx, ry, rz)
-        # state[1][2]   = left_gripper_position
-        # state[2][0:6] = chassis_T_left_arm_tip (x, y, z, rx, ry, rz)
-        # state[3][2]   = right_gripper_position
-        # state[4][0:6] = chassis_T_right_arm_tip (x, y, z, rx, ry, rz)
-        # state[5][0:6] = chest_T_left_arm_tip (x, y, z, rx, ry, rz)
-        # state[6][0:6] = chest_T_right_arm_tip (x, y, z, rx, ry, rz)
-        # state[7][0:6] = chassis_T_left_gripper_tip (x, y, z, rx, ry, rz)
-        # state[8][0:6] = chassis_T_right_gripper_tip (x, y, z, rx, ry, rz)
-        # state[9][0:6] = chest_T_left_gripper_tip (x, y, z, rx, ry, rz)
-        # state[10][0:6] = chest_T_right_gripper_tip (x, y, z, rx, ry, rz)
+        # Extract proprioception
+        state = self._parse_zzk_state(status)
 
-        if "state" in status:
-            state = status["state"]
-            if state.size > 0:
-                state = state.reshape(11, 6)
-
-                # Extract chassis_T_eef_pose for each arm
-                # Format: [gripper, x, y, z, rx, ry, rz] (7 dimensions)
-
-                # Left arm
-                left_gripper = state[1, 2]  # state[1][2]
-                left_xyz = state[2, 0:3]  # state[2][0:3]
-                left_rpy = state[2, 3:6]  # state[2][3:6]
-                obs["proprioception"]["chassis_T_eef_pose"] = np.concatenate(
-                    [[left_gripper], left_xyz, left_rpy]
-                )  # 7 dimensions: [gripper, x, y, z, rx, ry, rz]
-
-                logging.debug(
-                    f"chassis_T_eef_pose (left): gripper={left_gripper:.3f}, "
-                    f"xyz=({left_xyz[0]:.3f}, {left_xyz[1]:.3f}, {left_xyz[2]:.3f}), "
-                    f"rpy=({left_rpy[0]:.3f}, {left_rpy[1]:.3f}, {left_rpy[2]:.3f})"
-                )
+        for field_name in self.proprioception_fields:
+            value = self._extract_field_from_zzk(field_name, state, status)
+            if value is None:
+                logging.warning("Missing proprioception field '%s' in ZZK status; using zeros.", field_name)
+                obs["proprioception"][field_name] = self._zero_proprioception_value(field_name)
             else:
-                logging.warning("Empty state in ZZK status")
-                obs["proprioception"]["chassis_T_eef_pose"] = np.zeros(7, dtype=np.float32)
-        else:
-            logging.warning("No state in ZZK status")
-            obs["proprioception"]["chassis_T_eef_pose"] = np.zeros(7, dtype=np.float32)
+                obs["proprioception"][field_name] = self._select_field_value_or_zero(field_name, value)
 
         return obs
 
@@ -364,10 +445,10 @@ class ZzkPolicyInference:
             if len(actions[field]) > 0:
                 field_dim = len(actions[field][0])
             else:
-                field_dim = self.cfg.data.action_dim
+                field_dim = self._get_field_dim(field)
                 logging.debug(
                     f"Action field '{field}' has no data in buffer (first step), "
-                    f"using action_dim={field_dim} from config"
+                    f"using field_dim={field_dim} from normalization stats"
                 )
 
             while len(actions[field]) < self.total_timesteps:
@@ -469,8 +550,6 @@ class ZzkPolicyInference:
         # Denormalize actions - need to denormalize each field separately
         # model_output is the normalized action tensor [B, T, D]
         # We need to split it by action fields and denormalize each one
-        denormalized_actions = model_output.cpu()
-
         if self.robotics_processor.normalizer and self.robotics_processor.normalizer.enabled:
             # Split the action tensor by field dimensions
             action_start_idx = 0
@@ -489,6 +568,8 @@ class ZzkPolicyInference:
 
             # Concatenate denormalized parts
             denormalized_actions = torch.cat(denormalized_parts, dim=-1)
+        else:
+            denormalized_actions = model_output.cpu()
 
         return denormalized_actions.numpy()
 
@@ -506,11 +587,11 @@ class ZzkPolicyInference:
 
         for t in range(self.total_timesteps):
             action_dict = {}
+            action_start_idx = 0
             for field_name in self.action_fields:
-                if field_name == "arm_action":
-                    # arm_action is 7-dimensional
-                    action_dict[field_name] = actions_np[t, :7]
-                # Add other action fields here if needed
+                field_dim = self._get_field_dim(field_name)
+                action_dict[field_name] = actions_np[t, action_start_idx : action_start_idx + field_dim]
+                action_start_idx += field_dim
 
             self.action_buffer.append(action_dict)
 
@@ -549,22 +630,32 @@ class ZzkPolicyInference:
 
         # Convert to ZZK format
         zzk_action = {}
-        if "arm_action" in current_action_dict:
-            arm_values = current_action_dict["arm_action"]
+        debug_parts = []
+        unsupported_fields = []
+        for field_name in self.action_fields:
+            if field_name not in current_action_dict:
+                continue
 
-            # Map to ZZK format: [vx, vy, vz, wx, wy, wz] for left_arm
-            zzk_action["left_arm"] = [
-                arm_values[1],  # vx
-                arm_values[2],  # vy
-                arm_values[3],  # vz
-                arm_values[4],  # wx
-                arm_values[5],  # wy
-                arm_values[6],  # wz
-            ]
-            # Gripper: [0, 0, gripper_value, 0, 0, 0]
-            zzk_action["left_gripper"] = [0, 0, arm_values[0].item(), 0, 0, 0]
+            handler = self.action_mapper.action_field_handlers.get(field_name)
+            if handler is None:
+                unsupported_fields.append(field_name)
+                continue
 
-        logging.debug(f"Step action: vx={arm_values[1]:.3f}, vy={arm_values[2]:.3f}, gripper={arm_values[0]:.3f}")
+            action_values = np.asarray(current_action_dict[field_name], dtype=np.float32)
+            handler(action_values, zzk_action, debug_parts)
+
+        if unsupported_fields:
+            logging.warning("Ignoring unsupported action fields for ZZK command conversion: %s", unsupported_fields)
+
+        if self.enable_compliance:
+            for arm_key in ("left_arm", "right_arm", "left_arm_at_gripper_tip", "right_arm_at_gripper_tip"):
+                if arm_key in zzk_action:
+                    padding = 12 - len(zzk_action[arm_key])
+                    if padding > 0:
+                        zzk_action[arm_key] = zzk_action[arm_key] + [0.0] * padding
+
+        if debug_parts:
+            logging.debug("Step action: %s", ", ".join(debug_parts))
         return zzk_action
 
     def run_episode(self, max_steps: int = 500) -> bool:
@@ -579,7 +670,10 @@ class ZzkPolicyInference:
         logging.info(f"Starting episode with max_steps={max_steps}")
         self.reset_buffers()
 
+        control_period = 0.2  # 5Hz
         for step in range(max_steps):
+            step_start = time.time()
+
             # Get robot status
             zzk_status = self.zzk_client.receive_status()
 
@@ -597,12 +691,12 @@ class ZzkPolicyInference:
             # Get current action from buffer and convert to ZZK format
             zzk_action = self.step_action()
 
-            # Send action to robot
+            # Sleep to maintain control rate, then send action
+            sleep_time = max(0.0, control_period - (time.time() - step_start))
+            time.sleep(sleep_time)
+
             observation_timestamp = zzk_status.get("timestamp", 0)
             self.zzk_client.send_command([zzk_action], observation_timestamp)
-
-            # Sleep to match 10Hz control rate
-            time.sleep(0.1)
 
         logging.info("Episode completed")
         return True
@@ -638,12 +732,17 @@ def main():
     parser.add_argument("--num_episodes", type=int, default=10, help="Number of episodes to run")
     parser.add_argument("--max_steps_per_episode", type=int, default=500, help="Maximum steps per episode")
 
-    # ZZK API paths
+    # ZZK API path
     parser.add_argument(
-        "--zzk_api_client_py_path", type=str, default=None, help="Path to directory containing zzk_api_client.py"
+        "--zzk_api_client_path",
+        type=str,
+        required=True,
+        help="Path to directory containing zzk_api_client.py and ctypes .so library",
     )
+
+    # Compliance
     parser.add_argument(
-        "--zzk_api_client_ctypes_library_path", type=str, required=True, help="Path to zzk_api_ctypes_client.so library"
+        "--enable_compliance", action="store_true", default=False, help="Enable compliance mode for arm actions"
     )
 
     # Logging
@@ -675,8 +774,8 @@ def main():
         num_flow_steps=args.num_flow_steps,
         open_loop_steps=args.open_loop_steps,
         language_instruction=args.language_instruction,
-        zzk_api_client_py_path=args.zzk_api_client_py_path,
-        zzk_api_client_ctypes_library_path=args.zzk_api_client_ctypes_library_path,
+        zzk_api_client_path=args.zzk_api_client_path,
+        enable_compliance=args.enable_compliance,
     )
 
     # Run episodes

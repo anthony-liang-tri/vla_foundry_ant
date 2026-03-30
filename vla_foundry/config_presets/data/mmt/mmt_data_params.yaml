@@ -13,12 +13,17 @@ image_indices:
 
 proprioception_fields:
   - chest_T_eef_pose
+  - chassis_T_gripper_tip_pose
+  - chest_T_gripper_tip_pose
   - chest_T_head_pose
   - chassis_T_chest_pose
   - wrench
 
 action_fields:
-  - arm_action
+  - left_arm_action
+  - right_arm_action
+  - left_arm_action_at_gripper_tip
+  - right_arm_action_at_gripper_tip
   - head_action
   - base_action
   - lift_action

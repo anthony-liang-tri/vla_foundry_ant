@@ -43,15 +43,36 @@ NUM_EPISODES="${NUM_EPISODES:-10}"
 MAX_STEPS_PER_EPISODE="${MAX_STEPS_PER_EPISODE:-500}"
 
 # ============================================================
-# ZZK API Paths (Customize for your environment)
+# ZZK API Path (Customize for your environment)
 # ============================================================
-ZZK_API_CLIENT_PY_PATH="${ZZK_API_CLIENT_PY_PATH:-/PATH/TO/ZZK_API_CLIENT.py}"  # Must be set by user
-ZZK_API_CTYPES_LIBRARY_PATH="${ZZK_API_CTYPES_LIBRARY_PATH:-/PATH/TO/ZZK_API_CTYPES_LIBRARY.so}"  # Must be set by user
+ZZK_API_CLIENT_PATH="${ZZK_API_CLIENT_PATH:-/PATH/TO/ZZK_API_CLIENT_DIR}"  # Must be set by user
 
 # ============================================================
 # Logging
 # ============================================================
 LOG_LEVEL="${LOG_LEVEL:-INFO}"
+
+# ============================================================
+# Override defaults with CLI arguments (highest priority)
+# ============================================================
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --checkpoint_dir)        CHECKPOINT_DIR="$2";        shift 2 ;;
+        --checkpoint_name)       CHECKPOINT_NAME="$2";       shift 2 ;;
+        --device)                DEVICE="$2";                shift 2 ;;
+        --num_flow_steps)        NUM_FLOW_STEPS="$2";        shift 2 ;;
+        --open_loop_steps)       OPEN_LOOP_STEPS="$2";       shift 2 ;;
+        --robot_hostname)        ROBOT_HOSTNAME="$2";        shift 2 ;;
+        --robot_port)            ROBOT_PORT="$2";            shift 2 ;;
+        --language_instruction)  LANGUAGE_INSTRUCTION="$2";  shift 2 ;;
+        --num_episodes)          NUM_EPISODES="$2";          shift 2 ;;
+        --max_steps_per_episode) MAX_STEPS_PER_EPISODE="$2"; shift 2 ;;
+        --zzk_api_client_path)   ZZK_API_CLIENT_PATH="$2";   shift 2 ;;
+        --enable_compliance)     ENABLE_COMPLIANCE=1;        shift 1 ;;
+        --log_level)             LOG_LEVEL="$2";             shift 2 ;;
+        *) echo "Unknown argument: $1"; exit 1 ;;
+    esac
+done
 
 # ============================================================
 # Run Inference
@@ -68,22 +89,15 @@ CMD="$CMD --robot_port ${ROBOT_PORT}"
 CMD="$CMD --language_instruction \"${LANGUAGE_INSTRUCTION}\""
 CMD="$CMD --num_episodes ${NUM_EPISODES}"
 CMD="$CMD --max_steps_per_episode ${MAX_STEPS_PER_EPISODE}"
-CMD="$CMD --zzk_api_client_ctypes_library_path \"${ZZK_API_CTYPES_LIBRARY_PATH}\""
+CMD="$CMD --zzk_api_client_path \"${ZZK_API_CLIENT_PATH}\""
 CMD="$CMD --log_level \"${LOG_LEVEL}\""
 
-# Add checkpoint name if specified
 if [ -n "$CHECKPOINT_NAME" ]; then
     CMD="$CMD --checkpoint_name \"${CHECKPOINT_NAME}\""
 fi
 
-# Add ZZK API client path if specified
-if [ -n "$ZZK_API_CLIENT_PY_PATH" ]; then
-    CMD="$CMD --zzk_api_client_py_path \"${ZZK_API_CLIENT_PY_PATH}\""
-fi
-
-# Append any CLI arguments (highest priority)
-if [ $# -gt 0 ]; then
-    CMD="$CMD $@"
+if [ "${ENABLE_COMPLIANCE:-0}" = "1" ]; then
+    CMD="$CMD --enable_compliance"
 fi
 
 # Print configuration

@@ -23,7 +23,7 @@ data:
     - -1
     - 0
   action_fields:
-    - arm_action
+    - left_arm_action
   proprioception_fields:
     - chassis_T_eef_pose
 distributed:

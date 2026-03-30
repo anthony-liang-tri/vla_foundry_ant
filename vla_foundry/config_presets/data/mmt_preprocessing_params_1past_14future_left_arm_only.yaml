@@ -22,6 +22,3 @@ resize_images_size:
 mmt_lowdim_flatten_indices_selection:
   # State observations - left arm only
   chassis_T_eef_pose: [{start: 0, end: 7}]    # Left arm end-effector pose in chassis frame (7-dim)
-
-  # Actions - left arm only
-  arm_action: [{start: 0, end: 7}]            # Left arm action (7-dim)
