@@ -113,11 +113,15 @@ state_topic_subfield_map:
 # =============================================================================
 
 camera_topics:
-  - /head_camera/color/image_raw/compressed
+  - /head/zed_node/left/image_rect_color/compressed
+  - /head/zed_node/right/image_rect_color/compressed
+  # - /head_camera/color/image_raw/compressed
   - /left_wrist_camera/color/image_rect_raw/compressed
   - /right_wrist_camera/color/image_rect_raw/compressed
 
 camera_topics_field_map:
-  /head_camera/color/image_raw/compressed: head
+  /head/zed_node/left/image_rect_color/compressed: stereo_head_left
+  /head/zed_node/right/image_rect_color/compressed: stereo_head_right
+  # /head_camera/color/image_raw/compressed: head
   /left_wrist_camera/color/image_rect_raw/compressed: left_wrist
   /right_wrist_camera/color/image_rect_raw/compressed: right_wrist

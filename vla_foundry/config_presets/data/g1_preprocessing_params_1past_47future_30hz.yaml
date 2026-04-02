@@ -22,7 +22,9 @@ resize_images_size:
 - 384
 # Must align with g1_data_camera_names.yaml
 camera_rotations:
-  head: 0
+  # head: 0
+  stereo_head_left: 0
+  stereo_head_right: 0
   left_wrist: 3  # Rotate 90° counterclockwise
   right_wrist: 3
 jpeg_quality: 95
