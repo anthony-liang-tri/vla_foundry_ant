@@ -7,11 +7,15 @@ wandb
 experiments
 outputs
 results
+data/lerobot/
+data/preprocessed/
+tutorials/data/
 sagemaker/configs/
 sagemaker/git_diffs/
 tmp/
 debug_logs/
 downloaded_results/
+smoke_test_nb/
 
 
 # System files

@@ -1,0 +1,34 @@
+# Data directories (exclude large datasets but keep tutorial data accessible via absolute paths)
+tutorials/data/
+data/droid_100_minimal/
+data/dclm_minimal/
+smoke_test_nb/
+
+# Large test assets
+tests/essential/test_assets/
+
+# Environment
+.venv/
+
+# Git
+.git/
+
+# Experiments / outputs
+wandb/
+experiments/
+outputs/
+results/
+tmp/
+debug_logs/
+downloaded_results/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Cache
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
