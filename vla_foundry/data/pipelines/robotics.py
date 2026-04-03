@@ -67,11 +67,21 @@ def extract_robotics_fields(
             # Extract camera name and timestep from key.
             # Use rsplit to handle camera names containing dots (e.g., "observation.image_t-1")
             img_key = key.rsplit(".", 1)[0]  # e.g., "observation.image_t-1"
-            # Keep tensor images as tensors for tensor-native downstream paths.
-            if isinstance(value, torch.Tensor):
-                images[img_key] = value
+            # Also store under a short key (without dotted prefix like "observation.images.")
+            # so that image_names computed from camera_names match regardless of prefix.
+            # The short key is the part after the last dot-separated segment that precedes
+            # the camera+timestep pattern (e.g., "observation.images.cam_t0" -> "cam_t0").
+            # We detect the timestep suffix "_t" to find where the camera name starts.
+            parts = img_key.rsplit("_t", 1)
+            if len(parts) == 2 and "." in parts[0]:
+                short_key = parts[0].rsplit(".", 1)[-1] + "_t" + parts[1]
             else:
-                images[img_key] = np.asarray(value)
+                short_key = img_key
+            # Keep tensor images as tensors for tensor-native downstream paths.
+            img = value if isinstance(value, torch.Tensor) else np.asarray(value)
+            images[img_key] = img
+            if short_key != img_key:
+                images[short_key] = img
         elif key.endswith(".tiff"):
             # Point map: use rsplit to handle dotted camera names
             pm_key_with_suffix = key.rsplit(".", 1)[0]  # e.g., "scene_right_0_point_map_t0"

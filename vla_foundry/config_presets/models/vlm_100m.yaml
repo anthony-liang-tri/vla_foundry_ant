@@ -1,0 +1,8 @@
+# 100M backbone VLM with a tiny ViT encoder for efficient training.
+# Uses the same transformer architecture as transformer_100m.yaml.
+# The vocab_size is set to 49280 to match the SmolVLM2 tokenizer length (49152 base + 128 special tokens).
+type: vlm
+transformer:
+  <<: !include transformer_100m.yaml
+  vocab_size: 49280
+vit: !include vit_tiny.yaml

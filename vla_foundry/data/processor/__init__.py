@@ -79,6 +79,14 @@ def get_processor(data_params: DataParams):
         )
     elif data_params.processor == "debug":
         return DebugProcessor()
+    elif data_params.processor == "simple_vlm":
+        from vla_foundry.models.vision_language_backbones.simple_vlm_processor import SimpleVLMProcessor
+
+        processor = SimpleVLMProcessor(
+            image_size=data_params.image_size,
+        )
+        processor.image_seq_length = data_params.img_num_tokens
+        return processor
     elif data_params.processor == "none":
         return PassthroughProcessor(image_size=getattr(data_params, "image_size", None))
     elif data_params.processor is not None:

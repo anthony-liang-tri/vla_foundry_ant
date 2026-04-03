@@ -52,7 +52,7 @@ def main():
         raise RuntimeError(error_msg)
 
     # Initialize Ray - forward AWS credentials to workers when needed for S3 I/O
-    runtime_env = {"env_vars": {}}
+    runtime_env = {"env_vars": {"MPLBACKEND": "agg"}}
 
     # Capture git info on head node and pass to workers (since .git is excluded)
     runtime_env["env_vars"].update(get_git_env_vars())
@@ -73,13 +73,39 @@ def main():
             ray.init(
                 address="auto",
                 num_cpus=cfg.ray_num_cpus,
-                runtime_env=runtime_env | {"excludes": [".git", "*.pt", "*.pyc", "__pycache__", ".pytest_cache"]},
+                runtime_env=runtime_env
+                | {
+                    "excludes": [
+                        ".git",
+                        "*.pt",
+                        "*.pyc",
+                        "__pycache__",
+                        ".pytest_cache",
+                        "/data/",
+                        "/gitui",
+                        "/tests/essential/test_assets/",
+                        "/worktrees/",
+                    ]
+                },
             )
             print("Connected to existing Ray cluster (address='auto')")
         except ConnectionError:
             ray.init(
                 num_cpus=cfg.ray_num_cpus,
-                runtime_env=runtime_env | {"excludes": [".git", "*.pt", "*.pyc", "__pycache__", ".pytest_cache"]},
+                runtime_env=runtime_env
+                | {
+                    "excludes": [
+                        ".git",
+                        "*.pt",
+                        "*.pyc",
+                        "__pycache__",
+                        ".pytest_cache",
+                        "/data/",
+                        "/gitui",
+                        "/tests/essential/test_assets/",
+                        "/worktrees/",
+                    ]
+                },
             )
             print(f"Started new local Ray cluster with num_cpus={cfg.ray_num_cpus}")
 

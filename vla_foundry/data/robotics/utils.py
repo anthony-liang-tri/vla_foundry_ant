@@ -693,15 +693,10 @@ def merge_statistics(statistics: list[dict[str, Any]]) -> dict[str, Any]:
                 try:
                     batched_stats[tensor_name][stat_name] = np.array(batched_stats[tensor_name][stat_name])
                 except (ValueError, TypeError) as err:
-                    if stat_name.endswith("_per_timestep") or stat_name == "count":
-                        raise ValueError(
-                            f"Cannot merge statistics for '{tensor_name}': "
-                            f"'{stat_name}' has inconsistent shapes across datasets "
-                            "(likely different numbers of timesteps)."
-                        ) from err
-                    batched_stats[tensor_name][stat_name] = np.array(
-                        batched_stats[tensor_name][stat_name], dtype=object
-                    )
+                    raise ValueError(
+                        f"Cannot merge statistics for '{tensor_name}.{stat_name}': "
+                        f"inconsistent shapes across datasets (e.g. different numbers of timesteps)."
+                    ) from err
 
     merged_stats = {}
     for tensor_name in batched_stats:
