@@ -251,6 +251,7 @@ class Transformer(TransformerBase):
         attention_mask=None,
         output_hidden_states=False,
         is_causal=None,
+        **kwargs,
     ):
         """
         Args:
