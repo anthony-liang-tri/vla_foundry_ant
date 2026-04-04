@@ -55,7 +55,13 @@ class ImageCaptionDataParams(DataParams):
     processor_loaded = None
     img_num_tokens: int = field(default=256)
     image_size: int = field(default=224)
+    tokenizer: str = field(default=None)
     augmentation: DataAugmentationParams = field(default_factory=DataAugmentationParams)
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.tokenizer is None:
+            object.__setattr__(self, "tokenizer", self.processor)
 
     def init_shared_attributes(self, cfg):
         super().init_shared_attributes(cfg)

@@ -2,16 +2,19 @@ data:
   allow_multiple_epochs: false
   dataset_manifest:
   - s3://tri-ml-datasets/datasets/datacompdr_1b/manifest.jsonl
+  - s3://tri-ml-datasets/vla_foundry_datasets/dclm-baseline-1.0-tarshards/manifest.jsonl
   dataset_modality:
   - image_caption
+  - text_untokenized
   dataset_weighting:
-  - 1.0
+  - 0.8
+  - 0.2
   image_size: 224
   img_num_tokens: 64
   num_workers: 8
   prefetch_factor: 4
   processor: HuggingFaceTB/SmolVLM2-256M-Video-Instruct
-  seed: 42
+  seed: 43
   seq_len: 2048
   shuffle: true
   shuffle_buffer_size: 2000

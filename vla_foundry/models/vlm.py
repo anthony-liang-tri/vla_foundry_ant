@@ -77,25 +77,29 @@ class VLM(TransformerBase):
     def forward(
         self,
         input_ids,
-        pixel_values,
+        pixel_values=None,
         attention_mask=None,
         output_hidden_states=False,
         use_cache=False,
         attention_mask_images=None,  # ignored: image tokens are handled via image_token_id masking
         **kwargs,
     ):
-        # image shape [bsz, 3, image_size, image_size]
-        # input_ids and attention_mask should already allot tokens for the image
-        image_embd = self.vit(pixel_values)
-        image_embd = self.projection(image_embd)  # [bsz, 16*16, lm_hidden_dim]
-        special_image_mask = input_ids == self.model_params.image_token_id
-        safe_input_ids = input_ids.clone()
-        safe_input_ids[special_image_mask] = 0
-        token_embd = self.transformer.embeddings(safe_input_ids).to(image_embd.dtype)
-        special_image_mask = special_image_mask.unsqueeze(-1)
-        assert special_image_mask.sum() == image_embd.shape[0] * image_embd.shape[1]
-        special_image_mask = special_image_mask.expand_as(token_embd).to(token_embd.device)
-        inputs_embeds = token_embd.masked_scatter(special_image_mask, image_embd)
+        if pixel_values is not None:
+            # image shape [bsz, 3, image_size, image_size]
+            # input_ids and attention_mask should already allot tokens for the image
+            image_embd = self.vit(pixel_values)
+            image_embd = self.projection(image_embd)  # [bsz, 16*16, lm_hidden_dim]
+            special_image_mask = input_ids == self.model_params.image_token_id
+            safe_input_ids = input_ids.clone()
+            safe_input_ids[special_image_mask] = 0
+            token_embd = self.transformer.embeddings(safe_input_ids).to(image_embd.dtype)
+            special_image_mask = special_image_mask.unsqueeze(-1)
+            assert special_image_mask.sum() == image_embd.shape[0] * image_embd.shape[1]
+            special_image_mask = special_image_mask.expand_as(token_embd).to(token_embd.device)
+            inputs_embeds = token_embd.masked_scatter(special_image_mask, image_embd)
+        else:
+            # Text-only batch: no image tokens to scatter
+            inputs_embeds = self.transformer.embeddings(input_ids)
 
         # Call transformer's forward method directly to get logits and past_key_values and hidden_states
         output = self.transformer(
