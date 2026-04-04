@@ -6,7 +6,7 @@ data:
   - text_untokenized
   dataset_weighting:
   - 1.0
-  num_workers: 1
+  num_workers: 8
   prefetch_factor: 4
   seed: 42
   seq_len: 2048
@@ -34,7 +34,7 @@ ema:
 hparams:
   beta1: 0.9
   beta2: 0.95
-  decay: '0.3'
+  decay: 0.3
   eps: 1.0e-08
   force_min_lr: 0.0
   global_batch_size: 512
@@ -46,12 +46,12 @@ hparams:
   lr_scheduler: warmup_constant_decay
   optimizer: adamw
   per_gpu_batch_size: 4
-  precision: amp_bfloat16
+  precision: pure_bf16
   seed: 42
-  torchcompile: false
-  warmup: '1000'
+  torchcompile: true
+  warmup: 1000
   wd: 0.01
-  z_loss_coefficient: 0.0
+  z_loss_coefficient: 1e-4
 log_every_n_steps: 20
 log_level: INFO
 max_checkpoint_limit: null
@@ -69,7 +69,7 @@ model:
   norm_type: default_layer_norm
   positional_embedding_type: rotary
   post_embed_norm: false
-  qk_norm: false
+  qk_norm: true
   resume_from_checkpoint: null
   resume_weights_only: false
   type: transformer
