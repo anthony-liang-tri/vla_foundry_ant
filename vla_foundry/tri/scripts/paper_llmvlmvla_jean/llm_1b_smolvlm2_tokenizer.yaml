@@ -34,10 +34,10 @@ ema:
 hparams:
   beta1: 0.9
   beta2: 0.95
-  decay: 0.3
+  decay: 0.2
   eps: 1.0e-08
   force_min_lr: 0.0
-  global_batch_size: 512
+  global_batch_size: 1536
   grad_checkpointing: false
   grad_clip_norm: 1.0
   loss_function: cross_entropy
@@ -45,7 +45,7 @@ hparams:
   lr_cooldown_end: 0.0
   lr_scheduler: warmup_constant_decay
   optimizer: adamw
-  per_gpu_batch_size: 4
+  per_gpu_batch_size: 12
   precision: pure_bf16
   seed: 42
   torchcompile: true
@@ -85,6 +85,14 @@ total_train_samples: 50_000_000
 total_val_samples: null
 val_every_n_checkpoints: 1
 wandb: true
-wandb_entity: null
+wandb_entity: tri
 wandb_project_name: vla_foundry
-wandb_tags: []
+wandb_tags: [
+  "paper",
+  "llm_vlm_vla",
+  "tokenizer_smolvlm2",
+  "1b",
+  "100Btokens",
+  "pure_bf16",
+  "torchcompile",
+]
