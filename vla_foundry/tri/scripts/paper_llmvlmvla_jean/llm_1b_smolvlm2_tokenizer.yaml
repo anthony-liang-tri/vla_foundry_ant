@@ -1,0 +1,98 @@
+data:
+  allow_multiple_epochs: true
+  dataset_manifest:
+  - s3://tri-ml-datasets/vla_foundry_datasets/dclm-baseline-1.0-tarshards/manifest.jsonl
+  dataset_modality:
+  - text_untokenized
+  dataset_weighting:
+  - 1.0
+  num_workers: 8
+  prefetch_factor: 4
+  seed: 42
+  seq_len: 2048
+  shuffle: true
+  shuffle_buffer_size: 2000
+  shuffle_initial: 500
+  tokenizer: HuggingFaceTB/SmolVLM2-256M-Video-Instruct
+  type: text_untokenized
+  val_dataset_manifest: []
+  val_dataset_weighting: []
+distributed:
+  ddp_static_graph: false
+  device: cuda:0
+  dist_backend: nccl
+  dist_url: env://
+  fsdp: true
+  fsdp_cpu_offload: false
+  fsdp_reshard_after_forward: false
+  local_rank: 0
+  rank: 0
+  use_distributed: true
+  world_size: 128
+ema:
+  enabled: false
+hparams:
+  beta1: 0.9
+  beta2: 0.95
+  eps: 1.0e-08
+  force_min_lr: 0.0
+  global_batch_size: 1536
+  grad_checkpointing: false
+  grad_clip_norm: 1.0
+  loss_function: cross_entropy
+  lr: 0.0003
+  lr_cooldown_end: 0.0
+  lr_scheduler: warmup_constant_decay
+  warmup: 1000
+  decay: 0.2
+  optimizer: adamw
+  per_gpu_batch_size: 12
+  precision: pure_bf16
+  seed: 42
+  torchcompile: true
+  wd: 0.01
+  z_loss_coefficient: 1e-4
+log_every_n_steps: 20
+log_level: INFO
+max_checkpoint_limit: null
+model:
+  attn_name: torch_attn
+  cast_output_to_float32: false
+  ffn_type: swiglu
+  freeze: false
+  hidden_dim: 2048
+  is_causal: true
+  max_seq_len: 2048
+  n_heads: 16
+  n_layers: 24
+  norm_eps: 1.0e-05
+  norm_type: lp_layer_norm
+  positional_embedding_type: rotary
+  post_embed_norm: false
+  qk_norm: true
+  resume_from_checkpoint: null
+  resume_weights_only: false
+  type: transformer
+  vocab_size: 49280
+  weight_tying: false
+num_checkpoints: 5
+num_epochs: null
+remote_sync: s3://tri-ml-datasets-uw2/vla_foundry_scratch/models/llm_1b_smolvlm2tok_100Btokens
+remote_sync_fixed_path: s3://tri-ml-datasets-uw2/vla_foundry_models_fixed/
+resolve_configs: false
+save_path: /tmp
+total_train_samples: 50_000_000
+total_val_samples: null
+val_every_n_checkpoints: 1
+wandb: true
+wandb_entity: tri
+wandb_project_name: vla_foundry
+wandb_tags: [
+  "paper",
+  "llm_vlm_vla",
+  "tokenizer_smolvlm2",
+  "1b",
+  "100Btokens",
+  "pure_bf16",
+  "torchcompile",
+]
