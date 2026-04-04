@@ -248,6 +248,8 @@ class VLM(TransformerBase):
 
 @register_model("vlm")
 def create_vlm(model_params: VLMParams, load_pretrained: bool = True):
+    import logging
+
     from vla_foundry.models.transformer import Transformer
     from vla_foundry.models.transformer_hf import TransformerHF
     from vla_foundry.models.vit import ViT
@@ -259,4 +261,24 @@ def create_vlm(model_params: VLMParams, load_pretrained: bool = True):
         else TransformerHF(model_params.transformer, load_pretrained=load_pretrained)
     )
     vit = ViT(model_params.vit) if model_params.vit.type == "vit" else ViTHF(model_params.vit)
+
+    # Load sub-component checkpoints if specified
+    if model_params.transformer.resume_from_checkpoint is not None:
+        from vla_foundry.file_utils import pt_load
+
+        checkpoint = pt_load(model_params.transformer.resume_from_checkpoint, map_location="cpu")
+        sd = checkpoint["state_dict"]
+        if "_orig_mod" in next(iter(sd.items()))[0]:
+            sd = {k.replace("_orig_mod.", ""): v for k, v in sd.items()}
+        transformer.load_state_dict(sd, strict=True)
+        logging.info(f"=> loaded transformer weights from '{model_params.transformer.resume_from_checkpoint}'")
+
+    if model_params.vit.resume_from_checkpoint is not None:
+        from vla_foundry.file_utils import pt_load
+
+        checkpoint = pt_load(model_params.vit.resume_from_checkpoint, map_location="cpu")
+        sd = checkpoint["state_dict"]
+        vit.load_state_dict(sd, strict=True)
+        logging.info(f"=> loaded ViT weights from '{model_params.vit.resume_from_checkpoint}'")
+
     return VLM(model_params, transformer, vit)
