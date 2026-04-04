@@ -28,7 +28,7 @@ def batch_tokenize(batch, tokenizer, seq_len):
         max_length=seq_len + 1,  # +1 because next token prediction
         return_tensors="pt",
     )
-    return tokenized["input_ids"], tokenized["attention_mask"]
+    return tokenized["input_ids"]
 
 
 class TextUntokenizedPipeline(BaseWebDatasetPipeline):
@@ -61,5 +61,5 @@ class TextUntokenizedPipeline(BaseWebDatasetPipeline):
         return pipeline
 
     def tokenize_wrapper(self, batch):
-        input_ids, attention_mask = batch_tokenize(batch, self.tokenizer, self.data_params.seq_len)
-        return {"input_ids": input_ids, "attention_mask": attention_mask}
+        input_ids = batch_tokenize(batch, self.tokenizer, self.data_params.seq_len)
+        return {"input_ids": input_ids, "attention_mask": None}
