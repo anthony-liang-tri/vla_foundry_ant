@@ -34,7 +34,6 @@ ema:
 hparams:
   beta1: 0.9
   beta2: 0.95
-  decay: 0.2
   eps: 1.0e-08
   force_min_lr: 0.0
   global_batch_size: 1536
@@ -44,12 +43,13 @@ hparams:
   lr: 0.0003
   lr_cooldown_end: 0.0
   lr_scheduler: warmup_constant_decay
+  warmup: 1000
+  decay: 0.2
   optimizer: adamw
   per_gpu_batch_size: 12
   precision: pure_bf16
   seed: 42
   torchcompile: true
-  warmup: 1000
   wd: 0.01
   z_loss_coefficient: 1e-4
 log_every_n_steps: 20
@@ -66,7 +66,7 @@ model:
   n_heads: 16
   n_layers: 24
   norm_eps: 1.0e-05
-  norm_type: default_layer_norm
+  norm_type: lp_layer_norm
   positional_embedding_type: rotary
   post_embed_norm: false
   qk_norm: true

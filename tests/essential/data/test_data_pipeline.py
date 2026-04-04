@@ -57,35 +57,14 @@ def _test_batch_conform(batch, expected_seq_len, expected_batch_size=None, modal
     assert (batch["input_ids"] >= 0).all()
 
     # Modality-specific assertions
-    if modality in ["text_untokenized", "image_caption"]:
+    if modality == "image_caption":
         assert "attention_mask" in batch
         assert isinstance(batch["attention_mask"], torch.Tensor)
         assert batch["attention_mask"].dtype == torch.long
         assert batch["attention_mask"].shape == batch["input_ids"].shape
-
-        # Assert no NaN or infinite values in attention mask
-        assert not torch.isnan(batch["attention_mask"]).any()
-        assert not torch.isinf(batch["attention_mask"]).any()
-
-        # Assert attention mask values are valid
-        assert (batch["attention_mask"] >= 0).all()
-        assert (batch["attention_mask"] <= 1).all()
-
-        # Assert attention mask structure (1s followed by 0s for padding)
-        batch_size = batch["input_ids"].shape[0]
-        for i in range(batch_size):
-            attention_row = batch["attention_mask"][i]
-            # Should have some attention (not all zeros)
-            assert attention_row.sum() > 0, f"Empty attention mask for sample {i}"
-
-            # Find padding pattern (1s followed by 0s)
-            zeros = (attention_row == 0).nonzero(as_tuple=True)[0]
-            if len(zeros) > 0:
-                first_zero = zeros[0].item()
-                # All tokens before first zero should be 1
-                assert (attention_row[:first_zero] == 1).all()
-                # All tokens after first zero should be 0
-                assert (attention_row[first_zero:] == 0).all()
+    elif modality == "text_untokenized":
+        assert "attention_mask" in batch
+        assert batch["attention_mask"] is None
 
     if modality == "image_caption":
         assert "pixel_values" in batch
@@ -328,7 +307,7 @@ class TestTextUntokenizedPipeline:
         batch = [["Hello world", "Test text"]]
         seq_len = 3
 
-        input_ids, attention_mask = batch_tokenize(batch, mock_tokenizer, seq_len)
+        input_ids = batch_tokenize(batch, mock_tokenizer, seq_len)
 
         # Verify tokenizer was called with correct parameters
         mock_tokenizer.assert_called_once_with(
@@ -341,7 +320,6 @@ class TestTextUntokenizedPipeline:
 
         # Verify outputs
         assert torch.equal(input_ids, torch.tensor([[1, 2, 3, 0], [4, 5, 0, 0]]))
-        assert torch.equal(attention_mask, torch.tensor([[1, 1, 1, 0], [1, 1, 0, 0]]))
 
     def test_batch_tokenize_with_bytes(self):
         """Test batch_tokenize with bytes input."""
@@ -355,7 +333,7 @@ class TestTextUntokenizedPipeline:
         batch = [[b"Hello world"]]
         seq_len = 10
 
-        input_ids, attention_mask = batch_tokenize(batch, mock_tokenizer, seq_len)
+        batch_tokenize(batch, mock_tokenizer, seq_len)
 
         # Verify bytes were decoded
         mock_tokenizer.assert_called_once_with(
@@ -379,8 +357,7 @@ class TestTextUntokenizedPipeline:
         # Mock batch_tokenize
         with patch("vla_foundry.data.pipelines.text_untokenized.batch_tokenize") as mock_batch_tokenize:
             mock_input_ids = torch.tensor([[1, 2, 3]])
-            mock_attention_mask = torch.tensor([[1, 1, 1]])
-            mock_batch_tokenize.return_value = (mock_input_ids, mock_attention_mask)
+            mock_batch_tokenize.return_value = mock_input_ids
 
             batch = [["test text"]]
             result = pipeline.tokenize_wrapper(batch)
@@ -392,7 +369,7 @@ class TestTextUntokenizedPipeline:
             assert "input_ids" in result
             assert "attention_mask" in result
             assert torch.equal(result["input_ids"], mock_input_ids)
-            assert torch.equal(result["attention_mask"], mock_attention_mask)
+            assert result["attention_mask"] is None
 
     @pytest.mark.parametrize(
         "param_config_path", ["tests/essential/params/dummy_configs/dummy_text_untokenized_config.yaml"]
@@ -481,9 +458,9 @@ class TestTextUntokenizedPipeline:
 
         # Assert tensor properties are consistent
         assert batch1["input_ids"].dtype == batch2["input_ids"].dtype
-        assert batch1["attention_mask"].dtype == batch2["attention_mask"].dtype
+        assert batch1["attention_mask"] is None
+        assert batch2["attention_mask"] is None
         assert batch1["input_ids"].shape == batch2["input_ids"].shape
-        assert batch1["attention_mask"].shape == batch2["attention_mask"].shape
         assert batch1["input_ids"].shape == batch3["input_ids"].shape
 
         # Assert that batch1 and batch2 are the same
