@@ -1,4 +1,6 @@
 import dataclasses as dc
+import json
+import os
 import typing
 
 # Minor type annotations
@@ -45,6 +47,12 @@ class PolicyMetadata:
 
     runtime_information: dict[str, str] = dc.field(default_factory=dict)
 
+    def save_json(self, directory: str, filename: str = "policy_metadata.json"):
+        """Save policy metadata as a JSON file in the given directory."""
+        os.makedirs(directory, exist_ok=True)
+        path = os.path.join(directory, filename)
+        with open(path, "w") as f:
+            json.dump(dc.asdict(self), f, indent=2)
 
 class Policy:
     """
