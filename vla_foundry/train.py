@@ -87,31 +87,9 @@ def train_one_checkpoint(
         initial=step, total=total_steps, desc=f"Checkpoint {checkpoint_num}", disable=not is_master(cfg), unit="step"
     )
 
-    # Handle freeze_pretrained_steps: zero gradients for pretrained components for N steps.
-    # Identify frozen param names from the unwrapped model, then match against the wrapped model's params.
-    freeze_pretrained_steps = cfg.hparams.freeze_pretrained_steps
-    frozen_params = []
-    if freeze_pretrained_steps > 0 and step < freeze_pretrained_steps:
-        # Find which top-level module names are pretrained
-        unwrapped = get_unwrapped_model(model)
-        frozen_prefixes = []
-        for name, module in unwrapped.named_children():
-            if hasattr(module, "model_params") and getattr(module.model_params, "resume_from_checkpoint", None):
-                frozen_prefixes.append(name + ".")
-                logging.info(f"Will zero gradients for '{name}' for {freeze_pretrained_steps} steps")
-        # Collect params from the wrapped model (FSDP-compatible) by matching name prefixes
-        for name, param in model.named_parameters():
-            if any(prefix in name for prefix in frozen_prefixes):
-                frozen_params.append(param)
-
     # Open-ended loop; we break on budget or data exhaustion.
     for i in itertools.count():
         scheduler(step)
-
-        # Unfreeze pretrained modules after freeze_pretrained_steps
-        if frozen_params and step >= freeze_pretrained_steps:
-            logging.info(f"Unfreezing pretrained modules at step {step}")
-            frozen_params = []
 
         # Hard-stop when we reach the sample budget translated into steps.
         if step >= total_steps:
@@ -194,11 +172,6 @@ def train_one_checkpoint(
 
         # Optimizer step
         optim_step_start = time.time()
-        # Zero gradients for frozen pretrained modules
-        if frozen_params:
-            for param in frozen_params:
-                if param.grad is not None:
-                    param.grad.zero_()
         # (Optional) grad clipping
         if cfg.hparams.grad_clip_norm is not None:
             torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.hparams.grad_clip_norm, norm_type=2.0)
