@@ -26,6 +26,7 @@ class HyperParams(BaseParams):
     grad_clip_norm: float = field(default=None)
     grad_checkpointing: bool = field(default=False)
     torchcompile: bool = field(default=False)
+    freeze_pretrained_steps: int = field(default=0)
 
     # Shared attributes. Overwritten in init_shared_attributes.
     world_size: int = field(default=1)

@@ -55,6 +55,7 @@ hparams:
   precision: pure_bf16
   seed: 42
   torchcompile: true
+  freeze_pretrained_steps: 5000
   wd: 0.01
   z_loss_coefficient: 1e-4
 log_every_n_steps: 20

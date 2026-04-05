@@ -8,15 +8,21 @@ from vla_foundry.file_utils import pt_load
 
 
 def create_optimizer(hparams, model):
-    named_parameters = list(model.named_parameters())
-    no_decay_params = []  # to be potentially used later
-    params = [p for n, p in named_parameters if p.requires_grad]
+    decay_params = []
+    no_decay_params = []
+    for name, param in model.named_parameters():
+        if not param.requires_grad:
+            continue
+        if name.endswith(".bias") or "norm" in name.lower():
+            no_decay_params.append(param)
+        else:
+            decay_params.append(param)
 
     if hparams.optimizer == "adamw":
         optimizer = optim.AdamW(
             [
                 {"params": no_decay_params, "weight_decay": 0.0},
-                {"params": params, "weight_decay": hparams.wd},
+                {"params": decay_params, "weight_decay": hparams.wd},
             ],
             lr=hparams.lr,
             betas=(hparams.beta1, hparams.beta2),
