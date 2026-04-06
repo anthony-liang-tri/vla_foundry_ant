@@ -237,6 +237,21 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/5c/37/0211f82891a9f14efcfd2b2096f8d9e4351398ad637fdd1ee59cfc580b0e/bddl-1.0.1.tar.gz", hash = "sha256:1fa4e6e5050b93888ff6fd8455c39bfb29d3864ce06b4c37c0f781f513a2ae26", size = 164809, upload-time = "2022-03-08T01:48:23.564Z" }
 
 [[package]]
+name = "binomial-cis"
+version = "0.0.12"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "matplotlib" },
+    { name = "numba" },
+    { name = "numpy" },
+    { name = "scipy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/14/b4/de24057c0c8fd909bf6fe1d4b4dfba0ee05f3186326e6cf9fb55a2e35e0a/binomial_cis-0.0.12.tar.gz", hash = "sha256:55fc4967b2a30fafae761f7b3163ee42a748c41c9f710209d8cf8bc2953a51bc", size = 13064, upload-time = "2025-04-23T16:08:28.171Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6b/74/f59780bd9ecc5cbbdeb1c3d3aa07bd211708ad9d731064483142b1f62469/binomial_cis-0.0.12-py3-none-any.whl", hash = "sha256:38928ecd33e8d4d0ceea292bdcb620c4921d5dd65f3fefe53b51a71cad2c5bcf", size = 14401, upload-time = "2025-04-23T16:08:26.592Z" },
+]
+
+[[package]]
 name = "boto3"
 version = "1.42.70"
 source = { registry = "https://pypi.org/simple" }
@@ -3225,6 +3240,23 @@ wheels = [
 ]
 
 [[package]]
+name = "sequentialized-barnard-tests"
+version = "0.0.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "binomial-cis" },
+    { name = "matplotlib" },
+    { name = "numpy" },
+    { name = "pytest" },
+    { name = "scipy" },
+    { name = "tqdm" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b1/4c/1c5ed0a1c1bad2f3d9483c3ea5a19a9e7e91920eb2283130a6d71f240e17/sequentialized_barnard_tests-0.0.5.tar.gz", hash = "sha256:51ed68aa477b0fd9c609cf03c5804e3198e900c754cc9e3a59788de1da61947e", size = 298751, upload-time = "2025-12-15T18:01:16.146Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7d/af/3ed41a0c46ee8c59c3399c25ae2f71812721b709163d238950ed20ab8a4b/sequentialized_barnard_tests-0.0.5-py3-none-any.whl", hash = "sha256:6ebdfb95a5e624cfa44671dbfc16062d8ec523bc49ad444f4f6e3104e6b3e260", size = 324433, upload-time = "2025-12-15T18:01:14.515Z" },
+]
+
+[[package]]
 name = "setuptools"
 version = "82.0.1"
 source = { registry = "https://pypi.org/simple" }
@@ -3758,6 +3790,7 @@ dependencies = [
 eval-viewer = [
     { name = "gradio" },
     { name = "plotly" },
+    { name = "sequentialized-barnard-tests" },
 ]
 inference = [
     { name = "grpc-workspace" },
@@ -3833,6 +3866,7 @@ requires-dist = [
 eval-viewer = [
     { name = "gradio", specifier = ">=6.0.0" },
     { name = "plotly", specifier = ">=6.0.0" },
+    { name = "sequentialized-barnard-tests", specifier = ">=0.0.5" },
 ]
 inference = [
     { name = "grpc-workspace", editable = "packages/grpc-workspace" },

@@ -108,7 +108,7 @@ The simulation connects to the policy server in Terminal 1, runs each episode, a
 > **Interactive shell:** To explore the Docker container instead of running the evaluation, replace `bash launch_sim.sh PutMugOnSaucer` with just `bash`. You can then run `bash launch_sim.sh PutMugOnSaucer` manually from inside.
 
 **Controlling the number of episodes:**
-`LAUNCH_DEMONSTRATION_INDICES` controls which episode seeds to run. The format is `start:end` (exclusive). For example, `100:150` runs 50 episodes with seeds 100-149. For paper-comparable results, use `100:300` (200 episodes per task).
+`LAUNCH_DEMONSTRATION_INDICES` controls which episode seeds to run. The format is `start:end` (exclusive). For example, `100:150` runs 50 episodes with seeds 100-149. For paper-comparable results, use `0:200` (200 episodes per task).
 
 **Docker environment variables:**
 | Variable | Description | Default |
@@ -179,7 +179,7 @@ uv run python tutorials/sim_evaluation/run_evaluation.py $CHECKPOINT_A --model_n
 uv run python tutorials/sim_evaluation/run_evaluation.py $CHECKPOINT_B --model_name model_b
 ```
 
-See all options with `--help`. Key flags: `--num_gpus`, `--tasks_per_gpu`, `--num_processes`, `--model_name`, `--num_episodes` (seed range, default `100:300`).
+See all options with `--help`. Key flags: `--num_gpus`, `--tasks_per_gpu`, `--num_processes`, `--model_name`, `--num_episodes` (seed range, default `0:200`).
 
 **Speeding up evaluation:** The simulation (physics + rendering) is the bottleneck, not the policy server — GPU utilization is typically low. Two ways to increase throughput:
 
@@ -203,5 +203,5 @@ This runs 9 tasks concurrently (3 per GPU), each with 5 parallel episodes = 45 e
 - **OOM:** Policy server and simulation share the GPU. Try reducing `--num_flow_steps` (e.g., 8 → 4).
 - **Script errors:** If `run_evaluation.py` fails, check the policy server and Docker logs listed in the output.
 - **Stale containers:** `docker kill $(docker ps -q)` to clean up.
-- **Reproducing paper numbers:** Use 200 episodes (`NUM_EPISODES=100:300`). Local results may differ from paper numbers by a few percentage points due to GPU hardware differences and non-deterministic CUDA operations.
+- **Reproducing paper numbers:** Use 200 episodes (`NUM_EPISODES=0:200`). Local results may differ from paper numbers by a few percentage points due to GPU hardware differences and non-deterministic CUDA operations.
 - **Diagnosing crashes:** Check `rollouts/**/results-*.json` — episodes with `total_time: 0` and a gRPC traceback in `failure_message` are infrastructure crashes, not eval failures.

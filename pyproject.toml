@@ -83,6 +83,7 @@ visualization = [
 eval-viewer = [
     "gradio>=6.0.0",
     "plotly>=6.0.0",
+    "sequentialized-barnard-tests>=0.0.5",
 ]
 
 # Add `--group inference` to install runtime deps for GRPC policy serving and robot gym

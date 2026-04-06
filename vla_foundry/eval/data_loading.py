@@ -33,42 +33,123 @@ def find_recordings(task_dir: Path, skill_name: str, demo_id: int) -> dict[str, 
 
 
 def detect_model(root: Path, results_path: Path) -> str:
-    """Infer model name from directory structure."""
+    """Infer model name from directory structure.
+
+    Handles both layouts:
+    - ``Task/model/results-xxx.json`` → model is parts[-2]
+    - ``Task/model/timestamp/results.json`` → model is parts[-3]
+    - ``Task/results-xxx.json`` → "default"
+    """
     rel = results_path.relative_to(root)
-    # ("Task", "model", "results-xxx.json") or ("Task", "results-xxx.json")
+    # New layout: Task/model/timestamp/results.json (4 parts)
+    if len(rel.parts) >= 4:
+        return rel.parts[-3]
+    # Old layout: Task/model/results-xxx.json (3 parts)
     if len(rel.parts) >= 3:
         return rel.parts[-2]
     return "default"
 
 
-def load_episodes(root: Path) -> list[dict]:
+def _try_combine_files(
+    directory: Path,
+    files: list[Path],
+    root: Path,
+) -> tuple[str, bool]:
+    """Check if multiple ``results-*.json`` files in a directory can be combined.
+
+    Validates that all files share the same ``max_sample_size_per_model``
+    (or all omit it) and that no ``(skill_type, scenario_index)`` pairs overlap.
+
+    Returns ``(reason, can_combine)``; *reason* explains failures.
+    """
+    mss_values: set = set()
+    seen_keys: set[tuple[str, int]] = set()
+
+    for f in files:
+        try:
+            data = json.loads(f.read_text())
+        except (json.JSONDecodeError, OSError) as e:
+            return f"Cannot read {f.name}: {e}", False
+
+        mss_values.add(data.get("max_sample_size_per_model"))
+
+        for ep in data.get("evaluations", []):
+            skill = ep.get("skill_type", "unknown")
+            idx = ep.get("scenario_index", 0)
+            key = (skill, idx)
+            if key in seen_keys:
+                return (
+                    f"Overlapping episode ({skill}, index={idx}) across files in {directory.relative_to(root)}"
+                ), False
+            seen_keys.add(key)
+
+    if len(mss_values) > 1:
+        return (f"Mismatched max_sample_size_per_model values {mss_values} in {directory.relative_to(root)}"), False
+
+    return "", True
+
+
+def load_episodes(root: Path):
     """Parse all ``results-*.json`` under *root* into a flat episode list.
 
-    Each episode dict has keys: ``task``, ``model``, ``demo_id``, ``success``,
-    ``duration``, ``recording``, ``failure``.
+    When a directory contains multiple result files, they are combined if
+    they share the same ``max_sample_size_per_model`` and have no overlapping
+    ``(skill_type, scenario_index)`` pairs.  Otherwise only the newest file
+    is kept (older ones are treated as stale).
+
+    ``max_sample_size_per_model`` is read from inside each results JSON
+    (injected by ``run_evaluation.py`` as soon as the file is created).
+
+    Returns ``(episodes, pending_by, crashed_by, stale_info, max_sample_size_per_model)``.
     """
-    all_result_files = sorted(root.rglob("results-*.json"))
+    # Support both naming conventions:
+    #   - results-TIMESTAMP.json  (old Docker images)
+    #   - TIMESTAMP/results.json  (new Docker images)
+    all_result_files = sorted(set(root.rglob("results-*.json")) | set(root.rglob("results.json")))
     if not all_result_files:
         logger.warning("NO RESULTS FILES FOUND under %s — is the path correct?", root)
-        return []
+        return [], {}, {}, [], None
 
-    # Keep only the most recent results file per directory. Re-running
-    # evaluation creates a new timestamped file; older ones are stale.
     files_by_dir: dict[Path, list[Path]] = {}
     for rj in all_result_files:
         files_by_dir.setdefault(rj.parent, []).append(rj)
 
-    result_files = []
-    stale_info: list[dict] = []  # [{dir, kept, skipped}]
+    result_files: list[Path] = []
+    stale_info: list[dict] = []
+    max_sample_sizes_seen: set[int | None] = set()
+
     for d, files in files_by_dir.items():
         files_sorted = sorted(files, key=lambda p: p.name)
-        result_files.append(files_sorted[-1])
-        if len(files_sorted) > 1:
+
+        if len(files_sorted) == 1:
+            result_files.append(files_sorted[0])
+            data = json.loads(files_sorted[0].read_text())
+            max_sample_sizes_seen.add(data.get("max_sample_size_per_model"))
+            continue
+
+        # Multiple files — attempt to combine
+        reason, can_combine = _try_combine_files(d, files_sorted, root)
+        if can_combine:
+            result_files.extend(files_sorted)
+            for f in files_sorted:
+                data = json.loads(f.read_text())
+                max_sample_sizes_seen.add(data.get("max_sample_size_per_model"))
+            logger.info(
+                "Combined %d results files in %s",
+                len(files_sorted),
+                d.relative_to(root),
+            )
+        else:
+            # Fallback: keep newest only
+            result_files.append(files_sorted[-1])
+            data = json.loads(files_sorted[-1].read_text())
+            max_sample_sizes_seen.add(data.get("max_sample_size_per_model"))
             stale_info.append(
                 {
                     "dir": str(d.relative_to(root)),
                     "kept": files_sorted[-1].name,
                     "skipped": [f.name for f in files_sorted[:-1]],
+                    "reason": reason,
                 }
             )
 
@@ -133,7 +214,21 @@ def load_episodes(root: Path) -> list[dict]:
             breakdown,
         )
     logger.info("Loaded %d episodes from %d results file(s)", len(episodes), len(result_files))
-    return episodes, dict(pending_by), dict(crashed_by), stale_info
+
+    # Derive a single max_sample_size from all results files.
+    max_sample_sizes_seen.discard(None)
+    if len(max_sample_sizes_seen) == 1:
+        global_max_sample_size = max_sample_sizes_seen.pop()
+    elif len(max_sample_sizes_seen) == 0:
+        global_max_sample_size = None
+    else:
+        global_max_sample_size = None
+        logger.warning(
+            "Conflicting max_sample_size_per_model values across directories: %s. Statistical tests will not auto-run.",
+            max_sample_sizes_seen,
+        )
+
+    return episodes, dict(pending_by), dict(crashed_by), stale_info, global_max_sample_size
 
 
 def aggregate_episodes(

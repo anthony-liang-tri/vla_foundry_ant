@@ -196,6 +196,8 @@ def run_task(
         f"RECORD_VIDEO={args.record_video}",
         "-e",
         f"VIDEO_FPS={args.video_fps}",
+        "-e",
+        f"MAX_SAMPLE_SIZE_PER_MODEL={args.max_sample_size}",
         "-v",
         f"{task_dir.resolve()}:/tmp/lbm/rollouts",
         args.docker_image,
@@ -293,7 +295,7 @@ def main() -> int:
         "--tasks_per_gpu", type=int, default=1, help="Concurrent tasks per GPU (each gets its own policy server)"
     )
     parser.add_argument("--model_name", default="foundry_model")
-    parser.add_argument("--num_episodes", default="100:300")
+    parser.add_argument("--num_episodes", default="0:200")
     parser.add_argument("--num_processes", type=int, default=1)
     parser.add_argument("--num_flow_steps", type=int, default=8)
     parser.add_argument("--open_loop_steps", type=int, default=8)
@@ -308,6 +310,15 @@ def main() -> int:
     parser.add_argument("--max_retries", type=int, default=3)
     parser.add_argument("--record_video", type=int, default=1)
     parser.add_argument("--video_fps", type=int, default=10)
+    parser.add_argument(
+        "--max_sample_size",
+        type=int,
+        required=True,
+        help=(
+            "Maximum number of policy rollouts (per checkpoint, per task) you ever intend to run. "
+            "Required for sequential statistical testing. Set based on your experimental budget."
+        ),
+    )
     args = parser.parse_args()
 
     tasks = args.tasks or DEFAULT_TASKS
