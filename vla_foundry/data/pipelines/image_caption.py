@@ -21,6 +21,8 @@ class ImageCaptionPipeline(BaseWebDatasetPipeline):
         self.augmentations = Augmentations(
             data_params.augmentation, image_size=getattr(data_params, "image_size", None)
         )
+        tokenizer = getattr(self.processor, "tokenizer", None)
+        self.eos_token = getattr(tokenizer, "eos_token", "") or ""
 
     def create_pipeline(self, datastring: str, checkpoint_num: int):
         cache_cfg = self.data_params.dataset_cache
@@ -41,7 +43,7 @@ class ImageCaptionPipeline(BaseWebDatasetPipeline):
             wds.select(filter_no_caption_or_no_image),
             wds.map(self.augmentations.decode_and_augment_sample, handler=log_and_continue),
             wds.rename(image="jpg;png;jpeg;webp", text="txt"),
-            wds.map(lambda sample: {**sample, "text": "<image> " + sample["text"]}),
+            wds.map(lambda sample: {**sample, "text": "<image> " + sample["text"] + self.eos_token}),
             wds.batched(self.batch_size, partial=False),
             wds.map(
                 lambda sample: self.processor(
