@@ -157,9 +157,11 @@ class InferenceDiffusionPolicy(Policy):
                 "Image resizing is required for inference. Please ensure the model was trained with "
                 "resize_images_size configured in the preprocessing parameters."
             )
-        self.preprocessor_image_resize_method = preprocessing_config.get(
-            "preprocessor_image_resize_method", ImageResizingMethod.CENTER_CROP
-        )
+        raw_method = preprocessing_config.get("image_resizing_method")
+        if raw_method is None:
+            self.preprocessor_image_resize_method = ImageResizingMethod.CENTER_CROP
+        else:
+            self.preprocessor_image_resize_method = ImageResizingMethod(raw_method.lower())
         self.total_timesteps = self.num_past_timesteps + 1 + self.future_timesteps
         logging.info(
             f"Timestep configuration: total={self.total_timesteps}, "
