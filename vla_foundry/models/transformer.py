@@ -273,6 +273,13 @@ class Transformer(TransformerBase):
 
         x = self.post_embed_norm(x)
 
+        # For causal models during training (no KV-cache), the causal mask already
+        # prevents real tokens from attending to right-padded positions, so we can
+        # skip the explicit padding attention_mask. During generation with KV-cache,
+        # the mask is still needed for variable prefill lengths.
+        if (is_causal or self.is_causal) and not use_cache:
+            attention_mask = None
+
         if past_key_values is None:
             past_key_values = [None] * self.n_layers
         elif isinstance(past_key_values, tuple):
