@@ -29,7 +29,9 @@ def train_one_checkpoint(
     scheduler: Callable[[int], None],
     cfg: TrainExperimentParams,
     ema_model: nn.Module | None = None,
-) -> tuple[bool, int]:
+    data_iterator=None,
+    checkpoint_end_step: int | None = None,
+) -> tuple[bool, int, object]:
     """
     Trains model for one checkpoint on the provided data.
 
@@ -53,9 +55,17 @@ def train_one_checkpoint(
         cfg: Training config.
         ema_model: Optional EMA model for maintaining exponential moving average of weights.
 
+        data_iterator: Optional pre-existing data iterator. When provided the
+            function reuses it instead of creating a new one from `dataloader`,
+            avoiding S3 reconnection overhead between checkpoints.
+        checkpoint_end_step: Optional step at which to pause for checkpointing.
+            When set, training pauses at this step (returning the iterator for
+            reuse) instead of running until data exhaustion.
+
     Returns:
         success (bool): Whether training completed successfully
         step (int): Global step at the end of the checkpoint.
+        data_iterator: The data iterator (for reuse across checkpoints).
     """
     device = torch.device(cfg.distributed.device)
     autocast = get_autocast(cfg.hparams.precision)
@@ -79,7 +89,8 @@ def train_one_checkpoint(
     metrics = Metrics()
 
     end = time.time()
-    data_iterator = iter(dataloader.dataloader)
+    if data_iterator is None:
+        data_iterator = iter(dataloader.dataloader)
 
     # Progress bar setup - show step progress with proper starting value
     total_steps = cfg.total_train_samples // cfg.hparams.global_batch_size
@@ -95,6 +106,11 @@ def train_one_checkpoint(
         if step >= total_steps:
             logging.warning(f"step: {step} has reached/exceeded total_steps: {total_steps}. ending training.")
             break
+
+        # Pause at checkpoint boundary (without destroying the iterator).
+        if checkpoint_end_step is not None and step >= checkpoint_end_step:
+            progress_bar.close()
+            return True, step, data_iterator
 
         # Try to fetch the next batch on this rank.
         try:
@@ -231,4 +247,4 @@ def train_one_checkpoint(
 
     progress_bar.close()
 
-    return True, step
+    return True, step, data_iterator
