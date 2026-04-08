@@ -81,7 +81,6 @@ with open(_DATA_PARAMS_PATH) as _f:
 _BASE_PROPIO_FIELDS = _DATA_PARAMS["proprioception_fields"]
 _TACTILE_FIELDS = _DATA_PARAMS["tactile_fields"]
 ACTION_FIELDS = _DATA_PARAMS["action_fields"]
-
 # Camera name lists per camera hardware config
 _CAMERA_YAML_BY_CONFIG = {
     "zed_mini": f"{_G1_DATA_DIR}/g1_data_camera_names_zed2mini.yaml",
@@ -95,21 +94,22 @@ _CAMERA_YAML_BY_CONFIG = {
 _S3_TARFILE = "s3://robotics-cam-data/platform/unitree_g1_dex3/tarfile"
 DEFAULT_DATA_ROOT_V1 = f"{_S3_TARFILE}/v1"  # non-tactile
 DEFAULT_DATA_ROOT_V2 = f"{_S3_TARFILE}/v2"  # tactile (dex3 torque/pressure)
-CKPT_ROOT = "s3://robotics-cam-checkpoints/unitree_g1"
+CKPT_ROOT = "s3://robotics-cam-checkpoints/platform/unitree_g1_dex3/model_checkpoints"
+REMOTE_SYNC_FIXED_PATH = "s3://robotics-cam-checkpoints/platform/unitree_g1_dex3/model_checkpoints_fixed/"
+
 _CFG = "vla_foundry/config_presets/training_jobs/unitree_g1"
 
-CONFIGS = {
-    "vision_propio": f"{_CFG}/diffusion_policy_unitree_g1_410m.yaml",
-    "vision_only": f"{_CFG}/diffusion_policy_unitree_g1_410m.yaml",
-    "vision_propio_tactile": f"{_CFG}/diffusion_policy_unitree_g1_410m_tactile.yaml",
-}
+OBS_MODES = ["vision_propio", "vision_propio_tactile", "vision_only"]
+MODEL_SIZES = ["100m", "410m"]
 
-# Model size → config override; used with --config-override or directly via CONFIGS
-MODEL_CONFIGS = {
-    "410m": f"{_CFG}/diffusion_policy_unitree_g1_410m.yaml",
-    "100m": f"{_CFG}/diffusion_policy_unitree_g1_100m.yaml",
-    "410m_tactile": f"{_CFG}/diffusion_policy_unitree_g1_410m_tactile.yaml",
-    "100m_tactile": f"{_CFG}/diffusion_policy_unitree_g1_100m_tactile.yaml",
+# (obs_mode, model_size) → config YAML path
+_CONFIG_MATRIX = {
+    ("vision_propio", "100m"): f"{_CFG}/diffusion_policy_unitree_g1_100m.yaml",
+    ("vision_propio", "410m"): f"{_CFG}/diffusion_policy_unitree_g1_410m.yaml",
+    ("vision_only", "100m"): f"{_CFG}/diffusion_policy_unitree_g1_100m.yaml",
+    ("vision_only", "410m"): f"{_CFG}/diffusion_policy_unitree_g1_410m.yaml",
+    ("vision_propio_tactile", "100m"): f"{_CFG}/diffusion_policy_unitree_g1_100m_tactile.yaml",
+    ("vision_propio_tactile", "410m"): f"{_CFG}/diffusion_policy_unitree_g1_410m_tactile.yaml",
 }
 
 SM_REGION = DEFAULT_REGION
@@ -188,9 +188,15 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument(
         "--obs",
         required=True,
-        choices=list(CONFIGS),
+        choices=OBS_MODES,
         metavar="MODE",
         help="Observation mode: vision_propio | vision_propio_tactile | vision_only",
+    )
+    p.add_argument(
+        "--model",
+        default="410m",
+        choices=MODEL_SIZES,
+        help="Transformer size: 100m or 410m (default: 410m).",
     )
     p.add_argument(
         "--domain",
@@ -214,8 +220,9 @@ def _parse_args() -> argparse.Namespace:
         default="auto",
         metavar="CAMERAS",
         help=(
-            "'auto' to load camera list from camera-config YAML (default), "
-            'or a JSON list for an explicit subset, e.g. \'["stereo_head_left","stereo_head_right"]\'.'
+            "Camera subset: 'auto' = all cameras from camera-config YAML (default), "
+            "'head' = head cameras only, 'wrist' = wrist cameras only, "
+            'or a JSON list e.g. \'["stereo_head_left","stereo_head_right"]\'.'
         ),
     )
     p.add_argument(
@@ -323,7 +330,7 @@ def main() -> None:
     samples = args.steps * args.global_batch if args.steps is not None else args.samples
 
     # Obs-mode config and proprioception fields
-    config = args.config_override or CONFIGS[args.obs]
+    config = args.config_override or _CONFIG_MATRIX[(args.obs, args.model)]
     if args.obs == "vision_propio":
         proprio_fields = _BASE_PROPIO_FIELDS
         obs_desc = "vision + EE pose (18D) + finger joints (14D)"
@@ -341,28 +348,37 @@ def main() -> None:
     tactile_tag = "_tactile" if (args.tactile_propio and args.obs != "vision_propio_tactile") else ""
 
     # Camera selection
-    if args.cameras == "auto":
-        cam_yaml = _CAMERA_YAML_BY_CONFIG[args.camera_config]
-        with open(cam_yaml) as f:
-            camera_names = yaml.safe_load(f)
-        cam_tag = ""
+    cam_yaml = _CAMERA_YAML_BY_CONFIG[args.camera_config]
+    with open(cam_yaml) as f:
+        all_cameras = yaml.safe_load(f)
+
+    _CAMERA_PRESETS = {"auto": None, "head": "head", "wrist": "wrist"}
+    if args.cameras in _CAMERA_PRESETS:
+        keyword = _CAMERA_PRESETS[args.cameras]
+        camera_names = [c for c in all_cameras if keyword in c] if keyword else all_cameras
+        cam_tag = f"_{args.cameras}only" if keyword else ""
     else:
         try:
             camera_names = json.loads(args.cameras)
         except json.JSONDecodeError:
-            sys.exit(f"ERROR: --cameras must be 'auto' or a JSON list, got: {args.cameras!r}")
-        cam_tag = "_headonly" if len(camera_names) <= 2 else f"_{len(camera_names)}cam"
+            sys.exit(f"ERROR: --cameras must be auto|head|wrist or a JSON list, got: {args.cameras!r}")
+        cam_tag = f"_{len(camera_names)}cam"
+
+    if not camera_names:
+        sys.exit(f"ERROR: --cameras '{args.cameras}' matched no cameras from {cam_yaml}")
 
     # Data paths
     use_tactile_data = args.tactile_propio or args.obs == "vision_propio_tactile"
     default_root = DEFAULT_DATA_ROOT_V2 if use_tactile_data else DEFAULT_DATA_ROOT_V1
     data_root = args.data_root or f"{default_root}/{args.task}/{args.domain}/teleop/shards"
     run_tag = f"_{args.run_tag}" if args.run_tag else ""
-    ckpt = f"{CKPT_ROOT}/{args.task}_{args.domain}_{args.obs}{tactile_tag}{cam_tag}{run_tag}_{_samples_tag(samples)}"
+    stag = _samples_tag(samples)
+    ckpt_name = f"{args.task}_{args.domain}_{args.obs}_{args.model}{tactile_tag}{cam_tag}{run_tag}_{stag}"
+    ckpt = f"{CKPT_ROOT}/{ckpt_name}"
     tags = json.dumps(
-        ["unitree_g1", args.task, args.domain, args.obs, args.camera_config]
+        ["unitree_g1", args.task, args.domain, args.obs, args.model, args.camera_config]
         + (["tactile"] if args.tactile_propio else [])
-        + (["headonly"] if cam_tag else [])
+        + ([cam_tag.strip("_")] if cam_tag else [])
         + (args.wandb_tags if args.wandb_tags else [])
     )
 
@@ -374,6 +390,7 @@ def main() -> None:
     print(f"Obs:         {obs_desc}{tactile_suffix}")
     print(f"Cameras:     {camera_names}")
     print("Act:         EE pose (18D) + finger joints (14D) = 32D  [absolute]")
+    print(f"Model:       {args.model}")
     print(f"Config:      {config}")
     print(f"Data:        {_dataset_info(data_root)}")
     print(f"Checkpoint:  {ckpt}")
@@ -408,6 +425,8 @@ def main() -> None:
         str(samples),
         "--wandb_tags",
         tags,
+        "--remote_sync_fixed_path",
+        REMOTE_SYNC_FIXED_PATH,
         "--data.dataset_manifest",
         json.dumps([f"{data_root}/manifest.jsonl"]),
         "--data.dataset_statistics",

@@ -103,7 +103,9 @@ Action space is fixed: absolute EE pose (18D) + Dex3 finger joint positions (14D
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--obs` | required | Observation mode (see above) |
+| `--model` | `410m` | Transformer size: `100m` or `410m` |
 | `--domain` | `real` | Data domain: `real` or `sim` |
+| `--cameras` | `auto` | Camera subset: `auto` (all), `head`, `wrist`, or JSON list |
 | `--gpu` | `0,1` | CUDA device IDs (local only) |
 | `--samples` | `10000000` | Total training samples |
 | `--steps` | — | Training steps instead of samples; requires `--global-batch` |
@@ -218,21 +220,15 @@ batchtui                   # interactive TUI
 
 ## Training configs
 
-The draccus YAML configs loaded by this script live in:
+`train_g1_policy.py` selects a YAML config based on `--obs` and `--model`. The configs live in:
 
 ```
-vla_foundry/config_presets/
-  training_jobs/unitree_g1/
-    diffusion_policy_unitree_g1_base.yaml         # shared data (v1) + hparams (no model)
-    diffusion_policy_unitree_g1_tactile_base.yaml # shared data (v2, tactile propio) + hparams
-    diffusion_policy_unitree_g1_410m.yaml         # 410M transformer, v1 data
-    diffusion_policy_unitree_g1_100m.yaml         # 100M transformer, v1 data
-    diffusion_policy_unitree_g1_410m_tactile.yaml # 410M transformer, v2 data + dex3 sensors
-    diffusion_policy_unitree_g1_100m_tactile.yaml # 100M transformer, v2 data + dex3 sensors
-  data/unitree_g1/
-    g1_data_params.yaml          # obs/action fields, normalization
-    g1_mcap_topics.yaml          # MCAP topic → dataset field mapping for preprocessing
+vla_foundry/config_presets/training_jobs/unitree_g1/
 ```
 
-The training job YAMLs use `!include` to pull in the data params, so edits to
-`g1_data_params.yaml` take effect without touching the job configs.
+Dataset versions:
+- **v1** — vision + proprioception only (ZED mini stereo head + D435 wrist cameras)
+- **v2** — v1 + dex3 tactile sensors (joint torque + pressure); required for `vision_propio_tactile`
+
+The configs inherit shared data params from `vla_foundry/config_presets/data/unitree_g1/g1_data_params.yaml`,
+so edits to obs/action fields take effect without touching the job configs.
