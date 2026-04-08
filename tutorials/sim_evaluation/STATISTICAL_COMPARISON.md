@@ -66,16 +66,16 @@ uv run python tutorials/sim_evaluation/run_evaluation.py $CHECKPOINT \
     --model_name model_a --max_sample_size 200 --num_episodes 200:300 --output_dir rollouts
 ```
 
-This produces two `results-*.json` files in the same directory. The dashboard **automatically combines** them if:
+This produces two timestamped `results.json` files under the same rollouts directory. The dashboard **automatically combines** them if:
 
 1. **No overlapping episode indices** — each `(skill_type, scenario_index)` pair appears in only one file
 2. **Same `max_sample_size`** — both runs were started with the same `--max_sample_size`
 
-If these conditions aren't met, only the newest file is used and the others are reported as stale.
+If these conditions aren't met, loading will fail with a `ValueError`. Remove stale results files before viewing — video recordings for older runs may have been overwritten.
 
 ## Metadata
 
-When the simulation creates its `results-*.json` file, `run_evaluation.py` immediately injects `max_sample_size_per_model` into it — before any episodes complete. Docker preserves this field as it updates the file with episode results. This means every results JSON is self-contained: it carries its own budget from the very first episode, and you can share just the JSON file for others to compare against.
+Every `results.json` must contain a `max_sample_size_per_model` field recording the evaluation budget. This field should be written before any episodes complete so the budget is locked in from the start. Every results JSON is self-contained: it carries its own budget from the very first episode, and you can share just the JSON file for others to compare against.
 
 ### Why pre-commitment matters
 
@@ -167,11 +167,11 @@ Place the released JSONs alongside your results in the same `rollouts/` director
 
 ### Episode Recordings Tab
 - Paginated video grid of evaluation episodes
-- Filter by outcome (All / Success / Failure)
+- Filter by outcome (All / Success / Failure) and by episode ID
 
 ## File Format Reference
 
-### results-*.json
+### results.json
 ```json
 {
   "max_sample_size_per_model": 200,
@@ -195,12 +195,15 @@ Place the released JSONs alongside your results in the same `rollouts/` director
 ### Directory structure
 ```
 rollouts/
-  TaskName/
-    model_name/
-      results-2026-04-02T03:58:51.json
-      results-2026-04-02T04:26:55.json   <- combined automatically
-      TaskName/
-        demonstration_100/
-          recording.html
-          recording.mp4
+  model_name/
+    TaskName/
+      rollouts/
+        2026-04-02T03:58:51+00:00/
+          results.json
+          TaskName/
+            demonstration_100/
+              recording.html
+              recording.mp4
+        2026-04-02T04:26:55+00:00/   <- combined automatically if non-overlapping
+          results.json
 ```

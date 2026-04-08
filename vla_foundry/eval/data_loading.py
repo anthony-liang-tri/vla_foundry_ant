@@ -1,8 +1,16 @@
 """Filesystem scanning and aggregation for rollout results.
 
-Handles both directory layouts:
-- ``rollouts/{task}/{model}/results-*.json``
-- ``rollouts/{task}/results-*.json``  (model defaults to ``"default"``)
+Expected directory layout::
+
+    root/
+      {model}/
+        {Task}/
+          rollouts/
+            {timestamp}/
+              results.json
+              {skill_name}/
+                demonstration_{N}/
+                  ...
 
 No external dependencies beyond the standard library.
 """
@@ -33,21 +41,13 @@ def find_recordings(task_dir: Path, skill_name: str, demo_id: int) -> dict[str, 
 
 
 def detect_model(root: Path, results_path: Path) -> str:
-    """Infer model name from directory structure.
-
-    Handles both layouts:
-    - ``Task/model/results-xxx.json`` → model is parts[-2]
-    - ``Task/model/timestamp/results.json`` → model is parts[-3]
-    - ``Task/results-xxx.json`` → "default"
-    """
+    """Infer model name from ``{model}/{Task}/rollouts/{timestamp}/results.json``."""
     rel = results_path.relative_to(root)
-    # New layout: Task/model/timestamp/results.json (4 parts)
-    if len(rel.parts) >= 4:
-        return rel.parts[-3]
-    # Old layout: Task/model/results-xxx.json (3 parts)
-    if len(rel.parts) >= 3:
-        return rel.parts[-2]
-    return "default"
+    if len(rel.parts) != 5 or rel.name != "results.json" or rel.parts[2] != "rollouts":
+        raise ValueError(
+            f"Unexpected results path layout: {rel}. Expected {{model}}/{{Task}}/rollouts/{{timestamp}}/results.json"
+        )
+    return rel.parts[0]
 
 
 def _try_combine_files(
@@ -55,10 +55,10 @@ def _try_combine_files(
     files: list[Path],
     root: Path,
 ) -> tuple[str, bool]:
-    """Check if multiple ``results-*.json`` files in a directory can be combined.
+    """Check if multiple result files under a model directory can be combined.
 
     Validates that all files share the same ``max_sample_size_per_model``
-    (or all omit it) and that no ``(skill_type, scenario_index)`` pairs overlap.
+    and that no ``(skill_type, scenario_index)`` pairs overlap.
 
     Returns ``(reason, can_combine)``; *reason* explains failures.
     """
@@ -90,41 +90,66 @@ def _try_combine_files(
 
 
 def load_episodes(root: Path):
-    """Parse all ``results-*.json`` under *root* into a flat episode list.
+    """Parse all ``results.json`` under *root* into a flat episode list.
 
-    When a directory contains multiple result files, they are combined if
-    they share the same ``max_sample_size_per_model`` and have no overlapping
-    ``(skill_type, scenario_index)`` pairs.  Otherwise only the newest file
-    is kept (older ones are treated as stale).
+    Expected layout: ``{model}/{Task}/rollouts/{timestamp}/results.json``.
 
-    ``max_sample_size_per_model`` is read from inside each results JSON
-    (injected by ``run_evaluation.py`` as soon as the file is created).
+    When a rollouts directory contains multiple timestamped result files,
+    they are combined if they share the same ``max_sample_size_per_model``
+    and have no overlapping ``(skill_type, scenario_index)`` pairs.  Otherwise
+    a ``ValueError`` is raised — remove stale results files before loading.
 
-    Returns ``(episodes, pending_by, crashed_by, stale_info, max_sample_size_per_model)``.
+    Returns ``(episodes, pending_by, crashed_by, max_sample_size_per_model)``.
     """
-    # Support both naming conventions:
-    #   - results-TIMESTAMP.json  (old Docker images)
-    #   - TIMESTAMP/results.json  (new Docker images)
-    all_result_files = sorted(set(root.rglob("results-*.json")) | set(root.rglob("results.json")))
+    all_result_files = sorted(root.rglob("results.json"))
     if not all_result_files:
         logger.warning("NO RESULTS FILES FOUND under %s — is the path correct?", root)
-        return [], {}, {}, [], None
+        return [], {}, {}, None
 
+    # Validate layout and reject old-style results-TIMESTAMP.json files.
+    old_style = sorted(root.rglob("results-*.json"))
+    if old_style:
+        raise ValueError(
+            f"Found {len(old_style)} old-style results-*.json file(s) under {root}. "
+            f"Only the {{model}}/{{Task}}/rollouts/{{timestamp}}/results.json layout is supported. "
+            f"First offender: {old_style[0]}"
+        )
+
+    for rj in all_result_files:
+        rel = rj.relative_to(root)
+        if len(rel.parts) != 5 or rel.parts[2] != "rollouts":
+            raise ValueError(
+                f"Unexpected results path layout: {rel}. "
+                f"Expected {{model}}/{{Task}}/rollouts/{{timestamp}}/results.json"
+            )
+
+    # Validate that every results.json contains max_sample_size_per_model.
+    for rj in all_result_files:
+        data = json.loads(rj.read_text())
+        if "max_sample_size_per_model" not in data:
+            raise ValueError(
+                f"Missing required field 'max_sample_size_per_model' in {rj.relative_to(root)}. "
+                f"Every results.json must record the evaluation budget."
+            )
+
+    # Group result files by rollouts directory (grandparent of results.json)
+    # so that multiple timestamped runs for the same model+task are compared
+    # for overlapping episodes.
     files_by_dir: dict[Path, list[Path]] = {}
     for rj in all_result_files:
-        files_by_dir.setdefault(rj.parent, []).append(rj)
+        rollouts_dir = rj.parent.parent  # {model}/{Task}/rollouts
+        files_by_dir.setdefault(rollouts_dir, []).append(rj)
 
     result_files: list[Path] = []
-    stale_info: list[dict] = []
-    max_sample_sizes_seen: set[int | None] = set()
+    max_sample_sizes_seen: set[int] = set()
 
     for d, files in files_by_dir.items():
-        files_sorted = sorted(files, key=lambda p: p.name)
+        files_sorted = sorted(files)
 
         if len(files_sorted) == 1:
             result_files.append(files_sorted[0])
             data = json.loads(files_sorted[0].read_text())
-            max_sample_sizes_seen.add(data.get("max_sample_size_per_model"))
+            max_sample_sizes_seen.add(data["max_sample_size_per_model"])
             continue
 
         # Multiple files — attempt to combine
@@ -133,33 +158,18 @@ def load_episodes(root: Path):
             result_files.extend(files_sorted)
             for f in files_sorted:
                 data = json.loads(f.read_text())
-                max_sample_sizes_seen.add(data.get("max_sample_size_per_model"))
+                max_sample_sizes_seen.add(data["max_sample_size_per_model"])
             logger.info(
                 "Combined %d results files in %s",
                 len(files_sorted),
                 d.relative_to(root),
             )
         else:
-            # Fallback: keep newest only
-            result_files.append(files_sorted[-1])
-            data = json.loads(files_sorted[-1].read_text())
-            max_sample_sizes_seen.add(data.get("max_sample_size_per_model"))
-            stale_info.append(
-                {
-                    "dir": str(d.relative_to(root)),
-                    "kept": files_sorted[-1].name,
-                    "skipped": [f.name for f in files_sorted[:-1]],
-                    "reason": reason,
-                }
+            raise ValueError(
+                f"Cannot combine results files in {d.relative_to(root)}: {reason}. "
+                f"Video recordings for older runs may have been overwritten. "
+                f"Remove stale results files before viewing."
             )
-
-    if stale_info:
-        details = "; ".join(f"{s['dir']}: using {s['kept']}, ignoring {', '.join(s['skipped'])}" for s in stale_info)
-        logger.warning(
-            "Found stale results file(s) from previous runs. "
-            "Video recordings for older runs may have been overwritten. %s",
-            details,
-        )
 
     episodes: list[dict] = []
     pending_by: Counter[tuple[str, str]] = Counter()
@@ -213,22 +223,48 @@ def load_episodes(root: Path):
             total,
             breakdown,
         )
+    # Sanity check: no duplicate (task, model, demo_id) triples.
+    seen_keys: set[tuple[str, str, int]] = set()
+    for ep in episodes:
+        key = (ep["task"], ep["model"], ep["demo_id"])
+        if key in seen_keys:
+            logger.error(
+                "Duplicate episode detected: task=%s, model=%s, demo_id=%d. "
+                "This likely means overlapping result files were loaded from "
+                "different timestamped subdirectories. Check your results directory "
+                "for redundant runs.",
+                *key,
+            )
+            raise ValueError(
+                f"Duplicate episode (task={key[0]}, model={key[1]}, demo_id={key[2]}). "
+                f"Remove or rename stale result files under {root}."
+            )
+        seen_keys.add(key)
+
     logger.info("Loaded %d episodes from %d results file(s)", len(episodes), len(result_files))
 
-    # Derive a single max_sample_size from all results files.
-    max_sample_sizes_seen.discard(None)
+    # All files are required to have max_sample_size_per_model (validated above).
     if len(max_sample_sizes_seen) == 1:
         global_max_sample_size = max_sample_sizes_seen.pop()
-    elif len(max_sample_sizes_seen) == 0:
-        global_max_sample_size = None
     else:
-        global_max_sample_size = None
-        logger.warning(
-            "Conflicting max_sample_size_per_model values across directories: %s. Statistical tests will not auto-run.",
-            max_sample_sizes_seen,
+        raise ValueError(
+            f"Conflicting max_sample_size_per_model values across results files: {max_sample_sizes_seen}. "
+            f"All results must use the same evaluation budget."
         )
 
-    return episodes, dict(pending_by), dict(crashed_by), stale_info, global_max_sample_size
+    # Verify no (task, model) pair exceeds the declared budget.
+    ep_counts: Counter[tuple[str, str]] = Counter()
+    for ep in episodes:
+        ep_counts[(ep["task"], ep["model"])] += 1
+    over_budget = {k: v for k, v in ep_counts.items() if v > global_max_sample_size}
+    if over_budget:
+        details = ", ".join(f"{t}/{m}: {n}" for (t, m), n in sorted(over_budget.items()))
+        raise ValueError(
+            f"Episode count exceeds max_sample_size_per_model ({global_max_sample_size}): {details}. "
+            f"The sequential test budget must not be exceeded."
+        )
+
+    return episodes, dict(pending_by), dict(crashed_by), global_max_sample_size
 
 
 def aggregate_episodes(

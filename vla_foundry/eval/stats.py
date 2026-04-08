@@ -84,6 +84,8 @@ def compute_cld_step(
         success_arrays_by_task: Output of ``build_success_arrays``.
         max_sample_size_per_model: Maximum number of rollouts per model. Must be
             set based on the experimental budget *before* collecting data.
+            ``load_episodes`` enforces that all results files share the same
+            value, so this is always the recorded pre-commitment budget.
         confidence_level: Global confidence level (default 0.95).
         seed: RNG seed for the aggregate shuffle.
 
@@ -338,8 +340,9 @@ def model_comparison_chart(
 
     Args:
         episodes: Raw episode dicts with ``task``, ``model``, and ``success`` keys.
-        max_sample_size_per_model: Budget used to configure the STEP test. When
-            ``None``, violins are shown without CLD annotations.
+        max_sample_size_per_model: The ``max_sample_size_per_model`` value from
+            the results files (returned by ``load_episodes``). Used as the STEP
+            test budget. When ``None``, violins are shown without CLD annotations.
         overlay_on_bars: If ``True``, draw semi-transparent bars behind each
             violin showing the empirical mean.
         confidence_level: Global confidence level for CLD (default 0.95).
