@@ -13,6 +13,7 @@ from sagemaker.aws_batch.training_queue import TrainingQueue as Queue
 from sagemaker.pytorch import PyTorch
 
 import sagemaker
+from vla_foundry.aws.s3_constants import DEFAULT_REGION
 from vla_foundry.db_logger import get_git_env_vars
 from vla_foundry.params.base_params import BaseParams
 from vla_foundry.params.train_experiment_params import TrainExperimentParams
@@ -24,13 +25,15 @@ INSTANCE_MAPPER = {
     "p5en": "ml.p5en.48xlarge",
     "p6": "ml.p6-b200.48xlarge",
 }
-QUEUE_MAPPER = {
+# Maps full instance type to the queue name suffix shared across queue families.
+# Full queue name: fss-{queue_name}-{suffix}  (queue_name e.g. "ml" or "tri-cam-humanoid")
+QUEUE_SUFFIX_MAPPER = {
     "us-west-2": {
-        "ml.p5.48xlarge": "fss-ml-p5-48xlarge-us-west-2",
-        "ml.p5en.48xlarge": "fss-ml-p5en-48xlarge-us-west-2",
-        "ml.p4de.24xlarge": "fss-ml-p4de-24xlarge-us-west-2",
-        "ml.p4d.24xlarge": "fss-ml-p4d-24xlarge-us-west-2",
-        "ml.p6-b200.48xlarge": "fss-ml-p6-b200-48xlarge-us-west-2",
+        "ml.p5.48xlarge": "p5-48xlarge-us-west-2",
+        "ml.p5en.48xlarge": "p5en-48xlarge-us-west-2",
+        "ml.p4de.24xlarge": "p4de-24xlarge-us-west-2",
+        "ml.p4d.24xlarge": "p4d-24xlarge-us-west-2",
+        "ml.p6-b200.48xlarge": "p6-b200-48xlarge-us-west-2",
     },
 }
 
@@ -45,7 +48,7 @@ class SageMakerRunParams(BaseParams):
     volume_size: int = field(default=30)
 
     # AWS profile args
-    region: str = field(default="us-west-2")
+    region: str = field(default=DEFAULT_REGION)
     profile: str = field(default="default")
     arn: str = field(default=None)
 
@@ -296,9 +299,14 @@ def main():
         volume_size=args.volume_size,
     )
 
-    queue = Queue(
-        queue_name=QUEUE_MAPPER[args.region][INSTANCE_MAPPER[args.instance_type]].replace("ml", args.queue_name)
-    )
+    instance_type = INSTANCE_MAPPER[args.instance_type]
+    if instance_type not in QUEUE_SUFFIX_MAPPER[args.region]:
+        raise ValueError(
+            f"Instance '{instance_type}' not in QUEUE_SUFFIX_MAPPER for region '{args.region}'. "
+            f"Available: {list(QUEUE_SUFFIX_MAPPER[args.region].keys())}"
+        )
+    queue_name = f"fss-{args.queue_name}-{QUEUE_SUFFIX_MAPPER[args.region][instance_type]}"
+    queue = Queue(queue_name=queue_name)
 
     # Validate job name before submission
     if not job_name or len(job_name) > 63:
@@ -318,7 +326,7 @@ def main():
         )
         # Note: queue.map() may succeed even if AWS later rejects the job
         # Pre-validation above ensures job name is valid
-        print(f"Queued {job_name}")
+        print(f"Queued {job_name} to {queue_name}")
     except Exception as e:
         print(f"Failed to queue {job_name}: {str(e)}")
         raise

@@ -101,6 +101,7 @@ class RoboticsDataParams(DataParams):
     pad_missing_images: bool = field(default=False)
     mask_padded_images: bool = field(default=False)
     proprioception_fields: list[str] = field(default_factory=list)
+    tactile_fields: list[str] = field(default_factory=list)
     action_fields: list[str] = field(default_factory=list)
     pose_groups: list[dict[str, str]] = field(default_factory=list)
     intrinsics_fields: list[str] = field(default_factory=list)
@@ -116,6 +117,16 @@ class RoboticsDataParams(DataParams):
     proprioception_dim: int | None = field(default=None)
 
     def __post_init__(self):
+        try:
+            self._post_init_impl()
+        except (TypeError, ValueError, KeyError) as e:
+            raise RuntimeError(
+                f"RoboticsDataParams initialization failed: {type(e).__name__}: {e}\n"
+                "Check that dataset_statistics paths are correct and all proprioception_fields "
+                "and action_fields are present in the stats file."
+            ) from e
+
+    def _post_init_impl(self):
         super().__post_init__()
 
         if self.mask_padded_images and not self.pad_missing_images:

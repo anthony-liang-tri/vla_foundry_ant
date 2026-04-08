@@ -10,9 +10,8 @@
 #   "field[*].attr"      - Extract attr from each list item
 #   "field[*].attr[*]"   - Nested iteration (flattened)
 #
-# Some fields (IMU, motor torques etc) have been commented out for simplicity 
-# of rendered tarfiles, They can be added back once the data/training pipeline 
-# is stabilized.
+# Some fields (IMU, whole-body motor torques) are commented out pending
+# pipeline stabilization and can be re-enabled as needed.
 target_hz: 30.0
 output_mode: separate
 
@@ -58,6 +57,8 @@ state_field_map:
   /joint_states: actual_joint_states
   /current_left_hand_ee_link: actual_ee_pose_left
   /current_right_hand_ee_link: actual_ee_pose_right
+  /dex3/left/state: actual_dex3_hand_left
+  /dex3/right/state: actual_dex3_hand_right
   # /imu: actual_imu
   # /livox/imu_192_168_123_120: actual_imu_livox
 
@@ -71,15 +72,15 @@ state_topic_subfield_extraction:
   /dex3/left/state:
     joints: "motor_state[*].q"
     joints_vel: "motor_state[*].dq"
-    joints_tau: "motor_state[*].tau_est"
-    tactile: "press_sensor_state[*].pressure"
+    joints_torque: "motor_state[*].tau_est"
+    pressure: "press_sensor_state[*].pressure"
     # imu: "imu_state"
 
   /dex3/right/state:
     joints: "motor_state[*].q"
     joints_vel: "motor_state[*].dq"
-    joints_tau: "motor_state[*].tau_est"
-    tactile: "press_sensor_state[*].pressure"
+    joints_torque: "motor_state[*].tau_est"
+    pressure: "press_sensor_state[*].pressure"
     # imu: "imu_state"
 
   /lowstate:
@@ -90,18 +91,18 @@ state_topic_subfield_extraction:
 
 # Map extracted sub-fields to clean output names
 state_topic_subfield_map:
-  # Left hand
-  /dex3/left/state.joints: actual_hand_left_joints
-  /dex3/left/state.joints_vel: actual_hand_left_joints_vel
-  /dex3/left/state.joints_tau: actual_hand_left_joints_tau
-  /dex3/left/state.tactile: actual_hand_left_tactile
-  # /dex3/left/state.imu: actual_hand_left_imu
-  # Right hand
-  /dex3/right/state.joints: actual_hand_right_joints
-  /dex3/right/state.joints_vel: actual_hand_right_joints_vel
-  /dex3/right/state.joints_tau: actual_hand_right_joints_tau
-  /dex3/right/state.tactile: actual_hand_right_tactile
-  # /dex3/right/state.imu: actual_hand_right_imu
+  # Left hand (dex3)
+  /dex3/left/state.joints: actual_dex3_hand_left_joints
+  /dex3/left/state.joints_vel: actual_dex3_hand_left_joints_vel
+  /dex3/left/state.joints_torque: actual_dex3_hand_left_joints_torque
+  /dex3/left/state.pressure: actual_dex3_hand_left_pressure
+  # /dex3/left/state.imu: actual_dex3_hand_left_imu
+  # Right hand (dex3)
+  /dex3/right/state.joints: actual_dex3_hand_right_joints
+  /dex3/right/state.joints_vel: actual_dex3_hand_right_joints_vel
+  /dex3/right/state.joints_torque: actual_dex3_hand_right_joints_torque
+  /dex3/right/state.pressure: actual_dex3_hand_right_pressure
+  # /dex3/right/state.imu: actual_dex3_hand_right_imu
   # Motor state
   # /lowstate.motor_q: actual_motor_positions
   # /lowstate.motor_dq: actual_motor_velocities
