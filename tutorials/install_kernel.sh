@@ -7,7 +7,7 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
 # Sync the venv with required dependency groups
-uv sync --group preprocessing --group tutorials --quiet
+uv sync --group preprocessing --group tutorials --group dashboard --quiet
 
 # Register the kernel
 .venv/bin/python -m ipykernel install --user --name vla_foundry --display-name "Python (vla_foundry)"
