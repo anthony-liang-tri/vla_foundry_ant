@@ -6,7 +6,7 @@ the STEP sequential test from ``sequentialized_barnard_tests``).
 
 Usage::
 
-    uv run --group eval-viewer python vla_foundry/eval/results_explorer.py rollouts/
+    uv run --group dashboard python vla_foundry/eval/results_explorer.py rollouts/
 """
 
 from __future__ import annotations

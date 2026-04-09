@@ -2,7 +2,7 @@
 
 All functions are pure — no database or filesystem dependencies.
 Requires ``scipy``, ``numpy``, and ``sequentialized-barnard-tests``
-(available via ``uv sync --group eval-viewer``).
+(available via ``uv sync --group dashboard``).
 """
 
 from __future__ import annotations

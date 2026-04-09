@@ -50,6 +50,21 @@ def detect_model(root: Path, results_path: Path) -> str:
     return rel.parts[0]
 
 
+def collect_scenario_indices(directory: Path) -> set[int]:
+    """Return all ``scenario_index`` values from ``results.json`` files under *directory*."""
+    indices: set[int] = set()
+    for rj in sorted(directory.rglob("results.json")):
+        try:
+            data = json.loads(rj.read_text())
+        except (json.JSONDecodeError, OSError):
+            continue
+        for ep in data.get("evaluations", []):
+            idx = ep.get("scenario_index")
+            if idx is not None:
+                indices.add(idx)
+    return indices
+
+
 def _try_combine_files(
     directory: Path,
     files: list[Path],

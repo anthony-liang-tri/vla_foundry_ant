@@ -24,14 +24,14 @@ Run each model with the same `--max_sample_size` and the same `--output_dir`:
 
 ```bash
 # Model A
-uv run python tutorials/sim_evaluation/run_evaluation.py $CHECKPOINT_A \
+uv run python vla_foundry/eval/run_evaluation.py $CHECKPOINT_A \
     --model_name model_a \
     --max_sample_size 200 \
     --num_episodes 0:200 \
     --output_dir rollouts
 
 # Model B
-uv run python tutorials/sim_evaluation/run_evaluation.py $CHECKPOINT_B \
+uv run python vla_foundry/eval/run_evaluation.py $CHECKPOINT_B \
     --model_name model_b \
     --max_sample_size 200 \
     --num_episodes 0:200 \
@@ -42,7 +42,7 @@ uv run python tutorials/sim_evaluation/run_evaluation.py $CHECKPOINT_B \
 ### 3. View results in the dashboard
 
 ```bash
-uv run --group eval-viewer python vla_foundry/eval/results_explorer.py rollouts/
+uv run --group dashboard python vla_foundry/eval/results_explorer.py rollouts/
 ```
 
 Open `http://localhost:8505`. The **Model Comparison** tab shows:
@@ -58,11 +58,11 @@ You can collect results incrementally. For example, run episodes 100-199 first, 
 
 ```bash
 # First batch
-uv run python tutorials/sim_evaluation/run_evaluation.py $CHECKPOINT \
+uv run python vla_foundry/eval/run_evaluation.py $CHECKPOINT \
     --model_name model_a --max_sample_size 200 --num_episodes 100:200 --output_dir rollouts
 
 # Second batch (same model, same output dir, non-overlapping episodes)
-uv run python tutorials/sim_evaluation/run_evaluation.py $CHECKPOINT \
+uv run python vla_foundry/eval/run_evaluation.py $CHECKPOINT \
     --model_name model_a --max_sample_size 200 --num_episodes 200:300 --output_dir rollouts
 ```
 
@@ -138,7 +138,7 @@ These provide a visual sense of uncertainty. The CLD letters above each violin g
 We release per-episode breakdown JSONs for some of our evaluation results. These were collected with a computational budget of **200 episodes per model per task** (`max_sample_size = 200`). When combining these with your own runs or running statistical comparisons against them, you **must** set `--max_sample_size 200` to match.
 
 ```bash
-uv run python tutorials/sim_evaluation/run_evaluation.py $YOUR_CHECKPOINT \
+uv run python vla_foundry/eval/run_evaluation.py $YOUR_CHECKPOINT \
     --model_name your_model \
     --max_sample_size 200 \
     --num_episodes 0:200 \

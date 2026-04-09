@@ -23,7 +23,8 @@ from pathlib import Path
 
 import pytest
 
-from vla_foundry.eval.data_loading import aggregate_episodes, load_episodes
+from vla_foundry.eval.data_loading import aggregate_episodes, collect_scenario_indices, load_episodes
+from vla_foundry.eval.run_evaluation import check_no_overlapping_results, parse_episode_range
 
 FIXTURES = Path(__file__).resolve().parent / "test_assets" / "dashboard_fixtures"
 
@@ -139,3 +140,73 @@ class TestNoResultsFiles:
     def test_empty_dir(self, tmp_path):
         eps, pending, crashed, mss = load_episodes(tmp_path)
         assert len(eps) == 0
+
+
+# ---------------------------------------------------------------------------
+# collect_scenario_indices tests
+# ---------------------------------------------------------------------------
+
+
+class TestCollectScenarioIndices:
+    def test_returns_indices(self):
+        # mixed_pending_crashed_success has indices 0-4
+        rollouts_dir = FIXTURES / "mixed_pending_crashed_success" / "model_a" / "TaskA" / "rollouts"
+        indices = collect_scenario_indices(rollouts_dir)
+        assert indices == {0, 1, 2, 3, 4}
+
+    def test_empty_dir(self, tmp_path):
+        assert collect_scenario_indices(tmp_path) == set()
+
+
+# ---------------------------------------------------------------------------
+# check_no_overlapping_results tests
+# ---------------------------------------------------------------------------
+
+
+class TestCheckNoOverlappingResults:
+    """Tests for run_evaluation.check_no_overlapping_results."""
+
+    def test_nonexistent_dir_passes(self, tmp_path):
+        # Should not raise when directory doesn't exist
+        check_no_overlapping_results(tmp_path / "nonexistent", {0, 1, 2}, max_sample_size=200)
+
+    def test_no_overlap_passes(self):
+        # mixed_pending_crashed_success has indices 0-4, request 5-9 — no overlap
+        rollouts_dir = FIXTURES / "mixed_pending_crashed_success" / "model_a" / "TaskA" / "rollouts"
+        check_no_overlapping_results(rollouts_dir, {5, 6, 7, 8, 9}, max_sample_size=50)
+
+    def test_overlapping_indices_raises(self):
+        # mixed_pending_crashed_success has indices 0-4, request 3-7 — overlap on 3,4
+        rollouts_dir = FIXTURES / "mixed_pending_crashed_success" / "model_a" / "TaskA" / "rollouts"
+        with pytest.raises(SystemExit, match="overlapping"):
+            check_no_overlapping_results(rollouts_dir, {3, 4, 5, 6, 7}, max_sample_size=50)
+
+    def test_exact_duplicate_raises(self):
+        # Request the exact same indices that already exist
+        rollouts_dir = FIXTURES / "mixed_pending_crashed_success" / "model_a" / "TaskA" / "rollouts"
+        with pytest.raises(SystemExit, match="overlapping"):
+            check_no_overlapping_results(rollouts_dir, {0, 1, 2, 3, 4}, max_sample_size=50)
+
+    def test_exceeds_budget_raises(self):
+        # mixed_pending_crashed_success has 5 existing indices, request 46 more with budget 50
+        rollouts_dir = FIXTURES / "mixed_pending_crashed_success" / "model_a" / "TaskA" / "rollouts"
+        with pytest.raises(SystemExit, match="exceeding --max_sample_size"):
+            check_no_overlapping_results(rollouts_dir, set(range(5, 51)), max_sample_size=50)
+
+    def test_within_budget_passes(self):
+        # mixed_pending_crashed_success has 5 existing indices, request 5 more with budget 50
+        rollouts_dir = FIXTURES / "mixed_pending_crashed_success" / "model_a" / "TaskA" / "rollouts"
+        check_no_overlapping_results(rollouts_dir, {5, 6, 7, 8, 9}, max_sample_size=50)
+
+    def test_exactly_at_budget_passes(self):
+        # 5 existing + 45 new = 50 exactly at budget
+        rollouts_dir = FIXTURES / "mixed_pending_crashed_success" / "model_a" / "TaskA" / "rollouts"
+        check_no_overlapping_results(rollouts_dir, set(range(5, 50)), max_sample_size=50)
+
+
+class TestParseEpisodeRange:
+    def test_basic(self):
+        assert parse_episode_range("0:5") == {0, 1, 2, 3, 4}
+
+    def test_offset(self):
+        assert parse_episode_range("100:103") == {100, 101, 102}
