@@ -438,6 +438,8 @@ def main() -> None:
     ]
     if proprio_fields:
         overrides += ["--data.proprioception_fields", json.dumps(proprio_fields)]
+    else:
+        overrides += ["--data.proprioception_fields", json.dumps([])]
     if args.norm_scope is not None:
         overrides += ["--data.normalization.scope", args.norm_scope]
     if args.batch:

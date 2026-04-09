@@ -1,5 +1,8 @@
 type: robotics
 
+language_instruction_types:
+  - original
+
 proprioception_fields:
   - actual_ee_pose_left__xyz        # 3
   - actual_ee_pose_left__rot_6d     # 6
