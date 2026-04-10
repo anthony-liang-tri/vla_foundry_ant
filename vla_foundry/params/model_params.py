@@ -57,6 +57,7 @@ class TransformerParams(ModelParams):
     cast_output_to_float32: bool = field(default=False)
     max_seq_len: int = field(default=2048)
     is_causal: bool = field(default=True)
+    dropout: float = field(default=0.0)
 
 
 @register_model_params("transformer_hf")

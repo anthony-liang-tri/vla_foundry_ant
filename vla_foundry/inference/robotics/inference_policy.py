@@ -70,6 +70,10 @@ class InferenceDiffusionPolicy(Policy):
         gripper_debounce_open_threshold: float = 0.6,
         gripper_debounce_close_threshold: float = 0.4,
     ):
+        # locals() at the top of __init__ contains only the function parameters (plus self).
+        # Keep this before any other assignment so it doesn't pick up extra local variables.
+        self._init_kwargs = {k: v for k, v in locals().items() if k != "self"}
+
         self.model_config_path = os.path.join(checkpoint_directory, "config.yaml")
 
         # Load model configuration first to get EMA enabled setting
@@ -153,9 +157,11 @@ class InferenceDiffusionPolicy(Policy):
                 "Image resizing is required for inference. Please ensure the model was trained with "
                 "resize_images_size configured in the preprocessing parameters."
             )
-        self.preprocessor_image_resize_method = preprocessing_config.get(
-            "preprocessor_image_resize_method", ImageResizingMethod.CENTER_CROP
-        )
+        raw_method = preprocessing_config.get("image_resizing_method")
+        if raw_method is None:
+            self.preprocessor_image_resize_method = ImageResizingMethod.CENTER_CROP
+        else:
+            self.preprocessor_image_resize_method = ImageResizingMethod(raw_method.lower())
         self.total_timesteps = self.num_past_timesteps + 1 + self.future_timesteps
         logging.info(
             f"Timestep configuration: total={self.total_timesteps}, "
@@ -180,11 +186,15 @@ class InferenceDiffusionPolicy(Policy):
         """Reset the policy state."""
         logging.debug("Resetting policy state")
         self._step_count = defaultdict(int)
+        self._language_instruction: str = ""
         self.current_open_loop_step.clear()
 
     def get_policy_metadata(self):
         metadata = _get_policy_metadata()
         metadata.checkpoint_path = self.checkpoint_path
+        runtime_info = {k: str(v) for k, v in self._init_kwargs.items()}
+        runtime_info["language_instruction"] = self._language_instruction
+        metadata.runtime_information = runtime_info
         return metadata
 
     def _build_guidance(self, adapter, actions_tensor, action_buffer_mask_snapshot):
@@ -223,6 +233,8 @@ class InferenceDiffusionPolicy(Policy):
     def step(self, observation: MultiarmObservation, client_id: uuid.UUID) -> PosesAndGrippers:
         """Generate robot actions based on a single observation."""
         logging.debug(f"Stepping with {client_id}")
+        if observation.language_instruction is not None:
+            self._language_instruction = observation.language_instruction
         # Step the data adapter to update its state with the new observation
         self.data_adapter[client_id].step_observations(observation)
 

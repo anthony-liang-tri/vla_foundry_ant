@@ -1,0 +1,9 @@
+<<: !include diffusion_policy.yaml
+vision_language_backbone:
+  hf_pretrained: openai/clip-vit-base-patch32
+  freeze_text_encoder: true
+  freeze_image_encoder: false
+noise_scheduler:
+  clamp_range:
+    - -1.5
+    - 1.5

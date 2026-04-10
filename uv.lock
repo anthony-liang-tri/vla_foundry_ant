@@ -237,6 +237,21 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/5c/37/0211f82891a9f14efcfd2b2096f8d9e4351398ad637fdd1ee59cfc580b0e/bddl-1.0.1.tar.gz", hash = "sha256:1fa4e6e5050b93888ff6fd8455c39bfb29d3864ce06b4c37c0f781f513a2ae26", size = 164809, upload-time = "2022-03-08T01:48:23.564Z" }
 
 [[package]]
+name = "binomial-cis"
+version = "0.0.12"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "matplotlib" },
+    { name = "numba" },
+    { name = "numpy" },
+    { name = "scipy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/14/b4/de24057c0c8fd909bf6fe1d4b4dfba0ee05f3186326e6cf9fb55a2e35e0a/binomial_cis-0.0.12.tar.gz", hash = "sha256:55fc4967b2a30fafae761f7b3163ee42a748c41c9f710209d8cf8bc2953a51bc", size = 13064, upload-time = "2025-04-23T16:08:28.171Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6b/74/f59780bd9ecc5cbbdeb1c3d3aa07bd211708ad9d731064483142b1f62469/binomial_cis-0.0.12-py3-none-any.whl", hash = "sha256:38928ecd33e8d4d0ceea292bdcb620c4921d5dd65f3fefe53b51a71cad2c5bcf", size = 14401, upload-time = "2025-04-23T16:08:26.592Z" },
+]
+
+[[package]]
 name = "boto3"
 version = "1.42.70"
 source = { registry = "https://pypi.org/simple" }
@@ -1951,7 +1966,7 @@ name = "nvidia-cudnn-cu12"
 version = "9.5.1.17"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas-cu12" },
+    { name = "nvidia-cublas-cu12", marker = "sys_platform != 'emscripten'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/2a/78/4535c9c7f859a64781e43c969a3a7e84c54634e319a996d43ef32ce46f83/nvidia_cudnn_cu12-9.5.1.17-py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:30ac3869f6db17d170e0e556dd6cc5eee02647abc31ca856634d5a40f82c15b2", size = 570988386, upload-time = "2024-10-25T19:54:26.39Z" },
@@ -1962,7 +1977,7 @@ name = "nvidia-cufft-cu12"
 version = "11.3.0.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-nvjitlink-cu12" },
+    { name = "nvidia-nvjitlink-cu12", marker = "sys_platform != 'emscripten'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8f/16/73727675941ab8e6ffd86ca3a4b7b47065edcca7a997920b831f8147c99d/nvidia_cufft_cu12-11.3.0.4-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:ccba62eb9cef5559abd5e0d54ceed2d9934030f51163df018532142a8ec533e5", size = 200221632, upload-time = "2024-11-20T17:41:32.357Z" },
@@ -1991,9 +2006,9 @@ name = "nvidia-cusolver-cu12"
 version = "11.7.1.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas-cu12" },
-    { name = "nvidia-cusparse-cu12" },
-    { name = "nvidia-nvjitlink-cu12" },
+    { name = "nvidia-cublas-cu12", marker = "sys_platform != 'emscripten'" },
+    { name = "nvidia-cusparse-cu12", marker = "sys_platform != 'emscripten'" },
+    { name = "nvidia-nvjitlink-cu12", marker = "sys_platform != 'emscripten'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f0/6e/c2cf12c9ff8b872e92b4a5740701e51ff17689c4d726fca91875b07f655d/nvidia_cusolver_cu12-11.7.1.2-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:e9e49843a7707e42022babb9bcfa33c29857a93b88020c4e4434656a655b698c", size = 158229790, upload-time = "2024-11-20T17:43:43.211Z" },
@@ -2005,7 +2020,7 @@ name = "nvidia-cusparse-cu12"
 version = "12.5.4.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-nvjitlink-cu12" },
+    { name = "nvidia-nvjitlink-cu12", marker = "sys_platform != 'emscripten'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/06/1e/b8b7c2f4099a37b96af5c9bb158632ea9e5d9d27d7391d7eb8fc45236674/nvidia_cusparse_cu12-12.5.4.2-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:7556d9eca156e18184b94947ade0fba5bb47d69cec46bf8660fd2c71a4b48b73", size = 216561367, upload-time = "2024-11-20T17:44:54.824Z" },
@@ -3225,6 +3240,23 @@ wheels = [
 ]
 
 [[package]]
+name = "sequentialized-barnard-tests"
+version = "0.0.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "binomial-cis" },
+    { name = "matplotlib" },
+    { name = "numpy" },
+    { name = "pytest" },
+    { name = "scipy" },
+    { name = "tqdm" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b1/4c/1c5ed0a1c1bad2f3d9483c3ea5a19a9e7e91920eb2283130a6d71f240e17/sequentialized_barnard_tests-0.0.5.tar.gz", hash = "sha256:51ed68aa477b0fd9c609cf03c5804e3198e900c754cc9e3a59788de1da61947e", size = 298751, upload-time = "2025-12-15T18:01:16.146Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7d/af/3ed41a0c46ee8c59c3399c25ae2f71812721b709163d238950ed20ab8a4b/sequentialized_barnard_tests-0.0.5-py3-none-any.whl", hash = "sha256:6ebdfb95a5e624cfa44671dbfc16062d8ec523bc49ad444f4f6e3104e6b3e260", size = 324433, upload-time = "2025-12-15T18:01:14.515Z" },
+]
+
+[[package]]
 name = "setuptools"
 version = "82.0.1"
 source = { registry = "https://pypi.org/simple" }
@@ -3613,7 +3645,7 @@ name = "triton"
 version = "3.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "setuptools" },
+    { name = "setuptools", marker = "sys_platform != 'emscripten'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/11/53/ce18470914ab6cfbec9384ee565d23c4d1c55f0548160b1c7b33000b11fd/triton-3.3.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:b68c778f6c4218403a6bd01be7484f6dc9e20fe2083d22dd8aef33e3b87a10a3", size = 156504509, upload-time = "2025-04-09T20:27:40.413Z" },
@@ -3755,9 +3787,10 @@ dependencies = [
 ]
 
 [package.dev-dependencies]
-eval-viewer = [
+dashboard = [
     { name = "gradio" },
     { name = "plotly" },
+    { name = "sequentialized-barnard-tests" },
 ]
 inference = [
     { name = "grpc-workspace" },
@@ -3830,9 +3863,10 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-eval-viewer = [
+dashboard = [
     { name = "gradio", specifier = ">=6.0.0" },
     { name = "plotly", specifier = ">=6.0.0" },
+    { name = "sequentialized-barnard-tests", specifier = ">=0.0.5" },
 ]
 inference = [
     { name = "grpc-workspace", editable = "packages/grpc-workspace" },

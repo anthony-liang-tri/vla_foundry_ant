@@ -1,0 +1,38 @@
+# Inherits distributed/hparams/ema from base; overrides data for v2 (dex3 tactile).
+<<: !include diffusion_policy_unitree_g1_base.yaml
+
+data:
+  <<: !include ../../data/unitree_g1/g1_data_params.yaml
+  <<: !include ../../data/diffusion_policy.yaml
+  <<: !include ../../data/unitree_g1/g1_training_data_common.yaml
+  # Tactile proprioception: base fields (EE pose + finger joints) plus dex3
+  # torque and pressure sensors. Requires v2+ dataset (converted with tactile signals).
+  proprioception_fields:
+    - actual_ee_pose_left__xyz
+    - actual_ee_pose_left__rot_6d
+    - actual_joint_states__left_hand_thumb_0_joint
+    - actual_joint_states__left_hand_thumb_1_joint
+    - actual_joint_states__left_hand_thumb_2_joint
+    - actual_joint_states__left_hand_middle_0_joint
+    - actual_joint_states__left_hand_middle_1_joint
+    - actual_joint_states__left_hand_index_0_joint
+    - actual_joint_states__left_hand_index_1_joint
+    - actual_ee_pose_right__xyz
+    - actual_ee_pose_right__rot_6d
+    - actual_joint_states__right_hand_thumb_0_joint
+    - actual_joint_states__right_hand_thumb_1_joint
+    - actual_joint_states__right_hand_thumb_2_joint
+    - actual_joint_states__right_hand_middle_0_joint
+    - actual_joint_states__right_hand_middle_1_joint
+    - actual_joint_states__right_hand_index_0_joint
+    - actual_joint_states__right_hand_index_1_joint
+    - actual_dex3_hand_left_joints_torque   # 7 — dex3 left joint torques
+    - actual_dex3_hand_left_pressure        # 12 — dex3 left pressure sensors
+    - actual_dex3_hand_right_joints_torque  # 7 — dex3 right joint torques
+    - actual_dex3_hand_right_pressure       # 12 — dex3 right pressure sensors
+  # v2 data (dex3 torque/pressure topics). For non-tactile, use diffusion_policy_unitree_g1_base.yaml (v1).
+  # Overridden at launch time via --data.dataset_manifest / --data-root.
+  dataset_manifest:
+    - s3://robotics-cam-data/platform/unitree_g1_dex3/tarfile/v2/stack_cubes_ordered/real/teleop/shards/manifest.jsonl
+  dataset_statistics:
+    - s3://robotics-cam-data/platform/unitree_g1_dex3/tarfile/v2/stack_cubes_ordered/real/teleop/shards/stats.json

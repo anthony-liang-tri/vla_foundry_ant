@@ -1932,6 +1932,7 @@ df -h /tmp 2>/dev/null || true
             "num_workers": self.config.num_workers,
             "num_samples": self.config.num_samples,
             "submission_ids": self.submission_ids,
+            "checkpoints": self._resolve_checkpoint_paths(),
         }
 
         metadata_file = self.config.results_dir / "campaign_metadata.json"

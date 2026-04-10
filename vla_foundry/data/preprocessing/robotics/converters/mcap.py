@@ -402,7 +402,14 @@ def discover_and_validate_mcap_episodes_in_directory(mcap_dirs_path: str) -> lis
     all_files = fs.find(fs_path)
 
     # Collect parent paths of .mcap files
-    episode_paths = {f"{protocol_prefix}{os.path.dirname(p)}" for p in all_files if p.lower().endswith(".mcap")}
+    # HACK(mark.zolotas): skipping anything under "needs_post_processing"
+    # Should remove this filter once these directories become irrelevant to
+    # separate post-processed logs from the original raw logs
+    episode_paths = {
+        f"{protocol_prefix}{os.path.dirname(p)}"
+        for p in all_files
+        if p.lower().endswith(".mcap") and "/needs_post_processing/" not in p
+    }
 
     if not episode_paths:
         return []

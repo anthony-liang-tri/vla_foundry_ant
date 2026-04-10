@@ -70,7 +70,7 @@ model:
   positional_embedding_type: rotary
   post_embed_norm: false
   qk_norm: true
-  resume_from_checkpoint: s3://tri-ml-datasets-uw2/vla_foundry_scratch/models/llm_1b_smolvlm2tok_300Btokens/2026_04_04-21_43_15-model_transformer-lr_0.0003-bsz_1280/checkpoints/checkpoint_19.pt
+  resume_from_checkpoint: s3://tri-ml-datasets-uw2/vla_foundry_scratch/models/llm_1b_smolvlm2tok_1Ttokens/2026_04_04-21_43_15-model_transformer-lr_0.0003-bsz_1280/checkpoints/checkpoint_34.pt
   resume_weights_only: false
   type: transformer
   vocab_size: 49280

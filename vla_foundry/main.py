@@ -357,6 +357,10 @@ def main():
         checkpoint_num += 1
         done_training = global_step >= total_steps
 
+        # Skip saving if no training happened (avoids duplicate checkpoints at end).
+        if global_step == prev_step:
+            break
+
         # Persist training state (model/opt/scheduler + data cursors).
         save_checkpoint(
             cfg,

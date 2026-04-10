@@ -7,14 +7,14 @@ GPUs to finish their current task.
 
 Usage:
     # All tasks, 1 GPU
-    uv run python tutorials/sim_evaluation/run_evaluation.py experiments/my_checkpoint
+    uv run python vla_foundry/eval/run_evaluation.py experiments/my_checkpoint
 
     # Specific tasks, 3 GPUs
-    uv run python tutorials/sim_evaluation/run_evaluation.py experiments/my_checkpoint \
+    uv run python vla_foundry/eval/run_evaluation.py experiments/my_checkpoint \
         --num_gpus 3 --tasks PutMugOnSaucer TurnCupUpsideDown
 
     # Override defaults
-    uv run python tutorials/sim_evaluation/run_evaluation.py experiments/my_checkpoint \
+    uv run python vla_foundry/eval/run_evaluation.py experiments/my_checkpoint \
         --num_gpus 3 --num_episodes 100:110 --num_processes 4
 """
 
@@ -33,6 +33,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from threading import Lock
 
+from vla_foundry.eval.data_loading import collect_scenario_indices
+
 # fmt: off
 DEFAULT_TASKS = [
     # Single-arm (Cabot)
@@ -44,16 +46,10 @@ DEFAULT_TASKS = [
     "BimanualPutRedBellPepperInBin", "BimanualPutSpatulaOnPlateFromDryingRack",
     "BimanualPutSpatulaOnPlateFromTable", "BimanualStackPlatesOnTableFromDryingRack",
     "BimanualStoreCerealBoxUnderShelf",
-    # Unseen tasks
-    "SeparateFruitsVegetablesIntoContainers",
-    "DumpVegetablesFromSmallToLargeContainer",
-    "PutFruitInLargeContainerAndCoverWithPlate",
-    "BimanualPlaceAvocadoFromBowlIntoBin", "PutMugInCenterOfTable",
-    "BimanualPutSpatulaOnPlateFromUtensilCrock", "TurnLargeContainerUpsideDown",
 ]
 # fmt: on
 
-DEFAULT_DOCKER_IMAGE = "682769330988.dkr.ecr.us-east-1.amazonaws.com/lbm-eval-oss:latest"
+DEFAULT_DOCKER_IMAGE = "toyotaresearch/lbm-eval-oss:vla-foundry"
 
 # Managed subprocesses for cleanup
 _managed_procs: list[subprocess.Popen] = []
@@ -63,6 +59,44 @@ _print_lock = Lock()
 def log(msg: str) -> None:
     with _print_lock:
         print(msg, flush=True)
+
+
+def parse_episode_range(num_episodes: str) -> set[int]:
+    """Parse 'start:end' into a set of episode indices."""
+    start, end = num_episodes.split(":")
+    return set(range(int(start), int(end)))
+
+
+def check_no_overlapping_results(
+    task_dir: Path,
+    requested_indices: set[int],
+    max_sample_size: int,
+) -> None:
+    """Error out if task_dir already has results that conflict with the new run.
+
+    Checks two conditions:
+    1. No existing episode indices overlap with the requested range.
+    2. Existing episodes + requested episodes do not exceed ``max_sample_size``.
+    """
+    if not task_dir.exists():
+        return
+    existing_indices = collect_scenario_indices(task_dir)
+    overlap = requested_indices & existing_indices
+    if overlap:
+        sample = sorted(overlap)[:5]
+        raise SystemExit(
+            f"ERROR: {task_dir} already contains results for episode indices {sample}"
+            f"{'...' if len(overlap) > 5 else ''} ({len(overlap)} overlapping). "
+            f"Change --output_dir or remove stale results before re-running."
+        )
+    combined = len(existing_indices) + len(requested_indices)
+    if combined > max_sample_size:
+        raise SystemExit(
+            f"ERROR: {task_dir} already has {len(existing_indices)} episode(s). "
+            f"Adding {len(requested_indices)} would give {combined}, "
+            f"exceeding --max_sample_size {max_sample_size}. "
+            f"Reduce --num_episodes or increase --max_sample_size."
+        )
 
 
 def cleanup() -> None:
@@ -154,10 +188,11 @@ def run_task(
     output_dir: Path,
 ) -> bool:
     """Run a single evaluation task in a Docker container. Returns True on success."""
-    task_dir = output_dir / task / args.model_name
+    task_dir = output_dir / args.model_name / task / "rollouts"
+    check_no_overlapping_results(task_dir, parse_episode_range(args.num_episodes), args.max_sample_size)
     task_dir.mkdir(parents=True, exist_ok=True)
     os.chmod(task_dir, 0o777)
-    docker_log = task_dir / ".docker.log"
+    docker_log = task_dir.parent / ".docker.log"
 
     group_add = ["--group-add", "video"]
     render_gid = get_render_gid()
@@ -196,6 +231,8 @@ def run_task(
         f"RECORD_VIDEO={args.record_video}",
         "-e",
         f"VIDEO_FPS={args.video_fps}",
+        "-e",
+        f"MAX_SAMPLE_SIZE_PER_MODEL={args.max_sample_size}",
         "-v",
         f"{task_dir.resolve()}:/tmp/lbm/rollouts",
         args.docker_image,
@@ -243,7 +280,7 @@ def gpu_worker(
     results = []
     for task in tasks:
         counter[0] += 1
-        task_log = output_dir / task / args.model_name / ".docker.log"
+        task_log = output_dir / args.model_name / task / ".docker.log"
         log(f"[{counter[0]}/{total}] Evaluating: {task} (GPU {gpu}, port {port}, log: {task_log})")
         with _active_lock:
             _active_tasks.add(task)
@@ -271,7 +308,7 @@ def progress_monitor(
             active = set(_active_tasks)
         lines = []
         for task in sorted(active):
-            log_path = output_dir / task / model_name / ".docker.log"
+            log_path = output_dir / model_name / task / ".docker.log"
             prog = read_progress(log_path)
             if prog and prog != _last_progress.get(task):
                 _last_progress[task] = prog
@@ -293,7 +330,7 @@ def main() -> int:
         "--tasks_per_gpu", type=int, default=1, help="Concurrent tasks per GPU (each gets its own policy server)"
     )
     parser.add_argument("--model_name", default="foundry_model")
-    parser.add_argument("--num_episodes", default="100:300")
+    parser.add_argument("--num_episodes", default="0:200")
     parser.add_argument("--num_processes", type=int, default=1)
     parser.add_argument("--num_flow_steps", type=int, default=8)
     parser.add_argument("--open_loop_steps", type=int, default=8)
@@ -308,6 +345,15 @@ def main() -> int:
     parser.add_argument("--max_retries", type=int, default=3)
     parser.add_argument("--record_video", type=int, default=1)
     parser.add_argument("--video_fps", type=int, default=10)
+    parser.add_argument(
+        "--max_sample_size",
+        type=int,
+        required=True,
+        help=(
+            "Maximum number of policy rollouts (per checkpoint, per task) you ever intend to run. "
+            "Required for sequential statistical testing. Set based on your experimental budget."
+        ),
+    )
     args = parser.parse_args()
 
     tasks = args.tasks or DEFAULT_TASKS
@@ -392,21 +438,8 @@ def main() -> int:
     if failed:
         log(f"  {failed} task(s) failed")
 
-    # Print results table
-    log("")
-    subprocess.run(
-        [
-            "uv",
-            "run",
-            "python",
-            "-m",
-            "vla_foundry.eval.print_results",
-            str(output_dir),
-        ]
-    )
-
     log("\nInteractive dashboard:")
-    log(f"  uv run --group eval-viewer python vla_foundry/eval/results_explorer.py {output_dir}")
+    log(f"  uv run --group dashboard python vla_foundry/eval/results_explorer.py {output_dir}")
 
     return 1 if failed else 0
 

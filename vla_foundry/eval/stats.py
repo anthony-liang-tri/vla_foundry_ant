@@ -1,19 +1,21 @@
-"""Statistical functions for evaluation comparison (beta posteriors, CLD, z-tests).
+"""Statistical functions for evaluation comparison (beta posteriors, CLD, STEP test).
 
 All functions are pure — no database or filesystem dependencies.
-Requires ``scipy`` and ``numpy`` (available via ``uv sync --group eval-viewer``).
-
-Origin: Extracted from ``vla_foundry/tri/frontend/server.py`` (the internal
-leaderboard server). The statistical functions (``compute_beta_params``,
-``draw_beta_samples``, ``compute_beta_quantiles``, ``compare_two_proportions``,
-``compute_cld``, ``compute_comparison_stats``) are identical to the originals.
-``clopper_pearson_ci`` is adapted from
-``vla_foundry/tri/lbm_eval/eval_campaigns/success_stats.py``
-(``calculate_confidence_interval``), simplified to two-sided only.
-The plot builders (``bar_chart``, ``violin_chart``, ``spider_chart``) are new.
+Requires ``scipy``, ``numpy``, and ``sequentialized-barnard-tests``
+(available via ``uv sync --group dashboard``).
 """
 
 from __future__ import annotations
+
+import logging
+from collections import defaultdict
+
+import numpy as np
+import plotly.graph_objects as go
+from scipy.stats import binomtest
+from sequentialized_barnard_tests import Decision, Hypothesis, MirroredLaiTest, MirroredStepTest
+from sequentialized_barnard_tests.auto import get_mirrored_test
+from sequentialized_barnard_tests.tools.plotting import compact_letter_display, draw_samples_from_beta_posterior
 
 
 def clopper_pearson_ci(
@@ -34,202 +36,268 @@ def clopper_pearson_ci(
     """
     if total == 0:
         return 0.0, 1.0
-    from scipy.stats import binomtest
 
     r = binomtest(successes, total).proportion_ci(confidence)
     return r.low, r.high
 
 
-def compute_beta_params(successes: int, total: int, alpha_prior: float = 1, beta_prior: float = 1):
-    """Beta distribution parameters from success counts."""
-    alpha = alpha_prior + successes
-    beta = beta_prior + (total - successes)
-    return alpha, beta
+def build_success_arrays(
+    episodes: list[dict],
+) -> dict:
+    """Convert raw episodes to per-(task, model) boolean arrays.
 
-
-def compute_beta_quantiles(alpha: float, beta: float, quantiles: list[float]) -> list[float]:
-    """Quantiles of a Beta(alpha, beta) distribution."""
-    from scipy import stats
-
-    dist = stats.beta(alpha, beta)
-    return [float(dist.ppf(q)) for q in quantiles]
-
-
-def draw_beta_samples(alpha: float, beta: float, n_samples: int = 1000, seed: int = 42) -> list[float]:
-    """Draw random samples from Beta(alpha, beta) for violin plots."""
-    import numpy as np
-    from scipy import stats
-
-    rng = np.random.default_rng(seed)
-    return stats.beta(alpha, beta).rvs(n_samples, random_state=rng).tolist()
-
-
-def compare_two_proportions(n_a: int, k_a: int, n_b: int, k_b: int, alpha: float = 0.05) -> int:
-    """Two-proportion z-test.  Returns 1 if a>b, -1 if a<b, 0 if not significant."""
-    import numpy as np
-    from scipy import stats
-
-    if n_a == 0 or n_b == 0:
-        return 0
-    p_a, p_b = k_a / n_a, k_b / n_b
-    p_pooled = (k_a + k_b) / (n_a + n_b)
-    if p_pooled == 0 or p_pooled == 1:
-        return 0
-    se = np.sqrt(p_pooled * (1 - p_pooled) * (1 / n_a + 1 / n_b))
-    if se == 0:
-        return 0
-    z = (p_a - p_b) / se
-    p_value = 2 * (1 - stats.norm.cdf(abs(z)))
-    if p_value < alpha:
-        return 1 if p_a > p_b else -1
-    return 0
-
-
-def compute_cld(results_list: list[dict], alpha: float = 0.05) -> dict[str, str]:
-    """Compact Letter Display for statistical groupings.
-
-    *results_list* items must have ``label``, ``successes``, and ``total`` keys.
-    Returns ``{label: letter(s)}``.
+    Returns ``{task: {model: array}, "__aggregate__": {model: concatenated}}``.
+    The ``"__aggregate__"`` entry concatenates each model's arrays across all tasks.
     """
-    labels = [r["label"] for r in results_list]
-    if len(labels) < 2:
-        return {labels[0]: "a"} if labels else {}
+    data: dict[str, dict[str, list]] = defaultdict(lambda: defaultdict(list))
+    for ep in episodes:
+        data[ep["task"]][ep["model"]].append(bool(ep["success"]))
 
-    sig_pairs: list[tuple[str, str]] = []
-    for i in range(len(results_list)):
-        for j in range(i + 1, len(results_list)):
-            r_i, r_j = results_list[i], results_list[j]
-            if r_i["total"] == 0 or r_j["total"] == 0:
-                continue
-            if compare_two_proportions(r_i["total"], r_i["successes"], r_j["total"], r_j["successes"], alpha) != 0:
-                sig_pairs.append((labels[i], labels[j]))
+    result: dict[str, dict[str, np.ndarray]] = {}
+    agg: dict[str, list] = defaultdict(list)
 
-    sorted_labels = [
-        p[0]
-        for p in sorted(
-            ((r["label"], r["successes"] / r["total"] if r["total"] > 0 else 0) for r in results_list),
-            key=lambda x: x[1],
+    for task, model_dict in data.items():
+        result[task] = {}
+        for model, bools in model_dict.items():
+            result[task][model] = np.array(bools, dtype=bool)
+            agg[model].extend(bools)
+
+    result["__aggregate__"] = {m: np.array(v, dtype=bool) for m, v in agg.items()}
+    return result
+
+
+def compute_cld_step(
+    success_arrays_by_task: dict,
+    max_sample_size_per_model: int,
+    confidence_level: float = 0.95,
+    seed: int = 42,
+) -> tuple[dict[str, dict[str, str]], str]:
+    """Compute per-task and aggregate CLD using the STEP sequential test.
+
+    Calls ``compare_success_and_get_cld_auto`` with Bonferroni correction
+    across all pairwise comparisons.
+
+    Per-task comparisons use ``shuffle=False``; the aggregate uses ``shuffle=True``
+    (episodes from different tasks are concatenated, so order should be shuffled).
+
+    Args:
+        success_arrays_by_task: Output of ``build_success_arrays``.
+        max_sample_size_per_model: Maximum number of rollouts per model. Must be
+            set based on the experimental budget *before* collecting data.
+            ``load_episodes`` enforces that all results files share the same
+            value, so this is always the recorded pre-commitment budget.
+        confidence_level: Global confidence level (default 0.95).
+        seed: RNG seed for the aggregate shuffle.
+
+    Returns:
+        A tuple ``(cld_by_task, warning_msg)``.  ``cld_by_task`` maps each task
+        key (including ``"__aggregate__"``) to ``{model: cld_letter}``.
+        ``warning_msg`` is non-empty if any array length exceeds
+        ``max_sample_size_per_model``.
+    """
+    # Check for sample size violations (exclude aggregate since it's derived).
+    violations: list[tuple[str, str, int]] = []
+    all_task_lengths: list[int] = []
+    for task, model_dict in success_arrays_by_task.items():
+        if task == "__aggregate__":
+            continue
+        for model, arr in model_dict.items():
+            all_task_lengths.append(len(arr))
+            if len(arr) > max_sample_size_per_model:
+                violations.append((task, model, len(arr)))
+
+    warning_msg = ""
+    if violations:
+        ex_task, ex_model, ex_len = violations[0]
+        warning_msg = (
+            f"Some rollout counts exceed the pre-committed `max_sample_size` "
+            f'(e.g. task "{ex_task}", model "{ex_model}": {ex_len} > '
+            f"{max_sample_size_per_model}). "
+            f"Only the first **{max_sample_size_per_model}** observations "
+            f"per model are used for statistical testing. "
+            f"Extra observations are ignored to preserve the validity of "
+            f"the sequential test's error guarantees."
+        )
+
+    cld_by_task: dict[str, dict[str, str]] = {}
+    rng = np.random.default_rng(seed)
+    num_tasks = sum(1 for k in success_arrays_by_task if k != "__aggregate__")
+
+    for task, model_dict in success_arrays_by_task.items():
+        models = sorted(model_dict.keys())
+        if not models:
+            cld_by_task[task] = {}
+            continue
+        if len(models) == 1:
+            cld_by_task[task] = {models[0]: "a"}
+            continue
+
+        is_agg = task == "__aggregate__"
+        # For the aggregate test the maximum sequence length is
+        # max_sample_size_per_model * num_tasks (one budget per task).
+        n_max = max_sample_size_per_model * num_tasks if is_agg else max_sample_size_per_model
+        # Copy arrays — compare_success_and_get_cld shuffles them in-place.
+        arrays = [model_dict[m].copy() for m in models]
+
+        try:
+            cld = compare_success_and_get_cld_auto(
+                models,
+                arrays,
+                confidence_level,
+                n_max,
+                shuffle=is_agg,
+                rng=rng if is_agg else None,
+                verbose=False,
+            )
+        except Exception:
+            logging.getLogger(__name__).warning(
+                "CLD computation failed for task %r; marking as '?'",
+                task,
+                exc_info=True,
+            )
+            cld = {m: "?" for m in models}
+
+        cld_by_task[task] = cld
+
+    return cld_by_task, warning_msg
+
+
+def compare_success_and_get_cld_auto(
+    model_name_list: list[str],  # [model_0, ...]
+    success_array_list: list[np.ndarray],  # [success_array_for_model_0, ...]
+    global_confidence_level: float,
+    n_max: int,
+    shuffle: bool,
+    rng: np.random.Generator | None = None,
+    verbose: bool = True,
+) -> dict[str, str]:
+    """Compares multiple success arrays and returns their Compact Letter Display (CLD)
+    representation based on pairwise sequential tests (STEP or Lai, auto-selected).
+
+    Args:
+        model_name_list: A list of model names.
+        success_array_list: A list of binary arrays indicating success/failure
+            for each model.
+        global_confidence_level: The desired global confidence level for the
+            multiple comparisons.
+        n_max: The maximum sequence length for the sequential test. For
+            per-task comparisons this equals ``max_sample_size_per_model``; for
+            aggregate comparisons it equals
+            ``max_sample_size_per_model * num_tasks``.
+        shuffle: Whether to shuffle the True/False ordering of each success array
+            before comparison. Set it to False if each True/False outcome is
+            independent within each array. Set to True if, for example, each array is a
+            concatenation of results from multiple tasks and you want to measure the
+            aggregate multi-task performance.
+        rng: Optional random number generator instance for shuffling. Only used if
+            shuffle is True.
+        verbose: Whether to print detailed output. Defaults to True.
+    Returns:
+        A dictionary mapping model names to their CLD letters.
+    """
+    if shuffle and rng is None:
+        raise ValueError("rng must be provided when shuffle is True.")
+    num_models = len(model_name_list)
+    # Set up the sequential statistical test.
+    global_alpha = 1 - global_confidence_level
+    num_comparisons = num_models * (num_models - 1) // 2
+    individual_alpha = global_alpha / num_comparisons
+    individual_confidence_level = 1 - individual_alpha
+    test = get_mirrored_test(
+        alternative=Hypothesis.P0LessThanP1,
+        alpha=individual_alpha,
+        n_max=n_max,
+    )
+    if verbose:
+        if isinstance(test, MirroredStepTest):
+            method_name = "STEP"
+        elif isinstance(test, MirroredLaiTest):
+            method_name = "Lai"
+        else:
+            method_name = type(test).__name__
+        print("Statistical Test Specs:")
+        print(f"  Method: {method_name}")
+        print(f"  Global Confidence: {round(global_confidence_level, 5)}")
+        print(f"    ({round(individual_confidence_level, 5)} per comparison)")
+        print(f"  Maximum Sequence Length (n_max): {n_max}\n")
+
+    # No explicit reset needed — run_on_sequence() calls reset() internally.
+
+    # Prepare success array per model.
+    success_array_dict = dict()  # model_name -> success_array
+    for idx in np.arange(num_models):
+        model = model_name_list[idx]
+        success_array = success_array_list[idx]
+        if shuffle:
+            rng.shuffle(success_array)
+        success_array_dict[model] = success_array
+
+    # Run pairwise comparisons.
+    comparisons_dict = dict()  # (model_name_a, model_name_b) -> Decision
+    for idx_a in np.arange(num_models):
+        for idx_b in np.arange(idx_a + 1, num_models):
+            model_a = model_name_list[idx_a]
+            model_b = model_name_list[idx_b]
+            array_a = success_array_dict[model_a]
+            array_b = success_array_dict[model_b]
+            len_common = min(len(array_a), len(array_b))
+            array_a = array_a[:len_common]
+            array_b = array_b[:len_common]
+            # Run the test.
+            test_result = test.run_on_sequence(array_a, array_b)
+            comparisons_dict[(model_a, model_b)] = test_result.decision
+
+    # Compact Letter Display algorithm to summarize results
+    input_list_to_cld = list()
+    for key, val in comparisons_dict.items():
+        if val != Decision.FailToDecide:
+            input_list_to_cld.append(key)
+    models_sorted_by_success_rates = [
+        model
+        for model, _ in sorted(
+            success_array_dict.items(),
+            key=lambda kv_pair: np.mean(kv_pair[1]) if len(kv_pair[1]) else 0.0,
             reverse=True,
         )
     ]
+    letters_list = compact_letter_display(input_list_to_cld, models_sorted_by_success_rates)
+    if verbose:
+        print("Statistical Test Results (Compact Letter Display):")
+    str_padding = max([len(model) for model in models_sorted_by_success_rates])
+    return_dict = dict()
+    for letters, model in zip(letters_list, models_sorted_by_success_rates, strict=True):
+        return_dict[model] = letters
+        num_successes = np.sum(success_array_dict[model])
+        num_trials = len(success_array_dict[model])
+        empirical_success_rate = 0.0 if num_trials == 0 else np.mean(success_array_dict[model])
+        if verbose:
+            print(
+                f"  CLD for {model:<{str_padding}}: {letters}\n"
+                f"    Success Rate {num_successes} / {num_trials} = "
+                f"{round(empirical_success_rate, 3)}",
+            )
 
-    cld: dict[str, str] = {}
-    current_letter = ord("a")
-    assigned: set[str] = set()
-    for label in sorted_labels:
-        if label in assigned:
-            continue
-        group = [label] + [
-            other
-            for other in sorted_labels
-            if other != label
-            and other not in assigned
-            and (label, other) not in sig_pairs
-            and (other, label) not in sig_pairs
-        ]
-        letter = chr(current_letter)
-        for g in group:
-            cld[g] = cld.get(g, "") + letter
-        assigned.update(group)
-        current_letter += 1
-    return cld
-
-
-_STANDARD_QUANTILES = [0.025, 0.25, 0.5, 0.75, 0.975]
-
-
-def _beta_entry(successes: int, total: int, n_samples: int, **extra) -> dict:
-    """Build a single result entry with beta params, samples, and quantiles."""
-    alpha, beta = compute_beta_params(successes, total)
-    samples = draw_beta_samples(alpha, beta, n_samples)
-    quantiles = compute_beta_quantiles(alpha, beta, _STANDARD_QUANTILES)
-    return {
-        **extra,
-        "successes": successes,
-        "total": total,
-        "success_rate": successes / total if total > 0 else 0,
-        "alpha": alpha,
-        "beta": beta,
-        "violin_samples": samples,
-        "quantiles": {
-            "q025": quantiles[0],
-            "q25": quantiles[1],
-            "median": quantiles[2],
-            "q75": quantiles[3],
-            "q975": quantiles[4],
-        },
-    }
-
-
-def compute_comparison_stats(
-    entries: list[dict],
-    n_samples: int = 500,
-) -> dict:
-    """Compute violin/CLD comparison data from a list of per-(task, model) entries.
-
-    Each entry must have ``task_name``, ``label`` (model/ablation name),
-    ``successes``, and ``total``.
-
-    Returns ``{by_task, task_order, cld_by_task, aggregate, aggregate_cld}``.
-    """
-    import numpy as np
-
-    by_task: dict[str, list[dict]] = {}
-    all_results: list[dict] = []
-
-    for e in entries:
-        result = _beta_entry(
-            e["successes"],
-            e["total"],
-            n_samples,
-            task_name=e["task_name"],
-            label=e["label"],
-            ablation=e["label"],
-        )
-        by_task.setdefault(e["task_name"], []).append(result)
-        all_results.append(result)
-
-    # CLD per task
-    cld_by_task: dict[str, dict[str, str]] = {}
-    for task, task_results in by_task.items():
-        cld = compute_cld(task_results)
-        cld_by_task[task] = cld
-        for r in task_results:
-            r["cld_letter"] = cld.get(r["label"], "")
-
-    # Aggregate per label (model/ablation)
-    agg_map: dict[str, dict[str, int]] = {}
-    for r in all_results:
-        lbl = r["label"]
-        if lbl not in agg_map:
-            agg_map[lbl] = {"successes": 0, "total": 0}
-        agg_map[lbl]["successes"] += r["successes"]
-        agg_map[lbl]["total"] += r["total"]
-
-    aggregate = [
-        _beta_entry(a["successes"], a["total"], n_samples, label=lbl, ablation=lbl) for lbl, a in agg_map.items()
-    ]
-    agg_cld = compute_cld(aggregate)
-    for r in aggregate:
-        r["cld_letter"] = agg_cld.get(r["label"], "")
-
-    task_order = sorted(
-        by_task.keys(),
-        key=lambda t: float(np.mean([r["success_rate"] for r in by_task[t]])),
-        reverse=True,
+    # Ranks are determined if each policy has a unique single letter.
+    all_order_determined = all([len(letters) == 1 for letters in letters_list]) and len(set(letters_list)) == len(
+        model_name_list
     )
-
-    return {
-        "by_task": by_task,
-        "task_order": task_order,
-        "cld_by_task": cld_by_task,
-        "aggregate": aggregate,
-        "aggregate_cld": agg_cld,
-    }
+    if verbose:
+        if all_order_determined:
+            print(f"All models separated with global confidence of {round(global_confidence_level, 5)}.")
+        else:
+            print(
+                "Not all models were separated with global confidence of "
+                f"{round(global_confidence_level, 5)}. Models that share "
+                "a same letter are not separated from each other with "
+                "statistical significance. For more information on how to "
+                "interpret the letters, see: "
+                "https://en.wikipedia.org/wiki/Compact_letter_display.\n"
+            )
+    return return_dict
 
 
 # ---------------------------------------------------------------------------
-# Plot builders (Plotly figures from aggregated stats)
+# Plot builders (Plotly figures from raw episodes)
 # ---------------------------------------------------------------------------
 
 COLORS = [
@@ -252,142 +320,162 @@ def _with_alpha(hex_color: str, alpha: float) -> str:
     return f"rgba({r},{g},{b},{alpha})"
 
 
-def bar_chart(data: list[dict]):
-    """Grouped bar chart of success rates by task with 90% CIs."""
-    import numpy as np
-    import plotly.graph_objects as go
+def model_comparison_chart(
+    episodes: list[dict],
+    max_sample_size_per_model: int | None = None,
+    overlay_on_bars: bool = False,
+    confidence_level: float = 0.95,
+    n_posterior_samples: int = 2000,
+    seed: int = 42,
+) -> tuple:
+    """Plotly adaptation of ``plot_model_comparison`` from sequentialized_barnard_tests.
 
-    if not data:
-        return go.Figure().update_layout(title="No data")
-    models = sorted({s["model"] for s in data})
-    tasks = sorted(
-        {s["task"] for s in data},
-        key=lambda t: -max((s["pct"] for s in data if s["task"] == t), default=0),
-    )
-    lookup = {(s["task"], s["model"]): s for s in data}
-    fig = go.Figure()
-    for i, model in enumerate(models):
-        rates, err_lo, err_hi = [], [], []
-        for task in tasks:
-            s = lookup.get((task, model))
-            if s:
-                rates.append(s["pct"])
-                err_lo.append(s["pct"] - s["ci_low"] * 100)
-                err_hi.append(s["ci_high"] * 100 - s["pct"])
-            else:
-                rates.append(None)
-                err_lo.append(0)
-                err_hi.append(0)
-        fig.add_trace(
-            go.Bar(
-                name=model,
-                x=tasks,
-                y=rates,
-                error_y=dict(type="data", symmetric=False, array=np.array(err_hi), arrayminus=np.array(err_lo)),
-                marker_color=COLORS[i % len(COLORS)],
-            )
+    Draws beta posterior violin plots per (task, model) with:
+    - Horizontal mean lines through each violin (``meanline_visible=True``).
+    - Empirical mean dots (black circle markers).
+    - CLD letter annotations above each violin's posterior mean (STEP test,
+      Bonferroni-corrected). Only shown when ``max_sample_size_per_model`` is set.
+    - Optional semi-transparent bar overlay showing the empirical mean height.
+    - A vertical separator before the aggregate section.
+
+    Args:
+        episodes: Raw episode dicts with ``task``, ``model``, and ``success`` keys.
+        max_sample_size_per_model: The ``max_sample_size_per_model`` value from
+            the results files (returned by ``load_episodes``). Used as the STEP
+            test budget. When ``None``, violins are shown without CLD annotations.
+        overlay_on_bars: If ``True``, draw semi-transparent bars behind each
+            violin showing the empirical mean.
+        confidence_level: Global confidence level for CLD (default 0.95).
+        n_posterior_samples: Number of samples drawn from the beta posterior for
+            each violin (default 2000).
+        seed: RNG seed for posterior sampling and aggregate shuffling.
+
+    Returns:
+        ``(figure, warning_msg)``.  ``warning_msg`` is non-empty when any
+        rollout count exceeds ``max_sample_size_per_model``.
+    """
+
+    if not episodes:
+        return go.Figure().update_layout(title="No data"), ""
+
+    rng = np.random.default_rng(seed)
+    arrays_by_task = build_success_arrays(episodes)
+
+    pure_tasks = sorted(k for k in arrays_by_task if k != "__aggregate__")
+    all_models = sorted({m for task_dict in arrays_by_task.values() for m in task_dict})
+
+    cld_by_task: dict[str, dict[str, str]] = {}
+    warning_msg = ""
+    if max_sample_size_per_model is not None:
+        cld_by_task, warning_msg = compute_cld_step(
+            arrays_by_task, max_sample_size_per_model, confidence_level, seed + 1
         )
-    fig.update_layout(
-        title="Success Rate by Task (90% CI)",
-        yaxis_title="Success Rate (%)",
-        yaxis_range=[0, 105],
-        barmode="group",
-        xaxis_tickangle=-45,
-        legend=dict(orientation="h", y=1.02, x=0.5, xanchor="center"),
-        margin=dict(b=150, t=60),
-        plot_bgcolor="white",
+
+    task_order = sorted(
+        pure_tasks,
+        key=lambda t: float(np.mean([np.mean(arr) for arr in arrays_by_task[t].values()])),
+        reverse=True,
     )
-    return fig
 
-
-def violin_chart(data: list[dict]):
-    """Beta posterior violin plots with CLD significance letters."""
-    import numpy as np
-    import plotly.graph_objects as go
-
-    if not data:
-        return go.Figure().update_layout(title="No data")
-    entries = [
-        {"task_name": s["task"], "label": s["model"], "successes": s["successes"], "total": s["total"]} for s in data
-    ]
-    comp = compute_comparison_stats(entries, n_samples=500)
-    by_task, task_order, aggregate = comp["by_task"], comp["task_order"], comp["aggregate"]
-    all_labels = sorted({r["label"] for v in by_task.values() for r in v})
-    cmap = {a: COLORS[i % len(COLORS)] for i, a in enumerate(all_labels)}
-    n = len(all_labels)
-    gw, vw = 0.8, min(0.35, 0.8 / max(n, 1))
+    n = len(all_models)
+    cmap = {m: COLORS[i % len(COLORS)] for i, m in enumerate(all_models)}
+    gw = 0.8
+    vw = min(0.35, 0.8 / max(n, 1))
 
     fig = go.Figure()
     shown: set[str] = set()
     annotations: list[dict] = []
 
-    def _add(samples, label, xp, legend, width):
+    def _add_violin(xp: float, model: str, arr: np.ndarray, cld_key: str, width: float) -> None:
+        samples = draw_samples_from_beta_posterior(arr, rng, n_posterior_samples)
+        posterior_mean = float(np.mean(samples))
+        empirical_mean = float(np.mean(arr))
+        color = cmap[model]
+
+        if overlay_on_bars:
+            fig.add_trace(
+                go.Bar(
+                    x=[xp],
+                    y=[empirical_mean],
+                    width=width * 1.2,
+                    marker_color=_with_alpha(color, 0.3),
+                    marker_line_width=0,
+                    showlegend=False,
+                    legendgroup=model,
+                    hoverinfo="skip",
+                )
+            )
+
         fig.add_trace(
             go.Violin(
-                y=np.array(samples),
+                y=samples,
                 x=np.full(len(samples), xp),
-                name=label,
-                legendgroup=label,
-                showlegend=legend,
+                name=model,
+                legendgroup=model,
+                showlegend=model not in shown,
                 scalegroup="all",
                 points=False,
                 box_visible=False,
-                meanline_visible=True,
-                line_color=cmap[label],
-                fillcolor=cmap[label],
+                meanline=dict(visible=True, color="black", width=1.5),
+                line_color=color,
+                fillcolor=color,
                 opacity=0.7,
                 width=width,
                 hoverinfo="skip",
             )
         )
+        shown.add(model)
 
-    for ti, task in enumerate(task_order):
-        for r in by_task.get(task, []):
-            samples = r.get("violin_samples", [])
-            if not samples:
-                continue
-            ai = all_labels.index(r["label"])
-            xp = ti + (ai - (n - 1) / 2) * (gw / max(n, 1))
-            _add(samples, r["label"], xp, r["label"] not in shown, vw)
-            shown.add(r["label"])
-            cld = r.get("cld_letter", "")
-            if cld and n > 1:
-                annotations.append(
-                    dict(
-                        x=xp,
-                        y=min(r["success_rate"] + 0.08, 1.02),
-                        text=f"<b>{cld}</b>",
-                        showarrow=False,
-                        font=dict(size=10),
-                    )
-                )
+        # Empirical mean dot
+        fig.add_trace(
+            go.Scatter(
+                x=[xp],
+                y=[empirical_mean],
+                mode="markers",
+                marker=dict(color="black", size=6, symbol="circle"),
+                legendgroup=model,
+                showlegend=False,
+                hoverinfo="skip",
+            )
+        )
 
-    agg_x = len(task_order) + 1
-    for agg in aggregate:
-        samples = agg.get("violin_samples", [])
-        if not samples:
-            continue
-        ai = all_labels.index(agg["label"])
-        xp = agg_x + (ai - (n - 1) / 2) * (gw / max(n, 1))
-        _add(samples, agg["label"], xp, False, vw * 1.5)
-        cld = agg.get("cld_letter", "")
-        if cld and n > 1:
+        cld_letter = cld_by_task.get(cld_key, {}).get(model, "")
+        if cld_letter and n > 1:
             annotations.append(
                 dict(
                     x=xp,
-                    y=min(agg["success_rate"] + 0.08, 1.02),
-                    text=f"<b>{cld}</b>",
+                    y=min(posterior_mean + 0.08, 1.02),
+                    text=f"<b>{cld_letter}</b>",
                     showarrow=False,
                     font=dict(size=10),
                 )
             )
 
+    for ti, task in enumerate(task_order):
+        for model in sorted(arrays_by_task.get(task, {}).keys()):
+            ai = all_models.index(model)
+            xp = ti + (ai - (n - 1) / 2) * (gw / max(n, 1))
+            _add_violin(xp, model, arrays_by_task[task][model], task, vw)
+
+    agg_x = len(task_order) + 1
+    agg = arrays_by_task.get("__aggregate__", {})
+    for model in sorted(agg.keys()):
+        ai = all_models.index(model)
+        xp = agg_x + (ai - (n - 1) / 2) * (gw / max(n, 1))
+        _add_violin(xp, model, agg[model], "__aggregate__", vw * 1.5)
+
     ticks = list(range(len(task_order))) + [agg_x]
     tick_text = [t[:25] + "\u2026" if len(t) > 25 else t for t in task_order] + ["Aggregate"]
+
     fig.update_layout(
         title="Success Rate Distribution (Beta Posterior)",
         yaxis=dict(title="Success Rate", range=[-0.02, 1.15]),
-        xaxis=dict(tickangle=-45, tickvals=ticks, ticktext=tick_text, range=[-0.7, agg_x + 0.7]),
+        xaxis=dict(
+            tickangle=-45,
+            tickvals=ticks,
+            ticktext=tick_text,
+            range=[-0.7, agg_x + 0.7],
+        ),
         legend=dict(orientation="h", y=1.02, x=0.5, xanchor="center"),
         annotations=annotations,
         shapes=[
@@ -407,14 +495,14 @@ def violin_chart(data: list[dict]):
         paper_bgcolor="white",
         violingap=0,
         violinmode="overlay",
+        barmode="overlay",
     )
-    return fig
+
+    return fig, warning_msg
 
 
 def spider_chart(data: list[dict]):
     """Radar chart of success rates by task and model."""
-    import plotly.graph_objects as go
-
     if not data:
         return go.Figure().update_layout(title="No data")
     models = sorted({s["model"] for s in data})

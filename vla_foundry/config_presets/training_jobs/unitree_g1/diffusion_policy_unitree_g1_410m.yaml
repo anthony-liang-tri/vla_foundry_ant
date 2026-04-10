@@ -1,0 +1,7 @@
+<<: !include diffusion_policy_unitree_g1_base.yaml
+
+model:
+  <<: !include ../../models/diffusion_policy_g1.yaml
+  transformer:
+    <<: !include ../../models/transformer_410m.yaml
+    is_causal: True

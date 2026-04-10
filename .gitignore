@@ -151,3 +151,4 @@ tags
 
 # Evaluation rollout data
 rollouts/
+!tests/essential/test_assets/dashboard_fixtures/**/rollouts/

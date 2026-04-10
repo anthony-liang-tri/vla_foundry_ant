@@ -1,0 +1,25 @@
+data:
+  <<: !include ../../data/unitree_g1/g1_data_params.yaml
+  <<: !include ../../data/diffusion_policy.yaml
+  <<: !include ../../data/unitree_g1/g1_training_data_common.yaml
+  # v1 data (no tactile). For tactile, use diffusion_policy_unitree_g1_tactile_base.yaml (v2).
+  # Overridden at launch time via --data.dataset_manifest / --data-root.
+  dataset_manifest:
+    - s3://robotics-cam-data/platform/unitree_g1_dex3/tarfile/v1/move_block_on_plate/sim/teleop/shards/manifest.jsonl
+  dataset_statistics:
+    - s3://robotics-cam-data/platform/unitree_g1_dex3/tarfile/v1/move_block_on_plate/sim/teleop/shards/stats.json
+
+distributed:
+  fsdp: false
+
+hparams:
+  <<: !include ../../hparams/diffusion_policy.yaml
+  precision: "float32"
+  lr: 1e-4
+  lr_cooldown_end: 5e-5
+  wd: 1e-4
+  per_gpu_batch_size: 32
+  global_batch_size: 256
+
+ema:
+  enabled: true

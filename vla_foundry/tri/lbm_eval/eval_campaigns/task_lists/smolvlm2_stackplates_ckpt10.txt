@@ -1,0 +1,5 @@
+(
+    "smolvlm2_stackplates_ckpt10",
+    "BimanualStackPlatesOnTableFromDryingRack",
+    "s3://tri-ml-datasets-uw2/vla_foundry_scratch/models/vla_1b_smolvlm2_singletask_v2_lr1e4_fut8past2_50k/BimanualStackPlatesOnTableFromDryingRack/2026_04_09-11_04_37-model_diffusion_policy-lr_0.0001-bsz_256/",
+),

@@ -1,0 +1,5 @@
+# Camera names for G1 data recorded with a single D435 head camera + D435 wrist cameras.
+# Used for real_d435 and sim_d435 domains.
+- head
+- left_wrist
+- right_wrist

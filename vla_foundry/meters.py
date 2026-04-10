@@ -89,19 +89,13 @@ class Metrics:
             "seen_steps_epoch": batch_count,
         }
 
-        for name, val in self.state.items():
-            name = "train/" + name
-            if cfg.wandb:
-                import wandb
+        if cfg.wandb:
+            import wandb
 
-                wandb.log(
-                    {
-                        name: val,
-                        "tokens": self.state["tokens"],
-                        "samples": self.state["samples"],
-                    },
-                    step=step,
-                )
+            log_dict = {f"train/{name}": val for name, val in self.state.items()}
+            log_dict["tokens"] = self.state["tokens"]
+            log_dict["samples"] = self.state["samples"]
+            wandb.log(log_dict, step=step)
 
         self.reset()
 

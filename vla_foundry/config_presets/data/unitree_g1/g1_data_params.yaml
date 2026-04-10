@@ -1,44 +1,55 @@
 type: robotics
 
+language_instruction_types:
+  - original
+
 proprioception_fields:
-  - actual_ee_pose_left__xyz # 3
-  - actual_ee_pose_left__rot_6d # 6
-  - actual_joint_states__left_hand_thumb_0_joint # 1
-  - actual_joint_states__left_hand_thumb_1_joint # 1
-  - actual_joint_states__left_hand_thumb_2_joint # 1
-  - actual_joint_states__left_hand_middle_0_joint # 1
-  - actual_joint_states__left_hand_middle_1_joint # 1
-  - actual_joint_states__left_hand_index_0_joint # 1
-  - actual_joint_states__left_hand_index_1_joint # 1
-  - actual_ee_pose_right__xyz # 3
-  - actual_ee_pose_right__rot_6d # 6
-  - actual_joint_states__right_hand_thumb_0_joint # 1
-  - actual_joint_states__right_hand_thumb_1_joint # 1
-  - actual_joint_states__right_hand_thumb_2_joint # 1
-  - actual_joint_states__right_hand_middle_0_joint # 1
-  - actual_joint_states__right_hand_middle_1_joint # 1
-  - actual_joint_states__right_hand_index_0_joint # 1
-  - actual_joint_states__right_hand_index_1_joint # 1
+  - actual_ee_pose_left__xyz        # 3
+  - actual_ee_pose_left__rot_6d     # 6
+  - actual_joint_states__left_hand_thumb_0_joint
+  - actual_joint_states__left_hand_thumb_1_joint
+  - actual_joint_states__left_hand_thumb_2_joint
+  - actual_joint_states__left_hand_middle_0_joint
+  - actual_joint_states__left_hand_middle_1_joint
+  - actual_joint_states__left_hand_index_0_joint
+  - actual_joint_states__left_hand_index_1_joint
+  - actual_ee_pose_right__xyz       # 3
+  - actual_ee_pose_right__rot_6d    # 6
+  - actual_joint_states__right_hand_thumb_0_joint
+  - actual_joint_states__right_hand_thumb_1_joint
+  - actual_joint_states__right_hand_thumb_2_joint
+  - actual_joint_states__right_hand_middle_0_joint
+  - actual_joint_states__right_hand_middle_1_joint
+  - actual_joint_states__right_hand_index_0_joint
+  - actual_joint_states__right_hand_index_1_joint
+
+# Dex3 tactile fields — appended to proprioception_fields when --tactile-propio is set.
+# Requires data preprocessed with dex3 tactile topics (v2+ datasets).
+tactile_fields:
+  - actual_dex3_hand_left_joints_torque   # 7 (dex3 left joint torques)
+  - actual_dex3_hand_left_pressure        # 12 (dex3 left pressure sensors)
+  - actual_dex3_hand_right_joints_torque  # 7 (dex3 right joint torques)
+  - actual_dex3_hand_right_pressure       # 12 (dex3 right pressure sensors)
 
 action_fields:
-  - action_ee_pose_left__xyz_relative # 3
-  - action_ee_pose_left__rot_6d_relative # 6
-  - action_joint_hand_left__left_hand_thumb_0_joint # 1
-  - action_joint_hand_left__left_hand_thumb_1_joint # 1
-  - action_joint_hand_left__left_hand_thumb_2_joint # 1
-  - action_joint_hand_left__left_hand_middle_0_joint # 1
-  - action_joint_hand_left__left_hand_middle_1_joint # 1
-  - action_joint_hand_left__left_hand_index_0_joint # 1
-  - action_joint_hand_left__left_hand_index_1_joint # 1
-  - action_ee_pose_right__xyz_relative # 3
-  - action_ee_pose_right__rot_6d_relative # 6
-  - action_joint_hand_right__right_hand_thumb_0_joint # 1
-  - action_joint_hand_right__right_hand_thumb_1_joint # 1
-  - action_joint_hand_right__right_hand_thumb_2_joint # 1
-  - action_joint_hand_right__right_hand_middle_0_joint # 1
-  - action_joint_hand_right__right_hand_middle_1_joint # 1
-  - action_joint_hand_right__right_hand_index_0_joint # 1
-  - action_joint_hand_right__right_hand_index_1_joint # 1
+  - action_ee_pose_left__xyz        # 3
+  - action_ee_pose_left__rot_6d     # 6
+  - action_joint_hand_left__left_hand_thumb_0_joint
+  - action_joint_hand_left__left_hand_thumb_1_joint
+  - action_joint_hand_left__left_hand_thumb_2_joint
+  - action_joint_hand_left__left_hand_middle_0_joint
+  - action_joint_hand_left__left_hand_middle_1_joint
+  - action_joint_hand_left__left_hand_index_0_joint
+  - action_joint_hand_left__left_hand_index_1_joint
+  - action_ee_pose_right__xyz       # 3
+  - action_ee_pose_right__rot_6d    # 6
+  - action_joint_hand_right__right_hand_thumb_0_joint
+  - action_joint_hand_right__right_hand_thumb_1_joint
+  - action_joint_hand_right__right_hand_thumb_2_joint
+  - action_joint_hand_right__right_hand_middle_0_joint
+  - action_joint_hand_right__right_hand_middle_1_joint
+  - action_joint_hand_right__right_hand_index_0_joint
+  - action_joint_hand_right__right_hand_index_1_joint
 
 pose_groups:
   - name: "left_ee_pose_action"
@@ -51,6 +62,6 @@ pose_groups:
 normalization:
   enabled: true
   method: percentile_1_99
-  scope: per_timestep
+  scope: global
   epsilon: 1e-2
   centered_norm: true

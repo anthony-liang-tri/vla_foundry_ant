@@ -1,11 +1,12 @@
 """Gradio dashboard for simulation evaluation results.
 
 Reuses ``data_loading`` for filesystem scanning and ``stats`` for
-statistical comparisons (beta posteriors, CLD significance letters).
+statistical comparisons (beta posteriors, CLD significance letters via
+the STEP sequential test from ``sequentialized_barnard_tests``).
 
 Usage::
 
-    uv run --group eval-viewer python vla_foundry/eval/results_explorer.py rollouts/
+    uv run --group dashboard python vla_foundry/eval/results_explorer.py rollouts/
 """
 
 from __future__ import annotations
@@ -18,17 +19,16 @@ import pandas as pd
 
 from vla_foundry.eval.data_loading import aggregate_episodes, load_episodes
 from vla_foundry.eval.stats import (
-    bar_chart,
     clopper_pearson_ci,
+    model_comparison_chart,
     spider_chart,
-    violin_chart,
 )
 
 
 def _scan(root: Path):
-    eps, pending_by, crashed_by, stale_info = load_episodes(root)
+    eps, pending_by, crashed_by, max_sample_size = load_episodes(root)
     stats = aggregate_episodes(eps, ci_fn=clopper_pearson_ci, pending_by=pending_by, crashed_by=crashed_by)
-    return eps, stats, stale_info
+    return eps, stats, max_sample_size
 
 
 # ---------------------------------------------------------------------------
@@ -36,25 +36,15 @@ def _scan(root: Path):
 # ---------------------------------------------------------------------------
 
 
-def _stats_markdown(stats: list[dict], stale_info: list[dict] | None = None) -> str:
+def _stats_markdown(stats: list[dict]) -> str:
     if not stats:
         return "*No data*"
     total = sum(s["total"] for s in stats)
-    msg = (
+    return (
         f"**{len({s['task'] for s in stats})}** Tasks \u00a0\u00b7\u00a0 "
         f"**{len({s['model'] for s in stats})}** Models \u00a0\u00b7\u00a0 "
         f"**{total:,}** Episodes"
     )
-    if stale_info:
-        details = "\n".join(
-            f"- **{s['dir']}**: using `{s['kept']}`, ignoring `{', '.join(s['skipped'])}`" for s in stale_info
-        )
-        msg += (
-            "\n\n> **Warning:** Found stale results from previous runs. "
-            "Video recordings for older runs may have been overwritten.\n>\n"
-            + "\n".join(f"> {line}" for line in details.split("\n"))
-        )
-    return msg
 
 
 def _summary_df(data: list[dict]):
@@ -93,7 +83,13 @@ def _summary_df(data: list[dict]):
         completion_pct = 100.0 * row["Completed Rollouts"] / total if total > 0 else 0
         completion_bg = _rate_bg(completion_pct)
         return [
-            success_bg if col in ("Success Rate", "Successes") else completion_bg if col == "Completed Rollouts" else ""
+            (
+                success_bg
+                if col in ("Success Rate", "Successes")
+                else completion_bg
+                if col == "Completed Rollouts"
+                else ""
+            )
             for col in row.index
         ]
 
@@ -113,7 +109,7 @@ def create_app(root: Path):
     gr.set_static_paths(paths=[str(root)])
 
     state: dict = {}
-    state["episodes"], state["stats"], state["stale_info"] = _scan(root)
+    state["episodes"], state["stats"], state["max_sample_size"] = _scan(root)
 
     def all_tasks():
         return sorted({s["task"] for s in state["stats"]})
@@ -125,23 +121,32 @@ def create_app(root: Path):
         ts, ms = set(tasks_sel or []), set(models_sel or [])
         return [s for s in state["stats"] if s["task"] in ts and s["model"] in ms]
 
-    def _filtered_eps(tasks_sel, models_sel, outcome="All"):
+    def _parse_episode_filter(episode_filter: str) -> set[str] | None:
+        """Parse comma-separated episode/demo IDs. Returns None if no filter."""
+        if not episode_filter or not episode_filter.strip():
+            return None
+        return {tok.strip() for tok in episode_filter.split(",") if tok.strip()}
+
+    def _filtered_eps(tasks_sel, models_sel, outcome="All", episode_filter=""):
         ts, ms = set(tasks_sel or []), set(models_sel or [])
         eps = [ep for ep in state["episodes"] if ep["task"] in ts and ep["model"] in ms]
         if outcome == "Success":
             eps = [ep for ep in eps if ep["success"]]
         elif outcome == "Failure":
             eps = [ep for ep in eps if not ep["success"]]
+        demo_ids = _parse_episode_filter(episode_filter)
+        if demo_ids is not None:
+            eps = [ep for ep in eps if str(ep["demo_id"]) in demo_ids]
         return eps
 
     GRID_SIZE = 9  # 3x3
 
-    def _rec_eps(tasks_sel, models_sel, outcome="All"):
-        return [ep for ep in _filtered_eps(tasks_sel, models_sel, outcome) if ep.get("recording_video")]
+    def _rec_eps(tasks_sel, models_sel, outcome="All", episode_filter=""):
+        return [ep for ep in _filtered_eps(tasks_sel, models_sel, outcome, episode_filter) if ep.get("recording_video")]
 
-    def _grid_updates(tasks_sel, models_sel, outcome, page):
+    def _grid_updates(tasks_sel, models_sel, outcome, page, episode_filter=""):
         """Return updates for the 9 video slots + link slots given filters and page."""
-        eps = _rec_eps(tasks_sel, models_sel, outcome)
+        eps = _rec_eps(tasks_sel, models_sel, outcome, episode_filter)
         total_pages = max(1, (len(eps) + GRID_SIZE - 1) // GRID_SIZE)
         page = max(0, min(page, total_pages - 1))
         page_eps = eps[page * GRID_SIZE : (page + 1) * GRID_SIZE]
@@ -151,7 +156,7 @@ def create_app(root: Path):
             if i < len(page_eps):
                 ep = page_eps[i]
                 badge = "\u2705" if ep["success"] else "\u274c"
-                label = f"{ep['task']} | demo {ep['demo_id']} | {badge} | {ep['duration']:.1f}s"
+                label = f"{ep['model']} | {ep['task']} | demo {ep['demo_id']} | {badge} | {ep['duration']:.1f}s"
                 vid_updates.append(gr.update(value=ep["recording_video"], visible=True, label=label))
                 html_path = ep.get("recording_html", "")
                 if html_path:
@@ -169,16 +174,31 @@ def create_app(root: Path):
         page_text = f"Page {page + 1} / {total_pages}  ({len(eps)} recordings)"
         return vid_updates, link_updates, page, page_text
 
-    # ---- Event handlers ----
+    # ---- Shared filter output builder ----
 
-    def on_filter(tasks_sel, models_sel):
+    def _comparison_meta_text():
+        mss = state.get("max_sample_size")
+        if mss:
+            return f"**Max sample size per model:** {mss}"
+        return "*No max sample size found in results -- CLD annotations will not be shown.*"
+
+    def _build_filter_outputs(tasks_sel, models_sel, bar_overlay, outcome="All", episode_filter=""):
+        """Shared helper that builds all filter-dependent outputs.
+
+        CLD is computed automatically when ``max_sample_size_per_model`` is
+        available in the loaded results.
+        """
         d = _filtered(tasks_sel, models_sel)
-        vids, links, page, page_text = _grid_updates(tasks_sel, models_sel, "All", 0)
+        eps = _filtered_eps(tasks_sel, models_sel)
+        mss = state.get("max_sample_size")
+        comp_fig, _ = model_comparison_chart(eps, mss, bool(bar_overlay))
+
+        vids, links, page, page_text = _grid_updates(tasks_sel, models_sel, outcome, 0, episode_filter)
         return (
-            _stats_markdown(d, state["stale_info"]),
+            _stats_markdown(d),
             _summary_df(d),
-            bar_chart(d),
-            violin_chart(d),
+            _comparison_meta_text(),
+            comp_fig,
             spider_chart(d),
             *vids,
             *links,
@@ -186,14 +206,30 @@ def create_app(root: Path):
             page_text,
         )
 
-    def on_rec_filter(tasks_sel, models_sel, outcome, _page_state):
-        vids, links, page, page_text = _grid_updates(tasks_sel, models_sel, outcome, 0)
+    # ---- Event handlers ----
+
+    def on_filter(tasks_sel, models_sel, bar_overlay, outcome, episode_filter):
+        return _build_filter_outputs(tasks_sel, models_sel, bar_overlay, outcome, episode_filter)
+
+    def on_rec_filter(tasks_sel, models_sel, outcome, _page_state, episode_filter):
+        vids, links, page, page_text = _grid_updates(tasks_sel, models_sel, outcome, 0, episode_filter)
         return (*vids, *links, page, page_text)
 
-    def on_page(tasks_sel, models_sel, outcome, page_state, direction):
+    def on_page(tasks_sel, models_sel, outcome, page_state, episode_filter, direction):
         new_page = page_state + direction
-        vids, links, page, page_text = _grid_updates(tasks_sel, models_sel, outcome, new_page)
+        vids, links, page, page_text = _grid_updates(tasks_sel, models_sel, outcome, new_page, episode_filter)
         return (*vids, *links, page, page_text)
+
+    def on_select_all(bar_overlay, outcome, episode_filter):
+        import gradio as gr
+
+        tasks, models = all_tasks(), all_models()
+        outputs = _build_filter_outputs(tasks, models, bar_overlay, outcome, episode_filter)
+        return (
+            gr.update(value=tasks),
+            gr.update(value=models),
+            *outputs,
+        )
 
     def on_csv_download():
         d = state["stats"]
@@ -218,45 +254,44 @@ def create_app(root: Path):
         df.to_csv(csv_path, index=False)
         return str(csv_path)
 
-    def on_refresh():
-        state["episodes"], state["stats"], state["stale_info"] = _scan(root)
+    def on_refresh(bar_overlay, outcome, episode_filter):
+        import gradio as gr
+
+        state["episodes"], state["stats"], state["max_sample_size"] = _scan(root)
         tasks, models = all_tasks(), all_models()
-        d = _filtered(tasks, models)
-        vids, links, page, page_text = _grid_updates(tasks, models, "All", 0)
+        outputs = _build_filter_outputs(tasks, models, bar_overlay, outcome, episode_filter)
         return (
             gr.update(choices=tasks, value=tasks),
             gr.update(choices=models, value=models),
-            _stats_markdown(d, state["stale_info"]),
-            _summary_df(d),
-            bar_chart(d),
-            violin_chart(d),
-            spider_chart(d),
-            *vids,
-            *links,
-            page,
-            page_text,
+            *outputs,
         )
 
     # ---- Build UI ----
 
-    init_d = _filtered(all_tasks(), all_models())
-    init_vids, init_links, init_page, init_page_text = _grid_updates(
-        all_tasks(),
-        all_models(),
-        "All",
-        0,
-    )
+    init_tasks, init_models = all_tasks(), all_models()
+    init_d = _filtered(init_tasks, init_models)
+    init_eps = _filtered_eps(init_tasks, init_models)
+    init_comp_fig, _ = model_comparison_chart(init_eps, state.get("max_sample_size"))
+    init_vids, init_links, init_page, init_page_text = _grid_updates(init_tasks, init_models, "All", 0)
 
     with gr.Blocks(title="Evaluation Results") as demo:
         gr.Markdown(f"# Simulation Evaluation Results\n`{root}`")
-        stats_bar = gr.Markdown(_stats_markdown(init_d, state["stale_info"]))
+        stats_bar = gr.Markdown(_stats_markdown(init_d))
 
         with gr.Row():
             task_dd = gr.Dropdown(
-                choices=all_tasks(), value=all_tasks(), multiselect=True, label="Tasks", filterable=True
+                choices=init_tasks,
+                value=init_tasks,
+                multiselect=True,
+                label="Tasks",
+                filterable=True,
             )
             model_dd = gr.Dropdown(
-                choices=all_models(), value=all_models(), multiselect=True, label="Models", filterable=True
+                choices=init_models,
+                value=init_models,
+                multiselect=True,
+                label="Models",
+                filterable=True,
             )
             select_all_btn = gr.Button("Select All", scale=0, variant="secondary")
             refresh_btn = gr.Button("Refresh", scale=0, variant="secondary")
@@ -266,15 +301,20 @@ def create_app(root: Path):
                 sum_df = gr.Dataframe(_summary_df(init_d), interactive=False)
                 csv_btn = gr.DownloadButton("Download CSV", scale=0)
 
-            with gr.Tab("Bar Chart"):
-                bar_plot = gr.Plot(bar_chart(init_d))
-
-            with gr.Tab("Violin"):
+            with gr.Tab("Model Comparison"):
+                comparison_meta = gr.Markdown(_comparison_meta_text())
                 gr.Markdown(
-                    "*Beta posterior distributions. CLD letters = statistical groupings "
-                    "(shared letter = not significantly different, z-test p<0.05).*"
+                    "*Beta posterior distributions with CLD letters from sequential statistical testing "
+                    "(Bonferroni-corrected at global false positive rate = 0.05 "
+                    "for each column). Horizontal lines show posterior means; dots show empirical means. "
+                    "Shared CLD letter = not significantly different.*"
                 )
-                violin_plot = gr.Plot(violin_chart(init_d))
+                bar_overlay_cb = gr.Checkbox(
+                    label="Show bar overlay",
+                    value=False,
+                    container=False,
+                )
+                comparison_plot = gr.Plot(init_comp_fig)
 
             with gr.Tab("Spider"):
                 spider_plot = gr.Plot(spider_chart(init_d))
@@ -282,6 +322,12 @@ def create_app(root: Path):
             with gr.Tab("Episode Recordings"):
                 with gr.Row():
                     rec_outcome = gr.Radio(["All", "Success", "Failure"], value="All", label="Outcome")
+                    episode_filter_box = gr.Textbox(
+                        label="Episode IDs",
+                        placeholder="e.g. 0, 3, 12",
+                        value="",
+                        scale=1,
+                    )
                 with gr.Row():
                     prev_btn = gr.Button("< Prev", scale=0)
                     page_label = gr.Markdown(init_page_text)
@@ -298,55 +344,52 @@ def create_app(root: Path):
                             with gr.Column():
                                 vid_slots.append(
                                     gr.Video(
-                                        value=v.get("value") if isinstance(v, dict) else None,
-                                        visible=v.get("visible", False) if isinstance(v, dict) else False,
-                                        label=v.get("label", "") if isinstance(v, dict) else "",
+                                        value=(v.get("value") if isinstance(v, dict) else None),
+                                        visible=(v.get("visible", False) if isinstance(v, dict) else False),
+                                        label=(v.get("label", "") if isinstance(v, dict) else ""),
                                         autoplay=True,
                                     )
                                 )
                                 link_slots.append(
                                     gr.Markdown(
-                                        value=lk.get("value", "") if isinstance(lk, dict) else "",
-                                        visible=lk.get("visible", False) if isinstance(lk, dict) else False,
+                                        value=(lk.get("value", "") if isinstance(lk, dict) else ""),
+                                        visible=(lk.get("visible", False) if isinstance(lk, dict) else False),
                                     )
                                 )
 
         # ---- Wire events ----
 
         grid_out = vid_slots + link_slots + [page_state, page_label]
-        filter_out = [stats_bar, sum_df, bar_plot, violin_plot, spider_plot] + grid_out
-        task_dd.change(on_filter, [task_dd, model_dd], filter_out)
-        model_dd.change(on_filter, [task_dd, model_dd], filter_out)
+        filter_inputs = [task_dd, model_dd, bar_overlay_cb, rec_outcome, episode_filter_box]
+        filter_out = [
+            stats_bar,
+            sum_df,
+            comparison_meta,
+            comparison_plot,
+            spider_plot,
+        ] + grid_out
 
-        def on_select_all():
-            tasks, models = all_tasks(), all_models()
-            d = _filtered(tasks, models)
-            vids, links, page, page_text = _grid_updates(tasks, models, "All", 0)
-            return (
-                gr.update(value=tasks),
-                gr.update(value=models),
-                _stats_markdown(d, state["stale_info"]),
-                _summary_df(d),
-                bar_chart(d),
-                violin_chart(d),
-                spider_chart(d),
-                *vids,
-                *links,
-                page,
-                page_text,
-            )
+        task_dd.change(on_filter, filter_inputs, filter_out)
+        model_dd.change(on_filter, filter_inputs, filter_out)
+        bar_overlay_cb.change(on_filter, filter_inputs, filter_out)
 
-        select_all_btn.click(on_select_all, outputs=[task_dd, model_dd] + filter_out)
+        select_all_btn.click(
+            on_select_all,
+            inputs=[bar_overlay_cb, rec_outcome, episode_filter_box],
+            outputs=[task_dd, model_dd] + filter_out,
+        )
 
-        rec_outcome.change(on_rec_filter, [task_dd, model_dd, rec_outcome, page_state], grid_out)
+        rec_filter_inputs = [task_dd, model_dd, rec_outcome, page_state, episode_filter_box]
+        rec_outcome.change(on_rec_filter, rec_filter_inputs, grid_out)
+        episode_filter_box.submit(on_rec_filter, rec_filter_inputs, grid_out)
         prev_btn.click(
             lambda *a: on_page(*a, direction=-1),
-            [task_dd, model_dd, rec_outcome, page_state],
+            [task_dd, model_dd, rec_outcome, page_state, episode_filter_box],
             grid_out,
         )
         next_btn.click(
             lambda *a: on_page(*a, direction=1),
-            [task_dd, model_dd, rec_outcome, page_state],
+            [task_dd, model_dd, rec_outcome, page_state, episode_filter_box],
             grid_out,
         )
 
@@ -354,6 +397,7 @@ def create_app(root: Path):
 
         refresh_btn.click(
             on_refresh,
+            inputs=[bar_overlay_cb, rec_outcome, episode_filter_box],
             outputs=[task_dd, model_dd] + filter_out,
         )
 

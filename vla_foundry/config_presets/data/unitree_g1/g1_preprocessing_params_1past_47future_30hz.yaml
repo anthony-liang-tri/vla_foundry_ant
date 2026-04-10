@@ -17,10 +17,13 @@ still_threshold: 0.001
 
 # Image preprocessing
 image_resizing_method: resize_fit
+# 224 x 224 to avoid any center cropping during training,
+# assuming the CLIP-ViT vision backbone is used
+# TODO(mark.zolotas): ablate with 256 x 256 resize instead
 resize_images_size:
-- 384
-- 384
-# Must align with g1_data_camera_names.yaml
+- 224
+- 224
+# Must align with g1_data_camera_names_zed2mini.yaml
 camera_rotations:
   # head: 0
   stereo_head_left: 0
