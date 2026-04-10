@@ -285,58 +285,54 @@ def main():
         )
         val_dataloader = get_wds_dataloader(val_datastrings, val_num_samples_per_dataset, 0, cfg)
 
-    # Create ONE dataloader for all training to avoid S3 reconnection hangs between checkpoints.
-    datastrings, num_samples_per_dataset, curr_shard_idx_per_dataset, shard_shuffle_seed_per_dataset = (
-        get_datastring_input(
-            num_samples=cfg.total_train_samples,
-            curr_shard_idx_per_dataset=curr_shard_idx_per_dataset,
-            shard_shuffle_seed_per_dataset=shard_shuffle_seed_per_dataset,
-            manifest_paths=cfg.data.dataset_manifest,
-            dataset_weighting=cfg.data.dataset_weighting,
-            allow_multiple_epochs=cfg.data.allow_multiple_epochs,
-            num_workers_per_gpu=cfg.data.num_workers,
-            world_size=cfg.distributed.world_size,
-        )
-    )
-
-    if is_master(cfg):
-        logging.info(f"Now training on: {summarize_datastrings(datastrings)}")
-        logging.info(f"Total samples: {cfg.total_train_samples}")
-        logging.info(f"Samples per dataset: {num_samples_per_dataset}")
-
-    # Safety check: ensure all ranks see the same data slice.
-    if cfg.distributed.use_distributed:
-        all_datastrings = ["" for _ in range(cfg.distributed.world_size)]
-        torch.distributed.all_gather_object(all_datastrings, datastrings)
-        assert all([x == datastrings for x in all_datastrings]), (
-            "Dataset to train on is not the same across all nodes. This should not happen normally, "
-            "unless there is an issue with shard shuffling during the dataset generation."
-        )
-
-    dataloader = get_wds_dataloader(datastrings, num_samples_per_dataset, checkpoint_num, cfg)
-    if is_master(cfg):
-        dataloader.save_configs(experiment_path)
-        if cfg.remote_sync:
-            remote_sync(experiment_path, os.path.join(cfg.remote_sync, experiment_name))
-            remote_sync(experiment_path, os.path.join(cfg.remote_sync_fixed_path, experiment_uuid))
-
-    if cfg.distributed.use_distributed:
-        torch.distributed.barrier()
-
-    # Persistent iterator reused across checkpoints.
-    persistent_data_iterator = None
-    steps_per_checkpoint = total_steps // cfg.num_checkpoints
-
     # Main training loop
     while not done_training:
         if is_master(cfg):
             logging.info(f"Start checkpoint {checkpoint_num}")
+
+        # Partition the global sample budget into evenly-sized checkpoint chunks.
+        samples_per_checkpoint = cfg.total_train_samples // cfg.num_checkpoints
+        datastrings, num_samples_per_dataset, curr_shard_idx_per_dataset, shard_shuffle_seed_per_dataset = (
+            get_datastring_input(
+                num_samples=samples_per_checkpoint,
+                curr_shard_idx_per_dataset=curr_shard_idx_per_dataset,
+                shard_shuffle_seed_per_dataset=shard_shuffle_seed_per_dataset,
+                manifest_paths=cfg.data.dataset_manifest,
+                dataset_weighting=cfg.data.dataset_weighting,
+                allow_multiple_epochs=cfg.data.allow_multiple_epochs,
+                num_workers_per_gpu=cfg.data.num_workers,
+                world_size=cfg.distributed.world_size,
+            )
+        )
+
+        if is_master(cfg):
+            logging.info(f"Now training on: {summarize_datastrings(datastrings)}")
             logging.info(f"Samples: {samples_seen} / {cfg.total_train_samples}")
+            logging.info(f"Samples in this checkpoint (per dataset): {num_samples_per_dataset}")
+
+        # Safety check: ensure all ranks see the same data slice.
+        if cfg.distributed.use_distributed:
+            all_datastrings = ["" for _ in range(cfg.distributed.world_size)]
+            torch.distributed.all_gather_object(all_datastrings, datastrings)
+            assert all([x == datastrings for x in all_datastrings]), (
+                "Dataset to train on is not the same across all nodes. This should not happen normally, "
+                "unless there is an issue with shard shuffling during the dataset generation."
+            )
+
+        dataloader = get_wds_dataloader(datastrings, num_samples_per_dataset, checkpoint_num, cfg)
+        if is_master(cfg):
+            # Save any necessary dataloader/pipeline configs.
+            dataloader.save_configs(experiment_path)
+            if cfg.remote_sync:
+                remote_sync(experiment_path, os.path.join(cfg.remote_sync, experiment_name))
+                remote_sync(experiment_path, os.path.join(cfg.remote_sync_fixed_path, experiment_uuid))
 
         prev_step = global_step
-        checkpoint_end_step = min((checkpoint_num - start_checkpoint_num + 1) * steps_per_checkpoint, total_steps)
 
-        success, global_step, persistent_data_iterator = train_one_checkpoint(
+        if cfg.distributed.use_distributed:
+            torch.distributed.barrier()
+
+        success, global_step = train_one_checkpoint(
             model,
             dataloader,
             loss,
@@ -346,8 +342,6 @@ def main():
             scheduler,
             cfg,
             ema_model=ema_model,
-            data_iterator=persistent_data_iterator,
-            checkpoint_end_step=checkpoint_end_step,
         )
         if cfg.distributed.use_distributed:
             torch.distributed.barrier()
@@ -356,10 +350,6 @@ def main():
         samples_seen = samples_seen + (global_step - prev_step) * cfg.hparams.global_batch_size
         checkpoint_num += 1
         done_training = global_step >= total_steps
-
-        # Skip saving if no training happened (avoids duplicate checkpoints at end).
-        if global_step == prev_step:
-            break
 
         # Persist training state (model/opt/scheduler + data cursors).
         save_checkpoint(

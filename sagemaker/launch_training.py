@@ -147,8 +147,7 @@ def get_image(user, profile="default", region="us-east-1"):
     commands = [
         # Log in to Sagemaker account to get image.
         f"{login_cmd} 763104351884.dkr.ecr.{region}.amazonaws.com",
-        f"docker build --progress=plain -f {dockerfile_base} --build-arg AWS_REGION={region}"
-        f" --build-arg CODE_VERSION=$(git rev-parse HEAD) -t {algorithm_name} .",
+        f"docker build --progress=plain -f {dockerfile_base} --build-arg AWS_REGION={region} -t {algorithm_name} .",
         f"docker tag {algorithm_name} {fullname}",
         f"{login_cmd} {fullname}",
         (
