@@ -1,3 +1,5 @@
+import logging
+
 import torch
 import torch.nn as nn
 from einops import rearrange
@@ -248,8 +250,6 @@ class VLM(TransformerBase):
 
 @register_model("vlm")
 def create_vlm(model_params: VLMParams, load_pretrained: bool = True):
-    import logging
-
     from vla_foundry.models.transformer import Transformer
     from vla_foundry.models.transformer_hf import TransformerHF
     from vla_foundry.models.vit import ViT

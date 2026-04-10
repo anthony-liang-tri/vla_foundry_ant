@@ -66,7 +66,7 @@ model:
   n_heads: 16
   n_layers: 24
   norm_eps: 1.0e-05
-  norm_type: default_layer_norm
+  norm_type: lp_layer_norm
   positional_embedding_type: rotary
   post_embed_norm: false
   qk_norm: true

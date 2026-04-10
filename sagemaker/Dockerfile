@@ -26,7 +26,6 @@ RUN \
 RUN rm /opt/ml/code/pyproject.toml
 
 # /opt/ml and all subdirectories are utilized by SageMaker, use the /code subdirectory to store your user code.
-ARG CODE_VERSION=0
 COPY vla_foundry/ /opt/ml/code/vla_foundry/
 COPY sagemaker/configs/ /opt/ml/code/configs/
 ENV SAGEMAKER_PROGRAM /opt/ml/code/vla_foundry/main.py
