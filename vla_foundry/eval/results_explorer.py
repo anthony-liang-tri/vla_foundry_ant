@@ -176,11 +176,16 @@ def create_app(root: Path):
 
     # ---- Shared filter output builder ----
 
-    def _comparison_meta_text():
+    def _comparison_meta_text(comp_warning: str = ""):
         mss = state.get("max_sample_size")
+        parts: list[str] = []
         if mss:
-            return f"**Max sample size per model:** {mss}"
-        return "*No max sample size found in results -- CLD annotations will not be shown.*"
+            parts.append(f"**Max sample size per model per task:** {mss}")
+        else:
+            parts.append("*No max sample size found in results -- CLD annotations will not be shown.*")
+        if comp_warning:
+            parts.append(comp_warning)
+        return "\n\n".join(parts)
 
     def _build_filter_outputs(tasks_sel, models_sel, bar_overlay, outcome="All", episode_filter=""):
         """Shared helper that builds all filter-dependent outputs.
@@ -191,13 +196,13 @@ def create_app(root: Path):
         d = _filtered(tasks_sel, models_sel)
         eps = _filtered_eps(tasks_sel, models_sel)
         mss = state.get("max_sample_size")
-        comp_fig, _ = model_comparison_chart(eps, mss, bool(bar_overlay))
+        comp_fig, comp_warning = model_comparison_chart(eps, mss, bool(bar_overlay))
 
         vids, links, page, page_text = _grid_updates(tasks_sel, models_sel, outcome, 0, episode_filter)
         return (
             _stats_markdown(d),
             _summary_df(d),
-            _comparison_meta_text(),
+            _comparison_meta_text(comp_warning),
             comp_fig,
             spider_chart(d),
             *vids,
@@ -271,7 +276,7 @@ def create_app(root: Path):
     init_tasks, init_models = all_tasks(), all_models()
     init_d = _filtered(init_tasks, init_models)
     init_eps = _filtered_eps(init_tasks, init_models)
-    init_comp_fig, _ = model_comparison_chart(init_eps, state.get("max_sample_size"))
+    init_comp_fig, init_comp_warning = model_comparison_chart(init_eps, state.get("max_sample_size"))
     init_vids, init_links, init_page, init_page_text = _grid_updates(init_tasks, init_models, "All", 0)
 
     with gr.Blocks(title="Evaluation Results") as demo:
@@ -296,18 +301,25 @@ def create_app(root: Path):
             select_all_btn = gr.Button("Select All", scale=0, variant="secondary")
             refresh_btn = gr.Button("Refresh", scale=0, variant="secondary")
 
+        # Load documentation markdown once for the Documentation tab.
+        _doc_path = (
+            Path(__file__).resolve().parent.parent.parent / "tutorials" / "sim_evaluation" / "STATISTICAL_COMPARISON.md"
+        )
+        _doc_content = _doc_path.read_text() if _doc_path.exists() else "*Documentation not found.*"
+
         with gr.Tabs():
             with gr.Tab("Summary"):
                 sum_df = gr.Dataframe(_summary_df(init_d), interactive=False)
                 csv_btn = gr.DownloadButton("Download CSV", scale=0)
 
             with gr.Tab("Model Comparison"):
-                comparison_meta = gr.Markdown(_comparison_meta_text())
+                comparison_meta = gr.Markdown(_comparison_meta_text(init_comp_warning))
                 gr.Markdown(
                     "*Beta posterior distributions with CLD letters from sequential statistical testing "
                     "(Bonferroni-corrected at global false positive rate = 0.05 "
                     "for each column). Horizontal lines show posterior means; dots show empirical means. "
-                    "Shared CLD letter = not significantly different.*"
+                    "Shared CLD letter = not significantly different. "
+                    "See **How Statistical Comparisons Work** in the **Documentation** tab for details.*"
                 )
                 bar_overlay_cb = gr.Checkbox(
                     label="Show bar overlay",
@@ -356,6 +368,9 @@ def create_app(root: Path):
                                         visible=(lk.get("visible", False) if isinstance(lk, dict) else False),
                                     )
                                 )
+
+            with gr.Tab("Documentation"):
+                gr.Markdown(_doc_content)
 
         # ---- Wire events ----
 

@@ -89,6 +89,8 @@ We provide a brief technical overview of our statistical comparison framework. F
 
 For each task, the pipeline builds a boolean success/failure array per model and runs pairwise sequential tests ([`sequentialized_barnard_tests`](https://github.com/TRI-ML/sequentialized_barnard_tests)) between every pair of models. The test processes episodes sequentially and can reach a decision before consuming all data.
 
+If two models have different sample sizes (e.g., 80 rollouts for Model A and 120 for Model B), both arrays are truncated to the shorter length for paired testing with STEP.
+
 **Bonferroni correction** is applied across all pairwise comparisons to control the global false positive rate. With `K` models there are `K*(K-1)/2` pairs. The per-comparison significance level is:
 
 ```
@@ -101,15 +103,19 @@ Each per-task test uses `n_max = max_sample_size_per_model` and processes episod
 
 ### Aggregate comparison
 
-The aggregate comparison measures overall multi-task performance. It works by:
+The aggregate comparison measures overall multi-task performance. The goal is for each model's aggregate to be an **unbiased estimate of its equally-weighted multi-task performance**, where every task carries equal weight within a model's aggregate.
 
-1. **Concatenating** each model's per-task boolean arrays into a single array across all tasks. For example, if a model has 50 episodes on task A and 50 on task B, its aggregate array has 100 entries.
+To achieve this, the aggregate is **balanced per model** before statistical analysis:
 
-2. **Shuffling** the concatenated array before running the test (`shuffle=True`). This is necessary because the concatenation interleaves results from different tasks, which may have different difficulty levels. Shuffling removes any ordering bias.
+1. **Selecting common tasks**: only tasks where *every* model has at least one rollout are included. Tasks missing from any model are excluded from the aggregate for all models.
 
-3. **Scaling the budget** proportionally: `n_max = max_sample_size_per_model * num_tasks`. If you budgeted 200 episodes per task and have 5 tasks, the aggregate test uses `n_max = 1000`.
+2. **Per-model balancing**: for each model, the minimum rollout count across all common tasks is computed. If Model A has [50, 20, 100, 100] rollouts across 4 tasks, the minimum rollout count is 20. Then, the results are truncated to [20, 20, 20, 20] rollouts before aggregation to ensure equal task weighting within the model. If Model B has [70, 30, 80, 90] rollouts, the results are truncated to [30, 30, 30, 30] before aggregation. Then, 20 * 4 = 80 rollouts from Model A and 30 * 4 = 120 rollouts from Model B are used for plotting (see [Beta posterior visualization](#beta-posterior-visualization)).
 
-4. **Running the same pairwise STEP test** with Bonferroni correction, identical to the per-task comparisons.
+3. **Concatenating and shuffling**: each model's balanced per-task arrays are concatenated (in sorted task order) into a single array and shuffled before running the test (`shuffle=True`). Shuffling removes ordering bias from the concatenation of results across tasks with different difficulty levels.
+
+4. **Pairwise comparison**: the STEP test compares models pairwise, with `n_max = max_sample_size_per_model * num_tasks` (using all tasks, not just common ones). This ensures `n_max` remains stable as missing rollouts are collected later. When two models have different aggregate sizes (e.g., 80 rollouts for Model A and 120 for Model B), both results are truncated to the shorter length for that specific comparison. This is the same behavior as per-task comparisons.
+
+The dashboard displays which tasks are included in the aggregate, rollouts per task per model, and any excluded tasks. Each violin also shows `used/budgeted` counts to show the number of rollouts used for plotting out of the evaluation budget.
 
 ### Compact Letter Display (CLD)
 
@@ -132,6 +138,8 @@ The violin plots show **Bayesian beta posterior distributions** of each model's 
 - **Black dot:** empirical (observed) mean
 
 These provide a visual sense of uncertainty. The CLD letters above each violin give the formal statistical conclusion.
+
+For aggregate violins, each model's results are balanced to its minimum rollout count across all common tasks, ensuring the posterior reflects equally-weighted multi-task performance. See [Aggregate comparison](#aggregate-comparison) for details. Individual per-task violins use the full success/failure results available.
 
 ## Using Released Evaluation Results
 

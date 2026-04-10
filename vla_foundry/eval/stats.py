@@ -11,11 +11,6 @@ import logging
 from collections import defaultdict
 
 import numpy as np
-import plotly.graph_objects as go
-from scipy.stats import binomtest
-from sequentialized_barnard_tests import Decision, Hypothesis, MirroredLaiTest, MirroredStepTest
-from sequentialized_barnard_tests.auto import get_mirrored_test
-from sequentialized_barnard_tests.tools.plotting import compact_letter_display, draw_samples_from_beta_posterior
 
 
 def clopper_pearson_ci(
@@ -34,6 +29,8 @@ def clopper_pearson_ci(
     Returns:
         ``(lower_bound, upper_bound)`` of the confidence interval.
     """
+    from scipy.stats import binomtest
+
     if total == 0:
         return 0.0, 1.0
 
@@ -43,32 +40,85 @@ def clopper_pearson_ci(
 
 def build_success_arrays(
     episodes: list[dict],
-) -> dict:
+) -> tuple[dict, dict]:
     """Convert raw episodes to per-(task, model) boolean arrays.
 
-    Returns ``{task: {model: array}, "__aggregate__": {model: concatenated}}``.
-    The ``"__aggregate__"`` entry concatenates each model's arrays across all tasks.
+    Returns ``(arrays_by_task, metadata)``.
+
+    ``arrays_by_task`` has the shape
+    ``{task: {model: array}, "__aggregate__": {model: balanced_array}}``.
+
+    The ``"__aggregate__"`` entry is built so that each model's aggregate
+    is an unbiased estimate of its equally-weighted multi-task performance.
+    Only tasks common to *all* models are included.  For each model, the
+    per-task contribution is balanced to that model's own minimum count
+    across common tasks (``per_model_min_n``), so every task has equal
+    weight *within* that model.  Different models may therefore have
+    different aggregate array lengths; the pairwise STEP test handles
+    this via ``min(len(A), len(B))`` truncation.
+
+    Per-task arrays are kept at their full length.
+
+    ``metadata`` contains information about the balancing:
+
+    * ``common_tasks`` – sorted list of tasks used in the aggregate.
+    * ``excluded_tasks`` – sorted list of tasks excluded (not all models
+      have rollouts).
+    * ``per_model_min_n`` – ``{model: int}`` rollouts per common task
+      used in that model's aggregate.
+    * ``num_common_tasks`` – ``len(common_tasks)``.
+    * ``original_counts`` – ``{task: {model: int}}`` with original array
+      lengths before any truncation.
     """
     data: dict[str, dict[str, list]] = defaultdict(lambda: defaultdict(list))
     for ep in episodes:
         data[ep["task"]][ep["model"]].append(bool(ep["success"]))
 
     result: dict[str, dict[str, np.ndarray]] = {}
-    agg: dict[str, list] = defaultdict(list)
+    original_counts: dict[str, dict[str, int]] = {}
 
     for task, model_dict in data.items():
         result[task] = {}
+        original_counts[task] = {}
         for model, bools in model_dict.items():
             result[task][model] = np.array(bools, dtype=bool)
-            agg[model].extend(bools)
+            original_counts[task][model] = len(bools)
 
-    result["__aggregate__"] = {m: np.array(v, dtype=bool) for m, v in agg.items()}
-    return result
+    # Determine common tasks (tasks where every model has ≥1 rollout).
+    all_models = sorted({m for task_dict in data.values() for m in task_dict})
+    all_tasks = sorted(data.keys())
+    common_tasks = sorted(
+        t for t in all_tasks if all(t in data and m in data[t] and len(data[t][m]) > 0 for m in all_models)
+    )
+    excluded_tasks = sorted(set(all_tasks) - set(common_tasks))
+
+    # Build balanced aggregate — each model balanced to its own minimum.
+    per_model_min_n: dict[str, int] = {}
+    if common_tasks and all_models:
+        for m in all_models:
+            per_model_min_n[m] = min(len(result[t][m]) for t in common_tasks)
+        agg: dict[str, list] = defaultdict(list)
+        for t in common_tasks:
+            for m in all_models:
+                agg[m].extend(result[t][m][: per_model_min_n[m]].tolist())
+        result["__aggregate__"] = {m: np.array(v, dtype=bool) for m, v in agg.items()}
+    else:
+        result["__aggregate__"] = {}
+
+    metadata = {
+        "common_tasks": common_tasks,
+        "excluded_tasks": excluded_tasks,
+        "per_model_min_n": per_model_min_n,
+        "num_common_tasks": len(common_tasks),
+        "original_counts": original_counts,
+    }
+    return result, metadata
 
 
 def compute_cld_step(
     success_arrays_by_task: dict,
     max_sample_size_per_model: int,
+    aggregate_metadata: dict,
     confidence_level: float = 0.95,
     seed: int = 42,
 ) -> tuple[dict[str, dict[str, str]], str]:
@@ -81,11 +131,14 @@ def compute_cld_step(
     (episodes from different tasks are concatenated, so order should be shuffled).
 
     Args:
-        success_arrays_by_task: Output of ``build_success_arrays``.
+        success_arrays_by_task: First element of ``build_success_arrays`` output.
         max_sample_size_per_model: Maximum number of rollouts per model. Must be
             set based on the experimental budget *before* collecting data.
             ``load_episodes`` enforces that all results files share the same
             value, so this is always the recorded pre-commitment budget.
+        aggregate_metadata: Second element of ``build_success_arrays`` output.
+            Used to set ``n_max`` for the aggregate test and to generate
+            balancing warning messages.
         confidence_level: Global confidence level (default 0.95).
         seed: RNG seed for the aggregate shuffle.
 
@@ -93,23 +146,21 @@ def compute_cld_step(
         A tuple ``(cld_by_task, warning_msg)``.  ``cld_by_task`` maps each task
         key (including ``"__aggregate__"``) to ``{model: cld_letter}``.
         ``warning_msg`` is non-empty if any array length exceeds
-        ``max_sample_size_per_model``.
+        ``max_sample_size_per_model`` or if aggregate balancing is applied.
     """
     # Check for sample size violations (exclude aggregate since it's derived).
     violations: list[tuple[str, str, int]] = []
-    all_task_lengths: list[int] = []
     for task, model_dict in success_arrays_by_task.items():
         if task == "__aggregate__":
             continue
         for model, arr in model_dict.items():
-            all_task_lengths.append(len(arr))
             if len(arr) > max_sample_size_per_model:
                 violations.append((task, model, len(arr)))
 
-    warning_msg = ""
+    warning_parts: list[str] = []
     if violations:
         ex_task, ex_model, ex_len = violations[0]
-        warning_msg = (
+        warning_parts.append(
             f"Some rollout counts exceed the pre-committed `max_sample_size` "
             f'(e.g. task "{ex_task}", model "{ex_model}": {ex_len} > '
             f"{max_sample_size_per_model}). "
@@ -119,9 +170,33 @@ def compute_cld_step(
             f"the sequential test's error guarantees."
         )
 
+    # Aggregate balancing info.
+    num_common_tasks = aggregate_metadata["num_common_tasks"]
+    per_model_min_n: dict[str, int] = aggregate_metadata["per_model_min_n"]
+    excluded_tasks = aggregate_metadata["excluded_tasks"]
+    common_tasks = aggregate_metadata["common_tasks"]
+
+    if excluded_tasks:
+        warning_parts.append(
+            f"**Aggregate excludes {len(excluded_tasks)} task(s)** not shared by all models: "
+            f"{', '.join(excluded_tasks)}. "
+            f"Only tasks common to all models are included in the aggregate comparison."
+        )
+    if common_tasks:
+        per_model_summary = ", ".join(f"{m}: {n}" for m, n in sorted(per_model_min_n.items()))
+        warning_parts.append(
+            f"**Aggregate balanced for equal task weighting** across "
+            f"{num_common_tasks} task(s) ({', '.join(common_tasks)}). "
+            f"Rollouts per task per model: {per_model_summary}."
+        )
+    elif not common_tasks and success_arrays_by_task.get("__aggregate__") == {}:
+        warning_parts.append("**No tasks are common to all models** — aggregate comparison is not available.")
+
+    warning_msg = "\n\n".join(warning_parts)
+
     cld_by_task: dict[str, dict[str, str]] = {}
     rng = np.random.default_rng(seed)
-    num_tasks = sum(1 for k in success_arrays_by_task if k != "__aggregate__")
+    num_all_tasks = sum(1 for k in success_arrays_by_task if k != "__aggregate__")
 
     for task, model_dict in success_arrays_by_task.items():
         models = sorted(model_dict.keys())
@@ -134,8 +209,11 @@ def compute_cld_step(
 
         is_agg = task == "__aggregate__"
         # For the aggregate test the maximum sequence length is
-        # max_sample_size_per_model * num_tasks (one budget per task).
-        n_max = max_sample_size_per_model * num_tasks if is_agg else max_sample_size_per_model
+        # max_sample_size_per_model * num_all_tasks (one budget per task).
+        # We use *all* tasks (not just common ones) so that n_max remains
+        # stable as missing rollouts are collected later, preserving
+        # pre-commitment.
+        n_max = max_sample_size_per_model * num_all_tasks if is_agg else max_sample_size_per_model
         # Copy arrays — compare_success_and_get_cld shuffles them in-place.
         arrays = [model_dict[m].copy() for m in models]
 
@@ -195,6 +273,10 @@ def compare_success_and_get_cld_auto(
     Returns:
         A dictionary mapping model names to their CLD letters.
     """
+    from sequentialized_barnard_tests import Decision, Hypothesis, MirroredLaiTest, MirroredStepTest
+    from sequentialized_barnard_tests.auto import get_mirrored_test
+    from sequentialized_barnard_tests.tools.plotting import compact_letter_display
+
     if shuffle and rng is None:
         raise ValueError("rng must be provided when shuffle is True.")
     num_models = len(model_name_list)
@@ -354,12 +436,14 @@ def model_comparison_chart(
         ``(figure, warning_msg)``.  ``warning_msg`` is non-empty when any
         rollout count exceeds ``max_sample_size_per_model``.
     """
+    import plotly.graph_objects as go
+    from sequentialized_barnard_tests.tools.plotting import draw_samples_from_beta_posterior
 
     if not episodes:
         return go.Figure().update_layout(title="No data"), ""
 
     rng = np.random.default_rng(seed)
-    arrays_by_task = build_success_arrays(episodes)
+    arrays_by_task, agg_metadata = build_success_arrays(episodes)
 
     pure_tasks = sorted(k for k in arrays_by_task if k != "__aggregate__")
     all_models = sorted({m for task_dict in arrays_by_task.values() for m in task_dict})
@@ -368,7 +452,7 @@ def model_comparison_chart(
     warning_msg = ""
     if max_sample_size_per_model is not None:
         cld_by_task, warning_msg = compute_cld_step(
-            arrays_by_task, max_sample_size_per_model, confidence_level, seed + 1
+            arrays_by_task, max_sample_size_per_model, agg_metadata, confidence_level, seed + 1
         )
 
     task_order = sorted(
@@ -386,7 +470,15 @@ def model_comparison_chart(
     shown: set[str] = set()
     annotations: list[dict] = []
 
-    def _add_violin(xp: float, model: str, arr: np.ndarray, cld_key: str, width: float) -> None:
+    def _add_violin(
+        xp: float,
+        model: str,
+        arr: np.ndarray,
+        cld_key: str,
+        width: float,
+        used: int | None = None,
+        budgeted: int | None = None,
+    ) -> None:
         samples = draw_samples_from_beta_posterior(arr, rng, n_posterior_samples)
         posterior_mean = float(np.mean(samples))
         empirical_mean = float(np.mean(arr))
@@ -451,25 +543,66 @@ def model_comparison_chart(
                 )
             )
 
+        # "used / budgeted" annotation below the violin.
+        if used is not None and budgeted is not None:
+            annotations.append(
+                dict(
+                    x=xp,
+                    y=-0.06,
+                    text=f"{used}/{budgeted}",
+                    showarrow=False,
+                    textangle=-45,
+                    font=dict(size=11, color="gray"),
+                )
+            )
+
+    agg_per_model_min_n = agg_metadata["per_model_min_n"]
+    agg_num_common = agg_metadata["num_common_tasks"]
+    num_all_tasks = len(pure_tasks)
+
     for ti, task in enumerate(task_order):
         for model in sorted(arrays_by_task.get(task, {}).keys()):
             ai = all_models.index(model)
             xp = ti + (ai - (n - 1) / 2) * (gw / max(n, 1))
-            _add_violin(xp, model, arrays_by_task[task][model], task, vw)
+            arr = arrays_by_task[task][model]
+            per_task_used = len(arr)
+            per_task_budgeted = max_sample_size_per_model if max_sample_size_per_model is not None else None
+            _add_violin(
+                xp,
+                model,
+                arr,
+                task,
+                vw,
+                used=per_task_used,
+                budgeted=per_task_budgeted,
+            )
 
     agg_x = len(task_order) + 1
     agg = arrays_by_task.get("__aggregate__", {})
+    agg_budgeted = (
+        max_sample_size_per_model * num_all_tasks if max_sample_size_per_model is not None and num_all_tasks else None
+    )
     for model in sorted(agg.keys()):
         ai = all_models.index(model)
         xp = agg_x + (ai - (n - 1) / 2) * (gw / max(n, 1))
-        _add_violin(xp, model, agg[model], "__aggregate__", vw * 1.5)
+        model_min = agg_per_model_min_n.get(model, 0)
+        agg_used = model_min * agg_num_common if agg_num_common else None
+        _add_violin(
+            xp,
+            model,
+            agg[model],
+            "__aggregate__",
+            vw * 1.5,
+            used=agg_used,
+            budgeted=agg_budgeted,
+        )
 
     ticks = list(range(len(task_order))) + [agg_x]
-    tick_text = [t[:25] + "\u2026" if len(t) > 25 else t for t in task_order] + ["Aggregate"]
+    tick_text = ["<br>" + (t[:25] + "\u2026" if len(t) > 25 else t) for t in task_order] + ["<br>Aggregate"]
 
     fig.update_layout(
         title="Success Rate Distribution (Beta Posterior)",
-        yaxis=dict(title="Success Rate", range=[-0.02, 1.15]),
+        yaxis=dict(title="Success Rate", range=[-0.12, 1.15]),
         xaxis=dict(
             tickangle=-45,
             tickvals=ticks,
@@ -503,6 +636,8 @@ def model_comparison_chart(
 
 def spider_chart(data: list[dict]):
     """Radar chart of success rates by task and model."""
+    import plotly.graph_objects as go
+
     if not data:
         return go.Figure().update_layout(title="No data")
     models = sorted({s["model"] for s in data})
