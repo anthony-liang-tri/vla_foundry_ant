@@ -325,8 +325,11 @@ def test_batch_content_structure(dataset_path, manifest_data, mock_config):
         print("  Pixel values:")
         pixel_values = batch["pixel_values"]
         assert hasattr(pixel_values, "shape"), "Pixel values should have shape attribute"
-        assert len(pixel_values.shape) == 5, (
-            f"Pixel values should have 5 dimensions [B, Camera, C, H, W], got {pixel_values.shape}"
+        # pixel_values shape depends on the processor:
+        # standard processors return [B*N, C, H, W] (4D) or [B, N, C, H, W] (5D),
+        # Qwen-style processors return [total_patches, patch_dim] (2D).
+        assert len(pixel_values.shape) in (2, 4, 5), (
+            f"Pixel values should have 2, 4, or 5 dimensions, got {pixel_values.shape}"
         )
         print(f"    pixel_values: {pixel_values.shape} ({pixel_values.dtype})")
 

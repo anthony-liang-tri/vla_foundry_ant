@@ -81,10 +81,9 @@ class TestTransformerBatchHandler:
     def test_prepare_inputs_with_attention_mask(self, handler, sample_batch):
         """Test prepare_inputs with attention mask."""
         device = torch.device("cpu")
-        model_dtype = torch.float32
         cfg = Mock()
 
-        inputs = handler.prepare_inputs(sample_batch, device, model_dtype, cfg)
+        inputs = handler.prepare_inputs(sample_batch, device, cfg)
 
         assert "input_ids" in inputs
         assert "attention_mask" in inputs
@@ -98,13 +97,12 @@ class TestTransformerBatchHandler:
     def test_prepare_inputs_without_attention_mask(self, handler, sample_batch_no_mask):
         """Test prepare_inputs without attention mask."""
         device = torch.device("cpu")
-        model_dtype = torch.float32
         cfg = Mock()
 
-        inputs = handler.prepare_inputs(sample_batch_no_mask, device, model_dtype, cfg)
+        inputs = handler.prepare_inputs(sample_batch_no_mask, device, cfg)
 
         assert "input_ids" in inputs
-        assert "attention_mask" not in inputs
+        assert inputs.get("attention_mask") is None
         assert "output_hidden_states" in inputs
         assert inputs["input_ids"].dtype == torch.long
         assert inputs["output_hidden_states"] is False
@@ -112,9 +110,8 @@ class TestTransformerBatchHandler:
     def test_prepare_inputs_and_targets_with_mask(self, handler, sample_batch, mock_cfg):
         """Test prepare_inputs_and_targets with attention mask."""
         device = torch.device("cpu")
-        model_dtype = torch.float32
 
-        model_inputs, targets, mask = handler.prepare_inputs_and_targets(sample_batch, device, model_dtype, mock_cfg)
+        model_inputs, targets, mask = handler.prepare_inputs_and_targets(sample_batch, device, mock_cfg)
 
         # Check model inputs
         assert "input_ids" in model_inputs
@@ -139,15 +136,12 @@ class TestTransformerBatchHandler:
     def test_prepare_inputs_and_targets_without_mask(self, handler, sample_batch_no_mask, mock_cfg):
         """Test prepare_inputs_and_targets without attention mask."""
         device = torch.device("cpu")
-        model_dtype = torch.float32
 
-        model_inputs, targets, mask = handler.prepare_inputs_and_targets(
-            sample_batch_no_mask, device, model_dtype, mock_cfg
-        )
+        model_inputs, targets, mask = handler.prepare_inputs_and_targets(sample_batch_no_mask, device, mock_cfg)
 
         # Check model inputs
         assert "input_ids" in model_inputs
-        assert "attention_mask" not in model_inputs
+        assert model_inputs.get("attention_mask") is None
         assert "output_hidden_states" in model_inputs
         assert model_inputs["input_ids"].shape == (2, 8)
 
@@ -223,9 +217,8 @@ class TestVLMBatchHandler:
     def test_prepare_inputs_vlm_with_image(self, handler, sample_vlm_batch, mock_cfg_vlm):
         """Test prepare_inputs for VLM with image."""
         device = torch.device("cpu")
-        model_dtype = torch.float32
 
-        inputs = handler.prepare_inputs(sample_vlm_batch, device, model_dtype, mock_cfg_vlm)
+        inputs = handler.prepare_inputs(sample_vlm_batch, device, mock_cfg_vlm)
 
         assert "input_ids" in inputs
         assert "attention_mask" in inputs
@@ -239,9 +232,8 @@ class TestVLMBatchHandler:
     def test_prepare_inputs_vlm_hf_with_image(self, handler, sample_vlm_batch, mock_cfg_vlm_hf):
         """Test prepare_inputs for VLM HF with image."""
         device = torch.device("cpu")
-        model_dtype = torch.float32
 
-        inputs = handler.prepare_inputs(sample_vlm_batch, device, model_dtype, mock_cfg_vlm_hf)
+        inputs = handler.prepare_inputs(sample_vlm_batch, device, mock_cfg_vlm_hf)
 
         assert "input_ids" in inputs
         assert "attention_mask" in inputs
@@ -252,9 +244,8 @@ class TestVLMBatchHandler:
     def test_prepare_inputs_without_image(self, handler, sample_vlm_batch_no_image, mock_cfg_vlm):
         """Test prepare_inputs without image data."""
         device = torch.device("cpu")
-        model_dtype = torch.float32
 
-        inputs = handler.prepare_inputs(sample_vlm_batch_no_image, device, model_dtype, mock_cfg_vlm)
+        inputs = handler.prepare_inputs(sample_vlm_batch_no_image, device, mock_cfg_vlm)
 
         assert "input_ids" in inputs
         assert "attention_mask" in inputs
@@ -264,11 +255,8 @@ class TestVLMBatchHandler:
     def test_prepare_inputs_and_targets_vlm(self, handler, sample_vlm_batch, mock_cfg_vlm):
         """Test prepare_inputs_and_targets for VLM."""
         device = torch.device("cpu")
-        model_dtype = torch.float32
 
-        model_inputs, targets, mask = handler.prepare_inputs_and_targets(
-            sample_vlm_batch, device, model_dtype, mock_cfg_vlm
-        )
+        model_inputs, targets, mask = handler.prepare_inputs_and_targets(sample_vlm_batch, device, mock_cfg_vlm)
 
         # Check model inputs
         assert "input_ids" in model_inputs
@@ -289,11 +277,8 @@ class TestVLMBatchHandler:
     def test_prepare_inputs_and_targets_vlm_hf(self, handler, sample_vlm_batch, mock_cfg_vlm_hf):
         """Test prepare_inputs_and_targets for VLM HF."""
         device = torch.device("cpu")
-        model_dtype = torch.float32
 
-        model_inputs, targets, mask = handler.prepare_inputs_and_targets(
-            sample_vlm_batch, device, model_dtype, mock_cfg_vlm_hf
-        )
+        model_inputs, targets, mask = handler.prepare_inputs_and_targets(sample_vlm_batch, device, mock_cfg_vlm_hf)
 
         # Check model inputs
         assert "input_ids" in model_inputs
@@ -310,7 +295,6 @@ class TestVLMBatchHandler:
     def test_prepare_inputs_and_targets_vlm_mask_creation(self, handler, mock_cfg_vlm):
         """Test VLM mask creation with specific pad and image tokens."""
         device = torch.device("cpu")
-        model_dtype = torch.float32
 
         # Create a batch with known pad and image tokens
         batch_with_special_tokens = {
@@ -338,7 +322,7 @@ class TestVLMBatchHandler:
         }
 
         model_inputs, targets, mask = handler.prepare_inputs_and_targets(
-            batch_with_special_tokens, device, model_dtype, mock_cfg_vlm
+            batch_with_special_tokens, device, mock_cfg_vlm
         )
 
         # Check that mask correctly identifies pad and image tokens
@@ -440,9 +424,8 @@ class TestStableDiffusionBatchHandler:
     def test_prepare_inputs_with_mask(self, handler, sample_diffusion_batch, mock_cfg_diffusion):
         """Test prepare_inputs with attention mask."""
         device = torch.device("cpu")
-        model_dtype = torch.float32
 
-        inputs = handler.prepare_inputs(sample_diffusion_batch, device, model_dtype, mock_cfg_diffusion)
+        inputs = handler.prepare_inputs(sample_diffusion_batch, device, mock_cfg_diffusion)
 
         assert "input_ids" in inputs
         assert "attention_mask" in inputs
@@ -458,25 +441,23 @@ class TestStableDiffusionBatchHandler:
     def test_prepare_inputs_without_mask(self, handler, sample_diffusion_batch_no_mask, mock_cfg_diffusion):
         """Test prepare_inputs without attention mask."""
         device = torch.device("cpu")
-        model_dtype = torch.float32
 
-        inputs = handler.prepare_inputs(sample_diffusion_batch_no_mask, device, model_dtype, mock_cfg_diffusion)
+        inputs = handler.prepare_inputs(sample_diffusion_batch_no_mask, device, mock_cfg_diffusion)
 
         assert "input_ids" in inputs
-        assert "attention_mask" not in inputs
+        assert inputs.get("attention_mask") is None
         assert "image" in inputs
         assert "noise" in inputs
 
     def test_prepare_inputs_and_targets_standard_diffusion(self, handler, sample_diffusion_batch, mock_cfg_diffusion):
         """Test prepare_inputs_and_targets for standard diffusion."""
         device = torch.device("cpu")
-        model_dtype = torch.float32
 
         # Set seed for reproducible noise
         torch.manual_seed(42)
 
         model_inputs, targets, mask = handler.prepare_inputs_and_targets(
-            sample_diffusion_batch, device, model_dtype, mock_cfg_diffusion
+            sample_diffusion_batch, device, mock_cfg_diffusion
         )
 
         # Check model inputs
@@ -497,13 +478,12 @@ class TestStableDiffusionBatchHandler:
     def test_prepare_inputs_and_targets_flow_matching(self, handler, sample_diffusion_batch, mock_cfg_flow_matching):
         """Test prepare_inputs_and_targets for flow matching."""
         device = torch.device("cpu")
-        model_dtype = torch.float32
 
         # Set seed for reproducible noise
         torch.manual_seed(42)
 
         model_inputs, targets, mask = handler.prepare_inputs_and_targets(
-            sample_diffusion_batch, device, model_dtype, mock_cfg_flow_matching
+            sample_diffusion_batch, device, mock_cfg_flow_matching
         )
 
         # Check model inputs
@@ -575,9 +555,8 @@ class TestDiffusionPolicyBatchHandler:
     ):
         """Test prepare_inputs with attention mask."""
         device = torch.device("cpu")
-        model_dtype = torch.float32
 
-        inputs = handler.prepare_inputs(sample_diffusion_policy_batch, device, model_dtype, mock_cfg_diffusion_policy)
+        inputs = handler.prepare_inputs(sample_diffusion_policy_batch, device, mock_cfg_diffusion_policy)
 
         # Check all required fields are present
         assert "input_ids" in inputs
@@ -617,14 +596,13 @@ class TestDiffusionPolicyBatchHandler:
     ):
         """Test prepare_inputs without attention mask."""
         device = torch.device("cpu")
-        model_dtype = torch.float32
 
         inputs = handler.prepare_inputs(
-            sample_diffusion_policy_batch_no_attention_mask, device, model_dtype, mock_cfg_diffusion_policy
+            sample_diffusion_policy_batch_no_attention_mask, device, mock_cfg_diffusion_policy
         )
 
         # Check that attention_mask is None when not provided
-        assert inputs["attention_mask"] is None
+        assert inputs.get("attention_mask") is None
 
         # Check other required fields are still present
         assert "input_ids" in inputs
@@ -637,13 +615,12 @@ class TestDiffusionPolicyBatchHandler:
     def test_prepare_inputs_and_targets(self, handler, sample_diffusion_policy_batch, mock_cfg_diffusion_policy):
         """Test prepare_inputs_and_targets method."""
         device = torch.device("cpu")
-        model_dtype = torch.float32
 
         # Set seed for reproducible noise
         torch.manual_seed(42)
 
         model_inputs, targets, mask = handler.prepare_inputs_and_targets(
-            sample_diffusion_policy_batch, device, model_dtype, mock_cfg_diffusion_policy
+            sample_diffusion_policy_batch, device, mock_cfg_diffusion_policy
         )
 
         # Check model inputs structure
@@ -699,24 +676,21 @@ class TestDiffusionPolicyBatchHandler:
     def test_noise_generation_randomness(self, handler, sample_diffusion_policy_batch, mock_cfg_diffusion_policy):
         """Test that noise generation produces different values across calls."""
         device = torch.device("cpu")
-        model_dtype = torch.float32
 
         # Generate inputs twice without setting seed
-        inputs1 = handler.prepare_inputs(sample_diffusion_policy_batch, device, model_dtype, mock_cfg_diffusion_policy)
-        inputs2 = handler.prepare_inputs(sample_diffusion_policy_batch, device, model_dtype, mock_cfg_diffusion_policy)
+        inputs = handler.prepare_inputs(sample_diffusion_policy_batch, device, mock_cfg_diffusion_policy)
+        noise1 = inputs["noise"].clone()
+        inputs = handler.prepare_inputs(sample_diffusion_policy_batch, device, mock_cfg_diffusion_policy)
+        noise2 = inputs["noise"]
 
         # Noise should be different across calls
-        assert not torch.allclose(inputs1["noise"], inputs2["noise"])
-
-        # But actions should be the same (they come from the batch)
-        assert torch.allclose(inputs1["actions"], inputs2["actions"])
+        assert not torch.allclose(noise1, noise2)
 
     def test_slice_inputs_for_accumulation(self, handler, sample_diffusion_policy_batch, mock_cfg_diffusion_policy):
         """Test slicing inputs for gradient accumulation."""
         device = torch.device("cpu")
-        model_dtype = torch.float32
 
-        inputs = handler.prepare_inputs(sample_diffusion_policy_batch, device, model_dtype, mock_cfg_diffusion_policy)
+        inputs = handler.prepare_inputs(sample_diffusion_policy_batch, device, mock_cfg_diffusion_policy)
 
         # Slice to get first batch element only
         sliced_inputs = handler.slice_inputs_for_accumulation(inputs, 0, 1)
@@ -748,10 +722,9 @@ class TestDiffusionPolicyBatchHandler:
         """With num_action_head_repeats, prepare_inputs keeps all tensors at [B].
         Tiling happens later in slice_inputs_for_accumulation."""
         device = torch.device("cpu")
-        model_dtype = torch.float32
         batch_size = 2
 
-        inputs = handler.prepare_inputs(sample_diffusion_policy_batch, device, model_dtype, mock_cfg_with_repeats)
+        inputs = handler.prepare_inputs(sample_diffusion_policy_batch, device, mock_cfg_with_repeats)
 
         # All tensors stay at [B] — no tiling at this stage
         assert inputs["input_ids"].shape == (batch_size, 10)
@@ -768,10 +741,9 @@ class TestDiffusionPolicyBatchHandler:
         """slice_inputs_for_accumulation tiles action-side inputs to [micro*N]
         and generates N distinct noises, while VLM inputs stay at [micro]."""
         device = torch.device("cpu")
-        model_dtype = torch.float32
         num_repeats = 3
 
-        inputs = handler.prepare_inputs(sample_diffusion_policy_batch, device, model_dtype, mock_cfg_with_repeats)
+        inputs = handler.prepare_inputs(sample_diffusion_policy_batch, device, mock_cfg_with_repeats)
 
         # Simulate slicing a microbatch of size 1 from a full batch of 2
         sliced = handler.slice_inputs_for_accumulation(inputs, 0, 1)
@@ -802,11 +774,10 @@ class TestDiffusionPolicyBatchHandler:
         """slice_targets_for_accumulation recomputes targets from sliced inputs
         (fresh noise) when num_repeats > 1."""
         device = torch.device("cpu")
-        model_dtype = torch.float32
         num_repeats = 3
 
         inputs, targets, mask = handler.prepare_inputs_and_targets(
-            sample_diffusion_policy_batch, device, model_dtype, mock_cfg_with_repeats
+            sample_diffusion_policy_batch, device, mock_cfg_with_repeats
         )
         assert mask is None
 
@@ -856,3 +827,210 @@ class TestBatchHandlerFactory:
         """Test creating handler for unsupported model type."""
         with pytest.raises(ValueError, match="Batch handler for model type 'unsupported_type' is not registered"):
             create_batch_handler("unsupported_type")
+
+
+class TestMultiImageSlicing:
+    """Test batch handler slicing with multi-image inputs (CLIP/PaliGemma format)."""
+
+    def test_slice_inputs_clip_multi_image_format(self):
+        """Test slicing when pixel_values is [B*N, C, H, W] format (CLIP/PaliGemma)."""
+        handler = TransformerBatchHandler()
+        batch_size = 4
+        num_images = 3
+
+        # CLIP/PaliGemma processors return [B*N, C, H, W]
+        inputs = {
+            "input_ids": torch.randint(0, 1000, (batch_size, 32)),
+            "attention_mask": torch.ones(batch_size, 32, dtype=torch.bool),
+            "pixel_values": torch.randn(batch_size * num_images, 3, 224, 224),
+        }
+
+        # Slice first half: samples 0-1
+        sliced = handler.slice_inputs_for_accumulation(inputs, 0, 2)
+
+        # pixel_values should be scaled: 2 samples * 3 images = 6
+        assert sliced["input_ids"].shape == (2, 32)
+        assert sliced["pixel_values"].shape == (6, 3, 224, 224)
+        assert sliced["attention_mask"].shape == (2, 32)
+
+        # Verify we got the first 6 images
+        assert torch.equal(sliced["pixel_values"], inputs["pixel_values"][:6])
+
+    def test_slice_inputs_clip_multi_image_full_batch(self):
+        """Test slicing entire batch with multi-image format."""
+        handler = VLMBatchHandler()
+        batch_size = 3
+        num_images = 4
+
+        inputs = {
+            "input_ids": torch.randint(0, 1000, (batch_size, 64)),
+            "pixel_values": torch.randn(batch_size * num_images, 3, 224, 224),
+        }
+
+        # Slice entire batch
+        sliced = handler.slice_inputs_for_accumulation(inputs, 0, 3)
+
+        assert sliced["input_ids"].shape == (3, 64)
+        assert sliced["pixel_values"].shape == (12, 3, 224, 224)
+        assert torch.equal(sliced["pixel_values"], inputs["pixel_values"])
+
+    def test_slice_inputs_clip_multi_image_middle_slice(self):
+        """Test slicing middle portion with multi-image format."""
+        handler = TransformerBatchHandler()
+        batch_size = 6
+        num_images = 2
+
+        inputs = {
+            "input_ids": torch.randint(0, 1000, (batch_size, 48)),
+            "pixel_values": torch.randn(batch_size * num_images, 3, 224, 224),
+        }
+
+        # Slice samples 2-4
+        sliced = handler.slice_inputs_for_accumulation(inputs, 2, 4)
+
+        assert sliced["input_ids"].shape == (2, 48)
+        assert sliced["pixel_values"].shape == (4, 3, 224, 224)
+        # Should get images 4-7 (samples 2-3, each with 2 images)
+        assert torch.equal(sliced["pixel_values"], inputs["pixel_values"][4:8])
+
+    def test_slice_inputs_clip_single_image_per_sample(self):
+        """Test that single image per sample (N=1) works correctly."""
+        handler = TransformerBatchHandler()
+        batch_size = 4
+        num_images = 1
+
+        inputs = {
+            "input_ids": torch.randint(0, 1000, (batch_size, 32)),
+            "pixel_values": torch.randn(batch_size * num_images, 3, 224, 224),
+        }
+
+        sliced = handler.slice_inputs_for_accumulation(inputs, 1, 3)
+
+        # With N=1, scale=1, so should behave like normal slicing
+        assert sliced["input_ids"].shape == (2, 32)
+        assert sliced["pixel_values"].shape == (2, 3, 224, 224)
+
+    def test_slice_inputs_diffusion_policy_multi_image(self):
+        """Test DiffusionPolicy slicing with multi-image CLIP format."""
+        handler = DiffusionPolicyBatchHandler()
+        batch_size = 4
+        num_images = 3
+        seq_len = 16
+        action_dim = 7
+
+        inputs = {
+            "input_ids": torch.randint(0, 1000, (batch_size, 32)),
+            "pixel_values": torch.randn(batch_size * num_images, 3, 224, 224),
+            "actions": torch.randn(batch_size, seq_len, action_dim),
+            "noise": torch.randn(batch_size, seq_len, action_dim),
+            "past_mask": torch.ones(batch_size, seq_len, dtype=torch.bool),
+            "future_mask": torch.zeros(batch_size, seq_len, dtype=torch.bool),
+        }
+
+        sliced = handler.slice_inputs_for_accumulation(inputs, 0, 2)
+
+        # Pixel values should be scaled for multi-image
+        assert sliced["pixel_values"].shape == (6, 3, 224, 224)
+        # Action-side inputs should use normal batch slicing
+        assert sliced["actions"].shape == (2, seq_len, action_dim)
+        assert sliced["noise"].shape == (2, seq_len, action_dim)
+
+    def test_slice_inputs_vlm_multi_image(self):
+        """Test VLM handler slicing with multi-image format."""
+        handler = VLMBatchHandler()
+        batch_size = 5
+        num_images = 2
+
+        inputs = {
+            "input_ids": torch.randint(0, 1000, (batch_size, 128)),
+            "attention_mask": torch.ones(batch_size, 128, dtype=torch.bool),
+            "pixel_values": torch.randn(batch_size * num_images, 3, 224, 224),
+        }
+
+        # Slice last 2 samples
+        sliced = handler.slice_inputs_for_accumulation(inputs, 3, 5)
+
+        assert sliced["input_ids"].shape == (2, 128)
+        assert sliced["pixel_values"].shape == (4, 3, 224, 224)
+        assert torch.equal(sliced["pixel_values"], inputs["pixel_values"][6:10])
+
+    def test_slice_inputs_standard_5d_format_unchanged(self):
+        """Test that standard [B, N, C, H, W] format is sliced normally (not scaled)."""
+        handler = TransformerBatchHandler()
+        batch_size = 4
+        num_images = 3
+
+        # Standard 5D format: [B, N, C, H, W]
+        inputs = {
+            "input_ids": torch.randint(0, 1000, (batch_size, 32)),
+            "pixel_values": torch.randn(batch_size, num_images, 3, 224, 224),
+        }
+
+        sliced = handler.slice_inputs_for_accumulation(inputs, 1, 3)
+
+        # Should use normal batch slicing (not scaled)
+        assert sliced["input_ids"].shape == (2, 32)
+        assert sliced["pixel_values"].shape == (2, num_images, 3, 224, 224)
+        assert torch.equal(sliced["pixel_values"], inputs["pixel_values"][1:3])
+
+    def test_slice_inputs_mixed_formats_in_batch(self):
+        """Test slicing with mixed tensor dimensions."""
+        handler = TransformerBatchHandler()
+        batch_size = 4
+        num_images = 3
+
+        inputs = {
+            "input_ids": torch.randint(0, 1000, (batch_size, 32)),
+            "attention_mask": torch.ones(batch_size, 32, dtype=torch.bool),
+            # Multi-image format
+            "pixel_values": torch.randn(batch_size * num_images, 3, 224, 224),
+            # Standard batch format
+            "some_feature": torch.randn(batch_size, 128),
+        }
+
+        sliced = handler.slice_inputs_for_accumulation(inputs, 0, 2)
+
+        assert sliced["input_ids"].shape == (2, 32)
+        assert sliced["pixel_values"].shape == (6, 3, 224, 224)
+        assert sliced["some_feature"].shape == (2, 128)
+
+    def test_slice_inputs_diffusion_policy_with_repeats_and_multi_image(self):
+        """Test DiffusionPolicy with num_action_head_repeats and multi-image format."""
+        handler = DiffusionPolicyBatchHandler()
+        batch_size = 4
+        num_images = 3
+        num_repeats = 2
+
+        # Set up handler with num_action_head_repeats
+        handler._num_action_head_repeats = num_repeats
+
+        inputs = {
+            "input_ids": torch.randint(0, 1000, (batch_size, 32)),
+            "pixel_values": torch.randn(batch_size * num_images, 3, 224, 224),
+            "actions": torch.randn(batch_size, 16, 7),
+            "noise": torch.randn(batch_size, 16, 7),
+            "past_mask": torch.ones(batch_size, 16, dtype=torch.bool),
+            "future_mask": torch.zeros(batch_size, 16, dtype=torch.bool),
+        }
+
+        sliced = handler.slice_inputs_for_accumulation(inputs, 0, 2)
+
+        # VLM inputs: pixel_values scaled for multi-image, but NOT repeated
+        assert sliced["input_ids"].shape == (2, 32)
+        assert sliced["pixel_values"].shape == (6, 3, 224, 224)
+
+        # Action-side inputs: repeated
+        assert sliced["actions"].shape == (2 * num_repeats, 16, 7)
+        assert sliced["noise"].shape == (2 * num_repeats, 16, 7)
+        assert sliced["past_mask"].shape == (2 * num_repeats, 16)
+
+    def test_slice_targets_preserves_batch_structure(self):
+        """Test that target slicing works correctly with multi-image inputs."""
+        handler = TransformerBatchHandler()
+        batch_size = 4
+
+        targets = torch.randint(0, 1000, (batch_size, 128))
+        sliced_targets = handler.slice_targets_for_accumulation(targets, 1, 3, sliced_inputs=None)
+
+        assert sliced_targets.shape == (2, 128)
+        assert torch.equal(sliced_targets, targets[1:3])

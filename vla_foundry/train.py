@@ -64,7 +64,6 @@ def train_one_checkpoint(
     batch_handler = create_batch_handler(cfg.model.type)
 
     model.train()
-    model_dtype = next(model.parameters()).dtype
 
     # Set EMA model if provided (for models that support it)
     if ema_model is not None:
@@ -113,7 +112,7 @@ def train_one_checkpoint(
         optimizer.zero_grad()
 
         # Prepare model inputs and targets (including chunking) using batch handler
-        model_inputs, targets, mask = batch_handler.prepare_inputs_and_targets(batch, device, model_dtype, cfg)
+        model_inputs, targets, mask = batch_handler.prepare_inputs_and_targets(batch, device, cfg)
 
         # Validate that mask and future_mask are mutually exclusive
         if mask is not None and "future_mask" in model_inputs:

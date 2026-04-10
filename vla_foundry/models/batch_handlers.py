@@ -18,15 +18,21 @@ from vla_foundry.models.registry import register_batch_handler
 class BatchHandler(ABC):
     """Abstract base class for model-specific batch handlers."""
 
+    def _move_to_device(self, batch, device):
+        """Move all tensor values in batch to device in-place."""
+        for key, value in batch.items():
+            if isinstance(value, torch.Tensor):
+                batch[key] = value.to(device, non_blocking=True)
+        return batch
+
     @abstractmethod
-    def prepare_inputs(self, batch, device, model_dtype, cfg):
+    def prepare_inputs(self, batch, device, cfg):
         """
         Prepare model inputs from batch data.
 
         Args:
             batch: Raw batch dictionary from dataloader
             device: Target device for tensors
-            model_dtype: Target dtype for model inputs
             cfg: Training configuration
 
         Returns:
@@ -35,14 +41,13 @@ class BatchHandler(ABC):
         pass
 
     @abstractmethod
-    def prepare_inputs_and_targets(self, batch, device, model_dtype, cfg):
+    def prepare_inputs_and_targets(self, batch, device, cfg):
         """
         Prepare model inputs and targets from batch data, including chunking if needed.
 
         Args:
             batch: Raw batch dictionary from dataloader
             device: Target device for tensors
-            model_dtype: Target dtype for model inputs
             cfg: Training configuration
 
         Returns:
@@ -75,13 +80,66 @@ class BatchHandler(ABC):
 
     def slice_inputs_for_accumulation(self, model_inputs, start_idx, end_idx):
         """Slice model inputs for gradient accumulation microbatches."""
+        if "image_grid_thw" in model_inputs:
+            return self._slice_inputs_qwen(model_inputs, start_idx, end_idx)
+
+        batch_size = model_inputs["input_ids"].shape[0]
         sliced_inputs = {}
         for key, value in model_inputs.items():
             if isinstance(value, torch.Tensor) and value.dim() > 0:
+                if key == "pixel_values" and value.ndim == 4 and value.shape[0] != batch_size:
+                    # CLIP/PaliGemma processors return pixel_values as [B*N, C, H, W].
+                    # Scale slice indices to match the B*N first dimension.
+                    scale = value.shape[0] // batch_size
+                    sliced_inputs[key] = value[start_idx * scale : end_idx * scale]
+                else:
+                    sliced_inputs[key] = value[start_idx:end_idx]
+            else:
+                sliced_inputs[key] = value
+        return sliced_inputs
+
+    def _slice_inputs_qwen(self, model_inputs, start_idx, end_idx):
+        """Slice inputs for Qwen-style models with flat pixel_values.
+
+        Qwen processors return pixel_values as a flat (total_patches, patch_dim)
+        tensor instead of (B, ...), with a companion image_grid_thw tensor
+        describing per-image patch grid sizes. Both must be sliced together
+        using the grid metadata.
+
+        Assumes all samples in the batch have the same number of images. Missing
+        images must be padded (set data_params.pad_missing_images=True) to satisfy
+        this invariant.
+        """
+        batch_size = model_inputs["input_ids"].shape[0]
+        grid = model_inputs["image_grid_thw"]
+
+        assert grid.shape[0] % batch_size == 0, (
+            f"image_grid_thw.shape[0] ({grid.shape[0]}) must be divisible by batch_size ({batch_size}). "
+            f"Ensure all samples have the same number of images (set pad_missing_images=True)."
+        )
+
+        images_per_sample = grid.shape[0] // batch_size
+        img_start = start_idx * images_per_sample
+        img_end = end_idx * images_per_sample
+
+        sliced_inputs = {}
+        for key, value in model_inputs.items():
+            if key in ("pixel_values", "image_grid_thw"):
+                continue
+            if isinstance(value, torch.Tensor) and value.dim() > 0 and value.shape[0] == batch_size:
                 sliced_inputs[key] = value[start_idx:end_idx]
             else:
-                # Non-tensor values or scalars pass through unchanged
                 sliced_inputs[key] = value
+
+        sliced_inputs["image_grid_thw"] = grid[img_start:img_end]
+
+        # Each row in image_grid_thw is (t, h, w). The number of patches for
+        # that image is t * h * w. Compute cumulative offsets to slice pixel_values.
+        patches_per_image = grid[:, 0] * grid[:, 1] * grid[:, 2]
+        patch_start = patches_per_image[:img_start].sum().item()
+        patch_end = patch_start + patches_per_image[img_start:img_end].sum().item()
+        sliced_inputs["pixel_values"] = model_inputs["pixel_values"][patch_start:patch_end]
+
         return sliced_inputs
 
     def slice_targets_for_accumulation(self, targets, start_idx, end_idx, sliced_inputs=None):
@@ -103,32 +161,19 @@ class BatchHandler(ABC):
 class TransformerBatchHandler(BatchHandler):
     """Handles batch preparation for transformer and transformer_hf models."""
 
-    def prepare_inputs(self, batch, device, model_dtype, cfg):
-        inputs = {
-            "input_ids": batch["input_ids"].to(device, non_blocking=True, dtype=torch.long),
-            "output_hidden_states": False,
-        }
+    def prepare_inputs(self, batch, device, cfg):
+        self._move_to_device(batch, device)
+        batch["output_hidden_states"] = False
+        return batch
 
-        if "attention_mask" in batch and batch["attention_mask"] is not None:
-            inputs["attention_mask"] = batch["attention_mask"].to(device, non_blocking=True, dtype=torch.bool)
-
-        return inputs
-
-    def prepare_inputs_and_targets(self, batch, device, model_dtype, cfg):
-        # Move to device first
-        input_ids = batch["input_ids"].to(device, non_blocking=True, dtype=torch.long)
-        attention_mask = (
-            batch["attention_mask"].to(device, non_blocking=True, dtype=torch.bool)
-            if "attention_mask" in batch and batch["attention_mask"] is not None
-            else None
-        )
+    def prepare_inputs_and_targets(self, batch, device, cfg):
+        model_inputs = self.prepare_inputs(batch, device, cfg)
 
         # Sample a contiguous chunk to the configured sequence length
-        input_ids, attention_mask, targets = sample_chunk(input_ids, attention_mask, cfg.data.seq_len)
-
-        # Prepare model inputs
-        model_inputs = {"input_ids": input_ids, "output_hidden_states": False}
-
+        input_ids, attention_mask, targets = sample_chunk(
+            model_inputs["input_ids"], model_inputs.get("attention_mask"), cfg.data.seq_len
+        )
+        model_inputs["input_ids"] = input_ids
         if attention_mask is not None:
             model_inputs["attention_mask"] = attention_mask
 
@@ -138,10 +183,6 @@ class TransformerBatchHandler(BatchHandler):
         else:
             mask = None
 
-        # For reference:
-        # model_inputs["attention_mask"] tells us which tokens the model skips in forward (e.g. padding)
-        # mask tells us which tokens the model skips in loss computation (e.g. padding, image tokens)
-        # For LLMs, these should be the same but shifted by one token due to the autoregressive nature.
         return model_inputs, targets, mask
 
     def compute_loss(self, outputs, targets, loss_fn, cfg, mask=None):
@@ -153,45 +194,23 @@ class TransformerBatchHandler(BatchHandler):
 class VLMBatchHandler(BatchHandler):
     """Handles batch preparation for vlm and vlm_hf models."""
 
-    def prepare_inputs(self, batch, device, model_dtype, cfg):
-        inputs = {
-            "input_ids": batch["input_ids"].to(device, non_blocking=True, dtype=torch.long),
-            "output_hidden_states": False,
-        }
+    def prepare_inputs(self, batch, device, cfg):
+        self._move_to_device(batch, device)
+        batch["output_hidden_states"] = False
+        return batch
 
-        if "pixel_values" in batch:
-            inputs["pixel_values"] = batch["pixel_values"].to(device, non_blocking=True, dtype=model_dtype)
-
-        if "attention_mask" in batch and batch["attention_mask"] is not None:
-            inputs["attention_mask"] = batch["attention_mask"].to(device, non_blocking=True, dtype=torch.bool)
-
-        return inputs
-
-    def prepare_inputs_and_targets(self, batch, device, model_dtype, cfg):
-        # Move to device first
-        input_ids = batch["input_ids"].to(device, non_blocking=True, dtype=torch.long)
-        attention_mask = (
-            batch["attention_mask"].to(device, non_blocking=True, dtype=torch.bool)
-            if "attention_mask" in batch and batch["attention_mask"] is not None
-            else None
-        )
+    def prepare_inputs_and_targets(self, batch, device, cfg):
+        model_inputs = self.prepare_inputs(batch, device, cfg)
 
         # Sample a contiguous chunk to the configured sequence length
-        input_ids, attention_mask, targets = sample_chunk(input_ids, attention_mask, cfg.data.seq_len)
-
-        # Prepare model inputs
-        model_inputs = {"input_ids": input_ids, "output_hidden_states": False}
-
-        if "pixel_values" in batch:
-            model_inputs["pixel_values"] = batch["pixel_values"].to(device, non_blocking=True, dtype=model_dtype)
-
+        input_ids, attention_mask, targets = sample_chunk(
+            model_inputs["input_ids"], model_inputs.get("attention_mask"), cfg.data.seq_len
+        )
+        model_inputs["input_ids"] = input_ids
         if attention_mask is not None:
             model_inputs["attention_mask"] = attention_mask
 
         mask = (targets == cfg.data.pad_token_id) | (targets == cfg.data.image_token_id)
-
-        # model_inputs["attention_mask"] tells us which tokens the model skips in forward (e.g. padding)
-        # mask tells us which tokens the model skips in loss computation (e.g. padding, image tokens)
         return model_inputs, targets, mask
 
     def compute_loss(self, outputs, targets, loss_fn, cfg, mask=None):
@@ -202,42 +221,21 @@ class VLMBatchHandler(BatchHandler):
 class StableDiffusionBatchHandler(BatchHandler):
     """Handles batch preparation for stable_diffusion models."""
 
-    def prepare_inputs(self, batch, device, model_dtype, cfg):
-        image = batch["pixel_values"].to(device, non_blocking=True, dtype=model_dtype)
-        noise = torch.randn_like(image)
+    def prepare_inputs(self, batch, device, cfg):
+        self._move_to_device(batch, device)
+        # Model expects "image" not "pixel_values"
+        batch["image"] = batch.pop("pixel_values")
+        batch["noise"] = torch.randn_like(batch["image"])
+        return batch
 
-        inputs = {
-            "input_ids": batch["input_ids"].to(device, non_blocking=True, dtype=torch.long),
-            "image": image,
-            "noise": noise,
-        }
-
-        if "attention_mask" in batch and batch["attention_mask"] is not None:
-            inputs["attention_mask"] = batch["attention_mask"].to(device, non_blocking=True, dtype=torch.bool)
-
-        return inputs
-
-    def prepare_inputs_and_targets(self, batch, device, model_dtype, cfg):
-        # For diffusion models, we don't do sequence chunking like text models
-        # Instead, we prepare the image and noise directly
-        image = batch["pixel_values"].to(device, non_blocking=True, dtype=model_dtype)
-        noise = torch.randn_like(image)
-
-        # Prepare model inputs
-        model_inputs = {
-            "input_ids": batch["input_ids"].to(device, non_blocking=True, dtype=torch.long),
-            "image": image,
-            "noise": noise,
-        }
-
-        if "attention_mask" in batch and batch["attention_mask"] is not None:
-            model_inputs["attention_mask"] = batch["attention_mask"].to(device, non_blocking=True, dtype=torch.bool)
+    def prepare_inputs_and_targets(self, batch, device, cfg):
+        model_inputs = self.prepare_inputs(batch, device, cfg)
 
         # For diffusion, targets are the noise (or noise direction for flow matching)
-        targets = noise
+        targets = model_inputs["noise"]
         if cfg.model.use_flow_matching_scheduler:
             # In flow-matching variant: target is (noise - image) direction
-            targets = noise - image
+            targets = model_inputs["noise"] - model_inputs["image"]
 
         return model_inputs, targets, None
 
@@ -250,44 +248,14 @@ class StableDiffusionBatchHandler(BatchHandler):
 class DiffusionPolicyBatchHandler(BatchHandler):
     """Handles batch preparation for diffusion policy models."""
 
-    def prepare_inputs(self, batch, device, model_dtype, cfg):
-        actions = batch["actions"].to(device, non_blocking=True, dtype=model_dtype)
-        pixel_values = batch["pixel_values"].to(device, non_blocking=True, dtype=model_dtype)
-        input_ids = batch["input_ids"].to(device, non_blocking=True, dtype=torch.long)
-        attention_mask = (
-            batch["attention_mask"].to(device, non_blocking=True, dtype=torch.bool)
-            if "attention_mask" in batch and batch["attention_mask"] is not None
-            else None
-        )
-        attention_mask_images = (
-            batch["attention_mask_images"].to(device, non_blocking=True, dtype=torch.bool)
-            if "attention_mask_images" in batch and batch["attention_mask_images"] is not None
-            else None
-        )
-        past_mask = batch["past_mask"].to(device, non_blocking=True, dtype=torch.bool)
-        future_mask = batch["future_mask"].to(device, non_blocking=True, dtype=torch.bool)
-        proprioception = batch.get("proprioception")
-        if proprioception is not None:
-            proprioception = proprioception.to(device, non_blocking=True, dtype=model_dtype)
-
-        noise = torch.randn_like(actions)
+    def prepare_inputs(self, batch, device, cfg):
+        self._move_to_device(batch, device)
+        batch["noise"] = torch.randn_like(batch["actions"])
         self._num_action_head_repeats = getattr(cfg.model, "num_action_head_repeats", None)
-        inputs = {
-            "input_ids": input_ids,
-            "pixel_values": pixel_values,
-            "actions": actions,
-            "noise": noise,
-            "attention_mask": attention_mask,
-            "attention_mask_images": attention_mask_images,
-            "past_mask": past_mask,
-            "future_mask": future_mask,
-        }
-        if proprioception is not None:
-            inputs["proprioception"] = proprioception
-        return inputs
+        return batch
 
-    def prepare_inputs_and_targets(self, batch, device, model_dtype, cfg):
-        inputs = self.prepare_inputs(batch, device, model_dtype, cfg)
+    def prepare_inputs_and_targets(self, batch, device, cfg):
+        inputs = self.prepare_inputs(batch, device, cfg)
         targets = inputs["noise"] - inputs["actions"]
         return inputs, targets, None
 
@@ -355,60 +323,25 @@ class DiffusionPolicyBatchHandler(BatchHandler):
 class ManiFlowBatchHandler(BatchHandler):
     """Handles batch preparation for ManiFlow consistency flow models."""
 
-    def prepare_inputs(self, batch, device, model_dtype, cfg):
+    def prepare_inputs(self, batch, device, cfg):
         """Prepare inputs for ManiFlow inference."""
-        # Load point cloud if available and enabled
-        if batch.get("point_cloud") is not None and cfg.data.use_point_cloud:
-            point_cloud = batch["point_cloud"].to(device, non_blocking=True, dtype=model_dtype)
-        else:
-            point_cloud = None
+        self._move_to_device(batch, device)
+        if not cfg.data.use_point_cloud:
+            batch.pop("point_cloud", None)
+        return batch
 
-        proprioception = batch["proprioception"].to(device, non_blocking=True, dtype=model_dtype)
-
-        inputs = {
-            "point_cloud": point_cloud,
-            "proprioception": proprioception,
-        }
-
-        # Add language conditioning if present
-        if "task_name" in batch and batch["task_name"] is not None:
-            inputs["task_name"] = batch["task_name"]
-
-        return inputs
-
-    def prepare_inputs_and_targets(self, batch, device, model_dtype, cfg):
+    def prepare_inputs_and_targets(self, batch, device, cfg):
         """Prepare inputs and targets for ManiFlow training.
 
         ManiFlow computes its own loss internally with flow and consistency objectives.
         We structure the inputs so ManiFlow.forward() receives batch= kwargs.
         EMA model should be set via model.set_ema_model() before training.
         """
-        # Load point cloud if available and enabled
-        if batch.get("point_cloud") is not None and cfg.data.use_point_cloud:
-            point_cloud = batch["point_cloud"].to(device, non_blocking=True, dtype=model_dtype)
-        else:
-            point_cloud = None
-
-        proprioception = batch["proprioception"].to(device, non_blocking=True, dtype=model_dtype)
-        actions = batch["actions"].to(device, non_blocking=True, dtype=model_dtype)
-        input_ids = batch["input_ids"].to(device, non_blocking=True, dtype=torch.long)
-
-        # Prepare inputs for ManiFlow.forward() - flat structure for gradient accumulation compatibility
-        model_inputs = {
-            "point_cloud": point_cloud,
-            "proprioception": proprioception,
-            "actions": actions,
-            "input_ids": input_ids,
-        }
-
-        # Add language conditioning if present
-        if "task_name" in batch and batch["task_name"] is not None:
-            model_inputs["task_name"] = batch["task_name"]
+        model_inputs = self.prepare_inputs(batch, device, cfg)
 
         # Create dummy targets tensor for training loop compatibility (not actually used)
         # Training loop expects targets to be sliceable, but ManiFlow computes loss internally
-        dummy_targets = torch.zeros((actions.shape[0],), device=actions.device)
-
+        dummy_targets = torch.zeros((model_inputs["actions"].shape[0],), device=device)
         return model_inputs, dummy_targets, None
 
     def compute_loss(self, outputs, targets, loss_fn, cfg, mask=None):

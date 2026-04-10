@@ -13,10 +13,10 @@ class VLMHF(TransformerBase):
         super().__init__(model_params)
         self.model_name = model_params.hf_pretrained
         if load_pretrained:
-            self.model = AutoModelForImageTextToText.from_pretrained(self.model_name)
+            self.model = AutoModelForImageTextToText.from_pretrained(self.model_name, trust_remote_code=True)
         else:
-            config = AutoConfig.from_pretrained(self.model_name)
-            self.model = AutoModelForImageTextToText.from_config(config)
+            config = AutoConfig.from_pretrained(self.model_name, trust_remote_code=True)
+            self.model = AutoModelForImageTextToText.from_config(config, trust_remote_code=True)
         self._limit_hidden_states_to_last_n = None
         self._setup_model_info()
 
@@ -118,7 +118,7 @@ class VLMHF(TransformerBase):
     def num_hidden_layers(self) -> int:
         return get_num_hidden_layers_hf(self.model.config)
 
-    def generate(self, input_ids, pixel_values, attention_mask, max_new_tokens=20):
+    def generate(self, input_ids, pixel_values, attention_mask, max_new_tokens=20, **kwargs):
         """Generate text tokens using the VLM HF model"""
         # Add batch dimension if needed
         if input_ids.dim() == 1:
@@ -129,7 +129,7 @@ class VLMHF(TransformerBase):
         attn_mask = attention_mask.clone()
 
         for _ in range(max_new_tokens):
-            outputs = self.forward(input_ids=generated, pixel_values=pixel_values, attention_mask=attn_mask)
+            outputs = self.forward(input_ids=generated, pixel_values=pixel_values, attention_mask=attn_mask, **kwargs)
             last_output = outputs.logits[:, -1, :]
             next_token = torch.argmax(last_output, dim=-1, keepdim=True)
             generated = torch.cat([generated, next_token], dim=-1)

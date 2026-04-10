@@ -61,23 +61,12 @@ class VLMHFBackboneWrapper(BaseBackboneWrapper):
         Ensures required arguments are present and consistent (e.g., Qwen image_grid_thw
         matches pixel_values patches). Raises ValueError if inputs are invalid.
         """
-        # Debug: validate Qwen-style input consistency
-        if self._is_qwen_style:
-            if "image_grid_thw" not in kwargs:
-                raise ValueError(
-                    f"Qwen model requires image_grid_thw but it was not provided. "
-                    f"pixel_values shape: {pixel_values.shape}. "
-                    f"Ensure the processor passes image_grid_thw through the data pipeline."
-                )
-            image_grid_thw = kwargs["image_grid_thw"]
-            expected_patches = (image_grid_thw[:, 1] * image_grid_thw[:, 2]).sum().item()
-            actual_patches = pixel_values.shape[0]
-            if expected_patches != actual_patches:
-                raise ValueError(
-                    f"Qwen pixel_values/image_grid_thw mismatch: "
-                    f"image_grid_thw expects {expected_patches} patches but pixel_values has {actual_patches}. "
-                    f"image_grid_thw shape: {image_grid_thw.shape}, pixel_values shape: {pixel_values.shape}"
-                )
+        if self._is_qwen_style and "image_grid_thw" not in kwargs:
+            raise ValueError(
+                f"Qwen model requires image_grid_thw but it was not provided. "
+                f"pixel_values shape: {pixel_values.shape}. "
+                f"Ensure the processor passes image_grid_thw through the data pipeline."
+            )
 
     def _prepare_inputs_for_action_token(self, input_ids, attention_mask):
         """Helper: Append action token to inputs (modular and reusable)."""
@@ -110,13 +99,6 @@ class VLMHFBackboneWrapper(BaseBackboneWrapper):
         input_ids_with_action, attention_mask_with_action = self._prepare_inputs_for_action_token(
             input_ids, attention_mask
         )
-
-        # Paligemma handles multi-image input by stacking the images along the batch dimension.
-        # This enables it to use the SigLIP vision encoder to process each image independently.
-        # These images are then scattered appropriately back into the num_images dimension.
-        if self._is_paligemma_style:
-            batch_size, num_images, C, H, W = pixel_values.shape
-            pixel_values = pixel_values.view(batch_size * num_images, C, H, W)
 
         # VLM needs hidden states for action token embedding extraction
         kwargs["output_hidden_states"] = True
