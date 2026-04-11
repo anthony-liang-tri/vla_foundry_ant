@@ -12,6 +12,7 @@ This script:
 """
 
 import argparse
+import contextlib
 import datetime
 import json
 import os
@@ -24,6 +25,7 @@ import tarfile
 import tempfile
 import textwrap
 import time
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -240,6 +242,7 @@ class EvaluationCampaign:
 
     def __init__(self, config: CampaignConfig):
         self.config = config
+        self.eval_id = f"{datetime.date.today().isoformat()}_{uuid.uuid4().hex[:8]}"
         self.cluster_url: str | None = None
         self.submission_ids: list[str] = []
         self.runner_env: dict[str, str] = dict(os.environ)
@@ -318,6 +321,7 @@ class EvaluationCampaign:
         self.config.results_dir.mkdir(parents=True, exist_ok=True)
         state = {
             "campaign_name": self.config.campaign_name,
+            "eval_id": self.eval_id,
             "cluster_url": self.cluster_url,
             "submission_ids": self.submission_ids,
             "completed": {k: str(v) for k, v in self.completed.items()},
@@ -447,6 +451,7 @@ class EvaluationCampaign:
         print("=" * 80)
         print(f"Starting Evaluation Campaign: {self.config.campaign_name}")
         print(f"Description: {self.config.description}")
+        print(f"Eval ID: {self.eval_id}")
         print("=" * 80)
         print()
 
@@ -458,6 +463,10 @@ class EvaluationCampaign:
                 print()
                 print("  [resume] Found saved campaign state, will resume from checkpoint")
                 self.cluster_url = saved_state.get("cluster_url")
+                # Restore eval_id from saved state to keep the same S3 paths
+                if saved_state.get("eval_id"):
+                    self.eval_id = saved_state["eval_id"]
+                    print(f"  [resume] Restored eval_id: {self.eval_id}")
                 # Restore completed jobs
                 for sub_id, status_str in saved_state.get("completed", {}).items():
                     self.completed[sub_id] = status_str
@@ -465,6 +474,10 @@ class EvaluationCampaign:
                 self._write_cluster_info()
             else:
                 print("  [resume] No saved state found, starting fresh campaign")
+
+        # Save eval settings for reproducibility — done *after* resume restore
+        # so the persisted eval_id matches the one actually used for S3 paths.
+        self._save_eval_settings()
 
         # Always recreate expanded cluster config so campaign YAML edits
         # (e.g. cluster name / owner email) are applied immediately.
@@ -914,6 +927,9 @@ class EvaluationCampaign:
         if self.config.evaluation_subfolder:
             cmd.extend(["--evaluation-subfolder", self.config.evaluation_subfolder])
 
+        # Unique eval ID for this campaign run
+        cmd.extend(["--eval-id", self.eval_id])
+
         cmd.extend(["--tasks-file", str(tasks_file)])
 
         # Stream output while capturing it
@@ -1061,6 +1077,9 @@ class EvaluationCampaign:
 
         if self.config.inference_aws_profile:
             cmd.extend(["--aws-profile", self.config.inference_aws_profile])
+
+        # Unique eval ID for this campaign run
+        cmd.extend(["--eval-id", self.eval_id])
 
         # Add tasks file or checkpoints
         if tasks_file:
@@ -1928,6 +1947,7 @@ df -h /tmp 2>/dev/null || true
         # Save campaign metadata
         metadata = {
             "campaign_name": self.config.campaign_name,
+            "eval_id": self.eval_id,
             "description": self.config.description,
             "num_workers": self.config.num_workers,
             "num_samples": self.config.num_samples,
@@ -1944,6 +1964,9 @@ df -h /tmp 2>/dev/null || true
         success_metrics = self.compute_success_metrics()
         if success_metrics:
             self.success_metrics = success_metrics
+
+        # Upload eval settings to S3 alongside results
+        self._upload_eval_settings_to_s3()
 
         # Note: Artifacts are already in S3 (uploaded by inference jobs),
         # so we don't need to re-upload them here.
@@ -2124,18 +2147,82 @@ df -h /tmp 2>/dev/null || true
 
     def _default_s3_evaluation_path(self, checkpoint_path: str) -> str:
         base = checkpoint_path.rstrip("/")
-        slug = self._campaign_slug()
-        return f"{base}/evaluation/{slug}/{SUCCESS_METRICS_FILENAME}"
+        parts = [base, "evaluation"]
+        if self.config.evaluation_subfolder:
+            parts.append(self.config.evaluation_subfolder)
+        parts.append(self.eval_id)
+        parts.append(SUCCESS_METRICS_FILENAME)
+        return "/".join(parts)
 
     def _evaluation_dir_for_checkpoint(self, checkpoint_path: str) -> str:
         base = checkpoint_path.rstrip("/")
-        slug = self._campaign_slug()
-        return f"{base}/evaluation/{slug}"
+        parts = [base, "evaluation"]
+        if self.config.evaluation_subfolder:
+            parts.append(self.config.evaluation_subfolder)
+        parts.append(self.eval_id)
+        return "/".join(parts)
 
-    def _campaign_slug(self) -> str:
-        slug = re.sub(r"[^A-Za-z0-9._-]+", "_", self.config.campaign_name)
-        slug = slug.strip("_")
-        return slug or "campaign"
+    def _save_eval_settings(self):
+        """Save evaluation settings for reproducibility."""
+        git_commit = "unknown"
+        with contextlib.suppress(Exception):
+            git_commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True, cwd=REPO_ROOT).strip()
+
+        settings = {
+            "eval_id": self.eval_id,
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+            "campaign_name": self.config.campaign_name,
+            "description": self.config.description,
+            "git_commit": git_commit,
+            "docker_image": self.config.docker_image,
+            "vla_repo_ref": self.config.vla_repo_ref,
+            "evaluation_subfolder": self.config.evaluation_subfolder,
+            "evaluation": {
+                "num_samples": self.config.num_samples,
+                "start_index": self.config.start_index,
+                "num_flow_steps": self.config.num_flow_steps,
+                "open_loop_steps": self.config.open_loop_steps,
+                "device": self.config.device,
+                "max_samples_per_job": self.config.max_samples_per_job,
+                "launch_scenario": self.config.launch_scenario,
+                "launch_script": self.config.launch_script,
+                "jobs_per_gpu": self.config.jobs_per_gpu,
+            },
+            "tasks_file": str(self.config.tasks_file) if self.config.tasks_file else None,
+            "checkpoints": self.config.checkpoints,
+        }
+
+        self.config.results_dir.mkdir(parents=True, exist_ok=True)
+        settings_path = self.config.results_dir / "eval_settings.yaml"
+        with open(settings_path, "w") as f:
+            yaml.dump(settings, f, default_flow_style=False, sort_keys=False)
+        print(f"  Eval settings saved to: {settings_path}")
+
+    def _upload_eval_settings_to_s3(self):
+        """Upload eval_settings.yaml to S3 for each checkpoint."""
+        settings_path = self.config.results_dir / "eval_settings.yaml"
+        if not settings_path.exists():
+            return
+
+        checkpoint_paths = self._resolve_checkpoint_paths()
+        s3_paths = [p for p in checkpoint_paths if p.startswith("s3://")]
+        if not s3_paths:
+            return
+
+        env = {**os.environ}
+        profile = self.config.inference_aws_profile or self.config.aws_profile
+        if profile:
+            env["AWS_PROFILE"] = profile
+
+        for checkpoint in dict.fromkeys(s3_paths):
+            eval_dir = self._evaluation_dir_for_checkpoint(checkpoint)
+            destination = f"{eval_dir}/eval_settings.yaml"
+            cmd = ["aws", "s3", "cp", str(settings_path), destination]
+            try:
+                subprocess.run(cmd, check=True, env=env, capture_output=True)
+                print(f"  Eval settings uploaded to: {destination}")
+            except subprocess.CalledProcessError as exc:
+                print(f"  WARNING: Failed to upload eval settings to {destination}: {exc}")
 
     def _download_cluster_artifacts(
         self,
@@ -2187,11 +2274,16 @@ df -h /tmp 2>/dev/null || true
             if s3_base.endswith(".pt"):
                 s3_base = s3_base.rsplit("/checkpoints/", 1)[0]
 
-            # Include task name in path if provided (for multi-task evaluation)
+            # Build S3 path: {checkpoint}/evaluation/{subfolder?}/{eval_id}/{task}/rollouts/
+            subfolder = self.config.evaluation_subfolder
+            path_parts = [s3_base, "evaluation"]
+            if subfolder:
+                path_parts.append(subfolder)
+            path_parts.append(self.eval_id)
             if task_name:
-                s3_rollouts = f"{s3_base}/evaluation/{task_name}/rollouts/"
-            else:
-                s3_rollouts = f"{s3_base}/evaluation/rollouts/"
+                path_parts.append(task_name)
+            path_parts.append("rollouts/")
+            s3_rollouts = "/".join(path_parts)
 
             # Create a unique local directory for this task's artifacts
             checkpoint_name = s3_base.split("/")[-1]

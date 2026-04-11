@@ -9,6 +9,7 @@ __pycache__/
 # Ignore Git stuff
 .git/
 .gitignore
+worktrees/
 
 # Ignore local files
 .env

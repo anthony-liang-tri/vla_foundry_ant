@@ -134,10 +134,37 @@ def resolve_task_name_on_s3(checkpoint_base: str, task_name: str, aws_profile: s
     return task_name
 
 
+def _list_evaluation_subfolders(checkpoint_base: str, aws_profile: str | None = None) -> list[str]:
+    """List subfolders under evaluation/ that look like eval-run IDs (e.g. 2026-02-27_6c090584).
+
+    Returns subfolder names (not full paths) sorted most-recent-first.
+    """
+    cmd = ["aws", "s3", "ls", f"{checkpoint_base.rstrip('/')}/evaluation/"]
+    if aws_profile:
+        cmd.extend(["--profile", aws_profile])
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    except (subprocess.TimeoutExpired, OSError):
+        return []
+    if result.returncode != 0:
+        return []
+
+    eval_run_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}[_T]")
+    subfolders = []
+    for line in result.stdout.splitlines():
+        if " PRE " in line:
+            token = line.split(" PRE ", 1)[1].strip().rstrip("/")
+            if eval_run_pattern.match(token):
+                subfolders.append(token)
+    return sorted(subfolders, reverse=True)
+
+
 def find_existing_summaries(
     checkpoint: str,
     aws_profile: str | None = None,
     task_name: str | None = None,
+    eval_id: str | None = None,
 ) -> set[int]:
     """Find all existing summary indices for a checkpoint.
 
@@ -145,18 +172,34 @@ def find_existing_summaries(
         checkpoint: S3 path to the checkpoint
         aws_profile: AWS profile to use
         task_name: Task name for multi-task evaluation (results stored under task-specific path)
+        eval_id: Specific eval ID to look under (e.g., "2026-02-19_a1b2c3d4").
+                 If omitted, auto-discovers eval_id subfolders from S3.
     """
     checkpoint_base = checkpoint.rstrip("/")
 
-    # Check multiple possible paths - task-specific path first for multi-task support
-    paths_to_check = []
+    # Check multiple possible paths - eval_id paths first, then legacy
+    paths_to_check: list[str] = []
+
+    if eval_id:
+        # Explicit eval_id
+        if task_name:
+            paths_to_check.append(f"{checkpoint_base}/evaluation/{eval_id}/{task_name}/rollouts/")
+            paths_to_check.append(f"{checkpoint_base}/evaluation/{eval_id}/{task_name}/summary/")
+        paths_to_check.append(f"{checkpoint_base}/evaluation/{eval_id}/rollouts/")
+        paths_to_check.append(f"{checkpoint_base}/evaluation/{eval_id}/summary/")
+    else:
+        # Auto-discover eval_id subfolders (most recent first)
+        for subfolder in _list_evaluation_subfolders(checkpoint_base, aws_profile):
+            if task_name:
+                paths_to_check.append(f"{checkpoint_base}/evaluation/{subfolder}/{task_name}/rollouts/")
+                paths_to_check.append(f"{checkpoint_base}/evaluation/{subfolder}/{task_name}/summary/")
+            paths_to_check.append(f"{checkpoint_base}/evaluation/{subfolder}/rollouts/")
+            paths_to_check.append(f"{checkpoint_base}/evaluation/{subfolder}/summary/")
+
+    # Legacy paths (no eval_id)
     if task_name:
-        # New task-specific path (for multi-task evaluation on same checkpoint)
         paths_to_check.append(f"{checkpoint_base}/evaluation/{task_name}/rollouts/")
-        # Some launch scripts upload the per-episode summaries separately under a task-specific
-        # summary prefix (mirrors the legacy evaluation/summary/ layout).
         paths_to_check.append(f"{checkpoint_base}/evaluation/{task_name}/summary/")
-    # Legacy paths
     paths_to_check.extend(
         [
             f"{checkpoint_base}/evaluation/rollouts/",
@@ -178,6 +221,7 @@ def verify_task(
     start_index: int,
     num_samples: int,
     aws_profile: str | None = None,
+    eval_id: str | None = None,
 ) -> tuple[set[int], set[int]]:
     """
     Verify a single task's completion.
@@ -186,7 +230,7 @@ def verify_task(
         (existing_indices, missing_indices)
     """
     expected_indices = set(range(start_index, start_index + num_samples))
-    existing_indices = find_existing_summaries(task.checkpoint, aws_profile, task.task_name)
+    existing_indices = find_existing_summaries(task.checkpoint, aws_profile, task.task_name, eval_id=eval_id)
 
     # Only consider indices in our expected range
     existing_in_range = existing_indices.intersection(expected_indices)
@@ -344,6 +388,14 @@ Examples:
     )
 
     parser.add_argument(
+        "--eval-id",
+        type=str,
+        default=None,
+        help="Eval ID to look up results under (e.g., 2026-02-19_a1b2c3d4). "
+        "If omitted, auto-discovers eval_id subfolders from S3.",
+    )
+
+    parser.add_argument(
         "--output-rerun",
         type=Path,
         help="Output file for tasks that need re-running",
@@ -393,6 +445,7 @@ Examples:
             args.start_index,
             args.num_samples,
             args.aws_profile,
+            eval_id=args.eval_id,
         )
 
         total_expected += args.num_samples
