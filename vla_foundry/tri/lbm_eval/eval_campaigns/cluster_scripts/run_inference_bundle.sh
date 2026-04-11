@@ -1368,12 +1368,20 @@ upload_and_cleanup() {
       s3_base="${s3_base%/*}"
     fi
 
-    # Include task name in path to support multi-task evaluation on same checkpoint
-    if [[ -n "${LAUNCH_TASK_NAME:-}" ]]; then
-      local s3_dest="${s3_base}/evaluation/${LAUNCH_TASK_NAME}/rollouts/"
-    else
-      local s3_dest="${s3_base}/evaluation/rollouts/"
+    # Build S3 destination path: {checkpoint}/evaluation/{subfolder?}/{eval_id?}/{task?}/rollouts/
+    local s3_subfolder_prefix=""
+    if [[ -n "${LAUNCH_EVALUATION_SUBFOLDER:-}" ]]; then
+      s3_subfolder_prefix="${LAUNCH_EVALUATION_SUBFOLDER}/"
     fi
+    local s3_eval_id_prefix=""
+    if [[ -n "${LAUNCH_EVAL_ID:-}" ]]; then
+      s3_eval_id_prefix="${LAUNCH_EVAL_ID}/"
+    fi
+    local s3_task_prefix=""
+    if [[ -n "${LAUNCH_TASK_NAME:-}" ]]; then
+      s3_task_prefix="${LAUNCH_TASK_NAME}/"
+    fi
+    local s3_dest="${s3_base}/evaluation/${s3_subfolder_prefix}${s3_eval_id_prefix}${s3_task_prefix}rollouts/"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Uploading rollouts to ${s3_dest}"
 
     if "${aws_cmd[@]}" s3 sync "${CURRENT_SAVE_DIR}" "${s3_dest}" --quiet; then

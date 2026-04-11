@@ -213,32 +213,6 @@ def resolve_task_name_on_s3(checkpoint_base: str, task_name: str) -> str:
     return task_name
 
 
-def _list_evaluation_subfolders(checkpoint_base: str) -> list[str]:
-    """List subfolders under evaluation/ that look like eval-run IDs (e.g. 2026-02-27_6c090584).
-
-    Returns subfolder names (not full paths) that are *not* plausible task names
-    (i.e. they match a date-hash or UUID-like pattern).
-    """
-    result = subprocess.run(
-        ["aws", "s3", "ls", f"{checkpoint_base.rstrip('/')}/evaluation/"],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    if result.returncode != 0:
-        return []
-
-    # Pattern: date_hash like "2026-02-27_6c090584" or similar non-task-name folders
-    eval_run_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}[_T]")
-    subfolders = []
-    for line in result.stdout.splitlines():
-        if " PRE " in line:
-            token = line.split(" PRE ", 1)[1].strip().rstrip("/")
-            if eval_run_pattern.match(token):
-                subfolders.append(token)
-    return subfolders
-
-
 def _extract_sample_data(summary_data: dict, summary_file: Path) -> dict:
     """Extract relevant fields from a summary.yaml for storage."""
     # Extract demonstration index from path (e.g., demonstration_100)
@@ -285,6 +259,81 @@ def _extract_sample_data(summary_data: dict, summary_file: Path) -> dict:
     }
 
 
+def _discover_eval_id_paths_for_leaderboard(
+    checkpoint_base: str,
+    task_name: str | None,
+    evaluation_subfolder: str | None,
+) -> list[str]:
+    """Discover eval_id subdirectories under evaluation/ on S3.
+
+    Eval campaigns write results to paths like:
+        {checkpoint}/evaluation/{subfolder?}/{eval_id}/{task}/rollouts/
+    where eval_id looks like "2026-02-19_a1b2c3d4".
+
+    Returns candidate paths sorted most-recent-first.
+    """
+    eval_id_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}_[0-9a-f]{8}/$")
+    paths: list[str] = []
+
+    def _list_s3_prefixes(s3_prefix: str) -> list[str]:
+        try:
+            result = subprocess.run(
+                ["aws", "s3", "ls", s3_prefix],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            if result.returncode != 0:
+                return []
+            prefixes = []
+            for line in result.stdout.splitlines():
+                if " PRE " in line:
+                    token = line.split(" PRE ", 1)[1].strip()
+                    prefixes.append(token)
+            return prefixes
+        except subprocess.TimeoutExpired as exc:
+            sys.stderr.write(f"[leaderboard_cli] Timed out listing S3 prefix '{s3_prefix}': {exc}\n")
+            return []
+        except OSError as exc:
+            sys.stderr.write(f"[leaderboard_cli] Failed to invoke AWS CLI for prefix '{s3_prefix}': {exc}\n")
+            return []
+
+    def _add_paths_for_eval_ids(base_prefix: str, eval_ids: list[str]):
+        for eid in sorted(eval_ids, reverse=True):
+            if task_name:
+                paths.append(f"{base_prefix}{eid}/{task_name}/rollouts/")
+                paths.append(f"{base_prefix}{eid}/{task_name}/summary/")
+            paths.append(f"{base_prefix}{eid}/rollouts/")
+            paths.append(f"{base_prefix}{eid}/summary/")
+
+    eval_root = f"{checkpoint_base}/evaluation/"
+
+    # If subfolder is specified, look for eval_ids inside it first
+    if evaluation_subfolder:
+        sub_prefix = f"{eval_root}{evaluation_subfolder}/"
+        sub_prefixes = _list_s3_prefixes(sub_prefix)
+        sub_eval_ids = [p.rstrip("/") for p in sub_prefixes if eval_id_pattern.match(p)]
+        _add_paths_for_eval_ids(sub_prefix, sub_eval_ids)
+
+    # Also look for eval_ids directly under evaluation/
+    top_prefixes = _list_s3_prefixes(eval_root)
+    top_eval_ids = [p.rstrip("/") for p in top_prefixes if eval_id_pattern.match(p)]
+    _add_paths_for_eval_ids(eval_root, top_eval_ids)
+
+    # Check other subfolders for eval_ids too.
+    # Cap to avoid unbounded S3 list calls on checkpoints with many legacy task directories.
+    subfolder_names = [
+        p.rstrip("/") for p in top_prefixes if not eval_id_pattern.match(p) and p.rstrip("/") != evaluation_subfolder
+    ]
+    for subfolder in sorted(subfolder_names)[:50]:
+        sub_prefix = f"{eval_root}{subfolder}/"
+        sub_prefixes = _list_s3_prefixes(sub_prefix)
+        sub_eval_ids = [p.rstrip("/") for p in sub_prefixes if eval_id_pattern.match(p)]
+        _add_paths_for_eval_ids(sub_prefix, sub_eval_ids)
+
+    return paths
+
+
 def download_summaries_and_compute_rate(
     checkpoint_s3_path: str,
     campaign_name: str,
@@ -306,26 +355,18 @@ def download_summaries_and_compute_rate(
 
             paths_to_check: list[str] = []
 
-            # Collect evaluation subfolders to search: explicit flag first,
-            # then auto-discovered date-hash subfolders from S3.
-            eval_subfolders: list[str] = []
-            if evaluation_subfolder:
-                eval_subfolders.append(evaluation_subfolder)
-            else:
-                eval_subfolders.extend(_list_evaluation_subfolders(checkpoint_base))
+            # Auto-discover eval_id subdirectories (most recent first)
+            discovered = _discover_eval_id_paths_for_leaderboard(
+                checkpoint_base, resolved_task_name, evaluation_subfolder
+            )
+            paths_to_check.extend(discovered)
 
-            for subfolder in eval_subfolders:
-                if resolved_task_name:
-                    paths_to_check.extend(
-                        [
-                            f"{checkpoint_base}/evaluation/{subfolder}/{resolved_task_name}/rollouts/",
-                            f"{checkpoint_base}/evaluation/{subfolder}/{resolved_task_name}/summary/",
-                        ]
-                    )
+            # Legacy paths (no eval_id)
+            if evaluation_subfolder and resolved_task_name:
                 paths_to_check.extend(
                     [
-                        f"{checkpoint_base}/evaluation/{subfolder}/rollouts/",
-                        f"{checkpoint_base}/evaluation/{subfolder}/summary/",
+                        f"{checkpoint_base}/evaluation/{evaluation_subfolder}/{resolved_task_name}/rollouts/",
+                        f"{checkpoint_base}/evaluation/{evaluation_subfolder}/{resolved_task_name}/summary/",
                     ]
                 )
             if resolved_task_name:
@@ -333,6 +374,13 @@ def download_summaries_and_compute_rate(
                     [
                         f"{checkpoint_base}/evaluation/{resolved_task_name}/rollouts/",
                         f"{checkpoint_base}/evaluation/{resolved_task_name}/summary/",
+                    ]
+                )
+            if evaluation_subfolder:
+                paths_to_check.extend(
+                    [
+                        f"{checkpoint_base}/evaluation/{evaluation_subfolder}/rollouts/",
+                        f"{checkpoint_base}/evaluation/{evaluation_subfolder}/summary/",
                     ]
                 )
             paths_to_check.extend(

@@ -429,6 +429,13 @@ if [ -n "${CHECKPOINT_DIR:-}" ]; then
     S3_SUBFOLDER_PREFIX=""
   fi
 
+  # Unique eval ID to prevent result overwrites across eval runs
+  if [ -n "${LAUNCH_EVAL_ID:-}" ]; then
+    S3_EVAL_ID_PREFIX="${LAUNCH_EVAL_ID}/"
+  else
+    S3_EVAL_ID_PREFIX=""
+  fi
+
   # Include task name in S3 path to prevent different tasks from overwriting each other
   # when evaluating multiple tasks against the same checkpoint
   if [ -n "${LAUNCH_TASK_NAME:-}" ]; then
@@ -437,8 +444,8 @@ if [ -n "${CHECKPOINT_DIR:-}" ]; then
     S3_TASK_PREFIX=""
   fi
 
-  # Final path: {checkpoint}/evaluation/{subfolder}/{task}/rollouts/
-  S3_UPLOAD_PATH="${CHECKPOINT_DIR_CLEAN}/evaluation/${S3_SUBFOLDER_PREFIX}${S3_TASK_PREFIX}rollouts/"
+  # Final path: {checkpoint}/evaluation/{subfolder}/{eval_id}/{task}/rollouts/
+  S3_UPLOAD_PATH="${CHECKPOINT_DIR_CLEAN}/evaluation/${S3_SUBFOLDER_PREFIX}${S3_EVAL_ID_PREFIX}${S3_TASK_PREFIX}rollouts/"
   echo "Uploading rollouts to s3 at ${S3_UPLOAD_PATH}"
   if env -u AWS_PROFILE aws s3 sync "${LAUNCH_SAVE_DIR}" "${S3_UPLOAD_PATH}"; then
     echo "Rollouts uploaded successfully, cleaning up local copy..."

@@ -838,7 +838,11 @@ echo "Periodic cleanup completed"
 
 
 def verify_job_success_via_s3(
-    checkpoint: str, task_name: str, demo_indices: str, evaluation_subfolder: str | None = None
+    checkpoint: str,
+    task_name: str,
+    demo_indices: str,
+    evaluation_subfolder: str | None = None,
+    eval_id: str | None = None,
 ) -> tuple[bool, int, int]:
     """
     Verify if a job actually succeeded by checking if results exist in S3.
@@ -853,6 +857,7 @@ def verify_job_success_via_s3(
         task_name: The task name (e.g., BimanualPutRedBellPepperInBin)
         demo_indices: The demo range (e.g., "100:200")
         evaluation_subfolder: Optional subfolder in evaluation path (e.g., "oss")
+        eval_id: Optional unique eval ID (e.g., "2026-02-19_a1b2c3d4")
 
     Returns:
         Tuple of (success, found_count, expected_count):
@@ -882,12 +887,15 @@ def verify_job_success_via_s3(
         checkpoint_base = checkpoint_base.rsplit("/", 1)[0]
 
     # Determine S3 path for verification
-    # Path format: {checkpoint}/evaluation/{subfolder}/{task}/rollouts/
-    # subfolder is optional (only used when evaluation_subfolder is set)
+    # Path format: {checkpoint}/evaluation/{subfolder?}/{eval_id?}/{task}/rollouts/
+    path_parts = [checkpoint_base, "evaluation"]
     if evaluation_subfolder:
-        s3_path = f"{checkpoint_base}/evaluation/{evaluation_subfolder}/{task_name}/rollouts/"
-    else:
-        s3_path = f"{checkpoint_base}/evaluation/{task_name}/rollouts/"
+        path_parts.append(evaluation_subfolder)
+    if eval_id:
+        path_parts.append(eval_id)
+    path_parts.append(task_name)
+    path_parts.append("rollouts/")
+    s3_path = "/".join(path_parts)
 
     try:
         # Use aws s3 ls to check for result files
@@ -1052,6 +1060,10 @@ def build_docker_command(args, job, repetition=0):
     # S3 output path customization
     if getattr(args, "evaluation_subfolder", None):
         envs["LAUNCH_EVALUATION_SUBFOLDER"] = args.evaluation_subfolder
+
+    # Unique eval ID to prevent result overwrites
+    if getattr(args, "eval_id", None):
+        envs["LAUNCH_EVAL_ID"] = args.eval_id
 
     # Use the image-provided run_inference_bundle.sh.
     entrypoint_path = "/usr/local/bin/run_inference_bundle.sh"
@@ -1364,6 +1376,7 @@ def submit_jobs(args, jobs):
                             job.launch_task_name or job.task,
                             job.demo_indices,
                             getattr(args, "evaluation_subfolder", None),
+                            getattr(args, "eval_id", None),
                         )
 
                     if s3_success:
@@ -1849,6 +1862,13 @@ Tasks file format (tasks.txt):
         help=(
             "Optional subfolder to insert in S3 output path: {checkpoint}/evaluation/{subfolder}/{task}/rollouts/. "
             "Useful for organizing results from different evaluation campaigns (e.g., 'oss', 'stage3')."
+        ),
+    )
+    parser.add_argument(
+        "--eval-id",
+        help=(
+            "Unique evaluation ID (e.g., 2026-02-19_a1b2c3d4) inserted into S3 paths "
+            "to prevent result overwrites across eval runs."
         ),
     )
     return parser.parse_args(argv)

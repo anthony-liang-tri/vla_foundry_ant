@@ -11,6 +11,7 @@ This script:
 import argparse
 import ast
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -37,11 +38,39 @@ def parse_tasks_file(tasks_file: Path) -> list[tuple[str, str, str]]:
     return tasks
 
 
+def _list_evaluation_subfolders(checkpoint_base: str) -> list[str]:
+    """List subfolders under evaluation/ that look like eval-run IDs (e.g. 2026-02-27_6c090584).
+
+    Returns subfolder names (not full paths) sorted most-recent-first.
+    """
+    try:
+        result = subprocess.run(
+            ["aws", "s3", "ls", f"{checkpoint_base.rstrip('/')}/evaluation/"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return []
+    if result.returncode != 0:
+        return []
+
+    eval_run_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}[_T]")
+    subfolders = []
+    for line in result.stdout.splitlines():
+        if " PRE " in line:
+            token = line.split(" PRE ", 1)[1].strip().rstrip("/")
+            if eval_run_pattern.match(token):
+                subfolders.append(token)
+    return sorted(subfolders, reverse=True)
+
+
 def download_summaries(
     checkpoint_s3_path: str,
     task_name: str,
     campaign_name: str,
     output_dir: Path,
+    eval_id: str | None = None,
 ) -> list[Path]:
     """Download all summary.yaml files for a task."""
     import shutil
@@ -56,17 +85,30 @@ def download_summaries(
     task_dir.mkdir(parents=True, exist_ok=True)
 
     # Try multiple paths to find the rollouts - stop after finding data
-    # IMPORTANT: Check task-specific path FIRST for multi-task evaluation support
-    # This is where run_inference_bundle.sh uploads results when LAUNCH_TASK_NAME is set.
+    # IMPORTANT: Check eval_id paths FIRST, then task-specific, then legacy.
     checkpoint_base = checkpoint_s3_path.rstrip("/")
-    paths_to_check = [
-        # Task-specific path (for multi-task evaluation on same checkpoint)
-        f"{checkpoint_base}/evaluation/{task_name}/rollouts/",
-        # Legacy path (for single-task evaluation)
-        f"{checkpoint_base}/evaluation/rollouts/",
-        f"{checkpoint_base}/evaluation/summary/",
-        f"{checkpoint_base}/evaluation/{campaign_name}/artifacts/rollouts/",
-    ]
+
+    paths_to_check: list[str] = []
+
+    # If an explicit eval_id is given, check that first
+    if eval_id:
+        paths_to_check.append(f"{checkpoint_base}/evaluation/{eval_id}/{task_name}/rollouts/")
+        paths_to_check.append(f"{checkpoint_base}/evaluation/{eval_id}/rollouts/")
+    else:
+        # Auto-discover eval_id subfolders (most recent first)
+        for subfolder in _list_evaluation_subfolders(checkpoint_base):
+            paths_to_check.append(f"{checkpoint_base}/evaluation/{subfolder}/{task_name}/rollouts/")
+            paths_to_check.append(f"{checkpoint_base}/evaluation/{subfolder}/rollouts/")
+
+    # Legacy paths (no eval_id)
+    paths_to_check.extend(
+        [
+            f"{checkpoint_base}/evaluation/{task_name}/rollouts/",
+            f"{checkpoint_base}/evaluation/rollouts/",
+            f"{checkpoint_base}/evaluation/summary/",
+            f"{checkpoint_base}/evaluation/{campaign_name}/artifacts/rollouts/",
+        ]
+    )
 
     for s3_base in paths_to_check:
         print(f"  Checking: {s3_base}")
@@ -169,6 +211,14 @@ def main():
         help="Local directory to save results (default: ./rollout_summaries)",
     )
 
+    parser.add_argument(
+        "--eval-id",
+        type=str,
+        default=None,
+        help="Eval ID to look up results under (e.g., 2026-02-19_a1b2c3d4). "
+        "If omitted, auto-discovers eval_id subfolders from S3.",
+    )
+
     args = parser.parse_args()
 
     # Parse tasks
@@ -190,6 +240,7 @@ def main():
             task_name=task_name,
             campaign_name=args.campaign_name,
             output_dir=args.output_dir,
+            eval_id=args.eval_id,
         )
 
         if not summary_files:

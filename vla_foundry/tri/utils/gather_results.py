@@ -2160,30 +2160,69 @@ def find_video_file(base_folder: str, demo_name: str) -> str | None:
         return None
 
 
-def _list_evaluation_subfolders(checkpoint_base: str) -> list[str]:
-    """List subfolders under evaluation/ that look like eval-run IDs (e.g. 2026-02-27_6c090584).
+def _discover_eval_id_paths(checkpoint_base: str, task_name: str) -> list[str]:
+    """Discover eval_id subdirectories under evaluation/ on S3.
 
-    Returns subfolder names (not full paths) that are *not* plausible task names
-    (i.e. they match a date-hash or UUID-like pattern).
+    Eval campaigns write results to paths like:
+        {checkpoint}/evaluation/{subfolder?}/{eval_id}/{task}/rollouts/
+    where eval_id looks like "2026-02-19_a1b2c3d4".
+
+    This function lists the evaluation/ prefix on S3 and finds any dated
+    eval_id directories — both at the top level and nested inside subfolders —
+    then builds candidate paths for the given task.
+    Results are sorted most-recent-first so the latest eval is tried first.
     """
-    result = subprocess.run(
-        ["aws", "s3", "ls", f"{checkpoint_base.rstrip('/')}/evaluation/"],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    if result.returncode != 0:
-        return []
+    eval_id_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}_[0-9a-f]{8}/$")
+    paths: list[str] = []
 
-    # Pattern: date_hash like "2026-02-27_6c090584" or similar non-task-name folders
-    eval_run_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}[_T]")
-    subfolders = []
-    for line in result.stdout.splitlines():
-        if " PRE " in line:
-            token = line.split(" PRE ", 1)[1].strip().rstrip("/")
-            if eval_run_pattern.match(token):
-                subfolders.append(token)
-    return subfolders
+    def _list_s3_prefixes(s3_prefix: str) -> list[str]:
+        try:
+            result = subprocess.run(
+                ["aws", "s3", "ls", s3_prefix],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            if result.returncode != 0:
+                return []
+            prefixes = []
+            for line in result.stdout.splitlines():
+                if " PRE " in line:
+                    token = line.split(" PRE ", 1)[1].strip()
+                    prefixes.append(token)
+            return prefixes
+        except subprocess.TimeoutExpired:
+            sys.stderr.write(f"[gather_results] Timed out listing S3 prefix '{s3_prefix}'\n")
+            return []
+        except OSError as exc:
+            sys.stderr.write(f"[gather_results] Failed to invoke AWS CLI for prefix '{s3_prefix}': {exc}\n")
+            return []
+
+    def _add_paths_for_eval_ids(base_prefix: str, eval_ids: list[str]):
+        for eid in sorted(eval_ids, reverse=True):
+            if task_name:
+                paths.append(f"{base_prefix}{eid}/{task_name}/rollouts/")
+                paths.append(f"{base_prefix}{eid}/{task_name}/summary/")
+            paths.append(f"{base_prefix}{eid}/rollouts/")
+            paths.append(f"{base_prefix}{eid}/summary/")
+
+    eval_root = f"{checkpoint_base}/evaluation/"
+    top_prefixes = _list_s3_prefixes(eval_root)
+
+    # Eval IDs directly under evaluation/
+    top_eval_ids = [p.rstrip("/") for p in top_prefixes if eval_id_pattern.match(p)]
+    _add_paths_for_eval_ids(eval_root, top_eval_ids)
+
+    # Check non-eval-id subfolders for eval_ids nested inside them.
+    # Cap to avoid unbounded S3 list calls on checkpoints with many legacy task directories.
+    subfolder_names = [p.rstrip("/") for p in top_prefixes if not eval_id_pattern.match(p)]
+    for subfolder in sorted(subfolder_names)[:50]:
+        sub_prefix = f"{eval_root}{subfolder}/"
+        sub_prefixes = _list_s3_prefixes(sub_prefix)
+        sub_eval_ids = [p.rstrip("/") for p in sub_prefixes if eval_id_pattern.match(p)]
+        _add_paths_for_eval_ids(sub_prefix, sub_eval_ids)
+
+    return paths
 
 
 def download_summaries(
@@ -2203,10 +2242,22 @@ def download_summaries(
     dir_name = job_name if job_name else task_name
     task_dir = output_dir / dir_name
 
-    # Track the S3 path used for this cache to invalidate if it changes
+    # Try multiple paths to find the rollouts
+    checkpoint_base = checkpoint_s3_path.rstrip("/")
+    # Remove checkpoint.ckpt or checkpoint.pt suffix if present
+    if checkpoint_base.endswith("/checkpoint.ckpt") or checkpoint_base.endswith("/checkpoint.pt"):
+        checkpoint_base = checkpoint_base.rsplit("/", 1)[0]
+
+    # Auto-discover eval_id subdirectories (most recent first)
+    paths_to_check = _discover_eval_id_paths(checkpoint_base, task_name)
+
+    # Build a cache key that includes the most recent eval_id path.  Using only
+    # checkpoint_s3_path would give a stale cache hit when a *new* eval_id run is
+    # written (the checkpoint hasn't changed, but the best source path has).
+    cache_key = paths_to_check[0] if paths_to_check else checkpoint_s3_path
     cache_metadata_path = task_dir / ".cache_metadata.txt"
 
-    # Check if cache is valid (same S3 path was used)
+    # Check if cache is valid (same source path was used)
     cache_valid = False
     if (
         use_cache
@@ -2215,8 +2266,8 @@ def download_summaries(
         and cache_metadata_path.exists()
     ):
         try:
-            stored_s3_path = cache_metadata_path.read_text().strip()
-            if stored_s3_path == checkpoint_s3_path:
+            stored_cache_key = cache_metadata_path.read_text().strip()
+            if stored_cache_key == cache_key:
                 cache_valid = True
         except Exception:
             pass
@@ -2224,39 +2275,14 @@ def download_summaries(
     if cache_valid:
         return str(task_dir)
 
-    # If cache is disabled or invalid (different S3 path), force a clean re-download
+    # If cache is disabled or invalid (different source path), force a clean re-download
     # to avoid mixing stale files with new sync.
     if task_dir.exists() and (not use_cache or not cache_valid):
         shutil.rmtree(task_dir)
 
     task_dir.mkdir(parents=True, exist_ok=True)
 
-    # Try multiple paths to find the rollouts
-    checkpoint_base = checkpoint_s3_path.rstrip("/")
-    # Remove checkpoint.ckpt or checkpoint.pt suffix if present
-    if checkpoint_base.endswith("/checkpoint.ckpt") or checkpoint_base.endswith("/checkpoint.pt"):
-        checkpoint_base = checkpoint_base.rsplit("/", 1)[0]
-
-    # Auto-discover date-hash evaluation subfolders from S3
-    eval_subfolders = _list_evaluation_subfolders(checkpoint_base)
-
-    # Common paths where rollouts might be found
-    # First check paths with task_name (more specific), then fallback to paths without
-    paths_to_check: list[str] = []
-    for subfolder in eval_subfolders:
-        if task_name:
-            paths_to_check.extend(
-                [
-                    f"{checkpoint_base}/evaluation/{subfolder}/{task_name}/rollouts/",
-                    f"{checkpoint_base}/evaluation/{subfolder}/{task_name}/summary/",
-                ]
-            )
-        paths_to_check.extend(
-            [
-                f"{checkpoint_base}/evaluation/{subfolder}/rollouts/",
-                f"{checkpoint_base}/evaluation/{subfolder}/summary/",
-            ]
-        )
+    # Legacy paths (no eval_id)
     if task_name:
         paths_to_check.extend(
             [
@@ -2296,10 +2322,10 @@ def download_summaries(
         except Exception:
             pass
 
-    # Save the S3 path used for cache validation on future runs
+    # Save the cache key for validation on future runs
     if found:
         with contextlib.suppress(Exception):
-            cache_metadata_path.write_text(checkpoint_s3_path)
+            cache_metadata_path.write_text(cache_key)
 
     if not found:
         # If we didn't find anything, clean up empty dir?
