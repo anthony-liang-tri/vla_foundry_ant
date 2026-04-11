@@ -22,8 +22,6 @@ class ImageCaptionPipeline(BaseWebDatasetPipeline):
         self.augmentations = Augmentations(
             data_params.augmentation, image_size=getattr(data_params, "image_size", None)
         )
-        tokenizer = getattr(self.processor, "tokenizer", None)
-        self.eos_token = getattr(tokenizer, "eos_token", "") or ""
 
     def create_pipeline(self, datastring: str, checkpoint_num: int):
         cache_cfg = self.data_params.dataset_cache

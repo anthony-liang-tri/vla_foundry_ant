@@ -133,14 +133,6 @@ def get_processor(data_params: DataParams):
                 processor.image_seq_len = data_params.img_num_tokens
                 if hasattr(processor, "image_processor") and hasattr(processor.image_processor, "do_image_splitting"):
                     processor.image_processor.do_image_splitting = False
-        # Set image size so the processor resizes to match the ViT input size
-        image_size = getattr(data_params, "image_size", None)
-        if image_size and hasattr(processor, "image_processor"):
-            if hasattr(processor.image_processor, "max_image_size"):
-                processor.image_processor.max_image_size = {"longest_edge": int(image_size)}
-                processor.image_processor.size = {"longest_edge": int(image_size)}
-            elif "paligemma" in str(data_params.processor).lower():
-                processor.image_processor.size = {"height": int(image_size), "width": int(image_size)}
         return processor
     else:
         raise ValueError(f"{data_params.processor} not yet supported.")
