@@ -535,16 +535,14 @@ class ZzkPolicyInference:
             if isinstance(model_input[key], torch.Tensor):
                 model_input[key] = model_input[key].to(self.device)
 
+        # Filter to tensor keys only to avoid forwarding non-model fields (e.g. raw images, metadata)
+        model_input_tensors = {k: v for k, v in model_input.items() if isinstance(v, torch.Tensor)}
+
         # Generate actions
         with torch.no_grad():
             model_output = self.model.generate_actions(
-                input_ids=model_input.get("input_ids"),
-                pixel_values=model_input.get("pixel_values"),
-                actions=model_input.get("actions"),
-                attention_mask=model_input.get("attention_mask"),
+                **model_input_tensors,
                 num_inference_steps=self.num_flow_steps,
-                past_mask=model_input["past_mask"],
-                proprioception=model_input.get("proprioception"),
             )
 
         # Denormalize actions - need to denormalize each field separately

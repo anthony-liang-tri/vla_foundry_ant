@@ -45,7 +45,6 @@ def validate_one_checkpoint(
     model_was_training = model.training
     model.eval()
 
-    model_dtype = next(model.parameters()).dtype
     total_val_loss = torch.zeros(1, device=device)
     total_samples = 0
 
@@ -69,7 +68,7 @@ def validate_one_checkpoint(
 
         with torch.no_grad():
             # Prepare model inputs and targets (including chunking) using batch handler.
-            model_inputs, targets, mask = batch_handler.prepare_inputs_and_targets(batch, device, model_dtype, cfg)
+            model_inputs, targets, mask = batch_handler.prepare_inputs_and_targets(batch, device, cfg)
             # Use returned mask if present, otherwise check for future_mask (diffusion policy)
             if mask is None:
                 mask = model_inputs.get("future_mask", None)

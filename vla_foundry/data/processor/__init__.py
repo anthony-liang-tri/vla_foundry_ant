@@ -71,6 +71,27 @@ class DebugProcessor:
         }
 
 
+def apply_chat_template(processor, num_images, text):
+    """Format text with image placeholders using the processor's chat template.
+
+    Uses the chat template (from processor or tokenizer) when available so that
+    model-specific image tokens (e.g. Qwen's <|vision_start|>/<|image_pad|>)
+    are inserted correctly.  Falls back to a plain ``<image>`` prefix for
+    processors without a chat template (e.g. PaliGemma).
+    """
+    content = [{"type": "image"} for _ in range(num_images)]
+    content.append({"type": "text", "text": text})
+    messages = [{"role": "user", "content": content}]
+
+    if getattr(processor, "chat_template", None):
+        return processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
+    elif hasattr(processor, "tokenizer") and getattr(processor.tokenizer, "chat_template", None):
+        return processor.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
+    else:
+        image_tokens = "<image> " * num_images
+        return image_tokens + text
+
+
 def get_processor(data_params: DataParams):
     if data_params.processor == "stable_diffusion":
         return StableDiffusionProcessor(
@@ -101,32 +122,12 @@ def get_processor(data_params: DataParams):
                 "TOKENIZERS_PARALLELISM", "true" if data_params.hf_fast_tokenizers_parallelism else "false"
             )
         processor = AutoProcessor.from_pretrained(data_params.processor, use_fast=data_params.use_hf_fast_tokenizer)
-        # Different processors use different attribute names for image sequence length.
-        # PaliGemma uses image_seq_length; SmolVLM (and others) use image_seq_len.
-        if hasattr(processor, "image_seq_length"):
+        # PaliGemma uses image_seq_length to control how many image token
+        # placeholders the processor inserts per image.  Set it from config
+        # so the token count matches the ViT feature count.
+        is_paligemma = "paligemma" in data_params.processor.lower()
+        if hasattr(processor, "image_seq_length") and data_params.img_num_tokens and is_paligemma:
             processor.image_seq_length = data_params.img_num_tokens
-        else:
-            processor.image_seq_len = data_params.img_num_tokens
-
-        # Set image size for processors if specified in config
-        processor_name = str(data_params.processor) if hasattr(data_params, "processor") else ""
-        image_size = data_params.get("image_size")
-        if image_size and hasattr(processor, "image_processor"):
-            # Different processors expect different size formats
-            if "paligemma" in processor_name or "clip" in processor_name:
-                # PaliGemma expects height and width
-                processor.image_processor.size = {"height": int(image_size), "width": int(image_size)}
-                logging.debug(
-                    f"Set processor image_processor.size to {{'height': {image_size}, 'width': {image_size}}}"
-                )
-            elif hasattr(processor.image_processor, "max_image_size"):
-                # SmolVLM uses max_image_size for the tile/ViT input size.
-                # Also set size (input cap) to image_size so the image fits in exactly 1 tile.
-                processor.image_processor.max_image_size = {"longest_edge": int(image_size)}
-                processor.image_processor.size = {"longest_edge": int(image_size)}
-                logging.debug(
-                    f"Set processor image_processor.max_image_size and size to {{'longest_edge': {image_size}}}"
-                )
         return processor
     else:
         raise ValueError(f"{data_params.processor} not yet supported.")

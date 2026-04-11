@@ -323,6 +323,7 @@ class Transformer(TransformerBase):
         top_k=50,
         eos_token_id=None,
         use_cache=True,
+        **kwargs,
     ):
         """
         Generate tokens autoregressively with KV-cache support.

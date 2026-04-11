@@ -26,7 +26,7 @@ import pytest
 from vla_foundry.eval.data_loading import aggregate_episodes, collect_scenario_indices, load_episodes
 from vla_foundry.eval.run_evaluation import check_no_overlapping_results, parse_episode_range
 
-FIXTURES = Path(__file__).resolve().parent / "test_assets" / "dashboard_fixtures"
+FIXTURES = Path(__file__).resolve().parent.parent / "test_assets" / "dashboard_fixtures"
 
 
 # ---------------------------------------------------------------------------

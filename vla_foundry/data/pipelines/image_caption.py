@@ -3,7 +3,7 @@ import webdataset as wds
 from vla_foundry.data.augmentations.decode_and_augment import Augmentations
 from vla_foundry.data.pipelines.base import BaseWebDatasetPipeline
 from vla_foundry.data.pipelines.webdataset_cache import get_tarfile_to_samples_stage
-from vla_foundry.data.processor import get_processor
+from vla_foundry.data.processor import apply_chat_template, get_processor
 from vla_foundry.data.utils import deterministic_shuffle, log_and_continue
 from vla_foundry.params.base_data_params import DataParams
 
@@ -18,6 +18,7 @@ class ImageCaptionPipeline(BaseWebDatasetPipeline):
     def __init__(self, modality: str, data_params: DataParams, batch_size: int):
         super().__init__(modality, data_params, batch_size)
         self.processor = get_processor(data_params)
+        self.processor_kwargs = getattr(data_params, "processor_kwargs", {})
         self.augmentations = Augmentations(
             data_params.augmentation, image_size=getattr(data_params, "image_size", None)
         )
@@ -43,7 +44,12 @@ class ImageCaptionPipeline(BaseWebDatasetPipeline):
             wds.select(filter_no_caption_or_no_image),
             wds.map(self.augmentations.decode_and_augment_sample, handler=log_and_continue),
             wds.rename(image="jpg;png;jpeg;webp", text="txt"),
-            wds.map(lambda sample: {**sample, "text": "<image> " + sample["text"] + self.eos_token}),
+            wds.map(
+                lambda sample: {
+                    **sample,
+                    "text": apply_chat_template(self.processor, 1, sample["text"]),
+                }
+            ),
             wds.batched(self.batch_size, partial=False),
             wds.map(
                 lambda sample: self.processor(
@@ -53,15 +59,12 @@ class ImageCaptionPipeline(BaseWebDatasetPipeline):
                     padding="max_length",
                     padding_side="right",
                     max_length=self.data_params.seq_len + 1,
+                    **self.processor_kwargs,
                 ),
                 handler=log_and_continue,
             ),
-            wds.map(
-                lambda sample: {
-                    "input_ids": sample["input_ids"],
-                    "attention_mask": sample["attention_mask"],
-                    "pixel_values": sample["pixel_values"],
-                }
-            ),
+            # BatchFeature is preserved so batch_handlers can use .to(device)
+            # to forward all VLM-specific tensor keys automatically.
+            wds.map(lambda sample: (sample.pop("text", None), sample)[1]),
         ]
         return pipeline

@@ -12,6 +12,7 @@ import torch
 from libero.libero import benchmark, get_libero_path
 from libero.libero.envs import OffScreenRenderEnv
 
+from vla_foundry.data.processor import apply_chat_template
 from vla_foundry.eval.runners.base_eval_runner import BaseEvalRunner
 
 
@@ -55,7 +56,7 @@ class LiberoRunner(BaseEvalRunner):
                 self.past_images.extend(curr_image)
 
         num_images = len(curr_image) * (self.num_past_image_timesteps + 1)
-        text = self.processor.apply_chat_template(num_images, self.instruction)
+        text = apply_chat_template(self.processor.vlm_processor, num_images, self.instruction)
 
         processed = self.processor.vlm_processor(
             images=self.past_images + curr_image, text=text, padding=True, return_tensors="pt"

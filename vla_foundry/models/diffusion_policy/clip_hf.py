@@ -55,24 +55,14 @@ class CLIPHF(BaseModel):
         if pixel_values is None:
             vision_output = None
             image_embeds = None
-        elif pixel_values.ndim == 5:
-            # Handle multiple images per sample
-            # [B, N, C, H, W] -> [B*N, C, H, W]
-            num_images = pixel_values.shape[1]
-            pixel_values = pixel_values.view(-1, *pixel_values.shape[2:])
-            vision_output = self.model.vision_model(pixel_values).pooler_output
-            image_embeds = self.model.visual_projection(vision_output)
-            # [B*N, C, ...] -> [B, N, C, ...]
-            vision_output = vision_output.view(input_ids.shape[0], num_images, -1, *vision_output.shape[2:])
-            image_embeds = image_embeds.view(input_ids.shape[0], num_images, -1, *image_embeds.shape[2:])
-            image_embeds = F.normalize(image_embeds, dim=-1)
         else:
-            assert pixel_values.ndim == 4, "Pixel values must be of dimension 4 or 5 but got {pixel_values.ndim}"
+            # CLIP processor always returns [B*N, C, H, W] for multiple images
+            assert pixel_values.ndim == 4, f"Expected 4D pixel_values [B*N, C, H, W], got {pixel_values.ndim}D"
             vision_output = self.model.vision_model(pixel_values).pooler_output
             image_embeds = self.model.visual_projection(vision_output)
+            # [B*N, D] -> [B, N, D]
+            image_embeds = image_embeds.view(input_ids.shape[0], -1, *image_embeds.shape[1:])
             image_embeds = F.normalize(image_embeds, dim=-1)
-
-        # Zero out embeddings where mask is False
         if image_embeds is not None and attention_mask_images is not None:
             # [B, N, D] * [B, N, 1] -> [B, N, D]
             image_embeds = image_embeds * attention_mask_images.unsqueeze(-1)

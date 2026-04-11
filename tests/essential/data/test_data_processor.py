@@ -73,6 +73,132 @@ class TestProcessorPaliGemma:
         # Check that pixel values are not all the same (should have variation)
         assert result["pixel_values"].std() > 0.1, "Pixel values should have reasonable variation"
 
+    def test_processor_paligemma_multi_batch_multi_image(self):
+        """Test PaliGemma processor with multiple batches and multiple images per sample."""
+        params = load_experiment_params_from_yaml("tests/essential/params/dummy_configs/dummy_vlm_config.yaml")
+        object.__setattr__(params.data, "processor", "google/paligemma-3b-pt-224")
+        paligemma_processor = get_processor(params.data)
+
+        # Load test images
+        image1 = Image.open("tests/essential/shared/chonky_cat.png")
+        image2 = Image.open("tests/essential/shared/chonky_cat.png")
+        if image1.mode == "RGBA":
+            image1 = image1.convert("RGB")
+        if image2.mode == "RGBA":
+            image2 = image2.convert("RGB")
+
+        batch_size = 3
+        num_images_per_sample = 2
+        num_img_tokens = paligemma_processor.image_seq_length
+
+        # Test with multiple batches, each with multiple images
+        result = paligemma_processor(
+            images=[
+                [image1, image2],
+                [image1, image2],
+                [image1, image2],
+            ],  # 3 samples, 2 images each
+            text=[
+                "<image><image> What is in these images?",
+                "<image><image> Describe these images.",
+                "<image><image> What do you see?",
+            ],
+            return_tensors="pt",
+            padding="max_length",
+            padding_side="right",
+            padding_value=0,
+            max_length=params.data.seq_len + num_img_tokens * num_images_per_sample,
+        )
+
+        # Test pixel_values shape for multi-batch multi-image
+        assert "pixel_values" in result
+        # PaliGemma returns [B*N, C, H, W] for multiple images
+        assert result["pixel_values"].dim() == 4, "pixel_values should be 4D for multi-image"
+        assert result["pixel_values"].shape[0] == batch_size * num_images_per_sample, (
+            f"Should have {batch_size * num_images_per_sample} images (B*N)"
+        )
+        assert result["pixel_values"].shape[1] == 3, "Should have 3 color channels"
+        assert result["pixel_values"].shape[2] == 224, "Height should be 224"
+        assert result["pixel_values"].shape[3] == 224, "Width should be 224"
+
+        # Test input_ids shape
+        assert "input_ids" in result
+        assert result["input_ids"].shape[0] == batch_size, f"Should have {batch_size} samples"
+
+    def test_processor_paligemma_image_seq_length_only_for_paligemma(self):
+        """Test that image_seq_length is only set for PaliGemma processors."""
+        # Test PaliGemma
+        params = load_experiment_params_from_yaml("tests/essential/params/dummy_configs/dummy_vlm_config.yaml")
+        object.__setattr__(params.data, "processor", "google/paligemma-3b-pt-224")
+        object.__setattr__(params.data, "img_num_tokens", 256)
+        paligemma_processor = get_processor(params.data)
+
+        # Should have image_seq_length set
+        assert hasattr(paligemma_processor, "image_seq_length")
+        assert paligemma_processor.image_seq_length == 256
+
+        # Test non-PaliGemma processor: our code must not override image_seq_length
+        # with img_num_tokens, regardless of whether the processor has the attribute natively.
+        sentinel = -1
+        object.__setattr__(params.data, "processor", "HuggingFaceTB/SmolVLM2-256M-Video-Instruct")
+        object.__setattr__(params.data, "img_num_tokens", sentinel)
+        smolvlm_processor = get_processor(params.data)
+        assert getattr(smolvlm_processor, "image_seq_length", None) != sentinel
+
+
+class TestProcessorMultiImage:
+    """Test CLIP and PaliGemma processor handling of multiple images per sample."""
+
+    def test_clip_processor_multi_batch_multi_image(self):
+        """Test CLIP processor with multiple batches and multiple images per sample."""
+        params = load_experiment_params_from_yaml("tests/essential/params/dummy_configs/dummy_vlm_config.yaml")
+        object.__setattr__(params.data, "processor", "openai/clip-vit-base-patch32")
+        clip_processor = get_processor(params.data)
+
+        # Load test images
+        image1 = Image.open("tests/essential/shared/chonky_cat.png")
+        image2 = Image.open("tests/essential/shared/chonky_cat.png")
+        if image1.mode == "RGBA":
+            image1 = image1.convert("RGB")
+        if image2.mode == "RGBA":
+            image2 = image2.convert("RGB")
+
+        batch_size = 3
+        num_images_per_sample = 2
+
+        # Test with multiple batches, each with multiple images
+        result = clip_processor(
+            images=[
+                [image1, image2],
+                [image1, image2],
+                [image1, image2],
+            ],  # 3 samples, 2 images each
+            text=[
+                "What is in these images?",
+                "Describe these images.",
+                "What do you see?",
+            ],
+            return_tensors="pt",
+            padding="max_length",
+            max_length=77,
+        )
+
+        # Test pixel_values shape for multi-batch multi-image
+        assert "pixel_values" in result
+        # CLIP returns [B*N, C, H, W] for multiple images
+        assert result["pixel_values"].dim() == 4, "pixel_values should be 4D for multi-image"
+        assert result["pixel_values"].shape[0] == batch_size * num_images_per_sample, (
+            f"Should have {batch_size * num_images_per_sample} images (B*N)"
+        )
+        assert result["pixel_values"].shape[1] == 3, "Should have 3 color channels"
+        # CLIP uses 224x224 images
+        assert result["pixel_values"].shape[2] == 224, "Height should be 224"
+        assert result["pixel_values"].shape[3] == 224, "Width should be 224"
+
+        # Test input_ids shape
+        assert "input_ids" in result
+        assert result["input_ids"].shape[0] == batch_size, f"Should have {batch_size} samples"
+
 
 # Implement this after the Stable Diffusion is merged in
 # class TestProcessorStableDiffusion:

@@ -150,6 +150,7 @@ class VLM(TransformerBase):
         top_k: int = 50,
         eos_token_id: int = None,
         use_cache: bool = True,
+        **kwargs,
     ) -> torch.Tensor:
         """
         Generate tokens autoregressively with KV-cache support.
@@ -164,6 +165,8 @@ class VLM(TransformerBase):
             top_k: Top-k sampling (0 = disabled)
             eos_token_id: End of sequence token id for early stopping
             use_cache: Whether to use KV-cache for faster generation
+            **kwargs: Additional arguments for the forward pass. The processor used with this VLM
+                might generate extra kwargs (e.g., image_grid_thw for Qwen) that need to be passed through.
         """
         # Add batch dimension if needed
         if input_ids.dim() == 1:
@@ -181,6 +184,7 @@ class VLM(TransformerBase):
             pixel_values=pixel_values,
             attention_mask=attn_mask,
             use_cache=use_cache,
+            **kwargs,
         )
         logits = outputs.logits[:, -1, :]
         if use_cache:
@@ -232,6 +236,7 @@ class VLM(TransformerBase):
                         attention_mask=attn_mask,
                         past_key_values=past_key_values,
                         use_cache=use_cache,
+                        **kwargs,
                     )
                 else:
                     # No cache: reprocess full sequence

@@ -52,6 +52,7 @@ class TextUntokenizedDataParams(DataParams):
 @dataclass(frozen=True)
 class ImageCaptionDataParams(DataParams):
     processor: str = field(default="google/paligemma-3b-pt-224")
+    processor_kwargs: dict = field(default_factory=dict)
     processor_loaded = None
     img_num_tokens: int = field(default=256)
     image_size: int = field(default=224)
@@ -94,6 +95,8 @@ class RoboticsDataParams(DataParams):
     dataset_statistics: list[str] = field(default_factory=list)
     val_dataset_statistics: list[str] = field(default_factory=list)
     processor: str = field(default=None)
+    processor_kwargs: dict = field(default_factory=dict)
+
     img_num_tokens: int = field(default=256)
     image_size: int = field(default=224)
     max_text_seq_len: int | None = field(default=None)
