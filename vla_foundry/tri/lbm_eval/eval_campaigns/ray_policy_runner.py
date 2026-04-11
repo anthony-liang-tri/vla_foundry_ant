@@ -908,24 +908,34 @@ def verify_job_success_via_s3(
             print("    S3 path not found or no access")
             return False, 0, expected_count
 
-        # Count summary.yaml files (each rollout has one)
+        # Count result files (each rollout has one)
         lines = result.stdout.strip().split("\n") if result.stdout.strip() else []
-        # Match either summary.yaml (vla_foundry) or resolved_scenario.yaml (lbm-eval-oss)
-        pattern = re.compile(r"demonstration_(\d+)/(summary\.yaml|resolved_scenario\.yaml)")
+        # Match Anzu format: demonstration_N/(summary.yaml|resolved_scenario.yaml)
+        anzu_pattern = re.compile(r"demonstration_(\d+)/(summary\.yaml|resolved_scenario\.yaml)")
+        # Match OSS format: rollouts/<timestamp>/results.json
+        oss_pattern = re.compile(r"rollouts/[^/]+/results\.json")
         found_indices: set[int] = set()
+        oss_result_count = 0
         for line in lines:
-            match = pattern.search(line)
-            if match:
-                found_indices.add(int(match.group(1)))
-        matching_indices = found_indices.intersection(expected_indices) if expected_indices else set()
-        summary_count = len(matching_indices)
+            anzu_match = anzu_pattern.search(line)
+            if anzu_match:
+                found_indices.add(int(anzu_match.group(1)))
+            if oss_pattern.search(line):
+                oss_result_count += 1
 
-        print(f"    Expected indices: {sorted(expected_indices) if expected_indices else 'none'}")
-        print(f"    Found indices in S3: {sorted(found_indices) if found_indices else 'none'}")
-        print(f"    Matching indices: {sorted(matching_indices) if matching_indices else 'none'}")
+        # Use Anzu index matching if we found Anzu-format results, else use OSS count
+        if found_indices:
+            matching_indices = found_indices.intersection(expected_indices) if expected_indices else set()
+            summary_count = len(matching_indices)
+            print(f"    Expected indices: {sorted(expected_indices) if expected_indices else 'none'}")
+            print(f"    Found indices in S3: {sorted(found_indices) if found_indices else 'none'}")
+            print(f"    Matching indices: {sorted(matching_indices) if matching_indices else 'none'}")
+        else:
+            # OSS format: count results.json files directly
+            summary_count = oss_result_count
+            print(f"    Found {oss_result_count} OSS results.json files in S3")
 
-        # Consider success if we found at least some results
-        # We use a threshold of 50% to account for partial uploads or job splits
+        # Consider success if we found at least 50% of expected results
         min_required = max(1, expected_count // 2) if expected_count > 0 else 1
         success = summary_count >= min_required
 
@@ -1060,6 +1070,9 @@ def build_docker_command(args, job, repetition=0):
     # S3 output path customization
     if getattr(args, "evaluation_subfolder", None):
         envs["LAUNCH_EVALUATION_SUBFOLDER"] = args.evaluation_subfolder
+
+    # Pass docker image name for eval provenance stamping
+    envs["DOCKER_IMAGE"] = args.image
 
     # Unique eval ID to prevent result overwrites
     if getattr(args, "eval_id", None):

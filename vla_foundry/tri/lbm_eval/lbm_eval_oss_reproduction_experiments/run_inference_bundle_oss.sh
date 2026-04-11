@@ -1007,9 +1007,19 @@ fi
 # When using the baked-in /opt/vla_foundry checkout, copy it to a writable
 # location so editable installs (uv run) can update egg-info metadata.
 INFERENCE_WORKDIR_RUNTIME="${INFERENCE_WORKDIR}"
-# Always use writable copy on Ray clusters to prevent concurrent containers
-# from corrupting each other's .venv on shared mounts.
-INFERENCE_USE_WRITABLE_COPY=1
+if [[ "${INFERENCE_USE_WRITABLE_COPY}" != "1" ]]; then
+  workspace_writable=0
+  if [[ -w "${INFERENCE_WORKDIR}" ]]; then
+    workspace_writable=1
+  fi
+  if [[ -d "${INFERENCE_WORKDIR}/.venv" && ! -w "${INFERENCE_WORKDIR}/.venv" ]]; then
+    workspace_writable=0
+  fi
+  if [[ "${workspace_writable}" -eq 0 ]]; then
+    echo "Inference workspace ${INFERENCE_WORKDIR} is not writable; enabling writable copy."
+    INFERENCE_USE_WRITABLE_COPY=1
+  fi
+fi
 
 if [[ "${INFERENCE_USE_WRITABLE_COPY}" == "1" ]]; then
   INFERENCE_WORKDIR_RUNTIME="${INFERENCE_WRITABLE_COPY_DIR:-/tmp/vla_foundry_runtime}"
@@ -1019,18 +1029,11 @@ if [[ "${INFERENCE_USE_WRITABLE_COPY}" == "1" ]]; then
   # OPTIMIZATION: Exclude unnecessary files and allow partial copy (ignore unreadable temp files)
   rsync -a --ignore-errors --no-perms --no-owner --no-group \
     --exclude ".git" \
+    --exclude ".venv" \
     --exclude "__pycache__" \
     --exclude "tests" \
     --exclude "*.pyc" \
     "${INFERENCE_WORKDIR}/" "${INFERENCE_WORKDIR_RUNTIME}/" || true
-
-  # If no .venv was copied (shared mount didn't have one), create it locally.
-  if [[ ! -d "${INFERENCE_WORKDIR_RUNTIME}/.venv" ]]; then
-    echo "No .venv found after rsync, creating venv in writable copy..."
-    cd "${INFERENCE_WORKDIR_RUNTIME}"
-    uv sync --python 3.12 --link-mode=copy --group inference --group visualization 2>&1 || true
-    echo "venv created at ${INFERENCE_WORKDIR_RUNTIME}/.venv"
-  fi
 fi
 
 # If the inference command is fully overridden (e.g., LBM policy server), uv may
@@ -1063,7 +1066,7 @@ fi
 # from a writable workspace (otherwise it may try to create /opt/vla_foundry/.venv).
 inference_cmd=(bash -c "
   cd '${INFERENCE_WORKDIR_RUNTIME}'
-  TORCH_LIB_PATH=\"${INFERENCE_WORKDIR_RUNTIME}/.venv/lib/python3.12/site-packages/torch/lib\"
+  TORCH_LIB_PATH=\"${INFERENCE_WORKDIR_RUNTIME}/.venv/lib/python3.10/site-packages/torch/lib\"
   export LD_LIBRARY_PATH=\"\${TORCH_LIB_PATH}:\${LD_LIBRARY_PATH:-}\"
   ${BUILT_INFERENCE_CMD}"
 )
@@ -1390,20 +1393,16 @@ upload_and_cleanup() {
       s3_base="${s3_base%/*}"
     fi
 
-    # Build S3 destination path: {checkpoint}/evaluation/{subfolder?}/{eval_id?}/{task?}/rollouts/
-    local s3_subfolder_prefix=""
+    # Build S3 path: {checkpoint}/evaluation/{subfolder}/{task}/rollouts/
+    local subfolder_prefix=""
     if [[ -n "${LAUNCH_EVALUATION_SUBFOLDER:-}" ]]; then
-      s3_subfolder_prefix="${LAUNCH_EVALUATION_SUBFOLDER}/"
+      subfolder_prefix="${LAUNCH_EVALUATION_SUBFOLDER}/"
     fi
-    local s3_eval_id_prefix=""
-    if [[ -n "${LAUNCH_EVAL_ID:-}" ]]; then
-      s3_eval_id_prefix="${LAUNCH_EVAL_ID}/"
-    fi
-    local s3_task_prefix=""
     if [[ -n "${LAUNCH_TASK_NAME:-}" ]]; then
-      s3_task_prefix="${LAUNCH_TASK_NAME}/"
+      local s3_dest="${s3_base}/evaluation/${subfolder_prefix}${LAUNCH_TASK_NAME}/rollouts/"
+    else
+      local s3_dest="${s3_base}/evaluation/${subfolder_prefix}rollouts/"
     fi
-    local s3_dest="${s3_base}/evaluation/${s3_subfolder_prefix}${s3_eval_id_prefix}${s3_task_prefix}rollouts/"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Uploading rollouts to ${s3_dest}"
 
     if "${aws_cmd[@]}" s3 sync "${CURRENT_SAVE_DIR}" "${s3_dest}" --quiet; then

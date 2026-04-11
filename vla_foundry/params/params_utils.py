@@ -1,7 +1,8 @@
 import logging
+import typing
 from collections.abc import Sequence as SequenceType
 from dataclasses import fields, is_dataclass
-from typing import Any, get_origin
+from typing import Any, get_args, get_origin
 
 from draccus.choice_types import CHOICE_TYPE_KEY
 from draccus.parsers.decoding import decode_choice_class
@@ -71,6 +72,21 @@ def _strip_unknown_keys(raw_value: Any, cls: type[Any], path: SequenceType[str])
             if field_cls is not None:
                 # Recursively strip unknown keys from nested dataclass
                 cleaned[field_name] = _strip_unknown_keys(cleaned[field_name], field_type, (*path, field_name))
+            elif get_origin(field_type) is typing.Union:
+                # For Union types, strip keys not valid for any member of the union
+                nested_val = cleaned[field_name]
+                union_allowed = {CHOICE_TYPE_KEY}
+                for union_arg in get_args(field_type):
+                    arg_cls = _resolve_dataclass(union_arg)
+                    if arg_cls is not None:
+                        union_allowed.update(f.name for f in fields(arg_cls))
+                removed = [k for k in nested_val if k not in union_allowed]
+                if removed:
+                    readable_path = ".".join((*path, field_name))
+                    logging.warning(
+                        f"Ignoring unknown config fields {', '.join(sorted(removed))} while decoding {readable_path}."
+                    )
+                cleaned[field_name] = {k: v for k, v in nested_val.items() if k in union_allowed}
 
     return cleaned
 

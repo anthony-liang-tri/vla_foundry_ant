@@ -43,6 +43,8 @@ available_node_types:
       TagSpecifications:
         - ResourceType: instance
           Tags:
+            - Key: tri.owner
+              Value: ${OWNER_EMAIL}
             - Key: tri.owner.email
               Value: ${OWNER_EMAIL}
             - Key: tri.project
@@ -57,6 +59,9 @@ available_node_types:
         - subnet-061b8c531b13bd862
         - subnet-0f9b062323aab5634
         - subnet-0d76b84386cd2d69c
+      MetadataOptions:
+        HttpTokens: required        # IMDSv2 required by org SCP
+        HttpEndpoint: enabled
       IamInstanceProfile:
         Arn: arn:aws:iam::682769330988:instance-profile/dev-ecs-instance-role
       KeyName: manip-perception
@@ -87,6 +92,9 @@ file_mounts:
   # Cluster scripts - mounted directly from repo (run_evaluation_campaign.py runs from repo root)
   "/home/ubuntu/anzu_vla_foundry/run_inference_bundle.sh": "vla_foundry/tri/lbm_eval/eval_campaigns/cluster_scripts/run_inference_bundle.sh"
   "/home/ubuntu/anzu_vla_foundry/launch_sim.sh": "vla_foundry/tri/lbm_eval/eval_campaigns/cluster_scripts/launch_sim.sh"
+  "/home/ubuntu/anzu_vla_foundry/postprocess_results.py": "vla_foundry/tri/lbm_eval/eval_campaigns/cluster_scripts/postprocess_results.py"
+  # OSS eval patched bundle - delegates to baked-in launch_sim.sh for correct S3 subfolder paths
+  "/home/ubuntu/anzu_vla_foundry/run_inference_bundle_oss.sh": "vla_foundry/tri/lbm_eval/lbm_eval_oss_reproduction_experiments/run_inference_bundle_oss.sh"
   # Secrets from repo root (gitignored)
   "/home/ubuntu/anzu_vla_foundry/secrets.env": "secrets.env"
   "/home/ubuntu/vla_foundry_mount": "~/.cache/vla_foundry/ray_mount"
@@ -286,7 +294,9 @@ worker_setup_commands:
     
     aws ecr get-login-password --region us-east-1 \
       | sudo docker login --username AWS --password-stdin 682769330988.dkr.ecr.us-east-1.amazonaws.com
-    
+    aws ecr get-login-password --region us-east-1 \
+      | sudo docker login --username AWS --password-stdin 124224456861.dkr.ecr.us-east-1.amazonaws.com
+
     # Clean up stale data from previous runs (safe operations only - no pkill)
     # This enables reusing stopped instances without filling up disk
     echo "Cleaning up stale data from previous runs..."

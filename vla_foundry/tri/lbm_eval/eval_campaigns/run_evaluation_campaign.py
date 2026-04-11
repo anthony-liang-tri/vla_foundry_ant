@@ -60,6 +60,21 @@ else:
 SUCCESS_CONFIDENCE_LEVEL = 0.9
 SUCCESS_METRICS_FILENAME = "success_metrics.json"
 
+# OSS simulator preset: lbm-eval-oss Docker image with baked-in launch_sim.sh
+# Activated via --use-oss-sim CLI flag or docker.sim_type: "oss" in campaign YAML
+OSS_SIM_DOCKER_IMAGE = "toyotaresearch/lbm-eval-oss:vla-foundry"
+OSS_SIM_DOCKER_RUN_EXTRA_ARGS = (
+    "-v /home/ubuntu/anzu_vla_foundry/run_inference_bundle.sh"
+    ":/usr/local/bin/run_inference_bundle.sh:ro"
+    " -v /home/ubuntu/anzu_vla_foundry/postprocess_results.py"
+    ":/opt/anzu/postprocess_results.py:ro"
+    " -e RECORD_VIDEO=1"
+    " -e VIDEO_CAMERA=mosaic"
+    " -e VIDEO_FPS=10"
+    " -e INFERENCE_USE_WRITABLE_COPY=1"
+)
+OSS_SIM_EVALUATION_SUBFOLDER = "oss_eval"
+
 
 @dataclass
 class CampaignConfig:
@@ -137,6 +152,30 @@ class CampaignConfig:
     # Useful for organizing results from different evaluation campaigns (e.g., "oss", "stage3")
     evaluation_subfolder: str | None = None
 
+    # Extra arguments appended to `docker run` (e.g., volume mounts for a custom bundle script)
+    docker_run_extra_args: str | None = None
+
+    # Simulator type: "standard" (default) or "oss"
+    # When "oss", applies OSS sim overrides (docker image, skip_mount_scripts, etc.)
+    # Can be set via YAML (docker.sim_type) or CLI (--use-oss-sim).
+    sim_type: str = "standard"
+
+    def apply_oss_sim_overrides(self):
+        """Apply all overrides needed for the OSS simulator (lbm-eval-oss)."""
+        self.docker_image = OSS_SIM_DOCKER_IMAGE
+        self.skip_mount_scripts = True
+        if self.docker_run_extra_args:
+            self.docker_run_extra_args = f"{self.docker_run_extra_args} {OSS_SIM_DOCKER_RUN_EXTRA_ARGS}"
+        else:
+            self.docker_run_extra_args = OSS_SIM_DOCKER_RUN_EXTRA_ARGS
+        if not self.evaluation_subfolder:
+            self.evaluation_subfolder = OSS_SIM_EVALUATION_SUBFOLDER
+        results_name = self.results_dir.name
+        if not any(marker in results_name for marker in ["oss_eval", "_oss", "oss_"]):
+            self.results_dir = self.results_dir.parent / (results_name + "_oss")
+        if not self.cluster_name.endswith("_oss"):
+            self.cluster_name = self.cluster_name + "_oss"
+
     @classmethod
     def from_yaml(cls, yaml_path: Path) -> "CampaignConfig":
         """Load configuration from YAML file."""
@@ -199,7 +238,7 @@ class CampaignConfig:
             num_samples=data["evaluation"]["num_samples"],
             start_index=data["evaluation"]["start_index"],
             max_samples_per_job=data["evaluation"].get("max_samples_per_job", 20),
-            docker_image=data["docker"]["image"],
+            docker_image=data.get("docker", {}).get("image", ""),
             launch_config_file=data["evaluation"].get("launch_config_file"),
             launch_scenario=data["evaluation"]["launch_scenario"],
             launch_script=data["evaluation"]["launch_script"],
@@ -232,6 +271,10 @@ class CampaignConfig:
             skip_mount_scripts=data.get("docker", {}).get("skip_mount_scripts", False),
             # S3 output path customization
             evaluation_subfolder=data.get("evaluation", {}).get("evaluation_subfolder"),
+            # Extra docker run arguments (e.g., volume mounts for custom bundle scripts)
+            docker_run_extra_args=data.get("docker", {}).get("run_extra_args"),
+            # Simulator type: "standard" or "oss"
+            sim_type=data.get("docker", {}).get("sim_type", "standard"),
         )
 
 
@@ -926,6 +969,10 @@ class EvaluationCampaign:
         # S3 output path customization
         if self.config.evaluation_subfolder:
             cmd.extend(["--evaluation-subfolder", self.config.evaluation_subfolder])
+
+        # Extra docker run arguments (e.g., volume mounts for custom bundle scripts)
+        if self.config.docker_run_extra_args:
+            cmd.extend(["--docker-run-extra-args", self.config.docker_run_extra_args])
 
         # Unique eval ID for this campaign run
         cmd.extend(["--eval-id", self.eval_id])
@@ -2041,12 +2088,11 @@ df -h /tmp 2>/dev/null || true
             print(f"  No rollouts found under {rollouts_root}; skipping success metric aggregation.")
             return None
 
-        # Look for summaries in any checkpoint subdirectory or directly in rollouts
-        # New structure: rollouts_root/{checkpoint_name}/demonstration_*/summary.yaml
-        # Old structure: rollouts_root/demonstration_*/summary.yaml
+        # Look for summaries at any depth under rollouts_root.
+        # Covers standard (*/demonstration_*/), flat (demonstration_*/),
+        # and OSS (*/{task_snake_case}/demonstration_*/) layouts.
         summary_globs = [
-            str(rollouts_root / "*" / "demonstration_*" / "summary.yaml"),
-            str(rollouts_root / "demonstration_*" / "summary.yaml"),
+            str(rollouts_root / "**" / "demonstration_*" / "summary.yaml"),
         ]
         success_array = collect_multi_rollout_success_stats(summary_globs)
         successes = int(success_array[0, 0])
@@ -2063,9 +2109,14 @@ df -h /tmp 2>/dev/null || true
             scipy_interval=True,
         )
         success_rate = successes / rollouts if rollouts else 0.0
+        # Resolve checkpoint paths for metadata
+        checkpoint_paths = self._resolve_checkpoint_paths()
+
         metrics = {
             "campaign_name": self.config.campaign_name,
+            "description": self.config.description,
             "timestamp_utc": datetime.datetime.utcnow().isoformat() + "Z",
+            # Results
             "successes": successes,
             "rollouts": rollouts,
             "success_rate": success_rate,
@@ -2073,6 +2124,20 @@ df -h /tmp 2>/dev/null || true
             "confidence_interval": {
                 "lower": lower_bound,
                 "upper": upper_bound,
+            },
+            # Eval configuration (for reproducibility)
+            "config": {
+                "checkpoints": checkpoint_paths,
+                "docker_image": self.config.docker_image,
+                "sim_type": self.config.sim_type,
+                "num_samples": self.config.num_samples,
+                "start_index": self.config.start_index,
+                "num_flow_steps": self.config.num_flow_steps,
+                "open_loop_steps": self.config.open_loop_steps,
+                "evaluation_subfolder": self.config.evaluation_subfolder,
+                "tasks_file": self.config.tasks_file,
+                "vla_repo_ref": self.config.vla_repo_ref,
+                "max_retries": self.config.max_retries,
             },
             "summary_globs": summary_globs,
         }
@@ -2310,14 +2375,22 @@ df -h /tmp 2>/dev/null || true
                     cmd += ["--exclude", "*.pkl"]
             else:
                 # Default behavior: download only per-demonstration summaries.
-                cmd += ["--exclude", "*", "--include", "demonstration_*/summary.yaml"]
+                # Include both flat (standard sim) and nested (OSS sim) layouts.
+                cmd += [
+                    "--exclude",
+                    "*",
+                    "--include",
+                    "demonstration_*/summary.yaml",
+                    "--include",
+                    "*/demonstration_*/summary.yaml",
+                ]
             result = subprocess.run(cmd, capture_output=True, text=True, env=env)
             if result.returncode != 0:
                 stderr = result.stderr.strip()
                 print(f"      WARNING: Failed to download from {s3_rollouts}: {stderr}")
             else:
-                # Count downloaded demonstrations
-                demos = list(local_dir.glob("demonstration_*"))
+                # Count downloaded demonstrations (flat or nested under task subdir)
+                demos = list(local_dir.glob("demonstration_*")) + list(local_dir.glob("*/demonstration_*"))
                 if demos:
                     total_downloaded += len(demos)
                     print(f"      Downloaded {len(demos)} demonstration(s)")
@@ -2573,6 +2646,12 @@ def main():
         action="store_true",
         help="Download episode .pkl files from S3 (implies --download-rollouts)",
     )
+    parser.add_argument(
+        "--use-oss-sim",
+        action="store_true",
+        help="Use the OSS simulator (lbm-eval-oss) instead of anzu-vla-foundry. "
+        "Overrides docker image, mounts standard bundle, and separates results.",
+    )
 
     args = parser.parse_args()
 
@@ -2592,14 +2671,26 @@ def main():
     if args.download_episode_pkls:
         config.download_episode_pkls = True
 
+    # Apply OSS sim overrides if requested via CLI flag or YAML sim_type
+    if args.use_oss_sim or config.sim_type == "oss":
+        config.apply_oss_sim_overrides()
+        print("  [oss-sim] OSS simulator mode enabled")
+        print(f"  [oss-sim]   Docker image: {config.docker_image}")
+        print(f"  [oss-sim]   Evaluation subfolder: {config.evaluation_subfolder}")
+        print(f"  [oss-sim]   Results dir: {config.results_dir}")
+
     # Store skip_cluster_startup flag
     skip_cluster_startup = args.skip_cluster_startup
 
     if args.dry_run:
         print("Configuration loaded successfully:")
         print(f"  Campaign: {config.campaign_name}")
+        print(f"  Sim type: {config.sim_type}")
+        print(f"  Docker image: {config.docker_image}")
         print(f"  Workers: {config.num_workers}")
         print(f"  Samples: {config.num_samples}")
+        if config.evaluation_subfolder:
+            print(f"  Evaluation subfolder: {config.evaluation_subfolder}")
         print(f"  Results: {config.results_dir}")
         return 0
 
