@@ -189,8 +189,13 @@ def localize_paths(data: Any, base_path: str) -> Any:
     Loops through data and converts s3 paths to local paths.
     """
     if isinstance(data, str) and data.startswith("s3"):
-        base_path_s3, _ = os.path.split(data)
-        return data.replace(base_path_s3, base_path)
+        _, filename = os.path.split(data)
+        if not filename:
+            return data
+        local_path = os.path.join(base_path, filename)
+        if os.path.exists(local_path):
+            return local_path
+        return data
     elif isinstance(data, list):
         return [localize_paths(item, base_path) for item in data]
     elif isinstance(data, dict):

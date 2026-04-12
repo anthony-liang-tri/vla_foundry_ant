@@ -34,7 +34,7 @@ model_params = load_params_from_yaml(
     ModelParams,
     "s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/stable_diffusion_cfg/2025_10_16-04_40_27-model_stable_diffusion-lr_0.001-bsz_1024/config.yaml",
 )
-model = create_model(model_params)
+model = create_model(model_params, load_pretrained=False)
 ckpt = "s3://tri-ml-datasets/scratch/sedrick.keh/sedrick/stable_diffusion_cfg/2025_10_16-04_40_27-model_stable_diffusion-lr_0.001-bsz_1024/checkpoints/checkpoint_12.pt"
 load_model_checkpoint(model, ckpt)
 

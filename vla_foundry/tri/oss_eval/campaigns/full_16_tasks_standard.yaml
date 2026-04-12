@@ -1,0 +1,45 @@
+# Full 16-task evaluation on the standard (anzu-vla-foundry) simulator.
+# Same tasks/checkpoint as full_16_tasks.yaml but uses the standard sim.
+# Can run concurrently with an OSS eval — uses a separate cluster name.
+
+campaign_name: "standard_eval_full_16"
+description: "Full 16-task diffusion policy evaluation with standard sim"
+
+cluster:
+  config_file: "vla_foundry/tri/lbm_eval/eval_campaigns/ray_policy_runner_cluster.yaml"
+  num_workers: 256
+  aws_profile: "manip-cluster"
+  owner_email: "katherine.liu@tri.global"
+  cluster_name: "lbm_eval_katherine_liu_standard_full"
+  teardown_on_completion: true
+  teardown_on_failure: true
+
+evaluation:
+  jobs_per_gpu: 1
+  tasks_file: "vla_foundry/tri/oss_eval/task_lists/all_16.txt"
+  num_samples: 200
+  start_index: 0
+  launch_scenario: "GrpcServerToSim"
+  launch_script: "launch_sim.sh"
+  num_flow_steps: 8
+  open_loop_steps: 8
+  device: "cuda"
+  entrypoint_num_gpus: 1
+  entrypoint_memory: 62277025792
+  max_retries: 3
+  inference_aws_profile: "sagemaker"
+
+docker:
+  image: "682769330988.dkr.ecr.us-east-1.amazonaws.com/anzu-vla-foundry:latest"
+
+vla_foundry:
+  repo_url: "git@github.com:TRI-ML/vla_foundry_internal.git"
+  ref: "main"
+  local_dir: "~/.cache/vla_foundry/ray_mount"
+  use_remote_repo: true
+  remote_dir: "/home/ubuntu/vla_foundry_mount"
+  mount_target: "/opt/vla_foundry"
+
+output:
+  results_dir: "results/standard_eval_full_16"
+  save_job_logs: true

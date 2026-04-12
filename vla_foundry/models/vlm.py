@@ -265,7 +265,11 @@ def create_vlm(model_params: VLMParams, load_pretrained: bool = True):
         if model_params.transformer.type == "transformer"
         else TransformerHF(model_params.transformer, load_pretrained=load_pretrained)
     )
-    vit = ViT(model_params.vit) if model_params.vit.type == "vit" else ViTHF(model_params.vit)
+    vit = (
+        ViT(model_params.vit)
+        if model_params.vit.type == "vit"
+        else ViTHF(model_params.vit, load_pretrained=load_pretrained)
+    )
 
     # Load sub-component checkpoints if specified (skip when load_pretrained=False,
     # e.g. during inference where a full checkpoint is loaded separately)
@@ -284,5 +288,4 @@ def create_vlm(model_params: VLMParams, load_pretrained: bool = True):
         sd = unwrap_state_dict(checkpoint["state_dict"])
         vit.load_state_dict(sd, strict=True)
         logging.info(f"=> loaded ViT weights from '{model_params.vit.resume_from_checkpoint}'")
-
     return VLM(model_params, transformer, vit)

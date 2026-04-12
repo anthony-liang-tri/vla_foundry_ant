@@ -1,0 +1,52 @@
+# OSS Eval Smoke Test
+# Quick pipeline verification: 2 tasks, 5 episodes each, 2 workers.
+#
+# Uses docker.sim_type: "oss" which automatically applies:
+#   - lbm-eval-oss Docker image (OSS simulator)
+#   - skip_mount_scripts (keep baked-in launch_sim.sh)
+#   - mount standard run_inference_bundle.sh + video recording
+#   - evaluation_subfolder: "oss_eval" for S3 result separation
+
+campaign_name: "oss_eval_smoke_test"
+description: "Smoke test: 2 tasks x 5 episodes on lbm-eval-oss with vla_foundry inference"
+
+cluster:
+  config_file: "vla_foundry/tri/lbm_eval/eval_campaigns/ray_policy_runner_cluster.yaml"
+  num_workers: 2
+  aws_profile: "manip-cluster"
+  # REQUIRED: set your @tri.global email for AWS cost attribution
+  owner_email: ""
+  teardown_on_completion: true
+  teardown_on_failure: true
+
+evaluation:
+  jobs_per_gpu: 1
+  tasks_file: "vla_foundry/tri/oss_eval/task_lists/smoke_test.txt"
+  num_samples: 5
+  start_index: 0
+  launch_scenario: "GrpcServerToSim"
+  launch_script: "launch_sim.sh"
+  num_flow_steps: 8
+  open_loop_steps: 8
+  device: "cuda"
+  entrypoint_num_gpus: 1
+  entrypoint_memory: 62277025792
+  max_retries: 3
+  inference_aws_profile: "sagemaker"
+
+docker:
+  # sim_type is set automatically by launch.sh via --use-oss-sim flag.
+  # To run this on the standard sim instead, use launch_campaign.sh directly.
+  image: "682769330988.dkr.ecr.us-east-1.amazonaws.com/anzu-vla-foundry:latest"
+
+vla_foundry:
+  repo_url: "git@github.com:TRI-ML/vla_foundry_internal.git"
+  ref: "main"
+  local_dir: "~/.cache/vla_foundry/ray_mount"
+  use_remote_repo: true
+  remote_dir: "/home/ubuntu/vla_foundry_mount"
+  mount_target: "/opt/vla_foundry"
+
+output:
+  results_dir: "results/oss_eval_smoke_test"
+  save_job_logs: true

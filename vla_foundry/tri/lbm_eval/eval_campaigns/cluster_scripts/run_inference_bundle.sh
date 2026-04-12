@@ -223,11 +223,13 @@ monitor_progress() {
   while true; do
     sleep "${check_interval}"
 
-    # Count completed episodes
+    # Count completed episodes (standard .pkl or OSS demonstration_N/ formats)
     local current_count=0
     if [[ -d "${save_dir}" ]]; then
       for idx in $(seq "${start_idx}" "$((end_idx - 1))"); do
         if [[ -f "${save_dir}/episode_${idx}.pkl" ]]; then
+          current_count=$((current_count + 1))
+        elif find "${save_dir}" -type d -name "demonstration_${idx}" 2>/dev/null | grep -q .; then
           current_count=$((current_count + 1))
         fi
       done
@@ -789,9 +791,12 @@ get_next_episode_index() {
   fi
 
   # Find the highest completed episode index within our range
+  # Check both standard (.pkl) and OSS (demonstration_N/) formats
   local highest_completed=-1
   for idx in $(seq "${start_idx}" "$((end_idx - 1))"); do
     if [[ -f "${save_dir}/episode_${idx}.pkl" ]]; then
+      highest_completed="${idx}"
+    elif find "${save_dir}" -type d -name "demonstration_${idx}" 2>/dev/null | grep -q .; then
       highest_completed="${idx}"
     fi
   done
@@ -1002,19 +1007,9 @@ fi
 # When using the baked-in /opt/vla_foundry checkout, copy it to a writable
 # location so editable installs (uv run) can update egg-info metadata.
 INFERENCE_WORKDIR_RUNTIME="${INFERENCE_WORKDIR}"
-if [[ "${INFERENCE_USE_WRITABLE_COPY}" != "1" ]]; then
-  workspace_writable=0
-  if [[ -w "${INFERENCE_WORKDIR}" ]]; then
-    workspace_writable=1
-  fi
-  if [[ -d "${INFERENCE_WORKDIR}/.venv" && ! -w "${INFERENCE_WORKDIR}/.venv" ]]; then
-    workspace_writable=0
-  fi
-  if [[ "${workspace_writable}" -eq 0 ]]; then
-    echo "Inference workspace ${INFERENCE_WORKDIR} is not writable; enabling writable copy."
-    INFERENCE_USE_WRITABLE_COPY=1
-  fi
-fi
+# Always use writable copy on Ray clusters to prevent concurrent containers
+# from corrupting each other's .venv on shared mounts.
+INFERENCE_USE_WRITABLE_COPY=1
 
 if [[ "${INFERENCE_USE_WRITABLE_COPY}" == "1" ]]; then
   INFERENCE_WORKDIR_RUNTIME="${INFERENCE_WRITABLE_COPY_DIR:-/tmp/vla_foundry_runtime}"
@@ -1024,11 +1019,18 @@ if [[ "${INFERENCE_USE_WRITABLE_COPY}" == "1" ]]; then
   # OPTIMIZATION: Exclude unnecessary files and allow partial copy (ignore unreadable temp files)
   rsync -a --ignore-errors --no-perms --no-owner --no-group \
     --exclude ".git" \
-    --exclude ".venv" \
     --exclude "__pycache__" \
     --exclude "tests" \
     --exclude "*.pyc" \
     "${INFERENCE_WORKDIR}/" "${INFERENCE_WORKDIR_RUNTIME}/" || true
+
+  # If no .venv was copied (shared mount didn't have one), create it locally.
+  if [[ ! -d "${INFERENCE_WORKDIR_RUNTIME}/.venv" ]]; then
+    echo "No .venv found after rsync, creating venv in writable copy..."
+    cd "${INFERENCE_WORKDIR_RUNTIME}"
+    uv sync --python 3.12 --link-mode=copy --group inference --group visualization 2>&1 || true
+    echo "venv created at ${INFERENCE_WORKDIR_RUNTIME}/.venv"
+  fi
 fi
 
 # If the inference command is fully overridden (e.g., LBM policy server), uv may
@@ -1061,19 +1063,27 @@ fi
 # from a writable workspace (otherwise it may try to create /opt/vla_foundry/.venv).
 inference_cmd=(bash -c "
   cd '${INFERENCE_WORKDIR_RUNTIME}'
-  TORCH_LIB_PATH=\"${INFERENCE_WORKDIR_RUNTIME}/.venv/lib/python3.10/site-packages/torch/lib\"
+  TORCH_LIB_PATH=\"${INFERENCE_WORKDIR_RUNTIME}/.venv/lib/python3.12/site-packages/torch/lib\"
   export LD_LIBRARY_PATH=\"\${TORCH_LIB_PATH}:\${LD_LIBRARY_PATH:-}\"
   ${BUILT_INFERENCE_CMD}"
 )
+
+# Capture vla_foundry git info for eval provenance
+VLA_FOUNDRY_GIT_SHA="unknown"
+VLA_FOUNDRY_GIT_BRANCH="unknown"
+if [[ -d "${INFERENCE_WORKDIR}/.git" ]]; then
+  VLA_FOUNDRY_GIT_SHA=$(git -C "${INFERENCE_WORKDIR}" rev-parse HEAD 2>/dev/null || echo "unknown")
+  VLA_FOUNDRY_GIT_BRANCH=$(git -C "${INFERENCE_WORKDIR}" branch --show-current 2>/dev/null || echo "unknown")
+fi
+export VLA_FOUNDRY_GIT_SHA VLA_FOUNDRY_GIT_BRANCH
 
 # Debug: Show which vla_foundry code is being used
 echo "===== vla_foundry code verification ====="
 echo "INFERENCE_WORKDIR: ${INFERENCE_WORKDIR}"
 echo "INFERENCE_WORKDIR_RUNTIME: ${INFERENCE_WORKDIR_RUNTIME}"
-if [[ -d "${INFERENCE_WORKDIR}/.git" ]]; then
-  echo "Git info at INFERENCE_WORKDIR:"
-  git -C "${INFERENCE_WORKDIR}" log -1 --oneline 2>/dev/null || echo "  (could not read git log)"
-  git -C "${INFERENCE_WORKDIR}" branch --show-current 2>/dev/null || echo "  (could not read branch)"
+if [[ "${VLA_FOUNDRY_GIT_SHA}" != "unknown" ]]; then
+  echo "Git SHA: ${VLA_FOUNDRY_GIT_SHA}"
+  echo "Git branch: ${VLA_FOUNDRY_GIT_BRANCH}"
 else
   echo "INFERENCE_WORKDIR is not a git repo (likely a mount without .git)"
 fi
@@ -1347,6 +1357,18 @@ else
   elif [[ "${final_status}" -ne 0 ]]; then
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] WARNING: Job failed with status ${final_status}. Completed episodes: $((COMPLETED_EPISODE_IDX - ORIGINAL_START_IDX)) of $((ORIGINAL_END_IDX - ORIGINAL_START_IDX))"
   fi
+fi
+
+# Post-process results: convert OSS format + stamp eval provenance.
+# Converts results-*.json → summary.yaml (no-op for standard sim),
+# then stamps eval_metadata into all summary.yaml and results-*.json.
+if [[ -n "${CURRENT_SAVE_DIR:-}" ]] && [[ -d "${CURRENT_SAVE_DIR}" ]]; then
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] Post-processing result files..."
+  POSTPROCESS_SCRIPT="/opt/anzu/postprocess_results.py"
+  if [[ ! -f "${POSTPROCESS_SCRIPT}" ]]; then
+    POSTPROCESS_SCRIPT="/home/ubuntu/anzu_vla_foundry/postprocess_results.py"
+  fi
+  python3 "${POSTPROCESS_SCRIPT}" "${CURRENT_SAVE_DIR}" 2>&1 || echo "WARNING: Failed to post-process results"
 fi
 
 # Upload rollouts to S3 and clean up disk space

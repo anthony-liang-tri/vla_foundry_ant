@@ -206,12 +206,14 @@ def test_immutable_params():
     assert params.model.hidden_dim == 1000
 
 
-def test_localize_paths_string_s3_to_local():
-    """Test that s3 paths are converted to local paths with new base path."""
+def test_localize_paths_string_s3_to_local(tmp_path):
+    """Test that s3 paths are converted to local paths when local file exists."""
     s3_path = "s3://bucket/some/dir/file.yaml"
-    base_path = "/local/base"
+    base_path = str(tmp_path)
+    # Create the target file so os.path.exists returns True
+    (tmp_path / "file.yaml").touch()
     result = localize_paths(s3_path, base_path)
-    assert result == "/local/base/file.yaml"
+    assert result == f"{base_path}/file.yaml"
 
 
 def test_localize_paths_string_non_s3():
@@ -222,24 +224,27 @@ def test_localize_paths_string_non_s3():
     assert result == local_path
 
 
-def test_localize_paths_list():
-    """Test that s3 paths in lists are converted."""
+def test_localize_paths_list(tmp_path):
+    """Test that s3 paths in lists are converted when local files exist."""
     data = [
         "s3://bucket/dir1/file1.yaml",
         "/local/file.yaml",
         "s3://bucket/dir2/file2.yaml",
     ]
-    base_path = "/local/base"
+    base_path = str(tmp_path)
+    # Create the target files so os.path.exists returns True
+    (tmp_path / "file1.yaml").touch()
+    (tmp_path / "file2.yaml").touch()
     result = localize_paths(data, base_path)
     assert result == [
-        "/local/base/file1.yaml",
+        f"{base_path}/file1.yaml",
         "/local/file.yaml",
-        "/local/base/file2.yaml",
+        f"{base_path}/file2.yaml",
     ]
 
 
-def test_localize_paths_nested_dict():
-    """Test that s3 paths in nested dictionaries are converted."""
+def test_localize_paths_nested_dict(tmp_path):
+    """Test that s3 paths in nested dictionaries are converted when local files exist."""
     data = {
         "model": {
             "checkpoint": "s3://bucket/models/checkpoint.pt",
@@ -253,17 +258,21 @@ def test_localize_paths_nested_dict():
         },
         "other": "value",
     }
-    base_path = "/local/base"
+    base_path = str(tmp_path)
+    # Create the target files so os.path.exists returns True
+    (tmp_path / "checkpoint.pt").touch()
+    (tmp_path / "manifest.jsonl").touch()
+    (tmp_path / "file.yaml").touch()
     result = localize_paths(data, base_path)
-    assert result["model"]["checkpoint"] == "/local/base/checkpoint.pt"
+    assert result["model"]["checkpoint"] == f"{base_path}/checkpoint.pt"
     assert result["model"]["config"] == "/local/config.yaml"
-    assert result["data"]["manifest"] == "/local/base/manifest.jsonl"
-    assert result["data"]["nested"]["path"] == "/local/base/file.yaml"
+    assert result["data"]["manifest"] == f"{base_path}/manifest.jsonl"
+    assert result["data"]["nested"]["path"] == f"{base_path}/file.yaml"
     assert result["other"] == "value"
 
 
-def test_localize_paths_mixed_list_and_dict():
-    """Test that s3 paths in mixed structures are converted."""
+def test_localize_paths_mixed_list_and_dict(tmp_path):
+    """Test that s3 paths in mixed structures are converted when local files exist."""
     data = {
         "datasets": [
             "s3://bucket/dataset1/manifest.jsonl",
@@ -271,11 +280,13 @@ def test_localize_paths_mixed_list_and_dict():
         ],
         "weights": [0.5, 0.5],
     }
-    base_path = "/local/base"
+    base_path = str(tmp_path)
+    # Create the target file so os.path.exists returns True
+    (tmp_path / "manifest.jsonl").touch()
     result = localize_paths(data, base_path)
     assert result["datasets"] == [
-        "/local/base/manifest.jsonl",
-        "/local/base/manifest.jsonl",
+        f"{base_path}/manifest.jsonl",
+        f"{base_path}/manifest.jsonl",
     ]
     assert result["weights"] == [0.5, 0.5]
 
@@ -292,7 +303,8 @@ def test_load_params_from_yaml_without_localize():
 
 def test_load_params_from_yaml_with_localize():
     """Test loading params from yaml with path localization."""
-    # Create a temporary yaml file with s3 paths
+    # Create a temporary directory with a yaml file and the checkpoint file
+    base_dir = tempfile.mkdtemp()
     config_data = {
         "type": "transformer",
         "hidden_dim": 256,
@@ -303,22 +315,25 @@ def test_load_params_from_yaml_with_localize():
         "resume_from_checkpoint": "s3://bucket/models/checkpoint.pt",
     }
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+    yaml_path = os.path.join(base_dir, "config.yaml")
+    with open(yaml_path, "w") as f:
         yaml.dump(config_data, f)
-        temp_yaml_path = f.name
+
+    # Create checkpoint.pt so localize_paths finds it locally
+    open(os.path.join(base_dir, "checkpoint.pt"), "w").close()
 
     try:
-        params = load_params_from_yaml(ModelParams, temp_yaml_path, localize_params=True)
+        params = load_params_from_yaml(ModelParams, yaml_path, localize_params=True)
         assert params.type == "transformer"
         assert params.hidden_dim == 256
         assert params.n_layers == 4
         # The s3 path should be converted to use the same base directory as the config file
-        base_path = os.path.dirname(temp_yaml_path)
-        assert params.resume_from_checkpoint == f"{base_path}/checkpoint.pt"
+        assert params.resume_from_checkpoint == f"{base_dir}/checkpoint.pt"
     finally:
         # Clean up
-        if os.path.exists(temp_yaml_path):
-            os.unlink(temp_yaml_path)
+        import shutil
+
+        shutil.rmtree(base_dir)
 
 
 def test_load_params_from_yaml_ignores_unknown_fields():
@@ -362,6 +377,9 @@ def test_load_params_from_yaml_with_localize_complex():
     with open(yaml_path, "w") as f:
         yaml.dump(config_data, f)
 
+    # Create checkpoint.pt so localize_paths finds it locally
+    open(os.path.join(base_dir, "checkpoint.pt"), "w").close()
+
     try:
         from vla_foundry.params.model_params import VLMParams
 
@@ -371,10 +389,39 @@ def test_load_params_from_yaml_with_localize_complex():
         assert params.vit.resume_from_checkpoint == f"{base_dir}/checkpoint.pt"
     finally:
         # Clean up
-        if os.path.exists(yaml_path):
-            os.unlink(yaml_path)
-        if os.path.exists(base_dir):
-            os.rmdir(base_dir)
+        import shutil
+
+        shutil.rmtree(base_dir)
+
+
+def test_localize_paths_keeps_s3_when_local_missing(tmp_path):
+    """Test that S3 paths are preserved when the local file does not exist."""
+    s3_path = "s3://bucket/path/to/nonexistent.pt"
+    base_path = str(tmp_path)
+    # Do NOT create nonexistent.pt — the local file should not exist
+    result = localize_paths(s3_path, base_path)
+    assert result == s3_path
+
+
+def test_localize_paths_selective_localization(tmp_path):
+    """Test that only S3 paths whose files exist locally are rewritten."""
+    data = {
+        "existing": "s3://bucket/models/exists.pt",
+        "missing": "s3://bucket/models/missing.pt",
+    }
+    base_path = str(tmp_path)
+    # Only create the file for one of the two paths
+    (tmp_path / "exists.pt").touch()
+    result = localize_paths(data, base_path)
+    assert result["existing"] == f"{base_path}/exists.pt"
+    assert result["missing"] == "s3://bucket/models/missing.pt"
+
+
+def test_localize_paths_trailing_slash_s3(tmp_path):
+    """S3 directory paths (trailing slash) must not be rewritten."""
+    s3_dir = "s3://bucket/path/dir/"
+    result = localize_paths(s3_dir, str(tmp_path))
+    assert result == s3_dir
 
 
 def test_preprocess_params_spartan_decoding():
