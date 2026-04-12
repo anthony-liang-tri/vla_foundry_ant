@@ -6,12 +6,12 @@
 
 ## Results — Anzu Sim
 
-### kushal_nominal_1b_st (16 single-task models, unweighted mean = 22.4%)
+### kushal_nominal_1b_st (16 single-task models, unweighted mean = 24.4%)
 
 | Task | Success / Total | Rate |
 |------|-----------------|------|
-| BimanualPlaceAppleFromBowlIntoBin | 0 / 200 | 0.0% |
-| BimanualPlaceFruitFromBowlIntoBin | 0 / 190 | 0.0% |
+| BimanualPlaceAppleFromBowlIntoBin | 62 / 200 | 31.0% |
+| BimanualPlaceFruitFromBowlIntoBin | 0 / 192 | 0.0% |
 | BimanualPutRedBellPepperInBin | 36 / 200 | 18.0% |
 | BimanualPutSpatulaOnPlateFromDryingRack | 60 / 188 | 31.9% |
 | BimanualPutSpatulaOnPlateFromTable | 66 / 200 | 33.0% |
@@ -26,14 +26,15 @@
 | PutSpatulaInUtensilCrock | 68 / 200 | 34.0% |
 | TurnCupUpsideDown | 53 / 200 | 26.5% |
 | TurnMugRightsideUp | 42 / 200 | 21.0% |
-| **Unweighted Mean** | | **22.4%** |
+| **Unweighted Mean** | | **24.4%** |
 
 > Unweighted mean = average of per-task rates.
-> BimanualPlaceApple, BimanualPlaceFruit, BimanualPutRedBellPepper: corrected with 2k step models (originally evaluated with 10k step models by mistake).
+> BimanualPlaceApple: re-evaluated with correct run (2026_04_12-20_14_15). BimanualPlaceFruit confirmed 0%.
 > PushCoasterToMug has only 109 demos (some jobs failed).
 
 ## S3 Result Paths
 
 Results are spread across 16 checkpoint paths under:
 - 13 tasks: `s3://tri-ml-datasets-uw2/vla_foundry_scratch/models/vla_kushal_nominal/<TaskName>*/evaluation/2026-04-12_kushal_nominal_1b_st_v2/`
-- 3 corrected tasks: `s3://tri-ml-datasets-uw2/vla_foundry_scratch/models/vla_kushal_nominal/<TaskName>*/evaluation/2026-04-12_kushal_nominal_1b_2k_fix/`
+- BimanualPutRedBellPepper: `s3://...BimanualPutRedBellPepperInBin/2026_04_12-08_27_41-.../evaluation/2026-04-12_kushal_nominal_1b_2k_fix/`
+- BimanualPlaceApple + BimanualPlaceFruit: `s3://.../<TaskName>/.../evaluation/2026-04-12_kushal_apple_fruit_reeval/`
