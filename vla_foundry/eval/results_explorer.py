@@ -302,9 +302,7 @@ def create_app(root: Path):
             refresh_btn = gr.Button("Refresh", scale=0, variant="secondary")
 
         # Load documentation markdown once for the Documentation tab.
-        _doc_path = (
-            Path(__file__).resolve().parent.parent.parent / "tutorials" / "sim_evaluation" / "STATISTICAL_COMPARISON.md"
-        )
+        _doc_path = Path(__file__).resolve().parent.parent.parent / "tutorials" / "STATISTICAL_COMPARISON.md"
         _doc_content = _doc_path.read_text() if _doc_path.exists() else "*Documentation not found.*"
 
         with gr.Tabs():
@@ -319,6 +317,7 @@ def create_app(root: Path):
                     "(Bonferroni-corrected at global false positive rate = 0.05 "
                     "for each column). Horizontal lines show posterior means; dots show empirical means. "
                     "Shared CLD letter = not significantly different. "
+                    "`successes / available (budgeted)` annotations are shown below each violin plot. "
                     "See **How Statistical Comparisons Work** in the **Documentation** tab for details.*"
                 )
                 bar_overlay_cb = gr.Checkbox(

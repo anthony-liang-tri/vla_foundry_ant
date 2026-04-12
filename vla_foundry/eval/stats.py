@@ -478,6 +478,7 @@ def model_comparison_chart(
         width: float,
         used: int | None = None,
         budgeted: int | None = None,
+        successes: int | None = None,
     ) -> None:
         samples = draw_samples_from_beta_posterior(arr, rng, n_posterior_samples)
         posterior_mean = float(np.mean(samples))
@@ -518,7 +519,14 @@ def model_comparison_chart(
         )
         shown.add(model)
 
-        # Empirical mean dot
+        # Empirical mean dot with hover tooltip.
+        hover_lines = [f"<b>{model}</b>"]
+        hover_lines.append(f"Empirical: {empirical_mean:.1%}")
+        hover_lines.append(f"Posterior mean: {posterior_mean:.1%}")
+        if successes is not None and used is not None:
+            hover_lines.append(f"Successes: {successes}/{used}")
+        if budgeted is not None:
+            hover_lines.append(f"Budget: {budgeted}")
         fig.add_trace(
             go.Scatter(
                 x=[xp],
@@ -527,7 +535,8 @@ def model_comparison_chart(
                 marker=dict(color="black", size=6, symbol="circle"),
                 legendgroup=model,
                 showlegend=False,
-                hoverinfo="skip",
+                hoverinfo="text",
+                hovertext="<br>".join(hover_lines),
             )
         )
 
@@ -543,19 +552,6 @@ def model_comparison_chart(
                 )
             )
 
-        # "used / budgeted" annotation below the violin.
-        if used is not None and budgeted is not None:
-            annotations.append(
-                dict(
-                    x=xp,
-                    y=-0.06,
-                    text=f"{used}/{budgeted}",
-                    showarrow=False,
-                    textangle=-45,
-                    font=dict(size=11, color="gray"),
-                )
-            )
-
     agg_per_model_min_n = agg_metadata["per_model_min_n"]
     agg_num_common = agg_metadata["num_common_tasks"]
     num_all_tasks = len(pure_tasks)
@@ -566,6 +562,7 @@ def model_comparison_chart(
             xp = ti + (ai - (n - 1) / 2) * (gw / max(n, 1))
             arr = arrays_by_task[task][model]
             per_task_used = len(arr)
+            per_task_successes = int(np.sum(arr))
             per_task_budgeted = max_sample_size_per_model if max_sample_size_per_model is not None else None
             _add_violin(
                 xp,
@@ -575,6 +572,7 @@ def model_comparison_chart(
                 vw,
                 used=per_task_used,
                 budgeted=per_task_budgeted,
+                successes=per_task_successes,
             )
 
     agg_x = len(task_order) + 1
@@ -584,9 +582,10 @@ def model_comparison_chart(
     )
     for model in sorted(agg.keys()):
         ai = all_models.index(model)
-        xp = agg_x + (ai - (n - 1) / 2) * (gw / max(n, 1))
+        xp = agg_x + (ai - (n - 1) / 2) * (gw * 1.5 / max(n, 1))
         model_min = agg_per_model_min_n.get(model, 0)
         agg_used = model_min * agg_num_common if agg_num_common else None
+        agg_successes = int(np.sum(agg[model])) if len(agg[model]) else None
         _add_violin(
             xp,
             model,
@@ -595,19 +594,20 @@ def model_comparison_chart(
             vw * 1.5,
             used=agg_used,
             budgeted=agg_budgeted,
+            successes=agg_successes,
         )
 
     ticks = list(range(len(task_order))) + [agg_x]
-    tick_text = ["<br>" + (t[:25] + "\u2026" if len(t) > 25 else t) for t in task_order] + ["<br>Aggregate"]
+    tick_text = [(t[:25] + "\u2026" if len(t) > 25 else t) for t in task_order] + ["Aggregate"]
 
     fig.update_layout(
         title="Success Rate Distribution (Beta Posterior)",
-        yaxis=dict(title="Success Rate", range=[-0.12, 1.15]),
+        yaxis=dict(title="Success Rate", range=[-0.05, 1.15]),
         xaxis=dict(
             tickangle=-45,
             tickvals=ticks,
             ticktext=tick_text,
-            range=[-0.7, agg_x + 0.7],
+            range=[-0.7, agg_x + 1.0],
         ),
         legend=dict(orientation="h", y=1.02, x=0.5, xanchor="center"),
         annotations=annotations,

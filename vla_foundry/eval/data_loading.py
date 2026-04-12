@@ -12,7 +12,18 @@ Expected directory layout::
                 demonstration_{N}/
                   ...
 
-No external dependencies beyond the standard library.
+An optional ``rename.yaml`` file in the root directory can provide
+short display names for tasks::
+
+    tasks:
+      BimanualPlaceAppleFromBowlIntoBin: Apple→Bin
+      ...
+
+Any task whose ``skill_type`` matches a key exactly will be renamed
+in the loaded episodes.
+
+No external dependencies beyond the standard library (except PyYAML
+when ``rename.yaml`` is present).
 """
 
 from __future__ import annotations
@@ -23,6 +34,28 @@ from collections import Counter
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+
+def _load_rename_config(root: Path) -> dict[str, str]:
+    """Load task rename mapping from ``rename.yaml`` in *root*, if present.
+
+    Returns a dict mapping original task names to display names.
+    Only the ``tasks`` section is used; other keys are ignored.
+    """
+    rename_path = root / "rename.yaml"
+    if not rename_path.exists():
+        return {}
+    try:
+        import yaml
+
+        cfg = yaml.safe_load(rename_path.read_text())
+        task_map = cfg.get("tasks") or {}
+        if task_map:
+            logger.info("Loaded %d task rename(s) from %s", len(task_map), rename_path)
+        return {str(k): str(v) for k, v in task_map.items()}
+    except Exception as exc:
+        logger.warning("Failed to load rename config from %s: %s", rename_path, exc)
+        return {}
 
 
 def find_recordings(task_dir: Path, skill_name: str, demo_id: int) -> dict[str, str | None]:
@@ -238,6 +271,14 @@ def load_episodes(root: Path):
             total,
             breakdown,
         )
+    # Apply task renames from rename.yaml (if present).
+    task_rename = _load_rename_config(root)
+    if task_rename:
+        for ep in episodes:
+            ep["task"] = task_rename.get(ep["task"], ep["task"])
+        pending_by = {(task_rename.get(t, t), m): n for (t, m), n in pending_by.items()}
+        crashed_by = {(task_rename.get(t, t), m): n for (t, m), n in crashed_by.items()}
+
     # Sanity check: no duplicate (task, model, demo_id) triples.
     seen_keys: set[tuple[str, str, int]] = set()
     for ep in episodes:

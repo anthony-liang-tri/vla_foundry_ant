@@ -243,7 +243,7 @@ class TestBuildSuccessArraysBalancedAggregate:
 
 _skip_no_eval_viewer = pytest.mark.skipif(
     not _can_import("sequentialized_barnard_tests"),
-    reason="eval-viewer deps not installed",
+    reason="dashboard deps not installed",
 )
 
 
@@ -296,3 +296,57 @@ class TestComputeCldStepNmax:
         assert "A: 100" in warning
         assert "B: 30" in warning
         assert "balanced" in warning.lower()
+
+
+@_skip_no_eval_viewer
+class TestViolinAnnotations:
+    """Verify that violin annotations show correct successes/used (budgeted) values."""
+
+    def test_per_task_and_aggregate_annotation_values(self):
+        from vla_foundry.eval.stats import model_comparison_chart
+
+        # Deterministic episodes: A has 4 successes out of 5, B has 1 out of 3.
+        eps_a = [{"task": "T1", "model": "A", "success": i < 4} for i in range(5)]
+        eps_b = [{"task": "T1", "model": "B", "success": i < 1} for i in range(3)]
+
+        fig, _ = model_comparison_chart(eps_a + eps_b, max_sample_size_per_model=10, seed=42)
+
+        # Collect non-CLD annotations (CLD letters contain <b> tags).
+        annot_texts = [a.text for a in fig.layout.annotations if "<b>" not in a.text]
+
+        # Per-task: A has 4/5, B has 1/3. Budget = 10 per task.
+        # Aggregate: same as per-task (only 1 task). Budget = 10 * 1 = 10.
+        assert "4/5 (10)" in annot_texts, f"Missing A per-task annotation in {annot_texts}"
+        assert "1/3 (10)" in annot_texts, f"Missing B per-task annotation in {annot_texts}"
+        # Aggregate annotations are identical here (1 task → same counts).
+        # A: per_model_min_n=5, agg successes=4, agg used=5, agg budget=10
+        # B: per_model_min_n=3, agg successes=1, agg used=3, agg budget=10
+        assert annot_texts.count("4/5 (10)") == 2, f"Expected 2x '4/5 (10)' in {annot_texts}"
+        assert annot_texts.count("1/3 (10)") == 2, f"Expected 2x '1/3 (10)' in {annot_texts}"
+
+    def test_multi_task_aggregate_annotations(self):
+        from vla_foundry.eval.stats import model_comparison_chart
+
+        # A: T1 has 3/4, T2 has 2/2. B: T1 has 1/3, T2 has 3/5.
+        eps = (
+            [{"task": "T1", "model": "A", "success": i < 3} for i in range(4)]
+            + [{"task": "T2", "model": "A", "success": True} for _ in range(2)]
+            + [{"task": "T1", "model": "B", "success": i < 1} for i in range(3)]
+            + [{"task": "T2", "model": "B", "success": i < 3} for i in range(5)]
+        )
+
+        fig, _ = model_comparison_chart(eps, max_sample_size_per_model=10, seed=42)
+        annot_texts = [a.text for a in fig.layout.annotations if "<b>" not in a.text]
+
+        # Per-task annotations (full data, budget=10 per task):
+        assert "3/4 (10)" in annot_texts  # A on T1
+        assert "2/2 (10)" in annot_texts  # A on T2
+        assert "1/3 (10)" in annot_texts  # B on T1
+        assert "3/5 (10)" in annot_texts  # B on T2
+
+        # Aggregate: per_model_min_n: A=min(4,2)=2, B=min(3,5)=3.
+        # A agg: first 2 from T1 (2 successes) + first 2 from T2 (2 successes) = 4/4
+        # B agg: first 3 from T1 (1 success) + first 3 from T2 (3 successes) = 4/6
+        # Budget = 10 * 2 tasks = 20.
+        assert "4/4 (20)" in annot_texts, f"Missing A aggregate in {annot_texts}"
+        assert "4/6 (20)" in annot_texts, f"Missing B aggregate in {annot_texts}"
