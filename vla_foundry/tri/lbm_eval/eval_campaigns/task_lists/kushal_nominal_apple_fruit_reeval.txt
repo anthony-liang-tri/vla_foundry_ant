@@ -1,0 +1,2 @@
+    ("kushal_apple_BimanualPlaceAppleFromBowlIntoBin", "BimanualPlaceAppleFromBowlIntoBin", "s3://tri-ml-datasets-uw2/vla_foundry_scratch/models/vla_kushal_nominal/BimanualPlaceAppleFromBowlIntoBin/2026_04_12-20_14_15-model_diffusion_policy-lr_5e-05-bsz_512/"),
+    ("kushal_fruit_BimanualPlaceFruitFromBowlIntoBin", "BimanualPlaceFruitFromBowlIntoBin", "s3://tri-ml-datasets-uw2/vla_foundry_scratch/models/vla_kushal_nominal/BimanualPlaceFruitFromBowlIntoBin/2026_04_12-08_27_36-model_diffusion_policy-lr_5e-05-bsz_512/"),
