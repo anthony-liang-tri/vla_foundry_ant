@@ -94,16 +94,28 @@ class Augmentations:
 
         image_transforms = []
 
-        # Always resize when image_size is set (required for tensor batching)
-        if self.image_size is not None:
-            image_transforms.append(transforms.Resize((self.image_size, self.image_size), antialias=True))
-
         if self.augmentation_params is None or not self.augmentation_params.enabled:
+            # No augmentation: resize to target size for tensor batching
+            if self.image_size is not None:
+                image_transforms.append(transforms.Resize((self.image_size, self.image_size), antialias=True))
             self.image_transforms = transforms.Compose(image_transforms) if image_transforms else None
             return
 
-        # Add crop augmentation
-        if (crop := self.augmentation_params.image.get("crop", None)) and crop.enabled:
+        # Add crop augmentation. When crop is enabled and produces the final image_size,
+        # skip the initial Resize so the crop actually samples different regions.
+        # When no crop, resize first to ensure consistent tensor size.
+        crop = self.augmentation_params.image.get("crop", None)
+        crop_handles_size = (
+            crop is not None
+            and crop.enabled
+            and self.image_size is not None
+            and crop.shape[0] >= self.image_size
+            and crop.shape[1] >= self.image_size
+        )
+        if self.image_size is not None and not crop_handles_size:
+            image_transforms.append(transforms.Resize((self.image_size, self.image_size), antialias=True))
+
+        if crop is not None and crop.enabled:
             crop_h, crop_w = crop.shape
             if crop.mode == "center":
                 if crop_h <= 1.0 and crop_w <= 1.0:

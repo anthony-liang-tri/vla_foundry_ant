@@ -1,0 +1,169 @@
+data:
+  action_dim: 20
+  action_fields:
+  - robot__action__poses__left::panda__xyz_relative
+  - robot__action__poses__right::panda__xyz_relative
+  - robot__action__poses__left::panda__rot_6d_relative
+  - robot__action__poses__right::panda__rot_6d_relative
+  - robot__action__grippers__left::panda_hand
+  - robot__action__grippers__right::panda_hand
+  allow_multiple_epochs: true
+  augmentation:
+    enabled: true
+    image:
+      color_jitter:
+        brightness: 0.2
+        contrast: 0.4
+        enabled: true
+        hue:
+        - -0.05
+        - 0.05
+        saturation: 0.2
+      crop:
+        enabled: true
+        mode: random
+        shape:
+        - 224
+        - 224
+    point_cloud:
+      color_jitter:
+        brightness: 0.2
+        contrast: 0.4
+        enabled: false
+        hue:
+        - -0.05
+        - 0.05
+        saturation: 0.2
+  camera_names:
+  - scene_right_0
+  - scene_left_0
+  - wrist_left_plus
+  - wrist_right_minus
+  dataset_manifest:
+  - s3://tri-ml-datasets-uw2/vla_foundry_datasets_test/v0.4.3.9/sim/BimanualPutRedBellPepperInBin/shards/manifest.jsonl
+  dataset_modality:
+  - robotics
+  dataset_statistics:
+  - s3://tri-ml-datasets-uw2/vla_foundry_datasets_test/v0.4.3.9/sim/BimanualPutRedBellPepperInBin/shards/stats.json
+  dataset_weighting:
+  - 1.0
+  extrinsics_fields:
+  - extrinsics.scene_right_0
+  - extrinsics.scene_left_0
+  - extrinsics.wrist_left_plus
+  - extrinsics.wrist_right_minus
+  image_indices:
+  - -1
+  - 0
+  image_names:
+  - scene_right_0_t-1
+  - scene_left_0_t-1
+  - wrist_left_plus_t-1
+  - wrist_right_minus_t-1
+  - scene_right_0_t0
+  - scene_left_0_t0
+  - wrist_left_plus_t0
+  - wrist_right_minus_t0
+  image_size: 224
+  img_num_tokens: 64
+  intrinsics_fields:
+  - intrinsics.scene_right_0
+  - intrinsics.scene_left_0
+  - intrinsics.wrist_left_plus
+  - intrinsics.wrist_right_minus
+  language_instruction_types:
+  - original
+  - randomized
+  - verbose
+  - alternative
+  lowdim_future_timesteps: 8
+  lowdim_past_timesteps: 2
+  mask_padded_images: true
+  max_text_seq_len: null
+  normalization:
+    centered_norm: true
+    enabled: true
+    epsilon: 0.01
+    field_configs:
+      robot__action__grippers__left::panda_hand:
+        enabled: true
+        epsilon: 0.01
+        method: percentile_1_99
+        scope: per_timestep
+      robot__action__grippers__right::panda_hand:
+        enabled: true
+        epsilon: 0.01
+        method: percentile_1_99
+        scope: per_timestep
+      robot__action__poses__left::panda__rot_6d_relative:
+        enabled: true
+        epsilon: 0.01
+        method: percentile_1_99
+        scope: per_timestep
+      robot__action__poses__left::panda__xyz_relative:
+        enabled: true
+        epsilon: 0.01
+        method: percentile_1_99
+        scope: per_timestep
+      robot__action__poses__right::panda__rot_6d_relative:
+        enabled: true
+        epsilon: 0.01
+        method: percentile_1_99
+        scope: per_timestep
+      robot__action__poses__right::panda__xyz_relative:
+        enabled: true
+        epsilon: 0.01
+        method: percentile_1_99
+        scope: per_timestep
+      robot__actual__poses__left::panda__rot_6d:
+        enabled: true
+        epsilon: 0.01
+        method: percentile_1_99
+        scope: per_timestep
+      robot__actual__poses__left::panda__xyz:
+        enabled: true
+        epsilon: 0.01
+        method: percentile_1_99
+        scope: per_timestep
+      robot__actual__poses__right::panda__rot_6d:
+        enabled: true
+        epsilon: 0.01
+        method: percentile_1_99
+        scope: per_timestep
+      robot__actual__poses__right::panda__xyz:
+        enabled: true
+        epsilon: 0.01
+        method: percentile_1_99
+        scope: per_timestep
+    include_fields:
+    - robot__actual__poses__left::panda__xyz
+    - robot__actual__poses__right::panda__xyz
+    - robot__actual__poses__left::panda__rot_6d
+    - robot__actual__poses__right::panda__rot_6d
+    - robot__action__poses__left::panda__xyz_relative
+    - robot__action__poses__right::panda__xyz_relative
+    - robot__action__poses__left::panda__rot_6d_relative
+    - robot__action__poses__right::panda__rot_6d_relative
+    - robot__action__grippers__left::panda_hand
+    - robot__action__grippers__right::panda_hand
+    lowdim_future_timesteps: 19
+    lowdim_past_timesteps: 3
+    method: percentile_1_99
+    scope: per_timestep
+  num_workers: 8
+  pad_missing_images: true
+  point_cloud_num_points: 4096
+  pose_groups:
+  - name: left_panda_action
+    position_key: robot__action__poses__left::panda__xyz
+    rotation_key: robot__action__poses__left::panda__rot_6d
+  - name: right_panda_action
+    position_key: robot__action__poses__right::panda__xyz
+    rotation_key: robot__action__poses__right::panda__rot_6d
+  prefetch_factor: 4
+  processor: HuggingFaceTB/SmolVLM2-256M-Video-Instruct
+  processor_kwargs:
+    max_image_size:
+      longest_edge: 224
+    size:
+      longest_edge: 224

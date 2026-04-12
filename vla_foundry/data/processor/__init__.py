@@ -122,17 +122,14 @@ def get_processor(data_params: DataParams):
                 "TOKENIZERS_PARALLELISM", "true" if data_params.hf_fast_tokenizers_parallelism else "false"
             )
         processor = AutoProcessor.from_pretrained(data_params.processor, use_fast=data_params.use_hf_fast_tokenizer)
-        # Set the number of image token placeholders the processor inserts
-        # per image so that the token count matches the ViT feature count.
-        if data_params.img_num_tokens:
-            # PaliGemma uses ``image_seq_length``
-            if hasattr(processor, "image_seq_length") and "paligemma" in data_params.processor.lower():
-                processor.image_seq_length = data_params.img_num_tokens
-            # SmolVLM / Idefics uses ``image_seq_len`` + optional image splitting
-            if hasattr(processor, "image_seq_len"):
-                processor.image_seq_len = data_params.img_num_tokens
-                if hasattr(processor, "image_processor") and hasattr(processor.image_processor, "do_image_splitting"):
-                    processor.image_processor.do_image_splitting = False
+        # PaliGemma uses ``image_seq_length`` to control how many image token
+        # placeholders the processor inserts per image.
+        if (
+            data_params.img_num_tokens
+            and hasattr(processor, "image_seq_length")
+            and "paligemma" in data_params.processor.lower()
+        ):
+            processor.image_seq_length = data_params.img_num_tokens
         return processor
     else:
         raise ValueError(f"{data_params.processor} not yet supported.")
