@@ -192,7 +192,7 @@ class VLM(TransformerBase):
 
         for _step in range(max_new_tokens):
             # Apply temperature
-            if temperature != 1.0:
+            if temperature != 0:
                 logits = logits / temperature
 
             # Apply top-k filtering
