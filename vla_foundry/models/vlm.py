@@ -267,8 +267,9 @@ def create_vlm(model_params: VLMParams, load_pretrained: bool = True):
     )
     vit = ViT(model_params.vit) if model_params.vit.type == "vit" else ViTHF(model_params.vit)
 
-    # Load sub-component checkpoints if specified
-    if model_params.transformer.resume_from_checkpoint is not None:
+    # Load sub-component checkpoints if specified (skip when load_pretrained=False,
+    # e.g. during inference where a full checkpoint is loaded separately)
+    if load_pretrained and model_params.transformer.resume_from_checkpoint is not None:
         from vla_foundry.file_utils import pt_load
 
         checkpoint = pt_load(model_params.transformer.resume_from_checkpoint, map_location="cpu")
@@ -278,7 +279,7 @@ def create_vlm(model_params: VLMParams, load_pretrained: bool = True):
         transformer.load_state_dict(sd, strict=True)
         logging.info(f"=> loaded transformer weights from '{model_params.transformer.resume_from_checkpoint}'")
 
-    if model_params.vit.resume_from_checkpoint is not None:
+    if load_pretrained and model_params.vit.resume_from_checkpoint is not None:
         from vla_foundry.file_utils import pt_load
 
         checkpoint = pt_load(model_params.vit.resume_from_checkpoint, map_location="cpu")

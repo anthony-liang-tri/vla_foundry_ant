@@ -14,7 +14,6 @@ Usage:
 """
 
 import argparse
-import dataclasses
 import glob
 
 import requests
@@ -51,17 +50,9 @@ def main():
     # Load config
     train_params = load_params_from_yaml(TrainExperimentParams, f"{args.experiment_dir}/config.yaml")
 
-    # Clear S3 resume paths — we load the full checkpoint separately
-    model_params = train_params.model
-    if hasattr(model_params, "transformer") and hasattr(model_params.transformer, "resume_from_checkpoint"):
-        model_params = dataclasses.replace(
-            model_params, transformer=dataclasses.replace(model_params.transformer, resume_from_checkpoint=None)
-        )
-    if hasattr(model_params, "resume_from_checkpoint"):
-        model_params = dataclasses.replace(model_params, resume_from_checkpoint=None)
-
-    # Create model and load checkpoint
-    model = create_model(model_params)
+    # Create model (load_pretrained=False skips S3 checkpoint downloads —
+    # we load the full checkpoint separately)
+    model = create_model(train_params.model, load_pretrained=False)
     if args.checkpoint:
         ckpt_path = f"{args.experiment_dir}/checkpoints/{args.checkpoint}"
     else:
