@@ -270,20 +270,18 @@ def create_vlm(model_params: VLMParams, load_pretrained: bool = True):
     # Load sub-component checkpoints if specified (skip when load_pretrained=False,
     # e.g. during inference where a full checkpoint is loaded separately)
     if load_pretrained and model_params.transformer.resume_from_checkpoint is not None:
-        from vla_foundry.file_utils import pt_load
+        from vla_foundry.file_utils import pt_load, unwrap_state_dict
 
         checkpoint = pt_load(model_params.transformer.resume_from_checkpoint, map_location="cpu")
-        sd = checkpoint["state_dict"]
-        if "_orig_mod" in next(iter(sd.items()))[0]:
-            sd = {k.replace("_orig_mod.", ""): v for k, v in sd.items()}
+        sd = unwrap_state_dict(checkpoint["state_dict"])
         transformer.load_state_dict(sd, strict=True)
         logging.info(f"=> loaded transformer weights from '{model_params.transformer.resume_from_checkpoint}'")
 
     if load_pretrained and model_params.vit.resume_from_checkpoint is not None:
-        from vla_foundry.file_utils import pt_load
+        from vla_foundry.file_utils import pt_load, unwrap_state_dict
 
         checkpoint = pt_load(model_params.vit.resume_from_checkpoint, map_location="cpu")
-        sd = checkpoint["state_dict"]
+        sd = unwrap_state_dict(checkpoint["state_dict"])
         vit.load_state_dict(sd, strict=True)
         logging.info(f"=> loaded ViT weights from '{model_params.vit.resume_from_checkpoint}'")
 

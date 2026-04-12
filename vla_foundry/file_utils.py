@@ -397,6 +397,27 @@ def get_unwrapped_model(model):
     return model
 
 
+def unwrap_state_dict(sd: dict) -> dict:
+    """Strip wrapper prefixes (torch.compile's ``_orig_mod.``, DDP's ``module.``) from state-dict keys.
+
+    Mirrors :func:`get_unwrapped_model` but operates on a saved state-dict
+    rather than a live model, so checkpoints saved from wrapped models can be
+    loaded into unwrapped ones.
+    """
+    # The prefixes can be nested in either order, so we loop until no prefix remains.
+    changed = True
+    while changed:
+        changed = False
+        first_key = next(iter(sd), "")
+        if first_key.startswith("_orig_mod."):
+            sd = {k.removeprefix("_orig_mod."): v for k, v in sd.items()}
+            changed = True
+        elif first_key.startswith("module."):
+            sd = {k.removeprefix("module."): v for k, v in sd.items()}
+            changed = True
+    return sd
+
+
 def remote_sync(local_dir, remote_dir):
     logging.info("Starting remote sync.")
     result = subprocess.run(
@@ -416,11 +437,9 @@ def load_model_checkpoint(model, resume_from_checkpoint):
 
     # resuming a train checkpoint w/ epoch and optimizer state
     start_checkpoint_num = checkpoint["checkpoint_num"]
-    sd = checkpoint["state_dict"]
+    sd = unwrap_state_dict(checkpoint["state_dict"])
     global_step = checkpoint["global_step"]
     shard_shuffle_seed_per_dataset = checkpoint.get("shard_shuffle_seed_per_dataset", None)
-    if "_orig_mod" in next(iter(sd.items()))[0]:
-        sd = {k.replace("_orig_mod.", ""): v for k, v in sd.items()}
     if isinstance(model, FSDPModule):
         sharded_sd = {}
         model_sd = model.state_dict()
