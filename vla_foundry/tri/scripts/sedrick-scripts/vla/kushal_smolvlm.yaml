@@ -161,6 +161,11 @@ data:
     rotation_key: robot__action__poses__right::panda__rot_6d
   prefetch_factor: 10
   processor: HuggingFaceTB/SmolVLM2-256M-Video-Instruct
+  processor_kwargs:
+    max_image_size:
+      longest_edge: 224
+    size:
+      longest_edge: 224
   proprioception_dim: 18
   proprioception_fields:
   - robot__actual__poses__left::panda__xyz
