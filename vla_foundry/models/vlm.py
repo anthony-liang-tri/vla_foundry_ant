@@ -259,5 +259,9 @@ def create_vlm(model_params: VLMParams, load_pretrained: bool = True):
         if model_params.transformer.type == "transformer"
         else TransformerHF(model_params.transformer, load_pretrained=load_pretrained)
     )
-    vit = ViT(model_params.vit) if model_params.vit.type == "vit" else ViTHF(model_params.vit)
+    vit = (
+        ViT(model_params.vit)
+        if model_params.vit.type == "vit"
+        else ViTHF(model_params.vit, load_pretrained=load_pretrained)
+    )
     return VLM(model_params, transformer, vit)

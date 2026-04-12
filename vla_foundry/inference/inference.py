@@ -21,7 +21,7 @@ print(f"Loading config from {BASE_PATH}...")
 train_params = load_params_from_yaml(TrainExperimentParams, f"{BASE_PATH}/config.yaml")
 
 print("Creating model...")
-model = create_model(train_params.model)
+model = create_model(train_params.model, load_pretrained=False)
 model = model.cuda()
 
 print(f"Loading checkpoint from {CHECKPOINT}...")

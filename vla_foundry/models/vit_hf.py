@@ -6,10 +6,10 @@ from vla_foundry.params.model_params import ViTHFParams
 
 
 class ViTHF(BaseModel):
-    def __init__(self, model_params: ViTHFParams):
+    def __init__(self, model_params: ViTHFParams, load_pretrained: bool = True):
         super().__init__(model_params)
         self.model_name = model_params.hf_pretrained
-        self.model = timm.create_model(self.model_name, num_classes=0, pretrained=True)
+        self.model = timm.create_model(self.model_name, num_classes=0, pretrained=load_pretrained)
 
     def forward(self, image):
         image_embeddings = self.model.forward_intermediates(image)[0]
