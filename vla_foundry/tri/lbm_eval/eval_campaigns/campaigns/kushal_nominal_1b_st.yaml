@@ -12,7 +12,7 @@ cluster:
 
 evaluation:
   jobs_per_gpu: 1
-  evaluation_subfolder: "2026-04-12_kushal_nominal_1b_st"
+  evaluation_subfolder: "2026-04-12_kushal_nominal_1b_st_v2"
   tasks_file: "vla_foundry/tri/lbm_eval/eval_campaigns/task_lists/kushal_nominal_1b_st.txt"
   num_samples: 200
   start_index: 0
