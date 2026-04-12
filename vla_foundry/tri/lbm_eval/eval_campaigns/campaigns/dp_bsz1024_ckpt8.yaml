@@ -1,5 +1,5 @@
 campaign_name: "dp_bsz1024_ckpt8"
-description: "Single-task eval for diffusion policy bsz 1024 checkpoint 8 - TipUprightAndSlideTissueBox"
+description: "Multi-task eval (16 tasks) for diffusion policy bsz 1024 checkpoint 8"
 
 cluster:
   config_file: "vla_foundry/tri/lbm_eval/eval_campaigns/ray_policy_runner_cluster.yaml"
