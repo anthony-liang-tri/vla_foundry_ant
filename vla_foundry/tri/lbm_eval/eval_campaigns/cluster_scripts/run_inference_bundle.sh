@@ -1177,6 +1177,7 @@ while true; do
 
   echo "Starting launch script: ${current_launch_cmd[*]}"
   (
+    cd "${LAUNCH_WORKDIR}"
     "${current_launch_cmd[@]}" > "${BAZEL_LOG}" 2>&1
   ) &
   bazel_pid=$!
