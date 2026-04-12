@@ -1,0 +1,1 @@
+    ("dp_bsz1024_TipUprightAndSlideTissueBox", "TipUprightAndSlideTissueBox", "s3://tri-ml-datasets-uw2/vla_foundry_scratch/models/vla_kushal_nominal/multitask/2026_04_12-08_28_02-model_diffusion_policy-lr_5e-05-bsz_1024/"),

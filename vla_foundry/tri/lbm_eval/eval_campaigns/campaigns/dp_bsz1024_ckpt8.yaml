@@ -1,0 +1,42 @@
+campaign_name: "dp_bsz1024_ckpt8"
+description: "Single-task eval for diffusion policy bsz 1024 checkpoint 8 - TipUprightAndSlideTissueBox"
+
+cluster:
+  config_file: "vla_foundry/tri/lbm_eval/eval_campaigns/ray_policy_runner_cluster.yaml"
+  num_workers: 256
+  aws_profile: "manip-cluster"
+  owner_email: "jean.mercat@tri.global"
+  cluster_name: "lbm_eval_jean_mercat_dp_bsz1024_ckpt8"
+  teardown_on_completion: true
+  teardown_on_failure: false
+
+evaluation:
+  jobs_per_gpu: 1
+  evaluation_subfolder: "2026-04-12_dp_bsz1024_ckpt8"
+  tasks_file: "vla_foundry/tri/lbm_eval/eval_campaigns/task_lists/dp_bsz1024_ckpt8.txt"
+  num_samples: 200
+  start_index: 0
+  launch_scenario: "GrpcServerToSim"
+  launch_script: "launch_sim.sh"
+  num_flow_steps: 8
+  open_loop_steps: 8
+  device: "cuda"
+  entrypoint_num_gpus: 1
+  entrypoint_memory: 62277025792
+  max_retries: 3
+  inference_aws_profile: "sagemaker"
+
+docker:
+  image: "682769330988.dkr.ecr.us-east-1.amazonaws.com/anzu-vla-foundry:latest"
+
+vla_foundry:
+  repo_url: "git@github.com:jmercat/vla_foundry.git"
+  ref: "main"
+  local_dir: "~/.cache/vla_foundry/ray_mount"
+  use_remote_repo: true
+  remote_dir: "/home/ubuntu/vla_foundry_mount"
+  mount_target: "/opt/vla_foundry"
+
+output:
+  results_dir: "results/dp_bsz1024_ckpt8"
+  save_job_logs: true
