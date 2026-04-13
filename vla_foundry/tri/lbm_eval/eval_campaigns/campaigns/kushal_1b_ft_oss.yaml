@@ -3,7 +3,7 @@ description: "Kushal nominal 1B finetuned single-task models (16 tasks) - OSS si
 
 cluster:
   config_file: "vla_foundry/tri/lbm_eval/eval_campaigns/ray_policy_runner_cluster.yaml"
-  num_workers: 256
+  num_workers: 64
   aws_profile: "manip-cluster"
   owner_email: "jean.mercat@tri.global"
   cluster_name: "lbm_eval_jean_mercat_kushal_ft_oss"
