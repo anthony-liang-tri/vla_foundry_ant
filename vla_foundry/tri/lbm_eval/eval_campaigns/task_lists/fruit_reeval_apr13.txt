@@ -1,0 +1,1 @@
+    ("fruit_apr13_BimanualPlaceFruitFromBowlIntoBin", "BimanualPlaceFruitFromBowlIntoBin", "s3://tri-ml-datasets-uw2/vla_foundry_scratch/models/vla_kushal_nominal/BimanualPlaceFruitFromBowlIntoBin/2026_04_13-01_47_52-model_diffusion_policy-lr_5e-05-bsz_512/"),
