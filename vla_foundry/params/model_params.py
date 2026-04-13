@@ -243,6 +243,8 @@ class VLMBackboneParams(BackboneParams, VLMHFParams):
 class VLMFoundryBackboneParams(BackboneParams):
     # Number of last VLM layers to extract hidden states from for diffusion
     num_vlm_layers_to_use: int = field(default=4)
+    # Training-time pointer to source VLM experiment (unused at inference)
+    vlm_experiment_dir: str | None = field(default=None)
 
 
 @register_model_params("vit_backbone")
