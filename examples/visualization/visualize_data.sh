@@ -1,11 +1,14 @@
 #!/bin/bash
-# Generic LBM dataset visualizer that works with any S3 robotics dataset
+# Generic LBM dataset visualizer that works with any S3 or local robotics dataset
 #
 # Usage:
+#   # S3 paths:
 #   ./visualize_data.sh --num_episodes=5 s3://tri-ml-datasets-uw2/vla_foundry_datasets/toolhang_202602/BimanualPlaceTtoolOnPegboard
 #   ./visualize_data.sh --ordered --num_episodes=10 s3://...
-#   ./visualize_data.sh --subsample=10 --num_episodes=100 s3://...
-#   ./visualize_data.sh --print-command s3://...
+#
+#   # Local paths:
+#   ./visualize_data.sh --num_episodes=5 /data/datasets/BimanualPutRedBellPepperInBin
+#   ./visualize_data.sh --ordered --num_episodes=10 /data/datasets/BimanualPutRedBellPepperInBin
 #
 # Flags:
 #   --num_episodes=N   Number of episodes (trajectories) to visualize (default: 5)
@@ -48,10 +51,25 @@ if [ ${#POSITIONAL[@]} -lt 1 ]; then
     echo "  --subsample=N      Visualize every Nth sample (default: 1)"
     echo "  --ordered          Use ordered episode data instead of shuffled shards"
     echo "  --print-command    Print Python command for Colab instead of executing"
+    echo ""
+    echo "Dataset path can be either S3 or local:"
+    echo "  - S3:    s3://bucket/path/to/dataset"
+    echo "  - Local: /path/to/dataset"
+    echo ""
+    echo "Examples:"
+    echo "  ./visualize_data.sh --num_episodes=5 s3://tri-ml-datasets/dataset/task"
+    echo "  ./visualize_data.sh --ordered /data/datasets/BimanualPutRedBellPepperInBin"
     exit 1
 fi
 
 DATASET_PATH="${POSITIONAL[0]%/}"
+
+# Detect if this is an S3 path or local path
+if [[ "$DATASET_PATH" == s3://* ]]; then
+    IS_S3=true
+else
+    IS_S3=false
+fi
 
 # Determine if shards directory exists in dataset path
 if [[ "$DATASET_PATH" == *"/shards" ]]; then
@@ -64,13 +82,18 @@ fi
 CONFIG_FILE="$CONFIG_DIR/preprocessing_config.yaml"
 
 # Parse YAML to extract config
-if [[ "$CONFIG_FILE" == s3://* ]]; then
+if [ "$IS_S3" = true ]; then
     # Use aws s3 cp to download YAML temporarily
     TEMP_CONFIG=$(mktemp)
     aws s3 cp "$CONFIG_FILE" "$TEMP_CONFIG" > /dev/null
     CONFIG_FILE="$TEMP_CONFIG"
     CLEANUP=true
 else
+    # For local paths, verify the file exists
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo "Error: Config file not found: $CONFIG_FILE"
+        exit 1
+    fi
     CLEANUP=false
 fi
 
@@ -130,13 +153,18 @@ MANIFEST_PATH="$DATASET_PATH/shards/manifest.jsonl"
 
 # Calculate exact number of timesteps in first NUM_EPISODES episodes/shards
 # This ensures we get all timesteps from exactly N episodes, not an approximation
-if [[ "$MANIFEST_FOR_COUNTING" == s3://* ]]; then
+if [ "$IS_S3" = true ]; then
     # Download manifest temporarily
     TEMP_MANIFEST=$(mktemp)
     aws s3 cp "$MANIFEST_FOR_COUNTING" "$TEMP_MANIFEST" > /dev/null 2>&1
     MANIFEST_FILE="$TEMP_MANIFEST"
     CLEANUP_MANIFEST=true
 else
+    # For local paths, verify the file exists
+    if [ ! -f "$MANIFEST_FOR_COUNTING" ]; then
+        echo "Error: Manifest file not found: $MANIFEST_FOR_COUNTING"
+        exit 1
+    fi
     MANIFEST_FILE="$MANIFEST_FOR_COUNTING"
     CLEANUP_MANIFEST=false
 fi
@@ -149,6 +177,7 @@ if [ "$CLEANUP_MANIFEST" = true ]; then
 fi
 
 # echo "Visualizing $NUM_EPISODES episodes ($NUM_SAMPLES total timesteps)"
+# echo "Dataset type: $([ "$IS_S3" = true ] && echo "S3" || echo "Local")"
 
 # Build arguments dynamically from config
 ARGS=(

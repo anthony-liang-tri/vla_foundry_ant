@@ -65,6 +65,14 @@ tutorials = [
     "pymunk<7",
     "ipykernel",
     "ipywidgets",
+    "jupyterlab>=4.0.0",
+    "notebook>=7.0.0",
+    "jupyterlab-widgets",
+    "widgetsnbextension",
+    "anywidget",
+    "rerun-notebook",
+    "rerun-sdk>=0.29.2",
+    "robot-gym"
 ]
 
 libero = [
