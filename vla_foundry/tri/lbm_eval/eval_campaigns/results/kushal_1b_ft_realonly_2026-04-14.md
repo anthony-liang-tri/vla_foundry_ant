@@ -37,7 +37,30 @@ Includes 16 seen tasks + 3 unseen tasks (BimanualPlaceAvocadoFromBowlIntoBin, Bi
 
 ## Results — OSS Sim
 
-*Pending — will launch after anzu cluster tears down.*
+### kushal_1b_ft_realonly_oss (19 tasks, unweighted mean = 27.7%)
+
+| Task | Success / Total | Rate |
+|------|-----------------|------|
+| BimanualPlaceAppleFromBowlIntoBin | 77 / 192 | 40.1% |
+| BimanualPlaceAvocadoFromBowlIntoBin | 13 / 180 | 7.2% |
+| BimanualPlaceFruitFromBowlIntoBin | 72 / 200 | 36.0% |
+| BimanualPutRedBellPepperInBin | 71 / 172 | 41.3% |
+| BimanualPutSpatulaOnPlateFromDryingRack | 59 / 200 | 29.5% |
+| BimanualPutSpatulaOnPlateFromTable | 22 / 180 | 12.2% |
+| BimanualPutSpatulaOnPlateFromUtensilCrock | 34 / 180 | 18.9% |
+| BimanualStackPlatesOnTableFromDryingRack | 104 / 175 | 59.4% |
+| BimanualStoreCerealBoxUnderShelf | 63 / 200 | 31.5% |
+| PlaceCupByCoaster | 36 / 191 | 18.8% |
+| PushCoasterToCenterOfTable | 70 / 191 | 36.6% |
+| PushCoasterToMug | 16 / 120 | 13.3% |
+| PutBananaOnSaucer | 25 / 191 | 13.1% |
+| PutKiwiInCenterOfTable | 26 / 180 | 14.4% |
+| PutMugInCenterOfTable | 69 / 187 | 36.9% |
+| PutMugOnSaucer | 42 / 180 | 23.3% |
+| PutSpatulaInUtensilCrock | 16 / 186 | 8.6% |
+| TurnCupUpsideDown | 106 / 200 | 53.0% |
+| TurnMugRightsideUp | 57 / 174 | 32.8% |
+| **Unweighted Mean** | | **27.7%** |
 
 ## Comparison: FT (sim+real data) vs FT realonly (16 seen tasks only)
 
