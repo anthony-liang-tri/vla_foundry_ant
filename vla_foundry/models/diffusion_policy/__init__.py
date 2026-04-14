@@ -33,14 +33,21 @@ def create_vlm_foundry_backbone(model_params: ModelParams, load_pretrained: bool
     from vla_foundry.params.model_params import VLMParams
     from vla_foundry.params.train_experiment_params import load_params_from_yaml
 
-    # Derive experiment dir from checkpoint path: <experiment_dir>/checkpoints/checkpoint_N.pt
+    # Prefer vlm_experiment_dir (FT configs); fall back to deriving from resume_from_checkpoint path
     ckpt_path = model_params.resume_from_checkpoint
-    experiment_dir = os.path.dirname(os.path.dirname(ckpt_path))
+    experiment_dir = getattr(model_params, "vlm_experiment_dir", None)
+    if experiment_dir is None and ckpt_path is not None:
+        # Derive experiment dir from checkpoint path: <experiment_dir>/checkpoints/checkpoint_N.pt
+        experiment_dir = os.path.dirname(os.path.dirname(ckpt_path))
+    if experiment_dir is None:
+        raise ValueError(
+            "vlm_foundry_backbone requires vlm_experiment_dir or resume_from_checkpoint to locate config_model.yaml"
+        )
     vlm_params = load_params_from_yaml(VLMParams, os.path.join(experiment_dir, "config_model.yaml"))
 
     vlm = _create_model(vlm_params, load_pretrained=False)
 
-    if load_pretrained:
+    if load_pretrained and ckpt_path is not None:
         load_model_checkpoint(vlm, ckpt_path)
 
     return vlm
