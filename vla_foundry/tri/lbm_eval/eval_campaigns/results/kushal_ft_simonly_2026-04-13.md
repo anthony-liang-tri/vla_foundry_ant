@@ -10,8 +10,6 @@
 
 ## Results — Anzu Sim
 
-> Note: PushCoasterToMug (61/200) and PushCoasterToCenterOfTable (182/200) have incomplete samples due to slow tail jobs. All other tasks have 199-200 samples.
-
 | Task | Success | Total | Rate |
 |------|---------|-------|------|
 | BimanualPlaceAppleFromBowlIntoBin | 148 | 200 | 74.0% |
@@ -22,15 +20,15 @@
 | BimanualStackPlatesOnTableFromDryingRack | 161 | 200 | 80.5% |
 | BimanualStoreCerealBoxUnderShelf | 140 | 200 | 70.0% |
 | PlaceCupByCoaster | 87 | 200 | 43.5% |
-| PushCoasterToCenterOfTable | 126 | 182 | 69.2% |
-| PushCoasterToMug | 13 | 61 | 21.3% |
+| PushCoasterToCenterOfTable | 131 | 197 | 66.5% |
+| PushCoasterToMug | 36 | 200 | 18.0% |
 | PutBananaOnSaucer | 27 | 200 | 13.5% |
 | PutKiwiInCenterOfTable | 8 | 200 | 4.0% |
 | PutMugOnSaucer | 115 | 200 | 57.5% |
 | PutSpatulaInUtensilCrock | 139 | 200 | 69.5% |
 | TurnCupUpsideDown | 166 | 200 | 83.0% |
 | TurnMugRightsideUp | 134 | 200 | 67.0% |
-| **Seen Mean (16 tasks)** | | | **59.5%** |
+| **Seen Mean (16 tasks)** | | | **59.1%** |
 
 ### Unseen Tasks — Anzu
 
@@ -78,7 +76,7 @@
 
 | Metric | Anzu | OSS |
 |--------|------|-----|
-| Seen Mean (16 tasks) | **59.5%** | **43.5%** |
+| Seen Mean (16 tasks) | **59.1%** | **43.5%** |
 | Unseen Mean (3 tasks) | **60.3%** | **37.3%** |
 
 ## S3 Result Paths
