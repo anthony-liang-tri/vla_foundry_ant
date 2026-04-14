@@ -34,15 +34,36 @@ Sim-only multitask model (trained on 42 tasks from `v0.4.3.9/sim/manifest.jsonl`
 
 ## Results — OSS Sim
 
-_Pending — running now. Report will be updated with OSS results when complete._
+### dp_simonly_bsz1024_ckpt21_oss (multi-task, 16 tasks)
+
+| Task | Success | Total | Rate |
+|------|---------|-------|------|
+| BimanualPlaceAppleFromBowlIntoBin | 123 | 200 | 61.5% |
+| BimanualPlaceFruitFromBowlIntoBin | 120 | 188 | 63.8% |
+| BimanualPutRedBellPepperInBin | 132 | 200 | 66.0% |
+| BimanualPutSpatulaOnPlateFromDryingRack | 98 | 188 | 52.1% |
+| BimanualPutSpatulaOnPlateFromTable | 61 | 200 | 30.5% |
+| BimanualStackPlatesOnTableFromDryingRack | 108 | 188 | 57.4% |
+| BimanualStoreCerealBoxUnderShelf | 82 | 200 | 41.0% |
+| PlaceCupByCoaster | 54 | 200 | 27.0% |
+| PushCoasterToCenterOfTable | 51 | 200 | 25.5% |
+| PushCoasterToMug | 31 | 200 | 15.5% |
+| PutBananaOnSaucer | 12 | 200 | 6.0% |
+| PutKiwiInCenterOfTable | 23 | 200 | 11.5% |
+| PutMugOnSaucer | 54 | 200 | 27.0% |
+| PutSpatulaInUtensilCrock | 51 | 200 | 25.5% |
+| TurnCupUpsideDown | 103 | 187 | 55.1% |
+| TurnMugRightsideUp | 62 | 200 | 31.0% |
+| **Unweighted Mean** | | | **37.3%** |
 
 ## Comparison vs real-data model (dp_bsz1024_ckpt14)
 
 | Metric | dp_bsz1024_ckpt14 (real) | dp_simonly_bsz1024_ckpt21 (sim) |
 |---|---|---|
 | Anzu mean | 30.1% | **56.5%** |
+| OSS mean | 16.7% | **37.3%** |
 
-Sim-only training nearly doubles success in the anzu sim vs real-data training — large sim-to-real gap since eval is in sim.
+Sim-only training nearly doubles success in both sims vs real-data training.
 
 ## S3 Result Paths
 - Anzu: `s3://tri-ml-datasets-uw2/vla_foundry_scratch/models/vla_kushal_nominal/multitask_sim_only/2026_04_12-10_41_10-model_diffusion_policy-lr_5e-05-bsz_1024/evaluation/2026-04-13_dp_simonly_bsz1024_ckpt21/`
