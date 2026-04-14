@@ -1,0 +1,1 @@
+    ("bspdr_nopdl_r2_ckpt11_BimanualStackPlatesOnTableFromDryingRack", "BimanualStackPlatesOnTableFromDryingRack", "s3://tri-ml-datasets-uw2/vla_foundry_scratch/models/vla_1b_smolvlm2_singletask_v2_nopdl_lr1e4_fut8past2_50k/BimanualStackPlatesOnTableFromDryingRack/2026_04_10-08_21_09-model_diffusion_policy-lr_0.0001-bsz_256/"),
