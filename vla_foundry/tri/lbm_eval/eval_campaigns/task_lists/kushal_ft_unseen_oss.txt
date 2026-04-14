@@ -1,0 +1,3 @@
+    ("kushal_ft_BimanualPlaceAvocadoFromBowlIntoBin", "BimanualPlaceAvocadoFromBowlIntoBin", "s3://tri-ml-datasets-uw2/vla_foundry_scratch/models/vla_kushal_nominal_ft/BimanualPlaceAvocadoFromBowlIntoBin/2026_04_13-16_49_09-model_diffusion_policy-lr_5e-05-bsz_512/"),
+    ("kushal_ft_BimanualPutSpatulaOnPlateFromUtensilCrock", "BimanualPutSpatulaOnPlateFromUtensilCrock", "s3://tri-ml-datasets-uw2/vla_foundry_scratch/models/vla_kushal_nominal_ft/BimanualPutSpatulaOnPlateFromUtensilCrock/2026_04_13-17_10_59-model_diffusion_policy-lr_5e-05-bsz_512/"),
+    ("kushal_ft_PutMugInCenterOfTable", "PutMugInCenterOfTable", "s3://tri-ml-datasets-uw2/vla_foundry_scratch/models/vla_kushal_nominal_ft/PutMugInCenterOfTable/2026_04_13-17_26_39-model_diffusion_policy-lr_5e-05-bsz_512/"),
