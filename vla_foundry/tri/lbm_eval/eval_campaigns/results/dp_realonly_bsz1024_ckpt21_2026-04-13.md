@@ -34,18 +34,38 @@ Real-only multitask model (trained on real data from `v0.4.3.9/real/manifest.jso
 
 ## Results — OSS Sim
 
-_Pending — running now._
+### dp_realonly_bsz1024_ckpt21_oss (multi-task, 16 tasks)
 
-## Comparison: real-only vs sim-only vs mixed (all ckpt21, anzu sim)
+| Task | Success | Total | Rate |
+|------|---------|-------|------|
+| BimanualPlaceAppleFromBowlIntoBin | 0 | 200 | 0.0% |
+| BimanualPlaceFruitFromBowlIntoBin | 0 | 200 | 0.0% |
+| BimanualPutRedBellPepperInBin | 0 | 200 | 0.0% |
+| BimanualPutSpatulaOnPlateFromDryingRack | 0 | 200 | 0.0% |
+| BimanualPutSpatulaOnPlateFromTable | 0 | 200 | 0.0% |
+| BimanualStackPlatesOnTableFromDryingRack | 0 | 188 | 0.0% |
+| BimanualStoreCerealBoxUnderShelf | 0 | 200 | 0.0% |
+| PlaceCupByCoaster | 10 | 200 | 5.0% |
+| PushCoasterToCenterOfTable | 12 | 175 | 6.9% |
+| PushCoasterToMug | 4 | 123 | 3.3% |
+| PutBananaOnSaucer | 1 | 200 | 0.5% |
+| PutKiwiInCenterOfTable | 21 | 200 | 10.5% |
+| PutMugOnSaucer | 0 | 187 | 0.0% |
+| PutSpatulaInUtensilCrock | 0 | 200 | 0.0% |
+| TurnCupUpsideDown | 0 | 187 | 0.0% |
+| TurnMugRightsideUp | 0 | 200 | 0.0% |
+| **Unweighted Mean** | | | **1.6%** |
 
-| Model | Anzu Mean |
-|---|---|
-| dp_realonly_bsz1024_ckpt21 (real only) | **0.3%** |
-| dp_bsz1024_ckpt14 (real+sim mixed) | 30.1% |
-| dp_simonly_bsz1024_ckpt21 (sim only) | 56.5% |
+## Comparison: real-only vs sim-only vs mixed (all ckpt21 unless noted)
 
-Real-only training produces ~0% success in sim eval. The mixed-data model (30.1%) benefits from sim data; sim-only (56.5%) dominates.
+| Model | Anzu Mean | OSS Mean |
+|---|---|---|
+| dp_realonly_bsz1024_ckpt21 (real only) | **0.3%** | **1.6%** |
+| dp_bsz1024_ckpt14 (real+sim mixed) | 30.1% | 16.7% |
+| dp_simonly_bsz1024_ckpt21 (sim only) | 56.5% | 37.3% |
+
+Real-only training produces ~0% success in both sims. The mixed-data model benefits from sim data; sim-only dominates.
 
 ## S3 Result Paths
 - Anzu: `s3://tri-ml-datasets-uw2/vla_foundry_scratch/models/vla_kushal_nominal/multitask_real_only/2026_04_12-10_51_13-model_diffusion_policy-lr_5e-05-bsz_1024/evaluation/2026-04-13_dp_realonly_bsz1024_ckpt21/`
-- OSS (in progress): `s3://tri-ml-datasets-uw2/vla_foundry_scratch/models/vla_kushal_nominal/multitask_real_only/2026_04_12-10_51_13-model_diffusion_policy-lr_5e-05-bsz_1024/evaluation/2026-04-13_dp_realonly_bsz1024_ckpt21_oss/`
+- OSS: `s3://tri-ml-datasets-uw2/vla_foundry_scratch/models/vla_kushal_nominal/multitask_real_only/2026_04_12-10_51_13-model_diffusion_policy-lr_5e-05-bsz_1024/evaluation/2026-04-13_dp_realonly_bsz1024_ckpt21_oss/`
