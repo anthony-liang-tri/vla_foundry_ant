@@ -13,6 +13,7 @@ from typing import Any
 import numpy as np
 import ray
 import torch
+from numpy.typing import NDArray
 from PIL import Image
 
 from vla_foundry.aws.s3_io import download_fileobj_from_s3, upload_fileobj_to_s3
@@ -35,7 +36,7 @@ from vla_foundry.data.robotics.cv_utils import scale_intrinsics_3x3_for_resize_a
 from vla_foundry.file_utils import list_s3_directory_recursive
 
 
-def is_cabot_fisheye_camera(camera_name: str, intrinsics: np.ndarray) -> bool:
+def is_cabot_fisheye_camera(camera_name: str, intrinsics: NDArray[np.floating]) -> bool:
     """
     Detect if a camera is a cabot fisheye camera by matching intrinsics.
 
@@ -511,7 +512,7 @@ def create_shard(shard_files: list[str], shard_idx: int, output_dir: str) -> str
     return (shard_name.rstrip(".tar"), len(shard_files))
 
 
-def is_still_sample(lowdim_data: dict[str, np.ndarray], start_idx: int, end_idx: int, still_threshold: float) -> bool:
+def is_still_sample(lowdim_data: dict[str, NDArray], start_idx: int, end_idx: int, still_threshold: float) -> bool:
     """Check if sample is still by looking at action/position/pose keys."""
     recognized_patterns = ["action", "joint", "poses", "xyz", "actual"]
     movement_keys = [k for k in lowdim_data if any(x in k.lower() for x in recognized_patterns)]
@@ -530,7 +531,7 @@ def is_still_sample(lowdim_data: dict[str, np.ndarray], start_idx: int, end_idx:
     return True
 
 
-def transform_points_to_world(points: np.ndarray, extrinsics: np.ndarray) -> np.ndarray:
+def transform_points_to_world(points: NDArray[np.floating], extrinsics: NDArray[np.floating]) -> NDArray[np.floating]:
     """
     Transform points from camera space to world space.
 
@@ -594,8 +595,8 @@ def recursive_s3_copy(path1: str, path2: str) -> None:
 
 
 def apply_inverse_fisheye_distortion(
-    cam_coords: np.ndarray, distortion_params: list[float] | None, max_valid_radius: float = None
-) -> np.ndarray:
+    cam_coords: NDArray[np.floating], distortion_params: list[float] | None, max_valid_radius: float = None
+) -> NDArray[np.floating]:
     """
     Apply inverse fisheye distortion to convert fisheye coordinates to pinhole coordinates.
 
@@ -642,12 +643,12 @@ def apply_inverse_fisheye_distortion(
 
 
 def convert_pinhole_depth_to_fisheye_coords(
-    depth_pinhole: np.ndarray,
-    K_pinhole: np.ndarray,
-    K_fisheye: np.ndarray,
+    depth_pinhole: NDArray,
+    K_pinhole: NDArray[np.floating],
+    K_fisheye: NDArray[np.floating],
     distortion_params: list[float],
     depth_scale: float = 1000.0,
-) -> np.ndarray:
+) -> NDArray[np.floating]:
     """
     Convert pinhole depth image to 3D camera coordinates in fisheye image space.
 
@@ -732,7 +733,7 @@ def depth_images_to_point_cloud(
     normalize_colors: bool = True,
     min_depth: float = 0.001,
     max_depth: float = 3.0,
-) -> np.ndarray | None:
+) -> NDArray[np.floating] | None:
     """
     Convert multi-view depth images to a single downsampled colored point cloud using CUDA FPS.
 
@@ -1019,3 +1020,66 @@ def depth_images_to_point_maps(
         point_maps[camera_name] = cam_points_uint16
 
     return point_maps
+
+
+def nearest_indices(
+    source_times: NDArray[np.floating],
+    target_times: NDArray[np.floating],
+    max_snap_distance: float | None = None,
+) -> NDArray[np.intp]:
+    """
+    For each target time, find the index of the nearest source time.
+
+    Uses searchsorted for O(n log n) performance to locate the insertion point,
+    then compares the distance to the left and right neighbors, returning
+    whichever is closer. This ensures each target is snapped to the globally
+    nearest source sample regardless of direction.
+    Uses searchsorted for O(n log n) performance. Assumes source_times is sorted.
+
+    Args:
+        source_times: Sorted 1-D ``float`` array of source timestamps.
+            Must not be empty. Assumes source_times is sorted.
+        target_times: 1-D ``float`` array of target timestamps to snap.
+            May be empty, in which case an empty index array is returned.
+        max_snap_distance: Optional tolerance in the same units as the
+            timestamps (seconds). If any target sample snaps to a
+            source sample farther than this threshold, a ``ValueError`` is
+            raised. ``None`` (default) disables the check.
+
+    Returns:
+        Integer index array of shape ``(len(target_times),)`` indexing into
+        *source_times*.
+
+    Raises:
+        ValueError: If *source_times* is empty, or if *max_snap_distance* is
+            set and any snap exceeds the threshold.
+    """
+    if len(source_times) == 0:
+        raise ValueError("source_times must not be empty")
+
+    if len(source_times) == 1:
+        indices = np.zeros(len(target_times), dtype=np.intp)
+    else:
+        # Find for each target time the index of the first source >= target time
+        idx = np.searchsorted(source_times, target_times, side="left")
+        # Ensure valid indices, e.g., when an idx=0
+        idx = np.clip(idx, 1, len(source_times) - 1)
+
+        # Compare left and right neighbors, pick the closer one
+        left_diff = np.abs(target_times - source_times[idx - 1])
+        right_diff = np.abs(target_times - source_times[idx])
+        indices = np.where(right_diff < left_diff, idx, idx - 1)
+
+    # Gate: reject snaps that exceed the caller-specified tolerance
+    if max_snap_distance is not None and len(target_times) > 0:
+        snap_distances = np.abs(target_times - source_times[indices])
+        max_snap = float(snap_distances.max())
+        if max_snap > max_snap_distance:
+            n_violations = int((snap_distances > max_snap_distance).sum())
+            raise ValueError(
+                f"❌ {n_violations}/{len(target_times)} samples snapped "
+                f">{max_snap_distance:.4f}s from nearest source "
+                f"(max: {max_snap:.4f}s)"
+            )
+
+    return indices

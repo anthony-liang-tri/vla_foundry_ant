@@ -1,9 +1,9 @@
 """
-Unit tests for MCAP converter and temporal resampling pipeline.
+Unit tests for MCAP converter and temporal alignment pipeline.
 
 This test suite validates the MCAP-to-WebDataset preprocessing pipeline, covering:
 - Message extraction from ROS 2 CompressedImage and raw Image topics
-- Temporal resampling with anti-aliasing for frequency conversion
+- Nearest-neighbor time-alignment across data channels
 - Low-dimensional data extraction and normalization
 - Sample generation with temporal padding and stillness filtering
 - Integration with VLA Foundry's training data format
@@ -24,12 +24,12 @@ import yaml
 
 from vla_foundry.data.preprocessing.robotics.converters.mcap import (
     MCAPConverter,
-    TemporalResampler,
     extract_array_from_msg,
     extract_field_path,
     extract_image_from_msg,
     parse_episode_path,
 )
+from vla_foundry.data.preprocessing.utils import nearest_indices
 
 # Default action field config returned by load_action_field_config
 DEFAULT_ACTION_FIELD_CONFIG = {
@@ -83,8 +83,10 @@ def _make_base_config(**overrides):
 def _make_topics_config(**overrides):
     """Create a minimal topics config dict."""
     base = {
-        "target_hz": 30.0,
         "output_mode": "separate",
+        "pivot_source_field": "camera1",
+        "gap_threshold_dt": 0.1,
+        "snap_threshold_dt": 0.1,
         "action_topics": ["/action/joints"],
         "state_topics": ["/state/joints"],
         "camera_topics": {"camera1": "/cam1/compressed"},
@@ -269,74 +271,55 @@ class TestExtractArrayFromMsg:
         np.testing.assert_array_equal(result, np.array([1.0, 2.0, 3.0, 0.1, 0.2, 0.3], dtype=np.float32))
 
 
-class TestTemporalResampler:
-    """Tests for frequency conversion with anti-aliasing."""
+class TestNearestIndices:
+    """Tests for nearest_indices snap-to-source lookup."""
 
-    @pytest.fixture
-    def resampler(self):
-        """Create resampler configured for 10 Hz target frequency."""
-        return TemporalResampler(target_hz=10.0)
+    def test_exact_matches(self):
+        source = np.array([0.0, 1.0, 2.0, 3.0])
+        target = np.array([0.0, 1.0, 2.0, 3.0])
+        np.testing.assert_array_equal(nearest_indices(source, target), [0, 1, 2, 3])
 
-    def test_continuous_linear_interpolation(self, resampler):
-        """Verify linear interpolation for continuous signals like joint positions."""
-        # Source: 5 Hz data (samples at 0.0, 0.2, 0.4, 0.6, 0.8, 1.0 seconds)
-        source_times = np.array([0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
-        source_values = np.array([0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
-        # Target: 10 Hz data with matching start/end points (0.0 to 1.0)
-        target_times = np.linspace(0.0, 1.0, 11)
+    def test_snaps_to_closer_neighbor(self):
+        source = np.array([0.0, 1.0, 2.0])
+        target = np.array([0.3, 0.7, 1.6])
+        np.testing.assert_array_equal(nearest_indices(source, target), [0, 1, 2])
 
-        result = resampler.resample_continuous(source_times, source_values, target_times)
-        assert len(result) == 11
-        np.testing.assert_array_equal(result[0], 0.0)
-        np.testing.assert_array_equal(result[-1], 5.0)
-        # Verify interpolation: at t=0.1 (midpoint between 0.0 and 0.2), expect 0.5
-        np.testing.assert_array_equal(result[1], 0.5)
+    def test_single_source(self):
+        source = np.array([5.0])
+        target = np.array([1.0, 5.0, 9.0])
+        # Everything must map to index 0 regardless of distance
+        np.testing.assert_array_equal(nearest_indices(source, target), [0, 0, 0])
 
-    def test_discrete_zero_order_hold(self, resampler):
-        """Verify zero-order hold for discrete signals like binary gripper commands."""
-        source_times = np.array([0.0, 0.5, 1.0])
-        source_values = np.array([0, 1, 2])
-        target_times = np.arange(0.0, 1.0, 0.1)
+    def test_target_outside_source_range(self):
+        source = np.array([1.0, 2.0, 3.0])
+        # Target times before the first and after the last source time
+        target = np.array([0.0, 4.0])
+        # Verifies clip logic clamps correctly instead of going out of bounds
+        np.testing.assert_array_equal(nearest_indices(source, target), [0, 2])
 
-        result = resampler.resample_discrete(source_times, source_values, target_times)
-        assert len(result) == len(target_times)
-        assert result[0] == 0
-        assert result[4] == 0
-        assert result[5] == 1  # holds after t=0.5
+    def test_empty_source_raises(self):
+        """Empty source_times is not allowed."""
+        with pytest.raises(ValueError, match="source_times must not be empty"):
+            nearest_indices(np.array([]), np.array([1.0]))
 
-    def test_images_nearest_neighbor(self, resampler):
-        """Verify nearest-neighbor resampling for image frames."""
-        # Source: 3 image frames at different timestamps
-        source_times = np.array([0.0, 0.5, 1.0])
-        source_images = [b"img0", b"img1", b"img2"]
-        target_times = np.arange(0.0, 1.0, 0.1)
+    def test_empty_target_returns_empty(self):
+        """Empty target_times returns a zero-length index array."""
+        result = nearest_indices(np.array([1.0, 2.0]), np.array([]))
+        assert len(result) == 0
 
-        result = resampler.resample_images(source_times, source_images, target_times)
-        assert len(result) == len(target_times)
-        # Verify nearest-neighbor selection
-        assert result[0] == b"img0"  # t=0.0 maps to img0
-        assert result[5] == b"img1"  # t=0.5 maps to img1
-        assert result[9] == b"img2"  # t=0.9 is closer to 1.0, maps to img2
+    def test_max_snap_distance_raises_on_violation(self):
+        """Exceeding max_snap_distance raises ValueError."""
+        source = np.array([0.0, 10.0])
+        target = np.array([5.0])  # 5s from nearest source
+        with pytest.raises(ValueError, match="snapped"):
+            nearest_indices(source, target, max_snap_distance=1.0)
 
-    def test_upsampling(self):
-        """Verify interpolation behavior when upsampling."""
-        resampler = TemporalResampler(target_hz=20.0)
-        source_times = np.array([0.0, 0.2, 0.4, 0.6, 0.8])
-        source_values = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
-        target_times = np.arange(0.0, 0.8, 0.05)
-
-        result = resampler.resample_continuous(source_times, source_values, target_times)
-        assert len(result) == len(target_times)
-
-    def test_downsampling(self):
-        """Verify anti-aliasing filter activation during downsampling."""
-        resampler = TemporalResampler(target_hz=5.0)
-        source_times = np.array([0.0, 0.05, 0.1, 0.15, 0.2])
-        source_values = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
-        target_times = np.array([0.0, 0.2])
-
-        result = resampler.resample_continuous(source_times, source_values, target_times)
-        assert len(result) == 2
+    def test_max_snap_distance_passes_within_tolerance(self):
+        """Snaps within tolerance do not raise."""
+        source = np.array([0.0, 1.0, 2.0])
+        target = np.array([0.1, 0.9, 2.0])
+        result = nearest_indices(source, target, max_snap_distance=0.5)
+        np.testing.assert_array_equal(result, [0, 1, 2])
 
 
 class TestParseEpisodePath:
@@ -485,7 +468,6 @@ class TestMCAPConverterConfiguration:
     def test_topics_config_loaded(self):
         topics_cfg = _make_topics_config(target_hz=15.0, action_topics=["/custom/action"])
         converter = _create_converter(topics_cfg=topics_cfg)
-        assert converter.target_hz == 15.0
         assert converter.action_topics == ["/custom/action"]
 
     def test_invalid_output_mode_raises(self):
@@ -498,11 +480,6 @@ class TestMCAPConverterConfiguration:
         with pytest.raises(ValueError, match="state_key_fields"):
             _create_converter(topics_cfg=topics_cfg)
 
-    def test_negative_target_hz_raises(self):
-        topics_cfg = _make_topics_config(target_hz=-5.0)
-        with pytest.raises(ValueError, match="target_hz"):
-            _create_converter(topics_cfg=topics_cfg)
-
     def test_action_field_sizes_computed(self):
         action_cfg = {
             "action_key_fields": ["ee_xyz", "ee_rot", "gripper"],
@@ -511,6 +488,11 @@ class TestMCAPConverterConfiguration:
         }
         converter = _create_converter(action_field_config=action_cfg)
         assert converter.action_field_sizes == [3, 6, 1]
+
+    def test_missing_pivot_source_raises(self):
+        topics_cfg = _make_topics_config(pivot_source_field=None)
+        with pytest.raises(ValueError, match="pivot_source_field"):
+            _create_converter(topics_cfg=topics_cfg)
 
 
 class TestMCAPConverterLowdimExtraction:

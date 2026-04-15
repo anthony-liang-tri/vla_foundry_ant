@@ -6,22 +6,22 @@ language_instruction_types:
 proprioception_fields:
   - actual_ee_pose_left__xyz        # 3
   - actual_ee_pose_left__rot_6d     # 6
-  - actual_joint_states__left_hand_thumb_0_joint
-  - actual_joint_states__left_hand_thumb_1_joint
-  - actual_joint_states__left_hand_thumb_2_joint
-  - actual_joint_states__left_hand_middle_0_joint
-  - actual_joint_states__left_hand_middle_1_joint
-  - actual_joint_states__left_hand_index_0_joint
-  - actual_joint_states__left_hand_index_1_joint
+  - actual_joint_position__left_hand_thumb_0_joint
+  - actual_joint_position__left_hand_thumb_1_joint
+  - actual_joint_position__left_hand_thumb_2_joint
+  - actual_joint_position__left_hand_middle_0_joint
+  - actual_joint_position__left_hand_middle_1_joint
+  - actual_joint_position__left_hand_index_0_joint
+  - actual_joint_position__left_hand_index_1_joint
   - actual_ee_pose_right__xyz       # 3
   - actual_ee_pose_right__rot_6d    # 6
-  - actual_joint_states__right_hand_thumb_0_joint
-  - actual_joint_states__right_hand_thumb_1_joint
-  - actual_joint_states__right_hand_thumb_2_joint
-  - actual_joint_states__right_hand_middle_0_joint
-  - actual_joint_states__right_hand_middle_1_joint
-  - actual_joint_states__right_hand_index_0_joint
-  - actual_joint_states__right_hand_index_1_joint
+  - actual_joint_position__right_hand_thumb_0_joint
+  - actual_joint_position__right_hand_thumb_1_joint
+  - actual_joint_position__right_hand_thumb_2_joint
+  - actual_joint_position__right_hand_middle_0_joint
+  - actual_joint_position__right_hand_middle_1_joint
+  - actual_joint_position__right_hand_index_0_joint
+  - actual_joint_position__right_hand_index_1_joint
 
 # Dex3 tactile fields — appended to proprioception_fields when --tactile-propio is set.
 # Requires data preprocessed with dex3 tactile topics (v2+ datasets).

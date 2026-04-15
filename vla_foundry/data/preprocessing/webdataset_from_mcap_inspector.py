@@ -18,7 +18,7 @@ Commands:
     uv run python webdataset_from_mcap_inspector.py s3://bucket/path/frames/sample.tar
 
 Examples:
-    uv run python webdataset_from_mcap_inspector.py s3://robotics-cam-data/.../tarfile/v1/task/real/teleop/ \
+    uv run python webdataset_from_mcap_inspector.py s3://robotics-cam-data/.../tarfile/v3.2/task/real/teleop/ \
         --config vla_foundry/config_presets/data/unitree_g1/g1_mcap_topics.yaml
 """
 
@@ -412,7 +412,7 @@ def inspect_dataset(dataset_path: str, config_path: str | None = None, verbose: 
         important_keys = [
             "past_lowdim_steps",
             "future_lowdim_steps",
-            "target_hz",
+            "pivot_source_field",
             "image_indices",
             "filter_still_samples",
             "still_threshold",

@@ -12,8 +12,39 @@
 #
 # Some fields (IMU, whole-body motor torques) are commented out pending
 # pipeline stabilization and can be re-enabled as needed.
-target_hz: 30.0
 output_mode: separate
+
+# All lowdim state values in this list will have normalization stats calculated
+state_key_fields:
+  - actual_ee_pose_left__xyz        # 3
+  - actual_ee_pose_left__rot_6d     # 6
+  - actual_joint_position__left_hand_thumb_0_joint
+  - actual_joint_position__left_hand_thumb_1_joint
+  - actual_joint_position__left_hand_thumb_2_joint
+  - actual_joint_position__left_hand_middle_0_joint
+  - actual_joint_position__left_hand_middle_1_joint
+  - actual_joint_position__left_hand_index_0_joint
+  - actual_joint_position__left_hand_index_1_joint
+  - actual_ee_pose_right__xyz       # 3
+  - actual_ee_pose_right__rot_6d    # 6
+  - actual_joint_position__right_hand_thumb_0_joint
+  - actual_joint_position__right_hand_thumb_1_joint
+  - actual_joint_position__right_hand_thumb_2_joint
+  - actual_joint_position__right_hand_middle_0_joint
+  - actual_joint_position__right_hand_middle_1_joint
+  - actual_joint_position__right_hand_index_0_joint
+  - actual_joint_position__right_hand_index_1_joint
+
+# Pivot source for temporal alignment (any field name from camera, state, or
+# action field maps). Raises an error if field name is not found.
+pivot_source_field: stereo_head_left
+
+# Maximum gap (seconds) in the pivot source timeline before logging a warning.
+gap_threshold_dt: 0.15
+
+# Maximum snap distance (seconds) for nearest-neighbor alignment.
+# Raises an error if any sample exceeds this threshold.
+snap_threshold_dt: 0.25
 
 # =============================================================================
 # ACTION TOPICS
@@ -34,8 +65,8 @@ action_field_map:
   # /joint_cmd_whole_body: action_joint_whole_body
 
 reference_field_prefixes:
-  action_joint_hand_left__: actual_joint_states__
-  action_joint_hand_right__: actual_joint_states__
+  action_joint_hand_left__: actual_joint_position__
+  action_joint_hand_right__: actual_joint_position__
   action_: actual_
   desired_: actual_
 
@@ -49,16 +80,16 @@ state_topics:
   - /current_right_hand_ee_link
   # - /imu
   # - /livox/imu_192_168_123_120
-  - /dex3/left/state
-  - /dex3/right/state
+  # - /dex3/left/state
+  # - /dex3/right/state
   # - /lowstate (Motor level torque, position, velocity)
 
 state_field_map:
-  /joint_states: actual_joint_states
+  /joint_states: actual_joint_position
   /current_left_hand_ee_link: actual_ee_pose_left
   /current_right_hand_ee_link: actual_ee_pose_right
-  /dex3/left/state: actual_dex3_hand_left
-  /dex3/right/state: actual_dex3_hand_right
+  # /dex3/left/state: actual_dex3_hand_left
+  # /dex3/right/state: actual_dex3_hand_right
   # /imu: actual_imu
   # /livox/imu_192_168_123_120: actual_imu_livox
 
@@ -69,18 +100,18 @@ state_field_map:
 # Each entry creates a virtual subtopic: {topic}.{output_name}
 
 state_topic_subfield_extraction:
-  /dex3/left/state:
-    joints: "motor_state[*].q"
-    joints_vel: "motor_state[*].dq"
-    joints_torque: "motor_state[*].tau_est"
-    pressure: "press_sensor_state[*].pressure"
-    # imu: "imu_state"
+  # /dex3/left/state:
+  #   joints: "motor_state[*].q"
+  #   joints_vel: "motor_state[*].dq"
+  #   joints_torque: "motor_state[*].tau_est"
+  #   pressure: "press_sensor_state[*].pressure"
+  #   # imu: "imu_state"
 
-  /dex3/right/state:
-    joints: "motor_state[*].q"
-    joints_vel: "motor_state[*].dq"
-    joints_torque: "motor_state[*].tau_est"
-    pressure: "press_sensor_state[*].pressure"
+  # /dex3/right/state:
+  #   joints: "motor_state[*].q"
+  #   joints_vel: "motor_state[*].dq"
+  #   joints_torque: "motor_state[*].tau_est"
+  #   pressure: "press_sensor_state[*].pressure"
     # imu: "imu_state"
 
   /lowstate:
@@ -90,24 +121,28 @@ state_topic_subfield_extraction:
     # imu: "imu_state"
 
 # Map extracted sub-fields to clean output names
-state_topic_subfield_map:
-  # Left hand (dex3)
-  /dex3/left/state.joints: actual_dex3_hand_left_joints
-  /dex3/left/state.joints_vel: actual_dex3_hand_left_joints_vel
-  /dex3/left/state.joints_torque: actual_dex3_hand_left_joints_torque
-  /dex3/left/state.pressure: actual_dex3_hand_left_pressure
-  # /dex3/left/state.imu: actual_dex3_hand_left_imu
-  # Right hand (dex3)
-  /dex3/right/state.joints: actual_dex3_hand_right_joints
-  /dex3/right/state.joints_vel: actual_dex3_hand_right_joints_vel
-  /dex3/right/state.joints_torque: actual_dex3_hand_right_joints_torque
-  /dex3/right/state.pressure: actual_dex3_hand_right_pressure
-  # /dex3/right/state.imu: actual_dex3_hand_right_imu
-  # Motor state
-  # /lowstate.motor_q: actual_motor_positions
-  # /lowstate.motor_dq: actual_motor_velocities
-  # /lowstate.motor_tau: actual_motor_torques
-  # /lowstate.imu: actual_lowstate_imu
+# FIXME(mark.zolotas): These topics have serious drift from other topics,
+# e.g., on the order of 1s, which is failing our snap_threshold_dt.
+# I am temporarily uncommenting these fields until we identify why,
+# as they are not currently critical to training.
+# state_topic_subfield_map:
+#   # Left hand (dex3)
+#   /dex3/left/state.joints: actual_dex3_hand_left_joints
+#   /dex3/left/state.joints_vel: actual_dex3_hand_left_joints_vel
+#   /dex3/left/state.joints_torque: actual_dex3_hand_left_joints_torque
+#   /dex3/left/state.pressure: actual_dex3_hand_left_pressure
+#   /dex3/left/state.imu: actual_dex3_hand_left_imu
+#   # Right hand (dex3)
+#   /dex3/right/state.joints: actual_dex3_hand_right_joints
+#   /dex3/right/state.joints_vel: actual_dex3_hand_right_joints_vel
+#   /dex3/right/state.joints_torque: actual_dex3_hand_right_joints_torque
+#   /dex3/right/state.pressure: actual_dex3_hand_right_pressure
+#   /dex3/right/state.imu: actual_dex3_hand_right_imu
+#   # Motor state
+#   /lowstate.motor_q: actual_motor_positions
+#   /lowstate.motor_dq: actual_motor_velocities
+#   /lowstate.motor_tau: actual_motor_torques
+#   /lowstate.imu: actual_lowstate_imu
 
 # =============================================================================
 # CAMERA TOPICS

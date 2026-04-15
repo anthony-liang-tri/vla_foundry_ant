@@ -72,8 +72,7 @@ from scipy.spatial.transform import Rotation as R
 
 from vla_foundry.data.preprocessing.robotics.converters.base import BaseRoboticsConverter
 from vla_foundry.data.preprocessing.robotics.preprocess_masks import create_past_and_future_masks
-from vla_foundry.data.preprocessing.temporal_resampler import TemporalResampler
-from vla_foundry.data.preprocessing.utils import is_still_sample, validate_pose_groups
+from vla_foundry.data.preprocessing.utils import is_still_sample, nearest_indices, validate_pose_groups
 from vla_foundry.data.robotics.utils import load_action_field_config, matrix_to_rot_6d
 from vla_foundry.file_utils import copy_to_temp_file, file_exists, yaml_load
 
@@ -431,7 +430,7 @@ class MCAPConverter(BaseRoboticsConverter):
     The converter handles:
       - Multi-camera RGB images
       - Low-dimensional state and actions
-      - Temporal resampling to a uniform frequency
+      - Temporal alignment of topics (nearest-neighbor to pivot source timeline)
       - Episode metadata and language instructions
     """
 
@@ -468,14 +467,7 @@ class MCAPConverter(BaseRoboticsConverter):
         # Image indices for temporal window
         self.image_indices = getattr(cfg, "image_indices", [0])
 
-        # Configure temporal resampler for time-alignment across channels
-        self.target_hz = topics_cfg.get("target_hz", 30.0)
-        if self.target_hz <= 0:
-            raise ValueError(f"target_hz must be positive, got {self.target_hz}")
-
-        self.resampler = TemporalResampler(self.target_hz)
-
-        print(f"🧭 MCAP Converter initialized: {self.target_hz} Hz, {self.output_mode} mode")
+        print(f"🧭 MCAP Converter initialized: {self.output_mode} mode, pivot_source_field={self.pivot_source_field}")
         print(f"🧭 Action topics: {self.action_topics}")
         print(f"🧭 State topics: {self.state_topics}")
         print(f"🧭 Camera topics: {self.camera_topics}")
@@ -487,6 +479,17 @@ class MCAPConverter(BaseRoboticsConverter):
         self.output_mode = topics_cfg.get("output_mode", "separate")
         if self.output_mode not in ("separate", "concatenated"):
             raise ValueError(f"output_mode must be 'separate' or 'concatenated', got: {self.output_mode}")
+
+        # Pivot source for temporal alignment; must be a field name from
+        # camera_topics_field_map, state_field_map, or action_field_map.
+        self.pivot_source_field = topics_cfg.get("pivot_source_field", None)
+        if not self.pivot_source_field:
+            raise ValueError("pivot_source_field must be specified in topics config")
+        # Temporal alignment thresholds (seconds)
+        self.gap_threshold_dt = topics_cfg.get("gap_threshold_dt", 0.1)
+        self.snap_threshold_dt = topics_cfg.get("snap_threshold_dt", 0.1)
+
+        self.action_topics = topics_cfg.get("action_topics", [])
 
         self.action_topics = topics_cfg.get("action_topics", [])
         self.state_topics = topics_cfg.get("state_topics", [])
@@ -664,17 +667,17 @@ class MCAPConverter(BaseRoboticsConverter):
 
     def load_episode_data(self, episode_path: str) -> dict[str, Any]:
         """
-        Load and resample MCAP episode to target frequency.
+        Load and align MCAP episode to a common frequency across channels.
 
         Args:
             episode_path: Path to MCAP file
 
         Returns:
             Dictionary containing:
-            - Resampled camera images (JPEG bytes or numpy arrays)
-            - Resampled state/action data
-            - Timestamps
             - Episode metadata
+            - Time-aligned state & camera images (JPEG bytes or numpy arrays)
+            - Time-aligned action data
+            - Resampled timestamps
         """
         dir_name = os.path.basename(episode_path.rstrip("/"))
         # TODO(mark.zolotas): Assumption of single `_0`.mcap might need to change
@@ -693,14 +696,14 @@ class MCAPConverter(BaseRoboticsConverter):
         if raw is None:
             return {}
 
-        resampled = self._resample_to_target_hz(raw)
+        time_aligned = self._align_to_pivot_source(raw)
         metadata = self._load_episode_metadata(episode_path)
 
         return {
             "metadata": metadata,
-            "observations": resampled["observations"],
-            "actions": resampled["actions"],
-            "timestamps": resampled["timestamps"],
+            "observations": time_aligned["observations"],
+            "actions": time_aligned["actions"],
+            "timestamps": time_aligned["timestamps"],
         }
 
     def _extract_raw_data(self, mcap_path: str) -> dict[str, Any] | None:
@@ -708,13 +711,14 @@ class MCAPConverter(BaseRoboticsConverter):
         Read an MCAP file and extract raw per-topic data and timestamps.
 
         Returns:
-            Dict with keys {state_data, action_data, camera_data, per_topic_timestamps,
-            t_min, t_max}, or None if extraction fails.
+            Dict with keys {state_data, action_data, camera_data, per_topic_log_timestamps,
+            per_topic_sensor_timestamps, t_min, t_max}, or None if extraction fails.
         """
         state_data = defaultdict(list)
         action_data = defaultdict(list)
         camera_data = defaultdict(list)
-        per_topic_timestamps = defaultdict(list)
+        per_topic_log_timestamps = defaultdict(list)
+        per_topic_sensor_timestamps = defaultdict(list)
         # To later be used to set the episode relative target timeline
         t_min, t_max = float("inf"), float("-inf")
 
@@ -727,6 +731,13 @@ class MCAPConverter(BaseRoboticsConverter):
 
                 try:
                     msg = reader.deserialize(rawdata, connection.msgtype)
+
+                    # Extract message header timestamp if available
+                    msg_t_sec = None
+                    if hasattr(msg, "header") and hasattr(msg.header, "stamp"):
+                        stamp = msg.header.stamp
+                        msg_t_sec = stamp.sec + stamp.nanosec * 1e-9
+
                     is_camera = topic in self.camera_topics_field_map
                     is_state = topic in self.state_field_map
                     is_action = topic in self.action_field_map
@@ -735,7 +746,9 @@ class MCAPConverter(BaseRoboticsConverter):
                         img = extract_image_from_msg(msg, return_numpy=True)
                         field = self.camera_topics_field_map[topic]
                         camera_data[field].append(img)
-                        per_topic_timestamps[field].append(t_sec)
+                        per_topic_log_timestamps[field].append(t_sec)
+                        if msg_t_sec is not None:
+                            per_topic_sensor_timestamps[field].append(msg_t_sec)
 
                     if is_state or is_action:
                         # Config-driven sub-field extraction (e.g., /dex3/* topics)
@@ -746,7 +759,9 @@ class MCAPConverter(BaseRoboticsConverter):
                                     virtual_topic = f"{topic}.{sub_key}"
                                     final_name = self.state_topic_subfield_map.get(virtual_topic, virtual_topic)
                                     state_data[final_name].append(val)
-                                    per_topic_timestamps[final_name].append(t_sec)
+                                    per_topic_log_timestamps[final_name].append(t_sec)
+                                    if msg_t_sec is not None:
+                                        per_topic_sensor_timestamps[final_name].append(msg_t_sec)
                         # Structured messages (Pose/JointState -> __xyz, __rot_6d)
                         else:
                             base_name = self.action_field_map.get(topic, self.state_field_map.get(topic, topic))
@@ -756,17 +771,21 @@ class MCAPConverter(BaseRoboticsConverter):
                                 for suffix, val in structured_data.items():
                                     final_name = f"{base_name}{suffix}"
                                     target[final_name].append(val)
-                                    per_topic_timestamps[final_name].append(t_sec)
+                                    per_topic_log_timestamps[final_name].append(t_sec)
+                                    if msg_t_sec is not None:
+                                        per_topic_sensor_timestamps[final_name].append(msg_t_sec)
                             else:
                                 arr = extract_array_from_msg(msg)
                                 if arr is not None:
                                     target[base_name].append(arr)
-                                    per_topic_timestamps[base_name].append(t_sec)
+                                    per_topic_log_timestamps[base_name].append(t_sec)
+                                    if msg_t_sec is not None:
+                                        per_topic_sensor_timestamps[base_name].append(msg_t_sec)
                 except Exception as e:
                     print(f"⚠️  Skipping message on {topic}: {e}")
                     continue
 
-        if not per_topic_timestamps:
+        if not per_topic_log_timestamps:
             print(f"❌ No data extracted from: {mcap_path}")
             return None
 
@@ -776,7 +795,7 @@ class MCAPConverter(BaseRoboticsConverter):
         if not has_any_data:
             print(
                 f"❌ Messages were read from {mcap_path} but all extractions failed. "
-                f"Topics with timestamps: {list(per_topic_timestamps.keys())}"
+                f"Topics with timestamps: {list(per_topic_log_timestamps.keys())}"
             )
             return None
 
@@ -784,14 +803,19 @@ class MCAPConverter(BaseRoboticsConverter):
             "state_data": state_data,
             "action_data": action_data,
             "camera_data": camera_data,
-            "per_topic_timestamps": per_topic_timestamps,
+            "per_topic_log_timestamps": per_topic_log_timestamps,
+            "per_topic_sensor_timestamps": per_topic_sensor_timestamps,
             "t_min": t_min,
             "t_max": t_max,
         }
 
-    def _resample_to_target_hz(self, raw: dict[str, Any]) -> dict[str, Any]:
+    def _align_to_pivot_source(self, raw: dict[str, Any]) -> dict[str, Any]:
         """
-        Resample raw extracted data to a uniform target timeline.
+        Align all channels to a pivot source's timestamps via nearest-neighbor.
+
+        Uses the pivot source's message header timestamps as the ground-truth
+        timeline. Every other channel (cameras, state, actions) is snapped to
+        the nearest sample.
 
         Args:
             raw: Output from _extract_raw_data
@@ -802,31 +826,112 @@ class MCAPConverter(BaseRoboticsConverter):
         state_data = raw["state_data"]
         action_data = raw["action_data"]
         camera_data = raw["camera_data"]
-        per_topic_timestamps = raw["per_topic_timestamps"]
+        per_topic_log_timestamps = raw["per_topic_log_timestamps"]
+        per_topic_sensor_timestamps = raw["per_topic_sensor_timestamps"]
 
         # Convert to episode-relative time
-        t0 = raw["t_min"]
-        per_topic_timestamps = {k: (np.asarray(v) - t0) for k, v in per_topic_timestamps.items()}
+        log_t0 = raw["t_min"]
+        per_topic_log_relative_time = {k: (np.asarray(v) - log_t0) for k, v in per_topic_log_timestamps.items()}
+        per_topic_sensor_relative_time = {k: (np.asarray(v) - log_t0) for k, v in per_topic_sensor_timestamps.items()}
 
-        t_start = min(ts[0] for ts in per_topic_timestamps.values())
-        t_end = max(ts[-1] for ts in per_topic_timestamps.values())
-        target_timeline = self.resampler.create_target_timeline(t_start, t_end).astype(np.float32)
+        # Build per-field best-available timestamps, preferring sensor (header) stamps
+        best_timestamps = {}
+        for field in per_topic_log_relative_time:
+            log_ts = per_topic_log_relative_time[field]
+            sensor_ts = per_topic_sensor_relative_time.get(field)
+
+            if sensor_ts is not None and len(sensor_ts) == len(log_ts):
+                best_timestamps[field] = sensor_ts
+            else:
+                # Fall back to log (MCAP connection) timestamps when headers are missing or incomplete
+                if sensor_ts is not None and len(sensor_ts) != len(log_ts):
+                    raise ValueError(
+                        f"❌  [{field}] sensor timestamp count mismatch "
+                        f"(log={len(log_ts)}, sensor={len(sensor_ts)}), "
+                        f"falling back to log timestamps"
+                    )
+                best_timestamps[field] = log_ts
+
+        # Ensure all timestamp arrays are sorted (MCAP iteration order should
+        # guarantee this, but multi-publisher topics could interleave)
+        for field, ts in best_timestamps.items():
+            if len(ts) > 1 and not np.all(np.diff(ts) >= 0):
+                sort_idx = np.argsort(ts)
+                best_timestamps[field] = ts[sort_idx]
+                print(f"⚠️  [{field}] timestamps were not sorted, reordered {len(ts)} entries")
+                # Reorder corresponding data to match
+                if field in camera_data:
+                    camera_data[field] = [camera_data[field][i] for i in sort_idx]
+                elif field in state_data:
+                    state_data[field] = [state_data[field][i] for i in sort_idx]
+                elif field in action_data:
+                    action_data[field] = [action_data[field][i] for i in sort_idx]
+
+        # Build target timeline from pivot source
+        all_fields = set(camera_data.keys()) | set(state_data.keys()) | set(action_data.keys())
+        if self.pivot_source_field not in best_timestamps:
+            raise ValueError(
+                f"❌ pivot_source_field '{self.pivot_source_field}' not found in extracted fields: {sorted(all_fields)}"
+            )
+
+        target_timeline = best_timestamps[self.pivot_source_field].astype(np.float32).copy()
+        print(f"{len(target_timeline)} frames over {target_timeline[-1] - target_timeline[0]:.2f}s")
+
+        # Sanity check: flag gaps in pivot timeline (e.g., dropped camera frames)
+        if len(target_timeline) > 1:
+            dts = np.diff(target_timeline)
+            expected_dt = np.median(dts)
+            gap_mask = dts > self.gap_threshold_dt
+            if gap_mask.any():
+                raise ValueError(
+                    f"❌  {gap_mask.sum()} gaps in pivot timeline exceed "
+                    f"{self.gap_threshold_dt:.4f}s. "
+                    f"Largest: {dts.max():.4f}s at index {dts.argmax()}. "
+                    f"Median dt: {expected_dt:.4f}s"
+                )
+
+        # Assume sensor header stamps and .mcap log stamps share the same
+        # time base (both episode-relative). Sanity check large drift based on
+        # whether a field's time range has no overlap with the pivot.
+        pivot_ts = best_timestamps[self.pivot_source_field]
+        pivot_start, pivot_end = float(pivot_ts[0]), float(pivot_ts[-1])
+        margin = max(pivot_end - pivot_start, 1.0) * 0.1
+        for field, ts in best_timestamps.items():
+            if field == self.pivot_source_field or len(ts) == 0:
+                continue
+            field_start, field_end = float(ts[0]), float(ts[-1])
+            if field_end < pivot_start - margin or field_start > pivot_end + margin:
+                raise ValueError(
+                    f"❌  Likely clock mismatch: '{field}' time range "
+                    f"[{field_start:.2f}s, {field_end:.2f}s] has no overlap with "
+                    f"pivot source '{self.pivot_source_field}' range "
+                    f"[{pivot_start:.2f}s, {pivot_end:.2f}s]. "
+                    f"All channels are assumed to share the same time base."
+                )
 
         # Stack low-dim data
         state_data = {k: np.stack(v) for k, v in state_data.items()}
         action_data = {k: np.stack(v) for k, v in action_data.items()}
 
-        # Resample lowdim data to target frequency
+        # Validate all action key fields are present before concatenation
+        missing_action_fields = [k for k in self.action_key_fields if k not in action_data]
+        if missing_action_fields:
+            raise ValueError(
+                f"Missing action fields after extraction: {missing_action_fields}. "
+                f"Available: {list(action_data.keys())}"
+            )
+
+        # Nearest-neighbor align low-dim data with snap-distance gating
         for data in (state_data, action_data):
             for k, v in data.items():
-                data[k] = self.resampler.resample_continuous(per_topic_timestamps[k], v, target_timeline).astype(
-                    np.float32
-                )
+                source_ts = best_timestamps[k]
+                idx = nearest_indices(source_ts, target_timeline, max_snap_distance=self.snap_threshold_dt)
+                data[k] = v[idx].astype(np.float32)
 
-        # Resample and stack images
+        # Nearest-neighbor align images
         for k, imgs in camera_data.items():
-            resampled = self.resampler.resample_images(per_topic_timestamps[k], imgs, target_timeline)
-            camera_data[k] = np.stack(resampled, axis=0)
+            idx = nearest_indices(best_timestamps[k], target_timeline, max_snap_distance=self.snap_threshold_dt)
+            camera_data[k] = np.stack([imgs[i] for i in idx], axis=0)
 
         # Merge state and camera into observations
         observations = {**state_data, **camera_data}
@@ -836,10 +941,9 @@ class MCAPConverter(BaseRoboticsConverter):
             "actions": np.concatenate([action_data[k] for k in self.action_key_fields], axis=1).astype(np.float32)
         }
 
-        print(
-            f"Episode duration: {t_end - t_start:.2f}s, resampled "
-            f"to {len(target_timeline)} timesteps at {self.target_hz} Hz"
-        )
+        duration = target_timeline[-1] - target_timeline[0]
+        effective_hz = (len(target_timeline) - 1) / duration if duration > 0 else 0.0
+        print(f"Episode duration: {duration:.2f}s, {len(target_timeline)} timesteps at ~{effective_hz:.1f}Hz")
 
         return {
             "observations": observations,
@@ -917,11 +1021,15 @@ class MCAPConverter(BaseRoboticsConverter):
         else:
             # Extract low-dimensional observations
             if episode_data["observations"]:
+                # When state_key_fields is set, use it to filter to a consistent
+                # subset across heterogeneous sources (e.g., sim and real)
+                allowed_state_keys = set(self.state_key_fields) if self.state_key_fields else None
                 result.update(
                     {
                         key: value
                         for key, value in episode_data["observations"].items()
-                        if len(value.shape) <= 2 or key.startswith("language_")
+                        if key.startswith("language_")
+                        or (len(value.shape) <= 2 and (allowed_state_keys is None or key in allowed_state_keys))
                     }
                 )
 
@@ -1144,8 +1252,12 @@ class MCAPConverter(BaseRoboticsConverter):
         # Build stats_sample for batched statistics update (don't send immediately)
         stats_sample = None
         if statistics_ray_actor is not None:
+            configured_keys = set(self.action_key_fields) | set(self.state_key_fields or [])
+            # Construct stats from sample only for configured data fields
+            # Important when e.g., handling different domains (sim / real),
+            # that may have a different number of lowdim data fields
             stats_sample = {
-                "lowdim": {k: v.copy() for k, v in sample_lowdim.items()},  # Copy before modifying
+                "lowdim": {k: v.copy() for k, v in sample_lowdim.items() if k in configured_keys},
                 "past_mask": past_mask,
                 "future_mask": future_mask,
             }

@@ -12,6 +12,7 @@ Observation modes (--obs):
 Domain (--domain):
   real                  Real robot data (default)
   sim                   Simulation data
+  real_and_sim          Both data domains
 
 Camera config (--camera-config):
   zed_mini              ZED Mini stereo head + D435 wrist (default for real data)
@@ -92,7 +93,7 @@ _CAMERA_YAML_BY_CONFIG = {
 # ---------------------------------------------------------------------------
 
 _S3_TARFILE = "s3://robotics-cam-data/platform/unitree_g1_dex3/tarfile"
-DEFAULT_DATA_ROOT_V1 = f"{_S3_TARFILE}/v1"  # non-tactile
+DEFAULT_DATA_ROOT_V3 = f"{_S3_TARFILE}/v3.2"  # non-tactile
 DEFAULT_DATA_ROOT_V2 = f"{_S3_TARFILE}/v2"  # tactile (dex3 torque/pressure)
 CKPT_ROOT = "s3://robotics-cam-checkpoints/platform/unitree_g1_dex3/model_checkpoints"
 REMOTE_SYNC_FIXED_PATH = "s3://robotics-cam-checkpoints/platform/unitree_g1_dex3/model_checkpoints_fixed/"
@@ -201,8 +202,8 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument(
         "--domain",
         default="real",
-        choices=["real", "sim"],
-        help="Data domain: real (default) or sim. Affects default data path and W&B tags.",
+        choices=["real", "sim", "real_and_sim"],
+        help="Data domain: real (default), sim, or both. Affects default data path and W&B tags.",
     )
     p.add_argument(
         "--camera-config",
@@ -369,7 +370,14 @@ def main() -> None:
 
     # Data paths
     use_tactile_data = args.tactile_propio or args.obs == "vision_propio_tactile"
-    default_root = DEFAULT_DATA_ROOT_V2 if use_tactile_data else DEFAULT_DATA_ROOT_V1
+    # FIXME(mark.zolotas): V2 data root is deprecated and pending migration
+    # Remove this guard once V4 tactile data is available
+    if use_tactile_data:
+        raise NotImplementedError(
+            "Tactile data still points to DEFAULT_DATA_ROOT_V2 which is no longer supported. "
+            "Migrate tactile datasets to V4 before enabling this path."
+        )
+    default_root = DEFAULT_DATA_ROOT_V3
     data_root = args.data_root or f"{default_root}/{args.task}/{args.domain}/teleop/shards"
     run_tag = f"_{args.run_tag}" if args.run_tag else ""
     stag = _samples_tag(samples)

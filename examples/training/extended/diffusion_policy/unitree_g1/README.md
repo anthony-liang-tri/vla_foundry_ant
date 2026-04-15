@@ -47,7 +47,8 @@ git pull origin main  # ensure latest configs
 uv run --group preprocessing vla_foundry/data/preprocessing/preprocess_robotics_to_tar.py \
     --type mcap \
     --source_episodes "['s3://robotics-cam-data/platform/unitree_g1_dex3/mcap']" \
-    --output_dir "s3://robotics-cam-data/platform/unitree_g1_dex3/tarfile/v1/" \
+    --output_dir "s3://robotics-cam-data/platform/unitree_g1_dex3/tarfile/v3.2/" \
+    --output_dir_fixed_path "s3://robotics-cam-data/platform/unitree_g1_dex3/dataset_fixed/" \
     --config_path "vla_foundry/config_presets/data/unitree_g1/g1_preprocessing_params_1past_47future_30hz.yaml" \
     --topics_to_fields_path "vla_foundry/config_presets/data/unitree_g1/g1_mcap_topics.yaml" \
     --camera_names "include vla_foundry/config_presets/data/unitree_g1/g1_data_camera_names_zed2mini.yaml" \
@@ -65,7 +66,7 @@ Key flags:
 
 Output lands at:
 ```
-s3://robotics-cam-data/platform/unitree_g1_dex3/tarfile/v1/{task}/{domain}/{source}/
+s3://robotics-cam-data/platform/unitree_g1_dex3/tarfile/v3.2/{task}/{domain}/{source}/
 ```
 
 Pass that path as `--data-root` to `train_g1_policy.py`.
@@ -123,7 +124,7 @@ Action space is fixed: absolute EE pose (18D) + Dex3 finger joint positions (14D
 
 Training data is read from:
 ```
-s3://robotics-cam-data/platform/unitree_g1_dex3/tarfile/v1/{TASK}/{DOMAIN}/teleop/shards/
+s3://robotics-cam-data/platform/unitree_g1_dex3/tarfile/v3.2/{TASK}/{DOMAIN}/teleop/shards/
 ```
 
 Tactile configs (`vision_propio_tactile`) default to `v2/` — requires data preprocessed with

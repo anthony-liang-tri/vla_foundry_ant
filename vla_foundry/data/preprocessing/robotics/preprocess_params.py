@@ -209,7 +209,7 @@ class HumanoidEverydayPreprocessParams(PreprocessParams):
 class MCAPPreprocessParams(PreprocessParams):
     """Configuration for MCAP ROS 2 bag preprocessing."""
 
-    # Path to topics config (action_topics, state_topics, camera_topics, target_hz)
+    # Path to topics config (action_topics, state_topics, camera_topics)
     topics_to_fields_path: str = field(
         default="vla_foundry/config_presets/data/unitree_g1/g1_mcap_topics.yaml",
     )

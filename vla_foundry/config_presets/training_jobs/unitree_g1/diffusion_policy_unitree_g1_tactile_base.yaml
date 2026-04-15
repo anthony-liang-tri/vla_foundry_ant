@@ -10,22 +10,22 @@ data:
   proprioception_fields:
     - actual_ee_pose_left__xyz
     - actual_ee_pose_left__rot_6d
-    - actual_joint_states__left_hand_thumb_0_joint
-    - actual_joint_states__left_hand_thumb_1_joint
-    - actual_joint_states__left_hand_thumb_2_joint
-    - actual_joint_states__left_hand_middle_0_joint
-    - actual_joint_states__left_hand_middle_1_joint
-    - actual_joint_states__left_hand_index_0_joint
-    - actual_joint_states__left_hand_index_1_joint
+    - actual_joint_position__left_hand_thumb_0_joint
+    - actual_joint_position__left_hand_thumb_1_joint
+    - actual_joint_position__left_hand_thumb_2_joint
+    - actual_joint_position__left_hand_middle_0_joint
+    - actual_joint_position__left_hand_middle_1_joint
+    - actual_joint_position__left_hand_index_0_joint
+    - actual_joint_position__left_hand_index_1_joint
     - actual_ee_pose_right__xyz
     - actual_ee_pose_right__rot_6d
-    - actual_joint_states__right_hand_thumb_0_joint
-    - actual_joint_states__right_hand_thumb_1_joint
-    - actual_joint_states__right_hand_thumb_2_joint
-    - actual_joint_states__right_hand_middle_0_joint
-    - actual_joint_states__right_hand_middle_1_joint
-    - actual_joint_states__right_hand_index_0_joint
-    - actual_joint_states__right_hand_index_1_joint
+    - actual_joint_position__right_hand_thumb_0_joint
+    - actual_joint_position__right_hand_thumb_1_joint
+    - actual_joint_position__right_hand_thumb_2_joint
+    - actual_joint_position__right_hand_middle_0_joint
+    - actual_joint_position__right_hand_middle_1_joint
+    - actual_joint_position__right_hand_index_0_joint
+    - actual_joint_position__right_hand_index_1_joint
     - actual_dex3_hand_left_joints_torque   # 7 — dex3 left joint torques
     - actual_dex3_hand_left_pressure        # 12 — dex3 left pressure sensors
     - actual_dex3_hand_right_joints_torque  # 7 — dex3 right joint torques
