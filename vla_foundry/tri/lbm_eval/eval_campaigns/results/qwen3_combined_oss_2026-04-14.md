@@ -9,13 +9,14 @@ Combined evaluation of 3 model groups on OSS sim:
 
 ## Results — OSS Sim
 
-### NominalConfig-ST-Sim (15 tasks, mean = 61.1%)
+### NominalConfig-ST-Sim (16 tasks, mean = 57.3%)
 
 | Task | Success / Total | Rate |
 |------|-----------------|------|
 | BimanualPlaceAppleFromBowlIntoBin | 182 / 191 | 95.3% |
 | BimanualPlaceFruitFromBowlIntoBin | 70 / 183 | 38.3% |
 | BimanualPutRedBellPepperInBin | 150 / 183 | 82.0% |
+| BimanualPutSpatulaOnPlateFromDryingRack | 0 / 180 | 0.0% |
 | BimanualPutSpatulaOnPlateFromTable | 97 / 192 | 50.5% |
 | BimanualStackPlatesOnTableFromDryingRack | 174 / 200 | 87.0% |
 | BimanualStoreCerealBoxUnderShelf | 126 / 184 | 68.5% |
@@ -28,7 +29,9 @@ Combined evaluation of 3 model groups on OSS sim:
 | PutSpatulaInUtensilCrock | 82 / 191 | 42.9% |
 | TurnCupUpsideDown | 159 / 180 | 88.3% |
 | TurnMugRightsideUp | 125 / 163 | 76.7% |
-| **Unweighted Mean** | | **61.1%** |
+| **Unweighted Mean** | | **57.3%** |
+
+> Note: BimanualPutSpatulaOnPlateFromDryingRack was filled in a follow-up run (2026-04-15). 18 of 20 batches landed (180/200 demos); 3 demos hit Drake NaN sim failures, the rest ran full 30 s without success. Result is solid 0%. The 3 unseen tasks (Avocado, SpatulaUtensilCrock, MugCenter) have no NominalConfig-ST checkpoint — only multitask and FT models were trained on those.
 
 ### Qwen3-FT-v0.4.3.9 (16 seen tasks, mean = 44.3%)
 
