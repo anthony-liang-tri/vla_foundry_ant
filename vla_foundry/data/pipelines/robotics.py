@@ -171,9 +171,7 @@ class RoboticsPipeline(BaseWebDatasetPipeline):
         os.environ["TOKENIZERS_PARALLELISM"] = "true"
         self.data_params = data_params
         self.robotics_processor = RoboticsProcessor(data_params)
-        self.augmentations = Augmentations(
-            data_params.augmentation, image_size=getattr(data_params, "image_size", None)
-        )
+        self.augmentations = Augmentations(data_params.augmentation)
 
     def __len__(self):
         """Return the number of samples in the dataset (cached)."""

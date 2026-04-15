@@ -14,14 +14,21 @@ def filter_no_caption_or_no_image(sample):
     return has_caption and has_image
 
 
+def _list_collation_fn(batch):
+    """Collate samples into lists without stacking tensors.
+
+    Image-caption data has variable-size images that cannot be stacked.
+    The HF processor applied after batching handles resizing and padding.
+    """
+    return {k: [s[k] for s in batch] for k in batch[0]}
+
+
 class ImageCaptionPipeline(BaseWebDatasetPipeline):
     def __init__(self, modality: str, data_params: DataParams, batch_size: int):
         super().__init__(modality, data_params, batch_size)
         self.processor = get_processor(data_params)
         self.processor_kwargs = getattr(data_params, "processor_kwargs", {})
-        self.augmentations = Augmentations(
-            data_params.augmentation, image_size=getattr(data_params, "image_size", None)
-        )
+        self.augmentations = Augmentations(data_params.augmentation)
 
     def create_pipeline(self, datastring: str, checkpoint_num: int):
         cache_cfg = self.data_params.dataset_cache
@@ -48,7 +55,7 @@ class ImageCaptionPipeline(BaseWebDatasetPipeline):
                     "text": apply_chat_template(self.processor, 1, sample["text"]),
                 }
             ),
-            wds.batched(self.batch_size, partial=False),
+            wds.batched(self.batch_size, partial=False, collation_fn=_list_collation_fn),
             wds.map(
                 lambda sample: self.processor(
                     images=[[img] for img in sample["image"]],

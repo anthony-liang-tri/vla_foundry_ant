@@ -1,0 +1,45 @@
+# Ablation config: VLA Foundry trained SmolVLM2 backbone (vlm_foundry_backbone type)
+#
+# Difference from nominal v0.4.3.9:
+#   1. Switches model preset to vla_smolvlm_foundry_backbone.yaml (vlm_foundry_backbone
+#      type, no hf_pretrained)
+#   2. Loads VLM backbone weights trained within VLA Foundry
+#
+# All other fields (hyperparameters, clamp_range, proprioception, data augmentation,
+# action fields, etc.) are inherited from nominal v0.4.3.9.
+#
+# Note: data.img_num_tokens is irrelevant here — that field is only read by the
+# processor code for PaLIGemma. For SmolVLM2/vlm_foundry_backbone the image token
+# count is set by the HF processor's default image_seq_length (64 for SmolVLM2-256M).
+#
+# Note: data.processor_kwargs from nominal ({"size": {"longest_edge": 224}}) is inherited;
+# this should be harmless since vlm_foundry_backbone handles image processing via its ViT,
+# but flag for investigation if the first training run errors on processor config.
+#
+# Usage with ST nominal:
+#   uv run python vla_foundry/tri/ablations/generate_ablation_configs.py \
+#     --nominal-config vla_foundry/tri/ablations/vla/nominal_config_vla_singletask_v_0_4_3_9.yaml \
+#     --ablations-config vla_foundry/tri/ablations/vla/smolvlm_foundry_backbone_ablation.yaml
+#
+# Usage with MT nominal:
+#   uv run python vla_foundry/tri/ablations/generate_ablation_configs.py \
+#     --nominal-config vla_foundry/tri/ablations/vla/nominal_config_vla_multitask_v_0_4_3_9.yaml \
+#     --ablations-config vla_foundry/tri/ablations/vla/smolvlm_foundry_backbone_ablation.yaml
+
+ablations:
+  smolvlm_foundry_backbone:
+    # ---- Switch to VLA Foundry trained backbone ----
+    # Replaces the nominal vla_smolvlm_256m.yaml include; vlm_foundry_backbone type
+    # uses custom ViT+LLM trained in VLA Foundry instead of a HuggingFace pretrained model.
+    # model.transformer.is_causal: true from nominal base_args still applies.
+    model: include vla_foundry/config_presets/models/vla_smolvlm_foundry_backbone.yaml
+
+    # ---- Load VLM backbone checkpoint trained within VLA Foundry ----
+    model.vision_language_backbone.resume_from_checkpoint: "s3://tri-ml-datasets-uw2/vla_foundry_scratch/models/vlm_1b_caption_only/2026_04_11-08_24_20-model_vlm-lr_0.0001-bsz_1024/checkpoints/checkpoint_71.pt"
+    model.vision_language_backbone.resume_weights_only: true
+    data.processor_kwargs: {"max_image_size": {"longest_edge": 224}, "size": {"longest_edge": 224}}
+    data.hf_fast_tokenizer_rayon_threads: 16
+    data.img_num_tokens: 64
+    data.num_workers: 8
+    hparams.precision: pure_bf16
+    hparams.torchcompile: true

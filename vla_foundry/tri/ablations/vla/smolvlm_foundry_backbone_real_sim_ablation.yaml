@@ -1,0 +1,40 @@
+# Ablation config: SmolVLM foundry backbone trained on real-only and sim-only data subsets
+#
+# Same foundry backbone setup as smolvlm_foundry_backbone_ablation.yaml, but splits
+# the multitask dataset into real-only and sim-only subsets to measure domain contribution.
+#
+# Usage (with MT nominal):
+#   uv run python vla_foundry/tri/ablations/generate_ablation_configs.py \
+#     --nominal-config vla_foundry/tri/ablations/vla/nominal_config_vla_multitask_v_0_4_3_9.yaml \
+#     --ablations-config vla_foundry/tri/ablations/vla/smolvlm_foundry_backbone_real_sim_ablation.yaml
+
+ablations:
+  smolvlm_foundry_backbone_real_subset:
+    # ---- Foundry backbone model ----
+    model: include vla_foundry/config_presets/models/vla_smolvlm_foundry_backbone.yaml
+    model.vision_language_backbone.resume_from_checkpoint: "s3://tri-ml-datasets-uw2/vla_foundry_scratch/models/vlm_1b_caption_only/2026_04_11-08_24_20-model_vlm-lr_0.0001-bsz_1024/checkpoints/checkpoint_71.pt"
+    model.vision_language_backbone.resume_weights_only: true
+    data.processor_kwargs: {"max_image_size": {"longest_edge": 224}, "size": {"longest_edge": 224}}
+    data.hf_fast_tokenizer_rayon_threads: 16
+    data.img_num_tokens: 64
+    data.num_workers: 8
+    hparams.precision: pure_bf16
+    hparams.torchcompile: true
+    # ---- Real-only data subset ----
+    data.dataset_manifest: '["s3://tri-ml-datasets-uw2/vla_foundry_datasets_test/v0.4.3.9/real/manifest.jsonl"]'
+    data.dataset_statistics: '["s3://tri-ml-datasets-uw2/vla_foundry_datasets_test/v0.4.3.9/real/stats.json"]'
+
+  smolvlm_foundry_backbone_sim_subset:
+    # ---- Foundry backbone model ----
+    model: include vla_foundry/config_presets/models/vla_smolvlm_foundry_backbone.yaml
+    model.vision_language_backbone.resume_from_checkpoint: "s3://tri-ml-datasets-uw2/vla_foundry_scratch/models/vlm_1b_caption_only/2026_04_11-08_24_20-model_vlm-lr_0.0001-bsz_1024/checkpoints/checkpoint_71.pt"
+    model.vision_language_backbone.resume_weights_only: true
+    data.processor_kwargs: {"max_image_size": {"longest_edge": 224}, "size": {"longest_edge": 224}}
+    data.hf_fast_tokenizer_rayon_threads: 16
+    data.img_num_tokens: 64
+    data.num_workers: 8
+    hparams.precision: pure_bf16
+    hparams.torchcompile: true
+    # ---- Sim-only data subset ----
+    data.dataset_manifest: '["s3://tri-ml-datasets-uw2/vla_foundry_datasets_test/v0.4.3.9/sim/manifest.jsonl"]'
+    data.dataset_statistics: '["s3://tri-ml-datasets-uw2/vla_foundry_datasets_test/v0.4.3.9/sim/stats.json"]'

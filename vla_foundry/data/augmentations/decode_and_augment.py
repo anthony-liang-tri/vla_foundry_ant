@@ -83,9 +83,8 @@ def fast_image_decoder(key: str, data: bytes) -> torch.Tensor | None:
 
 
 class Augmentations:
-    def __init__(self, augmentation_params: DataAugmentationParams, image_size: int | None = None):
+    def __init__(self, augmentation_params: DataAugmentationParams):
         self.augmentation_params = augmentation_params
-        self.image_size = image_size
         self.construct_transforms()
 
     def construct_transforms(self):
@@ -95,37 +94,27 @@ class Augmentations:
         image_transforms = []
 
         if self.augmentation_params is None or not self.augmentation_params.enabled:
-            # No augmentation: resize to target size for tensor batching
-            if self.image_size is not None:
-                image_transforms.append(transforms.Resize((self.image_size, self.image_size), antialias=True))
-            self.image_transforms = transforms.Compose(image_transforms) if image_transforms else None
+            self.image_transforms = None
+            self._crop_size: tuple[int, int] | None = None
             return
 
-        # Add crop augmentation. When crop is enabled and produces the final image_size,
-        # skip the initial Resize so the crop actually samples different regions.
-        # When no crop, resize first to ensure consistent tensor size.
+        # Add crop augmentation.
         crop = self.augmentation_params.image.get("crop", None)
-        crop_handles_size = (
-            crop is not None
-            and crop.enabled
-            and self.image_size is not None
-            and crop.shape[0] >= self.image_size
-            and crop.shape[1] >= self.image_size
-        )
-        if self.image_size is not None and not crop_handles_size:
-            image_transforms.append(transforms.Resize((self.image_size, self.image_size), antialias=True))
+        self._crop_size = None
 
         if crop is not None and crop.enabled:
             crop_h, crop_w = crop.shape
             if crop.mode == "center":
                 if crop_h <= 1.0 and crop_w <= 1.0:
                     raise ValueError("Center crop with ratio-based shape is not supported. Use absolute pixel values.")
-                image_transforms.append(transforms.CenterCrop((int(crop_h), int(crop_w))))
+                self._crop_size = (int(crop_h), int(crop_w))
+                image_transforms.append(transforms.CenterCrop(self._crop_size))
             else:  # random mode
                 if crop_h <= 1.0 and crop_w <= 1.0:
                     image_transforms.append(RandomRatioCrop((crop_h, crop_w)))
                 elif crop_h > 1.0 and crop_w > 1.0:
-                    image_transforms.append(transforms.RandomCrop((int(crop_h), int(crop_w))))
+                    self._crop_size = (int(crop_h), int(crop_w))
+                    image_transforms.append(transforms.RandomCrop(self._crop_size))
                 else:
                     raise ValueError(f"Invalid crop shape: {crop.shape}")
 
@@ -206,6 +195,18 @@ class Augmentations:
                 result[key] = data
 
         if image_tensors and self.image_transforms is not None:
+            # Validate that images are large enough for the configured crop.
+            if self._crop_size is not None:
+                crop_h, crop_w = self._crop_size
+                for key, t in zip(image_keys, image_tensors, strict=True):
+                    _, img_h, img_w = t.shape
+                    if img_h < crop_h or img_w < crop_w:
+                        raise ValueError(
+                            f"Image '{key}' has size ({img_h}, {img_w}) which is smaller than "
+                            f"crop size ({crop_h}, {crop_w}). Reduce the crop size or resize "
+                            f"images during preprocessing."
+                        )
+
             # Group by shape, batch-transform each group so images of the
             # same size share the same random augmentation parameters.
             groups: dict[tuple, list[int]] = {}
