@@ -47,7 +47,6 @@ available_node_types:
         - subnet-08504ad0624833b61
         - subnet-061b8c531b13bd862
         - subnet-0f9b062323aab5634
-        - subnet-0d76b84386cd2d69c
       MetadataOptions:
         HttpTokens: required
         HttpEndpoint: enabled
