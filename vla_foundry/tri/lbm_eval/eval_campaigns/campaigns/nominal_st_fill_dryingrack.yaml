@@ -2,7 +2,7 @@ campaign_name: "nominal_st_fill_dryingrack"
 description: "Fill missing NominalConfig-ST task BimanualPutSpatulaOnPlateFromDryingRack - OSS sim, lands in 2026-04-14_qwen3_combined_oss subfolder"
 
 cluster:
-  config_file: "vla_foundry/tri/lbm_eval/eval_campaigns/ray_policy_runner_cluster.yaml"
+  config_file: "vla_foundry/tri/lbm_eval/eval_campaigns/ray_policy_runner_cluster_no_1f.yaml"
   num_workers: 32
   aws_profile: "manip-cluster"
   owner_email: "jean.mercat@tri.global"
