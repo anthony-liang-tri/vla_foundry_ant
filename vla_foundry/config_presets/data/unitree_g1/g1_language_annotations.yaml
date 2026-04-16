@@ -33,6 +33,9 @@ language_dict:
   move_block_on_plate:
     original:
     - move the red block on the blue plate using the left hand
+  place_cube_in_hand:
+    original:
+    - place the block in the person's hand
   stack_cubes_ordered:
     original:
     - stack a green block on the top of a blue block, and stack a red block on the top of the green block
