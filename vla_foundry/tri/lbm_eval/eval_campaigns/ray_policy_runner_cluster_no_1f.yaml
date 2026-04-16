@@ -1,5 +1,5 @@
-# Same as ray_policy_runner_cluster.yaml but excludes us-east-1f
-# (used when g5.24xlarge capacity is unavailable in 1f)
+# Same as ray_policy_runner_cluster.yaml but excludes us-east-1b and us-east-1f
+# (used when g5.24xlarge capacity is unavailable in those AZs)
 cluster_name: ${CLUSTER_NAME}
 max_workers: 1024
 upscaling_speed: 1.0
@@ -8,7 +8,7 @@ idle_timeout_minutes: 30
 provider:
   type: aws
   region: us-east-1
-  availability_zone: us-east-1a,us-east-1b,us-east-1c,us-east-1d,us-east-1e
+  availability_zone: us-east-1a,us-east-1c,us-east-1d,us-east-1e
   cache_stopped_nodes: false
   aws_profile: manip-cluster
   use_internal_ips: true
@@ -43,10 +43,9 @@ available_node_types:
         - sg-0ccd4ebaa290ef67b
         - sg-03d931ad906a3c63e
       SubnetIds:
-        - subnet-076ea44bbe5b04780
-        - subnet-08504ad0624833b61
-        - subnet-061b8c531b13bd862
-        - subnet-0f9b062323aab5634
+        - subnet-08504ad0624833b61  # us-east-1c
+        - subnet-061b8c531b13bd862  # us-east-1d
+        - subnet-0f9b062323aab5634  # us-east-1e
       MetadataOptions:
         HttpTokens: required
         HttpEndpoint: enabled
