@@ -2,7 +2,7 @@ campaign_name: "qwen3_unseen_oss"
 description: "Qwen3 5.2B multitask model - 3 unseen tasks - OSS sim"
 
 cluster:
-  config_file: "vla_foundry/tri/lbm_eval/eval_campaigns/ray_policy_runner_cluster.yaml"
+  config_file: "vla_foundry/tri/lbm_eval/eval_campaigns/ray_policy_runner_cluster_no_1f.yaml"
   num_workers: 128
   aws_profile: "manip-cluster"
   owner_email: "jean.mercat@tri.global"
