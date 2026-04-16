@@ -189,7 +189,7 @@ Before launching, present a concise summary to the user:
 >
 > Launching in 5 minutes unless you say otherwise.
 
-Wait up to 5 minutes for user response. If no response, proceed with the launch. If user modifies the plan (e.g., "use anzu instead", "only 100 samples"), adjust accordingly.
+**Implementation:** Start a `sleep 300 && echo "5 minutes elapsed"` background Bash command as a timer. Then proceed with Step 6 (commit, push, update cache) and Step 6.5 (collision check) while the timer runs — these pre-launch steps are needed regardless. If the user responds before the timer fires (confirming, modifying, or cancelling), act on their response immediately. If the timer fires with no user response, proceed with the launch. If user modifies the plan (e.g., "use anzu instead", "only 100 samples"), adjust accordingly.
 
 ### Step 6: Commit, push, update cache
 
