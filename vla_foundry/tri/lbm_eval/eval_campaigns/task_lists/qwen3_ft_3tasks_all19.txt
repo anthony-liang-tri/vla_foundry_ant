@@ -1,0 +1,341 @@
+(
+    "ft_spatula_table_BimanualPlaceAppleFromBowlIntoBin",
+    "BimanualPlaceAppleFromBowlIntoBin",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromTable/qwen3_ft/2026_04_16-20_56_05-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_table_BimanualPlaceAvocadoFromBowlIntoBin",
+    "BimanualPlaceAvocadoFromBowlIntoBin",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromTable/qwen3_ft/2026_04_16-20_56_05-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_table_BimanualPlaceFruitFromBowlIntoBin",
+    "BimanualPlaceFruitFromBowlIntoBin",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromTable/qwen3_ft/2026_04_16-20_56_05-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_table_BimanualPutRedBellPepperInBin",
+    "BimanualPutRedBellPepperInBin",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromTable/qwen3_ft/2026_04_16-20_56_05-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_table_BimanualPutSpatulaOnPlateFromDryingRack",
+    "BimanualPutSpatulaOnPlateFromDryingRack",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromTable/qwen3_ft/2026_04_16-20_56_05-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_table_BimanualPutSpatulaOnPlateFromTable",
+    "BimanualPutSpatulaOnPlateFromTable",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromTable/qwen3_ft/2026_04_16-20_56_05-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_table_BimanualPutSpatulaOnPlateFromUtensilCrock",
+    "BimanualPutSpatulaOnPlateFromUtensilCrock",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromTable/qwen3_ft/2026_04_16-20_56_05-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_table_BimanualStackPlatesOnTableFromDryingRack",
+    "BimanualStackPlatesOnTableFromDryingRack",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromTable/qwen3_ft/2026_04_16-20_56_05-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_table_BimanualStoreCerealBoxUnderShelf",
+    "BimanualStoreCerealBoxUnderShelf",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromTable/qwen3_ft/2026_04_16-20_56_05-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_table_PlaceCupByCoaster",
+    "PlaceCupByCoaster",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromTable/qwen3_ft/2026_04_16-20_56_05-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_table_PushCoasterToCenterOfTable",
+    "PushCoasterToCenterOfTable",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromTable/qwen3_ft/2026_04_16-20_56_05-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_table_PushCoasterToMug",
+    "PushCoasterToMug",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromTable/qwen3_ft/2026_04_16-20_56_05-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_table_PutBananaOnSaucer",
+    "PutBananaOnSaucer",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromTable/qwen3_ft/2026_04_16-20_56_05-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_table_PutKiwiInCenterOfTable",
+    "PutKiwiInCenterOfTable",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromTable/qwen3_ft/2026_04_16-20_56_05-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_table_PutMugInCenterOfTable",
+    "PutMugInCenterOfTable",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromTable/qwen3_ft/2026_04_16-20_56_05-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_table_PutMugOnSaucer",
+    "PutMugOnSaucer",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromTable/qwen3_ft/2026_04_16-20_56_05-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_table_PutSpatulaInUtensilCrock",
+    "PutSpatulaInUtensilCrock",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromTable/qwen3_ft/2026_04_16-20_56_05-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_table_TurnCupUpsideDown",
+    "TurnCupUpsideDown",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromTable/qwen3_ft/2026_04_16-20_56_05-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_table_TurnMugRightsideUp",
+    "TurnMugRightsideUp",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromTable/qwen3_ft/2026_04_16-20_56_05-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_cup_coaster_BimanualPlaceAppleFromBowlIntoBin",
+    "BimanualPlaceAppleFromBowlIntoBin",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/PlaceCupByCoaster/qwen3_ft/2026_04_16-20_56_15-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_cup_coaster_BimanualPlaceAvocadoFromBowlIntoBin",
+    "BimanualPlaceAvocadoFromBowlIntoBin",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/PlaceCupByCoaster/qwen3_ft/2026_04_16-20_56_15-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_cup_coaster_BimanualPlaceFruitFromBowlIntoBin",
+    "BimanualPlaceFruitFromBowlIntoBin",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/PlaceCupByCoaster/qwen3_ft/2026_04_16-20_56_15-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_cup_coaster_BimanualPutRedBellPepperInBin",
+    "BimanualPutRedBellPepperInBin",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/PlaceCupByCoaster/qwen3_ft/2026_04_16-20_56_15-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_cup_coaster_BimanualPutSpatulaOnPlateFromDryingRack",
+    "BimanualPutSpatulaOnPlateFromDryingRack",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/PlaceCupByCoaster/qwen3_ft/2026_04_16-20_56_15-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_cup_coaster_BimanualPutSpatulaOnPlateFromTable",
+    "BimanualPutSpatulaOnPlateFromTable",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/PlaceCupByCoaster/qwen3_ft/2026_04_16-20_56_15-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_cup_coaster_BimanualPutSpatulaOnPlateFromUtensilCrock",
+    "BimanualPutSpatulaOnPlateFromUtensilCrock",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/PlaceCupByCoaster/qwen3_ft/2026_04_16-20_56_15-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_cup_coaster_BimanualStackPlatesOnTableFromDryingRack",
+    "BimanualStackPlatesOnTableFromDryingRack",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/PlaceCupByCoaster/qwen3_ft/2026_04_16-20_56_15-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_cup_coaster_BimanualStoreCerealBoxUnderShelf",
+    "BimanualStoreCerealBoxUnderShelf",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/PlaceCupByCoaster/qwen3_ft/2026_04_16-20_56_15-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_cup_coaster_PlaceCupByCoaster",
+    "PlaceCupByCoaster",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/PlaceCupByCoaster/qwen3_ft/2026_04_16-20_56_15-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_cup_coaster_PushCoasterToCenterOfTable",
+    "PushCoasterToCenterOfTable",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/PlaceCupByCoaster/qwen3_ft/2026_04_16-20_56_15-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_cup_coaster_PushCoasterToMug",
+    "PushCoasterToMug",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/PlaceCupByCoaster/qwen3_ft/2026_04_16-20_56_15-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_cup_coaster_PutBananaOnSaucer",
+    "PutBananaOnSaucer",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/PlaceCupByCoaster/qwen3_ft/2026_04_16-20_56_15-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_cup_coaster_PutKiwiInCenterOfTable",
+    "PutKiwiInCenterOfTable",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/PlaceCupByCoaster/qwen3_ft/2026_04_16-20_56_15-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_cup_coaster_PutMugInCenterOfTable",
+    "PutMugInCenterOfTable",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/PlaceCupByCoaster/qwen3_ft/2026_04_16-20_56_15-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_cup_coaster_PutMugOnSaucer",
+    "PutMugOnSaucer",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/PlaceCupByCoaster/qwen3_ft/2026_04_16-20_56_15-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_cup_coaster_PutSpatulaInUtensilCrock",
+    "PutSpatulaInUtensilCrock",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/PlaceCupByCoaster/qwen3_ft/2026_04_16-20_56_15-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_cup_coaster_TurnCupUpsideDown",
+    "TurnCupUpsideDown",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/PlaceCupByCoaster/qwen3_ft/2026_04_16-20_56_15-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_cup_coaster_TurnMugRightsideUp",
+    "TurnMugRightsideUp",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/PlaceCupByCoaster/qwen3_ft/2026_04_16-20_56_15-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_rack_BimanualPlaceAppleFromBowlIntoBin",
+    "BimanualPlaceAppleFromBowlIntoBin",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromDryingRack/qwen3_ft/2026_04_16-20_52_19-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_rack_BimanualPlaceAvocadoFromBowlIntoBin",
+    "BimanualPlaceAvocadoFromBowlIntoBin",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromDryingRack/qwen3_ft/2026_04_16-20_52_19-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_rack_BimanualPlaceFruitFromBowlIntoBin",
+    "BimanualPlaceFruitFromBowlIntoBin",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromDryingRack/qwen3_ft/2026_04_16-20_52_19-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_rack_BimanualPutRedBellPepperInBin",
+    "BimanualPutRedBellPepperInBin",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromDryingRack/qwen3_ft/2026_04_16-20_52_19-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_rack_BimanualPutSpatulaOnPlateFromDryingRack",
+    "BimanualPutSpatulaOnPlateFromDryingRack",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromDryingRack/qwen3_ft/2026_04_16-20_52_19-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_rack_BimanualPutSpatulaOnPlateFromTable",
+    "BimanualPutSpatulaOnPlateFromTable",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromDryingRack/qwen3_ft/2026_04_16-20_52_19-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_rack_BimanualPutSpatulaOnPlateFromUtensilCrock",
+    "BimanualPutSpatulaOnPlateFromUtensilCrock",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromDryingRack/qwen3_ft/2026_04_16-20_52_19-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_rack_BimanualStackPlatesOnTableFromDryingRack",
+    "BimanualStackPlatesOnTableFromDryingRack",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromDryingRack/qwen3_ft/2026_04_16-20_52_19-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_rack_BimanualStoreCerealBoxUnderShelf",
+    "BimanualStoreCerealBoxUnderShelf",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromDryingRack/qwen3_ft/2026_04_16-20_52_19-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_rack_PlaceCupByCoaster",
+    "PlaceCupByCoaster",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromDryingRack/qwen3_ft/2026_04_16-20_52_19-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_rack_PushCoasterToCenterOfTable",
+    "PushCoasterToCenterOfTable",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromDryingRack/qwen3_ft/2026_04_16-20_52_19-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_rack_PushCoasterToMug",
+    "PushCoasterToMug",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromDryingRack/qwen3_ft/2026_04_16-20_52_19-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_rack_PutBananaOnSaucer",
+    "PutBananaOnSaucer",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromDryingRack/qwen3_ft/2026_04_16-20_52_19-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_rack_PutKiwiInCenterOfTable",
+    "PutKiwiInCenterOfTable",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromDryingRack/qwen3_ft/2026_04_16-20_52_19-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_rack_PutMugInCenterOfTable",
+    "PutMugInCenterOfTable",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromDryingRack/qwen3_ft/2026_04_16-20_52_19-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_rack_PutMugOnSaucer",
+    "PutMugOnSaucer",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromDryingRack/qwen3_ft/2026_04_16-20_52_19-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_rack_PutSpatulaInUtensilCrock",
+    "PutSpatulaInUtensilCrock",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromDryingRack/qwen3_ft/2026_04_16-20_52_19-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_rack_TurnCupUpsideDown",
+    "TurnCupUpsideDown",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromDryingRack/qwen3_ft/2026_04_16-20_52_19-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
+
+(
+    "ft_spatula_rack_TurnMugRightsideUp",
+    "TurnMugRightsideUp",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromDryingRack/qwen3_ft/2026_04_16-20_52_19-model_diffusion_policy-lr_5e-06-bsz_512/",
+),
