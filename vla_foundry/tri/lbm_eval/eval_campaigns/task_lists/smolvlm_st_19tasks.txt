@@ -1,0 +1,116 @@
+# SmolVLM foundry backbone ST (19 tasks: 16 seen + 3 unseen)
+# ST: per-task single-task models trained April 15
+
+(
+    "smolvlm_st_BimanualPlaceAppleFromBowlIntoBin",
+    "BimanualPlaceAppleFromBowlIntoBin",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPlaceAppleFromBowlIntoBin/smolvlm_foundry_backbone/2026_04_15-04_46_33-model_diffusion_policy-lr_5e-05-bsz_512/",
+),
+
+(
+    "smolvlm_st_BimanualPlaceAvocadoFromBowlIntoBin",
+    "BimanualPlaceAvocadoFromBowlIntoBin",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPlaceAvocadoFromBowlIntoBin/smolvlm_foundry_backbone/2026_04_15-04_27_00-model_diffusion_policy-lr_5e-05-bsz_512/",
+),
+
+(
+    "smolvlm_st_BimanualPlaceFruitFromBowlIntoBin",
+    "BimanualPlaceFruitFromBowlIntoBin",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPlaceFruitFromBowlIntoBin/smolvlm_foundry_backbone/2026_04_15-04_27_03-model_diffusion_policy-lr_5e-05-bsz_512/",
+),
+
+(
+    "smolvlm_st_BimanualPutRedBellPepperInBin",
+    "BimanualPutRedBellPepperInBin",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutRedBellPepperInBin/smolvlm_foundry_backbone/2026_04_15-05_01_38-model_diffusion_policy-lr_5e-05-bsz_512/",
+),
+
+(
+    "smolvlm_st_BimanualPutSpatulaOnPlateFromDryingRack",
+    "BimanualPutSpatulaOnPlateFromDryingRack",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromDryingRack/smolvlm_foundry_backbone/2026_04_15-05_30_34-model_diffusion_policy-lr_5e-05-bsz_512/",
+),
+
+(
+    "smolvlm_st_BimanualPutSpatulaOnPlateFromTable",
+    "BimanualPutSpatulaOnPlateFromTable",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromTable/smolvlm_foundry_backbone/2026_04_15-04_29_18-model_diffusion_policy-lr_5e-05-bsz_512/",
+),
+
+(
+    "smolvlm_st_BimanualPutSpatulaOnPlateFromUtensilCrock",
+    "BimanualPutSpatulaOnPlateFromUtensilCrock",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualPutSpatulaOnPlateFromUtensilCrock/smolvlm_foundry_backbone/2026_04_15-04_27_05-model_diffusion_policy-lr_5e-05-bsz_512/",
+),
+
+(
+    "smolvlm_st_BimanualStackPlatesOnTableFromDryingRack",
+    "BimanualStackPlatesOnTableFromDryingRack",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualStackPlatesOnTableFromDryingRack/smolvlm_foundry_backbone/2026_04_15-04_29_52-model_diffusion_policy-lr_5e-05-bsz_512/",
+),
+
+(
+    "smolvlm_st_BimanualStoreCerealBoxUnderShelf",
+    "BimanualStoreCerealBoxUnderShelf",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/BimanualStoreCerealBoxUnderShelf/smolvlm_foundry_backbone/2026_04_15-04_30_56-model_diffusion_policy-lr_5e-05-bsz_512/",
+),
+
+(
+    "smolvlm_st_PlaceCupByCoaster",
+    "PlaceCupByCoaster",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/PlaceCupByCoaster/smolvlm_foundry_backbone/2026_04_15-04_31_21-model_diffusion_policy-lr_5e-05-bsz_512/",
+),
+
+(
+    "smolvlm_st_PushCoasterToCenterOfTable",
+    "PushCoasterToCenterOfTable",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/PushCoasterToCenterOfTable/smolvlm_foundry_backbone/2026_04_15-05_29_56-model_diffusion_policy-lr_5e-05-bsz_512/",
+),
+
+(
+    "smolvlm_st_PushCoasterToMug",
+    "PushCoasterToMug",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/PushCoasterToMug/smolvlm_foundry_backbone/2026_04_15-05_02_48-model_diffusion_policy-lr_5e-05-bsz_512/",
+),
+
+(
+    "smolvlm_st_PutBananaOnSaucer",
+    "PutBananaOnSaucer",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/PutBananaOnSaucer/smolvlm_foundry_backbone/2026_04_15-05_03_00-model_diffusion_policy-lr_5e-05-bsz_512/",
+),
+
+(
+    "smolvlm_st_PutKiwiInCenterOfTable",
+    "PutKiwiInCenterOfTable",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/PutKiwiInCenterOfTable/smolvlm_foundry_backbone/2026_04_15-04_58_17-model_diffusion_policy-lr_5e-05-bsz_512/",
+),
+
+(
+    "smolvlm_st_PutMugInCenterOfTable",
+    "PutMugInCenterOfTable",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/PutMugInCenterOfTable/smolvlm_foundry_backbone/2026_04_15-04_28_22-model_diffusion_policy-lr_5e-05-bsz_512/",
+),
+
+(
+    "smolvlm_st_PutMugOnSaucer",
+    "PutMugOnSaucer",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/PutMugOnSaucer/smolvlm_foundry_backbone/2026_04_15-04_58_28-model_diffusion_policy-lr_5e-05-bsz_512/",
+),
+
+(
+    "smolvlm_st_PutSpatulaInUtensilCrock",
+    "PutSpatulaInUtensilCrock",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/PutSpatulaInUtensilCrock/smolvlm_foundry_backbone/2026_04_15-05_11_19-model_diffusion_policy-lr_5e-05-bsz_512/",
+),
+
+(
+    "smolvlm_st_TurnCupUpsideDown",
+    "TurnCupUpsideDown",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/TurnCupUpsideDown/smolvlm_foundry_backbone/2026_04_15-05_11_54-model_diffusion_policy-lr_5e-05-bsz_512/",
+),
+
+(
+    "smolvlm_st_TurnMugRightsideUp",
+    "TurnMugRightsideUp",
+    "s3://tri-ml-datasets-uw2/vla_foundry/model_checkpoints/vla/ablations_v04_3_9/st/TurnMugRightsideUp/smolvlm_foundry_backbone/2026_04_15-04_32_50-model_diffusion_policy-lr_5e-05-bsz_512/",
+),
