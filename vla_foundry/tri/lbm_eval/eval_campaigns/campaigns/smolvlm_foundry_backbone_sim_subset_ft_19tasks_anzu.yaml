@@ -1,0 +1,42 @@
+campaign_name: "smolvlm_foundry_backbone_sim_subset_ft_19tasks_anzu"
+description: "SmolVLM foundry backbone sim-subset FT (19 tasks: 16 seen + 3 unseen) - Anzu sim"
+
+cluster:
+  config_file: "vla_foundry/tri/lbm_eval/eval_campaigns/ray_policy_runner_cluster.yaml"
+  num_workers: 400
+  aws_profile: "manip-cluster"
+  owner_email: "kushal.arora@tri.global"
+  cluster_name: "lbm_eval_kushal_smolvlm_sim_subset_ft_anzu"
+  teardown_on_completion: true
+  teardown_on_failure: false
+
+evaluation:
+  jobs_per_gpu: 1
+  evaluation_subfolder: "2026-04-17_smolvlm_foundry_backbone_sim_subset_ft_19tasks_anzu"
+  tasks_file: "vla_foundry/tri/lbm_eval/eval_campaigns/task_lists/smolvlm_foundry_backbone_sim_subset_ft_19tasks.txt"
+  num_samples: 200
+  start_index: 0
+  launch_scenario: "GrpcServerToSim"
+  launch_script: "launch_sim.sh"
+  num_flow_steps: 8
+  open_loop_steps: 8
+  device: "cuda"
+  entrypoint_num_gpus: 1
+  entrypoint_memory: 62277025792
+  max_retries: 3
+  inference_aws_profile: "sagemaker"
+
+docker:
+  image: "682769330988.dkr.ecr.us-east-1.amazonaws.com/anzu-vla-foundry:latest"
+
+vla_foundry:
+  repo_url: "git@github.com:jmercat/vla_foundry.git"
+  ref: "main"
+  local_dir: "~/.cache/vla_foundry/ray_mount"
+  use_remote_repo: true
+  remote_dir: "/home/ubuntu/vla_foundry_mount"
+  mount_target: "/opt/vla_foundry"
+
+output:
+  results_dir: "results/smolvlm_foundry_backbone_sim_subset_ft_19tasks_anzu"
+  save_job_logs: true
