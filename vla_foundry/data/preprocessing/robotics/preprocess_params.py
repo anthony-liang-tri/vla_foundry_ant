@@ -134,6 +134,36 @@ class RangeSpec:
     end: int | None = field(default=None)
     step: int | None = field(default=None)
 
+    def to_dict(self):
+        return {"start": self.start, "end": self.end, "step": self.step}
+
+
+@dataclass(frozen=True)
+class FieldRemapEntry:
+    """A single remap target: source_field -> to (new name) with index selection."""
+
+    to: str | None = field(default=None)
+    indices: list[int | RangeSpec] = field(default_factory=list)
+
+    def to_dict(self):
+        return {"to": self.to, "indices": [i.to_dict() if hasattr(i, "to_dict") else i for i in self.indices]}
+
+
+def _resolve_indices(items: list[int | RangeSpec], context: str) -> list[int]:
+    """Resolve a list of ints and RangeSpecs into a flat list of indices."""
+    result = []
+    for item in items:
+        if isinstance(item, RangeSpec):
+            if item.start is None or item.end is None:
+                raise ValueError(f"RangeSpec for {context} must have start and end")
+            step = item.step if item.step is not None else 1
+            result.extend(list(range(item.start, item.end, step)))
+        elif isinstance(item, int):
+            result.append(item)
+        else:
+            raise ValueError(f"Invalid item type in {context}: expected int or RangeSpec, got {type(item)}")
+    return result
+
 
 @register_preprocess_params("mmt_npz")
 @dataclass(frozen=True)
@@ -143,6 +173,7 @@ class MMTPreprocessParams(PreprocessParams):
     mmt_lowdim_flatten_indices_selection: dict[str, int | list[int] | list[RangeSpec]] | None = field(
         default_factory=dict
     )
+    lowdim_field_remap: dict[str, list[FieldRemapEntry]] | None = field(default=None)
     depth_resizing_mask_threshold: float = field(default=0.99)
 
     def __post_init__(self):
@@ -158,24 +189,46 @@ class MMTPreprocessParams(PreprocessParams):
                         f"Invalid type for mmt_lowdim_flatten_indices_selection[{k}]: "
                         f"expected int or list, got {type(v)}"
                     )
-                new_v = []
-                for item in v:
-                    if isinstance(item, RangeSpec):
-                        if item.start is None or item.end is None:
-                            raise ValueError(
-                                f"RangeSpec for mmt_lowdim_flatten_indices_selection[{k}] must have start and end"
-                            )
-                        step = item.step if item.step is not None else 1
-                        new_v.extend(list(range(item.start, item.end, step)))
-                    elif isinstance(item, int):
-                        new_v.append(item)
-                    else:
-                        raise ValueError(
-                            f"Invalid item type in mmt_lowdim_flatten_indices_selection[{k}]: "
-                            f"expected int or RangeSpec, got {type(item)}"
-                        )
-                selections[k] = new_v
+                selections[k] = _resolve_indices(v, f"mmt_lowdim_flatten_indices_selection[{k}]")
             object.__setattr__(self, "mmt_lowdim_flatten_indices_selection", selections)
+
+        if self.lowdim_field_remap:
+            # Validate: remap source keys must not also have flatten index selection
+            if self.mmt_lowdim_flatten_indices_selection:
+                conflict = set(self.lowdim_field_remap.keys()) & set(self.mmt_lowdim_flatten_indices_selection.keys())
+                if conflict:
+                    raise ValueError(
+                        f"Fields {conflict} are in both lowdim_field_remap and "
+                        f"mmt_lowdim_flatten_indices_selection. Remap indices assume the "
+                        f"original field layout, so flatten selection must not be applied "
+                        f"to remap source fields."
+                    )
+            # Resolve into flat structure: {to_name: (source_key, [indices])}
+            resolved = {}
+            for source_key, entries in self.lowdim_field_remap.items():
+                for entry in entries:
+                    if not entry.to:
+                        raise ValueError(f"lowdim_field_remap[{source_key}] entry must have a 'to' field")
+                    if entry.to in resolved:
+                        existing_source = resolved[entry.to][0]
+                        raise ValueError(
+                            f"Duplicate remap target '{entry.to}': "
+                            f"defined in both '{existing_source}' and '{source_key}'"
+                        )
+                    resolved[entry.to] = (
+                        source_key,
+                        _resolve_indices(entry.indices, f"lowdim_field_remap[{source_key}] -> {entry.to}"),
+                    )
+            object.__setattr__(self, "_resolved_remap", resolved)
+            # Replace lowdim_field_remap with plain dicts so that
+            # vars(cfg) is serializable by both yaml.dump and json.dumps.
+            plain_remap = {
+                source_key: [
+                    {"to": entry.to, "indices": _resolve_indices(entry.indices, source_key)} for entry in entries
+                ]
+                for source_key, entries in self.lowdim_field_remap.items()
+            }
+            object.__setattr__(self, "lowdim_field_remap", plain_remap)
 
 
 @register_preprocess_params("humanoid_everyday")

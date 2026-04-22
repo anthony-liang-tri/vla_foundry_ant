@@ -19,6 +19,7 @@ import argparse
 import copy
 import logging
 import os
+import signal
 import sys
 import time
 from collections import deque
@@ -31,9 +32,15 @@ from vla_foundry.data.processor.robotics_processor import RoboticsProcessor
 from vla_foundry.file_utils import get_latest_checkpoint, load_ema_checkpoint, load_model_checkpoint, yaml_load
 from vla_foundry.inference.robotics.mmt.action_handlers import (
     MmtActionMapper,
+    is_position_action_field,
     load_lowdim_index_selection,
 )
-from vla_foundry.inference.robotics.mmt.field_layouts import MMT_FIELD_LAYOUTS, ZZK_STATE_COLS, ZZK_STATE_ROWS
+from vla_foundry.inference.robotics.mmt.field_layouts import (
+    MMT_FIELD_LAYOUTS,
+    ZZK_STATE_COLS,
+    ZZK_STATE_ROWS,
+    build_runtime_layouts,
+)
 from vla_foundry.logger import setup_logging
 from vla_foundry.models import create_model
 from vla_foundry.params.train_experiment_params import load_experiment_params_from_yaml
@@ -54,6 +61,7 @@ class ZzkPolicyInference:
         language_instruction: str = "You are a helpful robot assistant finishing tasks to help people's daily lives.",
         zzk_api_client_path: str | None = None,
         enable_compliance: bool = False,
+        robot_type: str | None = None,
     ):
         """Initialize the inference system.
 
@@ -68,6 +76,7 @@ class ZzkPolicyInference:
             TODO: Enable to change language_instruction every episode
             language_instruction: Task instruction for the robot
             zzk_api_client_path: Path to directory containing zzk_api_client.py and ctypes .so library
+            robot_type: Robot type ('tzkg' or 'tzkm') for robot-specific command formatting
         """
         self.checkpoint_directory = checkpoint_directory
         self.robot_hostname = robot_hostname
@@ -78,6 +87,7 @@ class ZzkPolicyInference:
         self.language_instruction = language_instruction
         self.zzk_api_client_path = zzk_api_client_path
         self.enable_compliance = enable_compliance
+        self.robot_type = robot_type
 
         # Load model configuration
         self.model_config_path = os.path.join(checkpoint_directory, "config.yaml")
@@ -129,7 +139,11 @@ class ZzkPolicyInference:
             preprocessing_config_path = os.path.join(checkpoint_directory, "preprocessing_configs.yaml")
         self.preprocessing_config = yaml_load(preprocessing_config_path)
         self.image_size = self.preprocessing_config["resize_images_size"]
+        self.image_resizing_method = ImageResizingMethod(
+            self.preprocessing_config.get("image_resizing_method", "center_crop").lower()
+        )
         self.lowdim_index_selection = load_lowdim_index_selection(self.preprocessing_config)
+        self.runtime_layouts = build_runtime_layouts(MMT_FIELD_LAYOUTS, self.preprocessing_config)
 
         # Get data configuration
         self.image_names = self.cfg.data.image_names
@@ -138,13 +152,17 @@ class ZzkPolicyInference:
         self.num_past_timesteps = self.cfg.data.lowdim_past_timesteps
         self.num_future_timesteps = self.cfg.data.lowdim_future_timesteps
         self.total_timesteps = self.num_past_timesteps + 1 + self.num_future_timesteps
-        self.action_mapper = MmtActionMapper(self.lowdim_index_selection)
+        self.action_mapper = MmtActionMapper(self.lowdim_index_selection, self.runtime_layouts, self.robot_type)
+
+        # Detect if action fields are position (pose) commands
+        self.use_position_commands = any(is_position_action_field(f) for f in self.action_fields)
 
         # Derive unique base camera names from temporal image names (e.g. "rgb_t-1" → "rgb")
         self.camera_base_names = sorted(set(name.rsplit("_t", 1)[0] for name in self.image_names))
 
         logging.info(f"Camera names: {self.image_names} (base: {self.camera_base_names})")
         logging.info(f"Action fields: {self.action_fields}")
+        logging.info(f"Position command mode: {self.use_position_commands}")
         logging.info(f"Timesteps: past={self.num_past_timesteps}, future={self.num_future_timesteps}")
 
         # Initialize ZZK API client
@@ -172,6 +190,8 @@ class ZzkPolicyInference:
         self.zzk_client = zzk_api_client.ZzkApiClient(
             robot_hostname, port=robot_port, file_path=self.zzk_api_client_path
         )
+        # Re-register SIGINT handler in case the C extension reset it
+        signal.signal(signal.SIGINT, signal.SIG_DFL)
         logging.info("Connected to ZZK API")
 
         # Initialize buffers
@@ -263,10 +283,16 @@ class ZzkPolicyInference:
         status: dict,
     ) -> np.ndarray | None:
         # Extract a proprioception field from ZZK status using the layout's zzk_source definition.
-        layout = MMT_FIELD_LAYOUTS.get(field_name)
+        layout = self.runtime_layouts.get(field_name)
         if layout is None or "zzk_source" not in layout:
             return None
         source = layout["zzk_source"]
+
+        if source["type"] == "remap_slice":
+            parent_values = self._extract_field_from_zzk(source["parent"], state, status)
+            if parent_values is None:
+                return None
+            return parent_values[np.asarray(source["indices"], dtype=np.int64)]
 
         if source["type"] == "eef_pose":
             if state is None:
@@ -279,6 +305,13 @@ class ZzkPolicyInference:
                 source["right_pose_row"],
             )
 
+        if source["type"] == "single_arm_pose":
+            if state is None:
+                return None
+            gripper = state[source["gripper_row"], 2]
+            pose = state[source["pose_row"], 0:6]
+            return np.concatenate([[gripper], pose]).astype(np.float32)
+
         if source["type"] == "state_row":
             if state is None:
                 return None
@@ -286,6 +319,12 @@ class ZzkPolicyInference:
 
         if source["type"] == "status_field":
             return self._get_optional_field(status, source["key"], source["expected_size"])
+
+        if source["type"] == "status_field_slice":
+            full = self._get_optional_field(status, source["key"], source["end"])
+            if full is None:
+                return None
+            return full[source["start"] : source["end"]]
 
         logging.warning("Unknown zzk_source type '%s' for field '%s'.", source["type"], field_name)
         return None
@@ -332,7 +371,7 @@ class ZzkPolicyInference:
                     resized_image = resize_and_crop_image(
                         image,
                         self.image_size,
-                        resize_method=ImageResizingMethod.CENTER_CROP,
+                        resize_method=self.image_resizing_method,
                     )
                     obs["images"][camera_name] = np.array(resized_image)
                     logging.debug(f"Loaded image {camera_name}: shape={obs['images'][camera_name].shape}")
@@ -470,15 +509,23 @@ class ZzkPolicyInference:
         """
         lowdim_dict = {}
 
-        # Add action fields
+        # Add action fields (full timesteps: past + current + future)
         for field in self.action_fields:
             if field in actions and actions[field]:
                 lowdim_dict[field] = torch.tensor(np.stack(actions[field]), dtype=torch.float32)
 
-        # Add proprioception fields
+        # Add proprioception fields. If a field shares a key with an action,
+        # overwrite the first (past + current) timesteps with actual
+        # observation values so proprioception reflects the real robot state.
         for field in self.proprioception_fields:
             if field in proprioception and proprioception[field]:
-                lowdim_dict[field] = torch.tensor(np.stack(proprioception[field]), dtype=torch.float32)
+                prop_tensor = torch.tensor(np.stack(proprioception[field]), dtype=torch.float32)
+                if field in lowdim_dict:
+                    # Overwrite the first num_past+1 timesteps with observation.
+                    num_prop = prop_tensor.shape[0]
+                    lowdim_dict[field][:num_prop] = prop_tensor
+                else:
+                    lowdim_dict[field] = prop_tensor
 
         return lowdim_dict
 
@@ -656,6 +703,54 @@ class ZzkPolicyInference:
             logging.debug("Step action: %s", ", ".join(debug_parts))
         return zzk_action
 
+    def step_position_action(self) -> list[tuple[dict, str, dict]]:
+        """Get current action from buffer as position commands.
+
+        Returns:
+            List of (position_action_dict, tcp, gripper_action) tuples.
+            Both dicts are merged and sent together via send_position_command;
+            the server interprets the gripper entry as a z-only delta for
+            prismatic IK. position_action_dict carries the arm pose and
+            gripper_action carries the gripper value at the robot-specific
+            index (self.action_mapper.gripper_command_index).
+        """
+        current_action_dict = self.action_buffer[self.num_past_timesteps]
+
+        # Shift buffer
+        last_action = copy.deepcopy(self.action_buffer[-1])
+        self.action_buffer.popleft()
+        self.action_buffer.append(last_action)
+
+        commands = []
+        for field_name in self.action_fields:
+            if field_name not in current_action_dict:
+                continue
+            action_values = np.asarray(current_action_dict[field_name], dtype=np.float32)
+            if is_position_action_field(field_name):
+                pos_cmd, tcp, gripper_cmd = self.action_mapper.build_position_command(field_name, action_values)
+                commands.append((pos_cmd, tcp, gripper_cmd))
+            else:
+                logging.warning("Non-position field '%s' in position mode; skipping.", field_name)
+        return commands
+
+    def _wait_for_motion_complete(self, timeout: float = 1.0, poll_interval: float = 0.05) -> dict:
+        """Poll ZZK status until motion completes, keeping observation buffers fresh.
+
+        Checks both navigation_running (position commands) and
+        parts_actions_running (velocity commands).
+
+        Returns the latest zzk_status.
+        """
+        start = time.time()
+        while time.time() - start < timeout:
+            zzk_status = self.zzk_client.receive_status()
+            self.step_observations(zzk_status)
+            if not self.zzk_client.navigation_running and not self.zzk_client.parts_actions_running:
+                return zzk_status
+            time.sleep(poll_interval)
+        logging.warning("Motion did not complete within %.1fs timeout", timeout)
+        return zzk_status
+
     def run_episode(self, max_steps: int = 500) -> bool:
         """Run a single episode.
 
@@ -668,6 +763,12 @@ class ZzkPolicyInference:
         logging.info(f"Starting episode with max_steps={max_steps}")
         self.reset_buffers()
 
+        if self.use_position_commands:
+            return self._run_episode_position(max_steps)
+        return self._run_episode_velocity(max_steps)
+
+    def _run_episode_velocity(self, max_steps: int) -> bool:
+        """Run episode with velocity commands at fixed control rate."""
         control_period = 0.2  # 5Hz
         for step in range(max_steps):
             step_start = time.time()
@@ -682,19 +783,94 @@ class ZzkPolicyInference:
             if step % self.open_loop_steps == 0:
                 logging.info(f"Step {step}: Generating new actions...")
                 predicted_actions = self.generate_actions()
-
-                # Update action buffer with new predictions
                 self.update_action_buffer(predicted_actions)
 
             # Get current action from buffer and convert to ZZK format
             zzk_action = self.step_action()
+            logging.info(f"Step {step} zzk_action: {zzk_action}")
 
             # Sleep to maintain control rate, then send action
             sleep_time = max(0.0, control_period - (time.time() - step_start))
             time.sleep(sleep_time)
 
             observation_timestamp = zzk_status.get("timestamp", 0)
-            self.zzk_client.send_command([zzk_action], observation_timestamp)
+            tcp = "gripper_tip" if any("at_gripper_tip" in f for f in self.action_fields) else "arm_tip"
+            self.zzk_client.send_command([zzk_action], observation_timestamp, tool_center_point=tcp)
+
+        logging.info("Episode completed")
+        return True
+
+    def _run_episode_position(self, max_steps: int) -> bool:
+        """Run episode with position commands, waiting for each to complete."""
+        # Fill observation buffer before first action to avoid zero-image predictions.
+        logging.info("Warming up observation buffer (%d frames)...", self.num_past_timesteps + 1)
+        for i in range(self.num_past_timesteps + 1):
+            zzk_status = self.zzk_client.receive_status()
+            self.step_observations(zzk_status)
+            logging.info("Warmup frame %d/%d received.", i + 1, self.num_past_timesteps + 1)
+
+        step = 0
+        while step < max_steps:
+            # Get fresh observation
+            zzk_status = self.zzk_client.receive_status()
+            self.step_observations(zzk_status)
+
+            # Generate new action chunk
+            logging.info(f"Step {step}: Generating new actions...")
+            predicted_actions = self.generate_actions()
+            self.update_action_buffer(predicted_actions)
+
+            # Execute each action in the chunk sequentially
+            for _ in range(self.open_loop_steps):
+                if step >= max_steps:
+                    break
+
+                # Get fresh observation before each action
+                zzk_status = self.zzk_client.receive_status()
+                self.step_observations(zzk_status)
+
+                # Get position command from buffer
+                commands = self.step_position_action()
+                if not commands:
+                    logging.warning("No position commands at step %d; skipping.", step)
+                    step += 1
+                    continue
+
+                # Send all position commands and record each target for the wait.
+                sent_targets: list[tuple[np.ndarray, int]] = []
+                for pos_cmd, tcp, gripper_cmd in commands:
+                    # In position mode, gripper commands are sent as part of
+                    # the position payload. The server interprets the gripper
+                    # entry as a z-only delta for prismatic IK.
+                    combined_pos_cmd = {**pos_cmd, **gripper_cmd}
+                    logging.info(f"Step {step} position_cmd: {combined_pos_cmd} tcp={tcp}")
+                    self.zzk_client.send_position_command(combined_pos_cmd, tool_center_point=tcp)
+
+                    arm_key = next(iter(pos_cmd))
+                    target_xyz = np.array(pos_cmd[arm_key]["pose"][:3])
+                    ref_frame = pos_cmd[arm_key].get("reference_frame", 0)
+                    side = "left" if "left" in arm_key else "right"
+                    if tcp == "gripper_tip":
+                        state_row = 9 if side == "left" else 10
+                        if ref_frame == 0:
+                            state_row = 7 if side == "left" else 8
+                    else:
+                        state_row = 5 if side == "left" else 6
+                        if ref_frame == 0:
+                            state_row = 2 if side == "left" else 4
+                    sent_targets.append((target_xyz, state_row))
+
+                # Wait for all arms to reach their targets (pose-based, not flag-based).
+                for _ in range(20):  # max ~1s (20 * 50ms)
+                    zzk_status = self.zzk_client.receive_status()
+                    self.step_observations(zzk_status)
+                    state = np.array(zzk_status["state"]).reshape(-1, 6)
+                    max_dist = max(np.linalg.norm(t_xyz - state[row, :3]) for t_xyz, row in sent_targets)
+                    if max_dist < 0.005:  # 5mm threshold
+                        break
+                    time.sleep(0.05)
+
+                step += 1
 
         logging.info("Episode completed")
         return True
@@ -738,6 +914,15 @@ def main():
         help="Path to directory containing zzk_api_client.py and ctypes .so library",
     )
 
+    # Robot type
+    parser.add_argument(
+        "--robot_type",
+        type=str,
+        default="tzkg",
+        choices=["tzkg", "tzkm"],
+        help="Robot type for robot-specific command formatting (e.g., gripper command field)",
+    )
+
     # Compliance
     parser.add_argument(
         "--enable_compliance", action="store_true", default=False, help="Enable compliance mode for arm actions"
@@ -774,6 +959,7 @@ def main():
         language_instruction=args.language_instruction,
         zzk_api_client_path=args.zzk_api_client_path,
         enable_compliance=args.enable_compliance,
+        robot_type=args.robot_type,
     )
 
     # Run episodes
@@ -795,4 +981,9 @@ def main():
 
 
 if __name__ == "__main__":
+    # Use the OS default SIGINT handler (immediate process termination).
+    # Python's signal handlers only run between bytecode instructions, so they
+    # cannot interrupt blocking C extension calls (e.g. zzk_api_client.receive_status).
+    # SIG_DFL lets the kernel kill the process directly on Ctrl+C.
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
     main()

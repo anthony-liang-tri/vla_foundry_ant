@@ -461,6 +461,48 @@ def test_preprocess_params_mmt_npz_decoding():
     assert result.mmt_lowdim_flatten_indices_selection == {"key1": [1, 2, 3]}
 
 
+def test_preprocess_params_mmt_npz_field_remap():
+    """Test that lowdim_field_remap resolves source -> to mappings with indices."""
+    config_dict = {
+        "type": "mmt_npz",
+        "source_episodes": ["/tmp/test"],
+        "output_dir": "/tmp/out",
+        "lowdim_field_remap": {
+            "chest_T_eef_pose": [
+                {"to": "chest_T_left_eef_pose", "indices": [{"start": 0, "end": 7}]},
+                {"to": "chest_T_right_eef_pose", "indices": [{"start": 7, "end": 14}]},
+            ],
+            "wrench": [
+                {"to": "left_wrench", "indices": [{"start": 0, "end": 6}]},
+                {"to": "right_wrench", "indices": [{"start": 6, "end": 12}]},
+            ],
+        },
+    }
+
+    result = PreprocessParams.from_dict(config_dict)
+
+    assert isinstance(result, MMTPreprocessParams)
+    resolved = result._resolved_remap
+    assert resolved["chest_T_left_eef_pose"] == ("chest_T_eef_pose", [0, 1, 2, 3, 4, 5, 6])
+    assert resolved["chest_T_right_eef_pose"] == ("chest_T_eef_pose", [7, 8, 9, 10, 11, 12, 13])
+    assert resolved["left_wrench"] == ("wrench", [0, 1, 2, 3, 4, 5])
+    assert resolved["right_wrench"] == ("wrench", [6, 7, 8, 9, 10, 11])
+
+
+def test_preprocess_params_mmt_npz_defaults_without_new_fields():
+    """Test backward compatibility: new fields default to None when omitted."""
+    config_dict = {
+        "type": "mmt_npz",
+        "source_episodes": ["/tmp/test"],
+        "output_dir": "/tmp/out",
+    }
+
+    result = PreprocessParams.from_dict(config_dict)
+
+    assert isinstance(result, MMTPreprocessParams)
+    assert result.lowdim_field_remap is None
+
+
 @pytest.mark.parametrize("type", ["spartan", "lerobot"])
 def test_preprocess_params_no_infinite_recursion(type):
     """Test that complex configurations don't cause infinite recursion."""

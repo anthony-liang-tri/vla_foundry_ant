@@ -1,8 +1,25 @@
 """Helper utilities for MMT inference lowdim decoding and ZZK action mapping."""
 
+from enum import IntEnum
+
 import numpy as np
 
-from vla_foundry.inference.robotics.mmt.field_layouts import MMT_FIELD_LAYOUTS
+from vla_foundry.inference.robotics.mmt.field_layouts import resolve_remap_indices
+
+
+class ReferenceFrame(IntEnum):
+    """Reference frame for position commands. Must match ZzkApiPositionReferenceFrame."""
+
+    CHASSIS = 0
+    CHEST = 1
+    LOCAL = 2
+
+
+REFERENCE_FRAME_MAP = {
+    "chassis": ReferenceFrame.CHASSIS,
+    "chest": ReferenceFrame.CHEST,
+    "local": ReferenceFrame.LOCAL,
+}
 
 
 def _to_index_list(selection) -> list[int] | None:
@@ -38,6 +55,34 @@ def load_lowdim_index_selection(preprocessing_config: dict) -> dict[str, list[in
     return {name: _to_index_list(sel) for name, sel in index_selection_config.items()}
 
 
+def load_lowdim_field_remap(preprocessing_config: dict) -> dict[str, tuple[str, list[int]]]:
+    """Extract per-field remap info from a preprocessing config.
+
+    Returns a dict mapping each remapped child field name to
+    ``(parent_field_name, list_of_indices_into_parent)``.
+
+    Example input (from preprocessing_configs.yaml)::
+
+        {"lowdim_field_remap": {
+            "arm_action": [
+                {"to": "left_arm_action", "indices": [0, 1, 2, 3, 4, 5, 6]},
+                {"to": "right_arm_action", "indices": [7, 8, 9, 10, 11, 12, 13]},
+            ]
+        }}
+
+    Example output::
+
+        {"left_arm_action": ("arm_action", [0, 1, 2, 3, 4, 5, 6]),
+         "right_arm_action": ("arm_action", [7, 8, 9, 10, 11, 12, 13])}
+    """
+    remap_config = preprocessing_config.get("lowdim_field_remap") or {}
+    result = {}
+    for source_key, entries in remap_config.items():
+        for entry in entries:
+            result[entry["to"]] = (source_key, resolve_remap_indices(entry["indices"]))
+    return result
+
+
 def restore_full_values(values: np.ndarray, selection: list[int] | None, full_dim: int) -> np.ndarray:
     """Scatter selected values back into a zero-filled array of the original full dimension.
 
@@ -61,11 +106,86 @@ def restore_full_values(values: np.ndarray, selection: list[int] | None, full_di
     return full_values
 
 
+# Gripper command format per robot type.
+# Index into [tx, ty, tz, rx, ry, rz] for the gripper part action.
+GRIPPER_COMMAND_INDEX = {
+    "tzkg": 2,  # translation.z
+    "tzkm": 3,  # rotation_rpy.x
+}
+
+
+def _get_position_cmd_config(field_name: str) -> tuple[str, int, str] | None:
+    """Derive position command config from field_layouts or field name convention.
+
+    Returns (part_name, reference_frame, tcp) or None if not a position field.
+
+    First checks for an explicit ``zzk_position_cmd`` entry in the layout.
+    Otherwise, parses the field name convention:
+        {frame}_T_{side}_{tcp_type}_pose
+    Examples:
+        chassis_T_left_eef_pose        -> ("left_arm",  CHASSIS, "arm_tip")
+        chest_T_right_gripper_tip_pose -> ("right_arm", CHEST,   "gripper_tip")
+    """
+    from vla_foundry.inference.robotics.mmt.field_layouts import MMT_FIELD_LAYOUTS
+
+    layout = MMT_FIELD_LAYOUTS.get(field_name)
+
+    # Explicit config takes priority.
+    if layout is not None and "zzk_position_cmd" in layout:
+        cmd = layout["zzk_position_cmd"]
+        ref_frame = REFERENCE_FRAME_MAP[cmd["reference_frame"]]
+        return cmd["part_name"], ref_frame, cmd["tcp"]
+
+    # Derive from naming convention: {frame}_T_{side}_{tcp_type}_pose
+    if not field_name.endswith("_pose"):
+        return None
+    parts = field_name.split("_T_", 1)
+    if len(parts) != 2:
+        return None
+    frame_str = parts[0]  # "chassis" or "chest"
+    rest = parts[1]  # "left_eef_pose" or "right_gripper_tip_pose"
+    if frame_str not in REFERENCE_FRAME_MAP:
+        return None
+    ref_frame = REFERENCE_FRAME_MAP[frame_str]
+    if rest.startswith("left_"):
+        side = "left"
+        remainder = rest[len("left_") :]
+    elif rest.startswith("right_"):
+        side = "right"
+        remainder = rest[len("right_") :]
+    else:
+        return None
+    part_name = f"{side}_arm"
+    if "gripper_tip" in remainder:
+        tcp = "gripper_tip"
+    elif "eef" in remainder:
+        tcp = "arm_tip"
+    else:
+        return None
+    return part_name, ref_frame, tcp
+
+
+def is_position_action_field(field_name: str) -> bool:
+    """Check if an action field is a position (pose) command rather than velocity."""
+    return _get_position_cmd_config(field_name) is not None
+
+
 class MmtActionMapper:
     """Maps model action fields into ZZK command dictionaries."""
 
-    def __init__(self, lowdim_index_selection: dict[str, list[int] | None]):
+    def __init__(
+        self,
+        lowdim_index_selection: dict[str, list[int] | None],
+        runtime_layouts: dict | None = None,
+        robot_type: str | None = None,
+    ):
         self.lowdim_index_selection = lowdim_index_selection
+        self.runtime_layouts = runtime_layouts or {}
+        if robot_type is None:
+            robot_type = "tzkg"
+        if robot_type not in GRIPPER_COMMAND_INDEX:
+            raise ValueError(f"Unknown robot_type '{robot_type}'. Supported: {list(GRIPPER_COMMAND_INDEX.keys())}")
+        self.gripper_command_index = GRIPPER_COMMAND_INDEX[robot_type]
         self.action_field_handlers = {
             "left_arm_action": self.append_left_arm_action_command,
             "right_arm_action": self.append_right_arm_action_command,
@@ -77,9 +197,13 @@ class MmtActionMapper:
         }
 
     def decode_full_field_action(self, field_name: str, action_values: np.ndarray) -> np.ndarray:
-        if field_name not in MMT_FIELD_LAYOUTS:
-            raise KeyError(f"Unknown MMT field layout '{field_name}'")
-        full_dim = MMT_FIELD_LAYOUTS[field_name]["full_dim"]
+        layout = self.runtime_layouts.get(field_name)
+        if layout is None:
+            raise KeyError(
+                f"Unknown MMT field layout '{field_name}' "
+                f"(not in runtime_layouts — check MMT_FIELD_LAYOUTS and lowdim_field_remap)"
+            )
+        full_dim = layout["full_dim"]
         selection = self.lowdim_index_selection.get(field_name)
         return restore_full_values(action_values, selection, full_dim)
 
@@ -96,7 +220,9 @@ class MmtActionMapper:
         gripper = float(full_action[0])
         arm = full_action[1:]
         zzk_action[zzk_arm_key] = arm.tolist()
-        zzk_action[f"{side_name}_gripper"] = [0, 0, gripper, 0, 0, 0]
+        gripper_cmd = [0.0] * 6
+        gripper_cmd[self.gripper_command_index] = gripper
+        zzk_action[f"{side_name}_gripper"] = gripper_cmd
         debug_parts.append(f"{side_name}[{zzk_arm_key}](vx={arm[0]:.3f}, vy={arm[1]:.3f}, gripper={gripper:.3f})")
 
     def append_left_arm_action_command(
@@ -138,7 +264,7 @@ class MmtActionMapper:
         self._append_single_arm_command(
             "left_arm_action_at_gripper_tip",
             "left",
-            "left_arm_at_gripper_tip",
+            "left_arm",
             action_values,
             zzk_action,
             debug_parts,
@@ -153,7 +279,7 @@ class MmtActionMapper:
         self._append_single_arm_command(
             "right_arm_action_at_gripper_tip",
             "right",
-            "right_arm_at_gripper_tip",
+            "right_arm",
             action_values,
             zzk_action,
             debug_parts,
@@ -177,3 +303,31 @@ class MmtActionMapper:
         full_lift_action = self.decode_full_field_action("lift_action", action_values)
         zzk_action["lift"] = full_lift_action.tolist()
         debug_parts.append(f"lift(z={full_lift_action[2]:.3f})")
+
+    def build_position_command(self, field_name: str, action_values: np.ndarray) -> tuple[dict, str, dict]:
+        """Build a ZZK position command dict for a pose action field.
+
+        Returns (position_action, tcp, gripper_action) where:
+          - position_action: arm pose payload for send_position_command.
+          - tcp: tool center point string.
+          - gripper_action: gripper payload merged into position_action before
+            send_position_command; the server interprets this entry as a
+            z-only delta for prismatic IK. The gripper value is placed at
+            self.gripper_command_index (robot-specific).
+        The 7-dim action is [gripper, x, y, z, rx, ry, rz].
+        """
+        config = _get_position_cmd_config(field_name)
+        if config is None:
+            raise ValueError(f"No position command config for '{field_name}'")
+        part_name, reference_frame, tcp = config
+        full_action = self.decode_full_field_action(field_name, action_values)
+        gripper = float(full_action[0])
+        pose = full_action[1:].tolist()
+        side = "left" if "left" in part_name else "right"
+        position_action = {
+            part_name: {"pose": pose, "reference_frame": reference_frame},
+        }
+        gripper_cmd = [0.0] * 6
+        gripper_cmd[self.gripper_command_index] = gripper
+        gripper_action = {f"{side}_gripper": gripper_cmd}
+        return position_action, tcp, gripper_action

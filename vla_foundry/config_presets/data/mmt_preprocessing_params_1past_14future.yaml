@@ -1,42 +1,73 @@
 type: mmt_npz
 
-past_lowdim_steps:   1 
-future_lowdim_steps: 14 
+past_lowdim_steps:   1
+future_lowdim_steps: 14
 image_indices:
 - -1
 - 0
-stride: 1 
-max_padding_left: 3 
-max_padding_right: 15 
-padding_strategy: copy 
-filter_still_samples: False 
-still_threshold: 0.05 
+stride: 1
+max_padding_left: 3
+max_padding_right: 15
+padding_strategy: copy
+filter_still_samples: False
+still_threshold: 0.05
 # camera_names: ["rgb", "rgb_left_wrist", "rgb_right_wrist"]
 camera_names: ["rgb"]
-jpeg_quality: 95 
-max_episodes_to_process: -1 
-fail_on_nan: True 
-skip_git_tagging: False 
+jpeg_quality: 95
+max_episodes_to_process: -1
+fail_on_nan: True
+skip_git_tagging: False
 resize_images_size:
 - 384
 - 384
 mmt_lowdim_flatten_indices_selection:
   # ── Proprioception (state observations) ──
-  # EEF pose: [left_gripper(1), left_pose(6), right_gripper(1), right_pose(6)] = 14-dim
-  chest_T_eef_pose: [{start: 0, end: 14}]
-  chassis_T_eef_pose: [{start: 0, end: 14}]
-  # Gripper tip pose: same layout as EEF pose = 14-dim
-  chassis_T_gripper_tip_pose: [{start: 0, end: 14}]
-  chest_T_gripper_tip_pose: [{start: 0, end: 14}]
+  # EEF / gripper tip / wrench: split via lowdim_field_remap below
   # Head/base/lift pose: 6-dim each, select relevant axes
   base_pose: [0, 1, 5]  # x, y, yaw
   chest_T_head_pose: [4, 5]  # pitch, yaw
   chassis_T_chest_pose: [2]  # z
-  # Wrench: [left(6), right(6)] = 12-dim
-  wrench: [{start: 0, end: 12}]
   # ── Actions ──
-  # Arm actions: 7-dim each [gripper(1), arm_pose(6)], no selection needed
   # Base/head/lift actions: 6-dim each, select relevant axes
   base_action: [0, 1, 5]  # x, y, yaw
   head_action: [4, 5]  # pitch, yaw
   lift_action: [2]  # z
+lowdim_field_remap:
+  # Split arm actions: [left(7), right(7)] = 14-dim
+  arm_action:
+    - to: left_arm_action
+      indices: [{start: 0, end: 7}]
+    - to: right_arm_action
+      indices: [{start: 7, end: 14}]
+  arm_action_at_gripper_tip:
+    - to: left_arm_action_at_gripper_tip
+      indices: [{start: 0, end: 7}]
+    - to: right_arm_action_at_gripper_tip
+      indices: [{start: 7, end: 14}]
+  # Split EEF poses into per-arm fields: [left_gripper(1), left_pose(6)] and [right_gripper(1), right_pose(6)]
+  chest_T_eef_pose:
+    - to: chest_T_left_eef_pose
+      indices: [{start: 0, end: 7}]
+    - to: chest_T_right_eef_pose
+      indices: [{start: 7, end: 14}]
+  chassis_T_eef_pose:
+    - to: chassis_T_left_eef_pose
+      indices: [{start: 0, end: 7}]
+    - to: chassis_T_right_eef_pose
+      indices: [{start: 7, end: 14}]
+  chassis_T_gripper_tip_pose:
+    - to: chassis_T_left_gripper_tip_pose
+      indices: [{start: 0, end: 7}]
+    - to: chassis_T_right_gripper_tip_pose
+      indices: [{start: 7, end: 14}]
+  chest_T_gripper_tip_pose:
+    - to: chest_T_left_gripper_tip_pose
+      indices: [{start: 0, end: 7}]
+    - to: chest_T_right_gripper_tip_pose
+      indices: [{start: 7, end: 14}]
+  # Split wrench: [left(6), right(6)] = 12-dim
+  wrench:
+    - to: left_wrench
+      indices: [{start: 0, end: 6}]
+    - to: right_wrench
+      indices: [{start: 6, end: 12}]

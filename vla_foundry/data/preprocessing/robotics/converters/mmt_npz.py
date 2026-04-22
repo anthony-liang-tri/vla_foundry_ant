@@ -13,9 +13,6 @@ from vla_foundry.data.preprocessing.utils import is_still_sample
 from vla_foundry.data.robotics.cv_utils import intrinsics_4_to_3x3
 from vla_foundry.data.robotics.utils import xyzrpy_to_T
 
-# Boundary for splitting raw bimanual arm_action (2, 7) into left/right after flatten.
-ARM_ACTION_SPLIT = 7
-
 
 def downsample_with_valid_depths(depth_image: np.ndarray, target_size: tuple[int, int], mask_threshold: float):
     """Downsample depth image while preserving valid depth pixels. Assumptions:
@@ -52,28 +49,6 @@ class MMTNPZConverter(BaseRoboticsConverter):
             else:
                 break
 
-        self.action_keys = [
-            "left_arm_action",
-            "right_arm_action",
-            "left_arm_action_at_gripper_tip",
-            "right_arm_action_at_gripper_tip",
-            "base_action",
-            "head_action",
-            "lift_action",
-        ]
-        self.eef_state_keys = ["chest_T_eef_pose", "chassis_T_eef_pose"]
-        self.gripper_tip_state_keys = ["chassis_T_gripper_tip_pose", "chest_T_gripper_tip_pose"]
-        self.base_state_keys = ["base_pose"]
-        self.head_state_keys = ["chest_T_head_pose"]
-        self.lift_state_keys = ["chassis_T_chest_pose"]
-        self.state_keys = (
-            self.eef_state_keys
-            + self.gripper_tip_state_keys
-            + self.base_state_keys
-            + self.head_state_keys
-            + self.lift_state_keys
-        )
-        self.wrench_keys = ["wrench"]
         self.item_bbox_keys = ["item_bounding_boxes", "index_of_center_bbox"]
 
     def get_episode_id(self, episode_path):
@@ -169,44 +144,50 @@ class MMTNPZConverter(BaseRoboticsConverter):
         first_step_data = episode_data[min(episode_data.keys())]
         available_raw_keys = set(first_step_data.keys())
 
-        all_keys = self.action_keys + self.state_keys + self.wrench_keys + self.item_bbox_keys
+        all_keys = list(self.item_bbox_keys)
+        # Include keys from flatten indices selection
+        if self.cfg.mmt_lowdim_flatten_indices_selection:
+            selection_keys = set(self.cfg.mmt_lowdim_flatten_indices_selection.keys()) - set(all_keys)
+            all_keys = all_keys + list(selection_keys)
+        user_requested_keys = set(all_keys)
+        # Include remap source keys so they are loaded from NPZ
+        if self.cfg.lowdim_field_remap:
+            remap_source_keys = set(self.cfg.lowdim_field_remap.keys()) - user_requested_keys
+            all_keys = all_keys + list(remap_source_keys)
         for key in all_keys:
-            # Map derived field names to their raw NPZ key for availability check.
-            if key in ("left_arm_action", "right_arm_action"):
-                raw_key = "arm_action"
-            elif key in ("left_arm_action_at_gripper_tip", "right_arm_action_at_gripper_tip"):
-                raw_key = "arm_action_at_gripper_tip"
-            else:
-                raw_key = key
-            if raw_key not in available_raw_keys:
+            if key not in available_raw_keys:
                 continue
             lowdim_data[key] = []
-            # left/right arm actions are split from raw bimanual arrays in the NPZ
-            if key in ("left_arm_action", "right_arm_action"):
-                raw_key = "arm_action"
-                is_left = key == "left_arm_action"
-                for t in sorted(episode_data.keys()):
-                    raw = episode_data[t][raw_key].flatten()
-                    data = raw[:ARM_ACTION_SPLIT] if is_left else raw[ARM_ACTION_SPLIT:]
-                    if key in self.cfg.mmt_lowdim_flatten_indices_selection:
-                        data = [data[i] for i in self.cfg.mmt_lowdim_flatten_indices_selection[key]]
-                    lowdim_data[key].append(data)
-            elif key in ("left_arm_action_at_gripper_tip", "right_arm_action_at_gripper_tip"):
-                raw_key = "arm_action_at_gripper_tip"
-                is_left = key == "left_arm_action_at_gripper_tip"
-                for t in sorted(episode_data.keys()):
-                    raw = episode_data[t][raw_key].flatten()
-                    data = raw[:ARM_ACTION_SPLIT] if is_left else raw[ARM_ACTION_SPLIT:]
-                    if key in self.cfg.mmt_lowdim_flatten_indices_selection:
-                        data = [data[i] for i in self.cfg.mmt_lowdim_flatten_indices_selection[key]]
-                    lowdim_data[key].append(data)
-            else:
-                for t in sorted(episode_data.keys()):
-                    data = episode_data[t][key].flatten()
-                    if key in self.cfg.mmt_lowdim_flatten_indices_selection:
-                        data = [data[i] for i in self.cfg.mmt_lowdim_flatten_indices_selection[key]]
-                    lowdim_data[key].append(data)
+            for t in sorted(episode_data.keys()):
+                data = episode_data[t][key].flatten()
+                if key in self.cfg.mmt_lowdim_flatten_indices_selection:
+                    data = [data[i] for i in self.cfg.mmt_lowdim_flatten_indices_selection[key]]
+                lowdim_data[key].append(data)
             lowdim_data[key] = np.stack(lowdim_data[key])
+
+        # Apply field remaps: derive new fields from existing source fields with index selection
+        # Format: {to_name: (source_key, [indices])}
+        if self.cfg.lowdim_field_remap:
+            resolved = self.cfg._resolved_remap
+            remapped_sources = set()
+            for to_name, (source_key, indices) in resolved.items():
+                if source_key not in lowdim_data:
+                    logging.getLogger(__name__).warning(
+                        "Remap source '%s' for '%s' not found in lowdim data; skipping.",
+                        source_key,
+                        to_name,
+                    )
+                    continue
+                lowdim_data[to_name] = lowdim_data[source_key][:, indices]
+                remapped_sources.add(source_key)
+            # Remove source fields that were only added for remapping
+            for source_key in remapped_sources:
+                if (
+                    source_key in lowdim_data
+                    and source_key not in self.cfg.mmt_lowdim_flatten_indices_selection
+                    and source_key not in user_requested_keys
+                ):
+                    del lowdim_data[source_key]
 
         return lowdim_data
 
