@@ -2,10 +2,9 @@ type: robotics
 image_size: 224
 processor: openai/clip-vit-base-patch32
 processor_kwargs:
-  max_image_size:
-    longest_edge: 224
   size:
-    longest_edge: 224
+    height: 224
+    width: 224
 img_num_tokens: 64
 allow_multiple_epochs: true
 seq_len: 2048
