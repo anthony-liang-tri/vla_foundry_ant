@@ -97,7 +97,9 @@ class NormalizationParams(BaseParams):
 
     def init_shared_attributes(self, cfg):
         super().init_shared_attributes(cfg)
-        include_fields = list(cfg.data.proprioception_fields + cfg.data.action_fields)
+        # Deduplicate: if the same field name exists in both proprioception_fields
+        # and action_fields, duplicates are removed while preserving order.
+        include_fields = list(dict.fromkeys(cfg.data.proprioception_fields + cfg.data.action_fields))
         # Add point_cloud if enabled
         if cfg.data.use_point_cloud:
             include_fields.append("point_cloud")
