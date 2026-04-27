@@ -1253,11 +1253,15 @@ class MCAPConverter(BaseRoboticsConverter):
         stats_sample = None
         if statistics_ray_actor is not None:
             configured_keys = set(self.action_key_fields) | set(self.state_key_fields or [])
+            # Also include relative variants of any configured key that were
+            # produced by create_relative_lowdim_data and are present in sample_lowdim
+            relative_keys = {f"{k}_relative" for k in configured_keys}
+            stats_keys = configured_keys | (relative_keys & sample_lowdim.keys())
             # Construct stats from sample only for configured data fields
             # Important when e.g., handling different domains (sim / real),
             # that may have a different number of lowdim data fields
             stats_sample = {
-                "lowdim": {k: v.copy() for k, v in sample_lowdim.items() if k in configured_keys},
+                "lowdim": {k: v.copy() for k, v in sample_lowdim.items() if k in stats_keys},
                 "past_mask": past_mask,
                 "future_mask": future_mask,
             }

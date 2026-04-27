@@ -30,6 +30,9 @@ language_dict:
     - manage a constructive task
     - deliver a helpful performance
     - handle a helpful undertaking
+  hand_over_flowers:
+    original:
+    - after a bouquet is pointed at, pick up the indicated rose bouquet and hand it to a human
   move_block_on_plate:
     original:
     - move the red block on the blue plate using the left hand
