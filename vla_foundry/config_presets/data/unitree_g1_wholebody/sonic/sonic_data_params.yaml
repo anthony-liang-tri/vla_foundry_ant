@@ -1,0 +1,174 @@
+# Sonic whole-body data params for G1 + Dex3 hands.
+#
+# These configs are sonic-specific because the diffusion policy is replacing 
+# the sonic teleop, and its inputs and outputs match what the sonic stack reads
+# and writes. A future twist2 (or other) whole-body controller would have a
+# different teleop interface and live in a parallel `unitree_g1_wholebody/<method>/`
+# directory with its own data params.
+type: robotics
+
+camera_names:
+  - stereo_head_left
+  - stereo_head_right
+
+# Proprioception: 43 joint positions from /joint_states (body 29 + hands 14).
+proprioception_fields:
+  # Legs + waist (15)
+  - actual_joint_position__left_hip_pitch_joint
+  - actual_joint_position__left_hip_roll_joint
+  - actual_joint_position__left_hip_yaw_joint
+  - actual_joint_position__left_knee_joint
+  - actual_joint_position__left_ankle_pitch_joint
+  - actual_joint_position__left_ankle_roll_joint
+  - actual_joint_position__right_hip_pitch_joint
+  - actual_joint_position__right_hip_roll_joint
+  - actual_joint_position__right_hip_yaw_joint
+  - actual_joint_position__right_knee_joint
+  - actual_joint_position__right_ankle_pitch_joint
+  - actual_joint_position__right_ankle_roll_joint
+  - actual_joint_position__waist_yaw_joint
+  - actual_joint_position__waist_roll_joint
+  - actual_joint_position__waist_pitch_joint
+  # Left arm (7)
+  - actual_joint_position__left_shoulder_pitch_joint
+  - actual_joint_position__left_shoulder_roll_joint
+  - actual_joint_position__left_shoulder_yaw_joint
+  - actual_joint_position__left_elbow_joint
+  - actual_joint_position__left_wrist_roll_joint
+  - actual_joint_position__left_wrist_pitch_joint
+  - actual_joint_position__left_wrist_yaw_joint
+  # Left hand (7)
+  - actual_joint_position__left_hand_thumb_0_joint
+  - actual_joint_position__left_hand_thumb_1_joint
+  - actual_joint_position__left_hand_thumb_2_joint
+  - actual_joint_position__left_hand_middle_0_joint
+  - actual_joint_position__left_hand_middle_1_joint
+  - actual_joint_position__left_hand_index_0_joint
+  - actual_joint_position__left_hand_index_1_joint
+  # Right arm (7)
+  - actual_joint_position__right_shoulder_pitch_joint
+  - actual_joint_position__right_shoulder_roll_joint
+  - actual_joint_position__right_shoulder_yaw_joint
+  - actual_joint_position__right_elbow_joint
+  - actual_joint_position__right_wrist_roll_joint
+  - actual_joint_position__right_wrist_pitch_joint
+  - actual_joint_position__right_wrist_yaw_joint
+  # Right hand (7)
+  - actual_joint_position__right_hand_thumb_0_joint
+  - actual_joint_position__right_hand_thumb_1_joint
+  - actual_joint_position__right_hand_thumb_2_joint
+  - actual_joint_position__right_hand_middle_0_joint
+  - actual_joint_position__right_hand_middle_1_joint
+  - actual_joint_position__right_hand_index_0_joint
+  - actual_joint_position__right_hand_index_1_joint
+
+# Action: 72 SMPL body + 6 anchor rot_6d + 6 wrist refs + 14 Dex3 hand = 98 dims
+# SMPL joint order matches /smpl_joint_points.name array (pelvis-local, Z-up, meters)
+# Anchor rot_6d + wrist refs come from /reference_motion.
+action_fields:
+  # SMPL body (72)
+  - action_smpl__pelvis_x
+  - action_smpl__pelvis_y
+  - action_smpl__pelvis_z
+  - action_smpl__left_hip_x
+  - action_smpl__left_hip_y
+  - action_smpl__left_hip_z
+  - action_smpl__right_hip_x
+  - action_smpl__right_hip_y
+  - action_smpl__right_hip_z
+  - action_smpl__spine1_x
+  - action_smpl__spine1_y
+  - action_smpl__spine1_z
+  - action_smpl__left_knee_x
+  - action_smpl__left_knee_y
+  - action_smpl__left_knee_z
+  - action_smpl__right_knee_x
+  - action_smpl__right_knee_y
+  - action_smpl__right_knee_z
+  - action_smpl__spine2_x
+  - action_smpl__spine2_y
+  - action_smpl__spine2_z
+  - action_smpl__left_ankle_x
+  - action_smpl__left_ankle_y
+  - action_smpl__left_ankle_z
+  - action_smpl__right_ankle_x
+  - action_smpl__right_ankle_y
+  - action_smpl__right_ankle_z
+  - action_smpl__spine3_x
+  - action_smpl__spine3_y
+  - action_smpl__spine3_z
+  - action_smpl__left_foot_x
+  - action_smpl__left_foot_y
+  - action_smpl__left_foot_z
+  - action_smpl__right_foot_x
+  - action_smpl__right_foot_y
+  - action_smpl__right_foot_z
+  - action_smpl__neck_x
+  - action_smpl__neck_y
+  - action_smpl__neck_z
+  - action_smpl__left_collar_x
+  - action_smpl__left_collar_y
+  - action_smpl__left_collar_z
+  - action_smpl__right_collar_x
+  - action_smpl__right_collar_y
+  - action_smpl__right_collar_z
+  - action_smpl__head_x
+  - action_smpl__head_y
+  - action_smpl__head_z
+  - action_smpl__left_shoulder_x
+  - action_smpl__left_shoulder_y
+  - action_smpl__left_shoulder_z
+  - action_smpl__right_shoulder_x
+  - action_smpl__right_shoulder_y
+  - action_smpl__right_shoulder_z
+  - action_smpl__left_elbow_x
+  - action_smpl__left_elbow_y
+  - action_smpl__left_elbow_z
+  - action_smpl__right_elbow_x
+  - action_smpl__right_elbow_y
+  - action_smpl__right_elbow_z
+  - action_smpl__left_wrist_x
+  - action_smpl__left_wrist_y
+  - action_smpl__left_wrist_z
+  - action_smpl__right_wrist_x
+  - action_smpl__right_wrist_y
+  - action_smpl__right_wrist_z
+  - action_smpl__left_hand_x
+  - action_smpl__left_hand_y
+  - action_smpl__left_hand_z
+  - action_smpl__right_hand_x
+  - action_smpl__right_hand_y
+  - action_smpl__right_hand_z
+  # Anchor orientation (6-D) + wrist joint refs (6) from /reference_motion
+  - action_reference_motion__root_rot_6d        # 6
+  - action_reference_motion__left_wrist_roll_joint
+  - action_reference_motion__left_wrist_pitch_joint
+  - action_reference_motion__left_wrist_yaw_joint
+  - action_reference_motion__right_wrist_roll_joint
+  - action_reference_motion__right_wrist_pitch_joint
+  - action_reference_motion__right_wrist_yaw_joint
+  # Left hand (7)
+  - action_joint_hand_left__left_hand_thumb_0_joint
+  - action_joint_hand_left__left_hand_thumb_1_joint
+  - action_joint_hand_left__left_hand_thumb_2_joint
+  - action_joint_hand_left__left_hand_middle_0_joint
+  - action_joint_hand_left__left_hand_middle_1_joint
+  - action_joint_hand_left__left_hand_index_0_joint
+  - action_joint_hand_left__left_hand_index_1_joint
+  # Right hand (7)
+  - action_joint_hand_right__right_hand_thumb_0_joint
+  - action_joint_hand_right__right_hand_thumb_1_joint
+  - action_joint_hand_right__right_hand_thumb_2_joint
+  - action_joint_hand_right__right_hand_middle_0_joint
+  - action_joint_hand_right__right_hand_middle_1_joint
+  - action_joint_hand_right__right_hand_index_0_joint
+  - action_joint_hand_right__right_hand_index_1_joint
+
+pose_groups: []
+
+normalization:
+  enabled: true
+  method: percentile_1_99
+  scope: global
+  epsilon: 1e-2
+  centered_norm: true

@@ -8,7 +8,7 @@ uv run --group preprocessing vla_foundry/data/preprocessing/preprocess_robotics_
 --config_path "vla_foundry/config_presets/data/unitree_g1/g1_preprocessing_params_1past_47future_30hz.yaml" \
 --action_fields_config_path "vla_foundry/config_presets/data/unitree_g1/g1_action_fields.yaml" \
 --topics_to_fields_path "vla_foundry/config_presets/data/unitree_g1/g1_mcap_topics.yaml" \
---camera_names "include vla_foundry/config_presets/data/unitree_g1/g1_data_camera_names_zed2mini.yaml" \
+--camera_names "include vla_foundry/config_presets/data/unitree_g1/camera_names/zedm_head_d405_wrists.yaml" \
 --samples_per_shard 100 \
 --ray_num_cpus 32 \
 --task_filter '["move_block_on_plate"]' \

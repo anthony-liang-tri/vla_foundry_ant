@@ -1,0 +1,9 @@
+# 410M-parameter transformer variant of the wholebody sonic policy.
+# Mirrors diffusion_policy_unitree_g1_410m.yaml but for whole-body data.
+<<: !include diffusion_policy_unitree_g1_wholebody_sonic_base.yaml
+
+model:
+  <<: !include ../../../models/diffusion_policy_g1.yaml
+  transformer:
+    <<: !include ../../../models/transformer_410m.yaml
+    is_causal: True

@@ -8,6 +8,7 @@ Observation modes (--obs):
   vision_propio         Vision + EE pose + finger joints (32D)
   vision_propio_tactile Vision + EE pose + finger joints + torque + pressure
   vision_only           Vision only — no proprioception
+  wholebody             Vision + 43 G1 joint positions
 
 Domain (--domain):
   real                  Real robot data (default)
@@ -15,8 +16,10 @@ Domain (--domain):
   real_and_sim          Both data domains
 
 Camera config (--camera-config):
-  zed_mini              ZED Mini stereo head + D435 wrist (default for real data)
-  d435                  D435 head + D435 wrist (default for sim data)
+  zedm_head_d405_wrists ZED Mini stereo head + D405 wrists (default for real data)
+  d435_head_d405_wrists D435 head + D405 wrists (default for sim data)
+  zedm_head             ZED Mini stereo head only (whole-body / sonic teleop)
+  d435_head             D435 head only
 
 Camera selection (--cameras):
   auto                  Load camera list from camera-config YAML (default)
@@ -48,15 +51,19 @@ Examples:
 
   # Sim data with D435 cameras
   uv run python train_g1_policy.py move_block_on_plate --obs vision_propio \\
-      --domain sim --camera-config d435
+      --domain sim --camera-config d435_head_d405_wrists
 
   # With tactile proprioception
   uv run python train_g1_policy.py move_block_on_plate --obs vision_propio \\
-      --domain sim --camera-config d435 --tactile-propio
+      --domain sim --camera-config d435_head_d405_wrists --tactile-propio
 
   # Head-cam only, ZED Mini real data
   uv run python train_g1_policy.py move_block_on_plate --obs vision_propio \\
       --cameras '["stereo_head_left","stereo_head_right"]'
+
+  # Whole-body (sonic teleop demos), ZED Mini head-only
+  uv run python train_g1_policy.py put_cap_in_laundry_basket --obs wholebody \\
+      --domain real --camera-config zedm_head
 """
 
 import argparse
@@ -75,17 +82,26 @@ from vla_foundry.aws.s3_constants import DEFAULT_REGION, S3_PREFIX
 
 _G1_DATA_DIR = "vla_foundry/config_presets/data/unitree_g1"
 _DATA_PARAMS_PATH = f"{_G1_DATA_DIR}/g1_data_params.yaml"
+_WHOLEBODY_DATA_PARAMS_PATH = "vla_foundry/config_presets/data/unitree_g1_wholebody/sonic/sonic_data_params.yaml"
 
 with open(_DATA_PARAMS_PATH) as _f:
     _DATA_PARAMS = yaml.safe_load(_f)
 
+with open(_WHOLEBODY_DATA_PARAMS_PATH) as _f:
+    _WHOLEBODY_DATA_PARAMS = yaml.safe_load(_f)
+
 _BASE_PROPIO_FIELDS = _DATA_PARAMS["proprioception_fields"]
 _TACTILE_FIELDS = _DATA_PARAMS["tactile_fields"]
 ACTION_FIELDS = _DATA_PARAMS["action_fields"]
-# Camera name lists per camera hardware config
+_WHOLEBODY_PROPIO_FIELDS = _WHOLEBODY_DATA_PARAMS["proprioception_fields"]
+WHOLEBODY_ACTION_FIELDS = _WHOLEBODY_DATA_PARAMS["action_fields"]
+# Camera name lists per camera hardware config; keys match the YAML basenames
+# under data/unitree_g1/camera_names/.
 _CAMERA_YAML_BY_CONFIG = {
-    "zed_mini": f"{_G1_DATA_DIR}/g1_data_camera_names_zed2mini.yaml",
-    "d435": f"{_G1_DATA_DIR}/g1_data_camera_names_d435.yaml",
+    "zedm_head_d405_wrists": f"{_G1_DATA_DIR}/camera_names/zedm_head_d405_wrists.yaml",
+    "d435_head_d405_wrists": f"{_G1_DATA_DIR}/camera_names/d435_head_d405_wrists.yaml",
+    "zedm_head": f"{_G1_DATA_DIR}/camera_names/zedm_head.yaml",
+    "d435_head": f"{_G1_DATA_DIR}/camera_names/d435_head.yaml",
 }
 
 # ---------------------------------------------------------------------------
@@ -95,12 +111,14 @@ _CAMERA_YAML_BY_CONFIG = {
 _S3_TARFILE = "s3://robotics-cam-data/platform/unitree_g1_dex3/tarfiles"
 DEFAULT_DATA_ROOT_V3 = f"{_S3_TARFILE}/v3.2"  # non-tactile
 DEFAULT_DATA_ROOT_V2 = f"{_S3_TARFILE}/v2"  # tactile (dex3 torque/pressure)
+DEFAULT_DATA_ROOT_V0_WHOLEBODY = f"{_S3_TARFILE}/v0_wholebody"  # whole-body (sonic teleop)
 CKPT_ROOT = "s3://robotics-cam-checkpoints/platform/unitree_g1_dex3/model_checkpoints"
 REMOTE_SYNC_FIXED_PATH = "s3://robotics-cam-checkpoints/platform/unitree_g1_dex3/model_checkpoints_fixed/"
 
 _CFG = "vla_foundry/config_presets/training_jobs/unitree_g1"
+_CFG_WHOLEBODY = "vla_foundry/config_presets/training_jobs/unitree_g1_wholebody/sonic"
 
-OBS_MODES = ["vision_propio", "vision_propio_tactile", "vision_only"]
+OBS_MODES = ["vision_propio", "vision_propio_tactile", "vision_only", "wholebody"]
 MODEL_SIZES = ["100m", "410m"]
 
 # (obs_mode, model_size) → config YAML path
@@ -111,6 +129,8 @@ _CONFIG_MATRIX = {
     ("vision_only", "410m"): f"{_CFG}/diffusion_policy_unitree_g1_410m.yaml",
     ("vision_propio_tactile", "100m"): f"{_CFG}/diffusion_policy_unitree_g1_100m_tactile.yaml",
     ("vision_propio_tactile", "410m"): f"{_CFG}/diffusion_policy_unitree_g1_410m_tactile.yaml",
+    ("wholebody", "100m"): f"{_CFG_WHOLEBODY}/diffusion_policy_unitree_g1_wholebody_sonic_100m.yaml",
+    ("wholebody", "410m"): f"{_CFG_WHOLEBODY}/diffusion_policy_unitree_g1_wholebody_sonic_410m.yaml",
 }
 
 SM_REGION = DEFAULT_REGION
@@ -207,13 +227,15 @@ def _parse_args() -> argparse.Namespace:
     )
     p.add_argument(
         "--camera-config",
-        default="zed_mini",
+        default="zedm_head_d405_wrists",
         dest="camera_config",
         choices=list(_CAMERA_YAML_BY_CONFIG),
         help=(
-            "Camera hardware config: zed_mini (default) | d435. Selects camera name list. "
-            "WARNING: verify this matches your dataset recording hardware — wrong config "
-            "will silently train on a mismatched camera subset."
+            "Camera hardware config: one of "
+            f"{list(_CAMERA_YAML_BY_CONFIG)} (default: zedm_head_d405_wrists). "
+            "Selects camera name list. WARNING: verify this matches your dataset "
+            "recording hardware — wrong config will silently train on a mismatched "
+            "camera subset."
         ),
     )
     p.add_argument(
@@ -332,12 +354,18 @@ def main() -> None:
 
     # Obs-mode config and proprioception fields
     config = args.config_override or _CONFIG_MATRIX[(args.obs, args.model)]
+    # Whole-body uses a different (98D) action space and 43D G1-joint proprio.
+    is_wholebody = args.obs == "wholebody"
+    action_fields = WHOLEBODY_ACTION_FIELDS if is_wholebody else ACTION_FIELDS
     if args.obs == "vision_propio":
         proprio_fields = _BASE_PROPIO_FIELDS
         obs_desc = "vision + EE pose (18D) + finger joints (14D)"
     elif args.obs == "vision_only":
         proprio_fields = []
         obs_desc = "vision only (no proprioception)"
+    elif is_wholebody:
+        proprio_fields = _WHOLEBODY_PROPIO_FIELDS
+        obs_desc = "vision + 43 G1 joint positions"
     else:  # vision_propio_tactile
         proprio_fields = _BASE_PROPIO_FIELDS + _TACTILE_FIELDS
         obs_desc = "vision + EE pose + finger joints + torque + pressure"
@@ -377,7 +405,7 @@ def main() -> None:
             "Tactile data still points to DEFAULT_DATA_ROOT_V2 which is no longer supported. "
             "Migrate tactile datasets to V4 before enabling this path."
         )
-    default_root = DEFAULT_DATA_ROOT_V3
+    default_root = DEFAULT_DATA_ROOT_V0_WHOLEBODY if is_wholebody else DEFAULT_DATA_ROOT_V3
     data_root = args.data_root or f"{default_root}/{args.task}/{args.domain}/teleop/shards"
     run_tag = f"_{args.run_tag}" if args.run_tag else ""
     stag = _samples_tag(samples)
@@ -397,7 +425,10 @@ def main() -> None:
     tactile_suffix = " + tactile" if args.tactile_propio and args.obs != "vision_propio_tactile" else ""
     print(f"Obs:         {obs_desc}{tactile_suffix}")
     print(f"Cameras:     {camera_names}")
-    print("Act:         EE pose (18D) + finger joints (14D) = 32D  [absolute]")
+    if is_wholebody:
+        print("Act:         SMPL skeleton (72D) + root rot (6D) + wrist refs (6D) + Dex3 hands (14D) = 98D")
+    else:
+        print("Act:         EE pose (18D) + finger joints (14D) = 32D")
     print(f"Model:       {args.model}")
     print(f"Config:      {config}")
     print(f"Data:        {_dataset_info(data_root)}")
@@ -440,7 +471,7 @@ def main() -> None:
         "--data.dataset_statistics",
         json.dumps([f"{data_root}/stats.json"]),
         "--data.action_fields",
-        json.dumps(ACTION_FIELDS),
+        json.dumps(action_fields),
         "--data.camera_names",
         json.dumps(camera_names),
     ]

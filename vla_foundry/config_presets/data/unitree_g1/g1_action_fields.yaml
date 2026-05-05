@@ -1,3 +1,9 @@
+# G1 upper-body action layout (32D): EE pose (left + right, xyz + 6D rot) + 14
+# Dex3 hand joints. The 14 `action_joint_hand_left/right__*` entries below MUST
+# stay in sync with the same block in
+# `data/unitree_g1_wholebody/sonic/sonic_action_fields.yaml`. If you rename or
+# add a Dex3 joint, edit both files together (YAML !include can't list-concat,
+# so duplication is unavoidable until we lift the joint list to a Python const).
 action_key_fields:
   - action_ee_pose_left__xyz # 3
   - action_ee_pose_left__rot_6d # 6

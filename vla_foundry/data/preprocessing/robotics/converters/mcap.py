@@ -204,6 +204,9 @@ def extract_structured_msg(msg: Any) -> dict[str, np.ndarray] | None:
     Handles:
     - sensor_msgs/JointState: Returns dict with __<joint_name> keys
     - geometry_msgs/PoseStamped, Pose: Returns __xyz and __rot_6d keys
+    - Skeleton-style (name[] + points[Point]): Returns __<joint>_x/_y/_z keys
+    - ReferenceMotion-style (root_pose: Pose + joint_positions: JointState):
+      Returns __root_rot_6d plus __<joint_name> keys from joint_positions
 
     Returns:
         Dictionary mapping field names to float32 arrays, or None if not a structured message.
@@ -215,6 +218,41 @@ def extract_structured_msg(msg: Any) -> dict[str, np.ndarray] | None:
         if hasattr(msg, "name") and hasattr(msg, "position") and hasattr(msg, "velocity") and hasattr(msg, "effort"):
             # Extract only position data for now
             return {f"__{n}": np.asarray([p], dtype=np.float32) for n, p in zip(msg.name, msg.position, strict=True)}
+
+        # ReferenceMotion-style composite: root_pose (Pose) + joint_positions (JointState).
+        # Emits __root_rot_6d from the pose orientation plus one __<joint_name> entry per
+        # joint position (downstream action_fields selects which joints it actually uses).
+        if (
+            hasattr(msg, "root_pose")
+            and hasattr(msg, "joint_positions")
+            and hasattr(msg.root_pose, "orientation")
+            and hasattr(msg.joint_positions, "name")
+            and hasattr(msg.joint_positions, "position")
+        ):
+            q = msg.root_pose.orientation
+            quat = np.array([q.x, q.y, q.z, q.w])
+            rot_matrix = R.from_quat(quat).as_matrix()
+            out: dict[str, np.ndarray] = {"__root_rot_6d": matrix_to_rot_6d(rot_matrix).astype(np.float32)}
+            for n, p in zip(msg.joint_positions.name, msg.joint_positions.position, strict=True):
+                out[f"__{n}"] = np.asarray([p], dtype=np.float32)
+            return out
+
+        # Skeleton-style: parallel name[] + points[Point] arrays (e.g. SMPL joint points).
+        # Strip any "namespace/" prefix from each joint name ("smpl/pelvis" -> "pelvis").
+        if (
+            hasattr(msg, "name")
+            and hasattr(msg, "points")
+            and isinstance(msg.points, list)
+            and len(msg.points) > 0
+            and all(hasattr(msg.points[0], a) for a in ("x", "y", "z"))
+        ):
+            out: dict[str, np.ndarray] = {}
+            for n, p in zip(msg.name, msg.points, strict=True):
+                clean = n.split("/", 1)[-1]
+                out[f"__{clean}_x"] = np.asarray([p.x], dtype=np.float32)
+                out[f"__{clean}_y"] = np.asarray([p.y], dtype=np.float32)
+                out[f"__{clean}_z"] = np.asarray([p.z], dtype=np.float32)
+            return out
 
         # Unwrap geometry_msgs/PoseStamped -> geometry_msgs/Pose
         if hasattr(msg, "pose") and hasattr(msg.pose, "position"):
@@ -391,11 +429,12 @@ def discover_and_validate_mcap_episodes_in_directory(mcap_dirs_path: str) -> lis
     fs, fs_path = fsspec.core.url_to_fs(mcap_dirs_path)
     fs_path = fs_path.rstrip("/")
 
-    # Determine protocol prefix (e.g. "s3://")
+    # Determine protocol prefix (e.g. "s3://"). Local paths stay as plain
+    # filesystem paths so downstream os.path.join / AnyReader behave.
     protocol = fs.protocol
     if isinstance(protocol, (list, tuple)):
         protocol = protocol[0]
-    protocol_prefix = f"{protocol}://"
+    protocol_prefix = "" if protocol in ("file", "local") else f"{protocol}://"
 
     # Recursively list all objects under the path
     all_files = fs.find(fs_path)

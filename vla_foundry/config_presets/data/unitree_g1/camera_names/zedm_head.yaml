@@ -1,0 +1,4 @@
+# Camera names for G1 data recorded with a head-mounted ZED Mini stereo (no wrist cameras).
+# Reusable across G1 setups: sonic whole-body, head-only diffik, etc.
+- stereo_head_left
+- stereo_head_right

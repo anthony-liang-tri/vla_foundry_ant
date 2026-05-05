@@ -51,7 +51,7 @@ uv run --group preprocessing vla_foundry/data/preprocessing/preprocess_robotics_
     --output_dir_fixed_path "s3://robotics-cam-data/platform/unitree_g1_dex3/dataset_fixed/" \
     --config_path "vla_foundry/config_presets/data/unitree_g1/g1_preprocessing_params_1past_47future_30hz.yaml" \
     --topics_to_fields_path "vla_foundry/config_presets/data/unitree_g1/g1_mcap_topics.yaml" \
-    --camera_names "include vla_foundry/config_presets/data/unitree_g1/g1_data_camera_names_zed2mini.yaml" \
+    --camera_names "include vla_foundry/config_presets/data/unitree_g1/camera_names/zedm_head_d405_wrists.yaml" \
     --task_filter '["move_block_on_plate"]' \
     --domain_filter '["sim"]' \
     --source_filter '["teleop"]' \
@@ -71,6 +71,49 @@ s3://robotics-cam-data/platform/unitree_g1_dex3/tarfiles/v3.2/{task}/{domain}/{s
 
 Pass that path as `--data-root` to `train_g1_policy.py`.
 
+### Whole-body preprocessing (sonic teleop)
+
+Whole-body MCAPs have additional topics (`/smpl_joint_points`,
+`/reference_motion`) and produce a 98D action layout. Use the
+`unitree_g1_wholebody/sonic/` configs and write to a separate
+`tarfiles/v0_wholebody/` track:
+
+```bash
+ssh humanoid_data_1   # or humanoid_data_2
+cd ~/vla_foundry
+git pull origin main
+
+uv run --group preprocessing vla_foundry/data/preprocessing/preprocess_robotics_to_tar.py \
+    --type mcap \
+    --source_episodes "['s3://robotics-cam-data/platform/unitree_g1_dex3/mcap']" \
+    --output_dir "s3://robotics-cam-data/platform/unitree_g1_dex3/tarfiles/v0_wholebody/" \
+    --output_dir_fixed_path "s3://robotics-cam-data/platform/unitree_g1_dex3/dataset_fixed/" \
+    --config_path "vla_foundry/config_presets/data/unitree_g1_wholebody/sonic/sonic_preprocessing_params.yaml" \
+    --topics_to_fields_path "vla_foundry/config_presets/data/unitree_g1_wholebody/sonic/sonic_topics_to_fields.yaml" \
+    --action_fields_config_path "vla_foundry/config_presets/data/unitree_g1_wholebody/sonic/sonic_action_fields.yaml" \
+    --language_annotations_path "vla_foundry/config_presets/data/unitree_g1/g1_language_annotations.yaml" \
+    --camera_names "include vla_foundry/config_presets/data/unitree_g1/camera_names/zedm_head.yaml" \
+    --task_filter '["put_cap_in_laundry_basket"]' \
+    --domain_filter '["real"]' \
+    --source_filter '["teleop"]' \
+    --samples_per_shard 100 \
+    --ray_num_cpus 64
+```
+
+### Camera-name presets
+
+Camera-name lists live under `vla_foundry/config_presets/data/unitree_g1/camera_names/`:
+
+| Preset | Cameras |
+|--------|---------|
+| `d435_head.yaml` | `head` |
+| `d435_head_d405_wrists.yaml` | `head, left_wrist, right_wrist` |
+| `zedm_head.yaml` | `stereo_head_left, stereo_head_right` |
+| `zedm_head_d405_wrists.yaml` | `stereo_head_left, stereo_head_right, left_wrist, right_wrist` |
+
+Reference one of these from `--camera_names "include …"` (preprocessing) or
+`--camera-config <preset>` (training launcher).
+
 ## Quick start
 
 ```bash
@@ -82,6 +125,10 @@ uv run python examples/training/extended/diffusion_policy/unitree_g1/train_g1_po
 uv run python examples/training/extended/diffusion_policy/unitree_g1/train_g1_policy.py \
     move_block_on_plate --obs vision_propio --domain sim \
     --sagemaker --user firstname.lastname
+
+# Whole-body (sonic teleop demos), ZED Mini head-only
+uv run python examples/training/extended/diffusion_policy/unitree_g1/train_g1_policy.py \
+    put_cap_in_laundry_basket --obs wholebody --domain real --camera-config zedm_head
 ```
 
 ## Usage
@@ -96,8 +143,15 @@ uv run python train_g1_policy.py TASK --obs MODE [OPTIONS]
 |------|--------|
 | `vision_propio` | Vision + EE pose (18D) + finger joint positions (14D) |
 | `vision_propio_tactile` | Vision + EE pose + finger joint positions + joint torque (14D) + pressure |
+| `wholebody` | Vision + 43 G1 joint positions |
 
-Action space is fixed: absolute EE pose (18D) + Dex3 finger joint positions (14D) = 32D.
+Default action space (vision_propio, vision_only, vision_propio_tactile):
+absolute EE pose (18D) + Dex3 finger joint positions (14D) = 32D.
+
+`wholebody` overrides this with a 98D action: 72 SMPL joint positions
+(24 joints × xyz) + 6D root orientation + 6D wrist references + 14D Dex3 hand
+joints. Default data root is
+`s3://robotics-cam-data/platform/unitree_g1_dex3/tarfiles/v0_wholebody`.
 
 ### All options
 

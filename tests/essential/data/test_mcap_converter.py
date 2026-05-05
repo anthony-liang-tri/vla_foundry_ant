@@ -27,6 +27,7 @@ from vla_foundry.data.preprocessing.robotics.converters.mcap import (
     extract_array_from_msg,
     extract_field_path,
     extract_image_from_msg,
+    extract_structured_msg,
     parse_episode_path,
 )
 from vla_foundry.data.preprocessing.utils import nearest_indices
@@ -269,6 +270,96 @@ class TestExtractArrayFromMsg:
         assert result.shape == (6,)
         assert result.dtype == np.float32
         np.testing.assert_array_equal(result, np.array([1.0, 2.0, 3.0, 0.1, 0.2, 0.3], dtype=np.float32))
+
+
+class TestExtractStructuredMsg:
+    """Tests for extract_structured_msg covering JointState, Pose, Skeleton, and ReferenceMotion shapes."""
+
+    def test_joint_state(self):
+        """JointState messages emit one __<joint_name> entry per joint position."""
+        msg = Mock(spec=["name", "position", "velocity", "effort"])
+        msg.name = ["shoulder", "elbow"]
+        msg.position = [0.1, 0.2]
+        msg.velocity = [0.0, 0.0]
+        msg.effort = [0.0, 0.0]
+
+        result = extract_structured_msg(msg)
+        assert result is not None
+        assert set(result.keys()) == {"__shoulder", "__elbow"}
+        np.testing.assert_array_equal(result["__shoulder"], np.array([0.1], dtype=np.float32))
+        np.testing.assert_array_equal(result["__elbow"], np.array([0.2], dtype=np.float32))
+        assert all(v.dtype == np.float32 for v in result.values())
+
+    def test_skeleton_style(self):
+        """Skeleton messages (parallel name[] + points[Point]) emit __<joint>_{x,y,z}."""
+        p_pelvis = Mock(spec=["x", "y", "z"])
+        p_pelvis.x, p_pelvis.y, p_pelvis.z = 0.0, 0.0, 0.9
+        p_hip = Mock(spec=["x", "y", "z"])
+        p_hip.x, p_hip.y, p_hip.z = 0.1, -0.2, 0.8
+        msg = Mock(spec=["name", "points"])
+        # Names carry a "namespace/" prefix that the extractor must strip.
+        msg.name = ["smpl/pelvis", "smpl/left_hip"]
+        msg.points = [p_pelvis, p_hip]
+
+        result = extract_structured_msg(msg)
+        assert result is not None
+        assert set(result.keys()) == {
+            "__pelvis_x",
+            "__pelvis_y",
+            "__pelvis_z",
+            "__left_hip_x",
+            "__left_hip_y",
+            "__left_hip_z",
+        }
+        np.testing.assert_array_equal(result["__pelvis_z"], np.array([0.9], dtype=np.float32))
+        np.testing.assert_array_equal(result["__left_hip_x"], np.array([0.1], dtype=np.float32))
+        assert all(v.shape == (1,) and v.dtype == np.float32 for v in result.values())
+
+    def test_skeleton_style_no_namespace_prefix(self):
+        """Skeleton names without a "namespace/" prefix pass through unchanged."""
+        p = Mock(spec=["x", "y", "z"])
+        p.x, p.y, p.z = 1.0, 2.0, 3.0
+        msg = Mock(spec=["name", "points"])
+        msg.name = ["head"]
+        msg.points = [p]
+
+        result = extract_structured_msg(msg)
+        assert result is not None
+        assert set(result.keys()) == {"__head_x", "__head_y", "__head_z"}
+
+    def test_reference_motion_composite(self):
+        """ReferenceMotion (root_pose + joint_positions) emits __root_rot_6d + per-joint scalars."""
+        # Identity quaternion -> identity rotation matrix -> rot_6d = [1,0,0, 0,1,0]
+        orientation = Mock(spec=["x", "y", "z", "w"])
+        orientation.x, orientation.y, orientation.z, orientation.w = 0.0, 0.0, 0.0, 1.0
+        root_pose = Mock(spec=["orientation"])
+        root_pose.orientation = orientation
+        joint_positions = Mock(spec=["name", "position"])
+        joint_positions.name = ["left_wrist_roll_joint", "right_wrist_roll_joint"]
+        joint_positions.position = [0.5, -0.5]
+        msg = Mock(spec=["root_pose", "joint_positions"])
+        msg.root_pose = root_pose
+        msg.joint_positions = joint_positions
+
+        result = extract_structured_msg(msg)
+        assert result is not None
+        assert set(result.keys()) == {
+            "__root_rot_6d",
+            "__left_wrist_roll_joint",
+            "__right_wrist_roll_joint",
+        }
+        assert result["__root_rot_6d"].shape == (6,)
+        assert result["__root_rot_6d"].dtype == np.float32
+        np.testing.assert_allclose(
+            result["__root_rot_6d"], np.array([1.0, 0.0, 0.0, 0.0, 1.0, 0.0], dtype=np.float32), atol=1e-6
+        )
+        np.testing.assert_array_equal(result["__left_wrist_roll_joint"], np.array([0.5], dtype=np.float32))
+
+    def test_unstructured_message_returns_none(self):
+        """Messages that don't match any structured shape return None."""
+        msg = Mock(spec=["unrelated_field"])
+        msg.unrelated_field = 42
+        assert extract_structured_msg(msg) is None
 
 
 class TestNearestIndices:

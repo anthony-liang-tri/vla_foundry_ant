@@ -1,0 +1,9 @@
+# Sonic whole-body preprocessing config.
+# Inherits temporal windowing, padding, image preprocessing, and runtime defaults 
+# from the G1 base. Sonic head-mounted ZED stereo needs no rotation, 
+# so we override only camera_rotations.
+<<: !include ../../unitree_g1/g1_preprocessing_params_1past_47future_30hz.yaml
+
+camera_rotations:
+  stereo_head_left: 0
+  stereo_head_right: 0

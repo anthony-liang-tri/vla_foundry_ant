@@ -1,0 +1,21 @@
+# Whole-body G1 (SMPL skeleton + Dex3) shared base for sonic teleop demos.
+# Mirrors the upper-body diffusion_policy_unitree_g1_base.yaml structure:
+# holds data overrides; the per-size wrappers (_100m / _410m) add the model
+# section. Inherits hparams + ema + distributed defaults from the upper-body
+# G1 base; overrides only the data slot (sonic 98-D action + 43-D proprio,
+# v0_wholebody S3 paths). Production hparams come from the upper-body base
+# (per_gpu_batch_size=32, global_batch_size=256, lr=1e-4, etc.); for local
+# 2-GPU runs override e.g. --hparams.global_batch_size 16.
+<<: !include ../../unitree_g1/diffusion_policy_unitree_g1_base.yaml
+
+data:
+  # Replace base's g1_data_params (32-D EE pose) with sonic 98-D whole-body.
+  <<: !include ../../../data/unitree_g1_wholebody/sonic/sonic_data_params.yaml
+  <<: !include ../../../data/diffusion_policy.yaml
+  # Inherit dataset_modality, dataset_weighting, lowdim_future_timesteps=47,
+  # augmentation, prefetch_factor, img_num_tokens from upper-body common.
+  <<: !include ../../../data/unitree_g1/g1_training_data_common.yaml
+  dataset_manifest:
+    - s3://robotics-cam-data/platform/unitree_g1_dex3/tarfiles/v0_wholebody/put_cap_in_laundry_basket/real/teleop/shards/manifest.jsonl
+  dataset_statistics:
+    - s3://robotics-cam-data/platform/unitree_g1_dex3/tarfiles/v0_wholebody/put_cap_in_laundry_basket/real/teleop/shards/stats.json

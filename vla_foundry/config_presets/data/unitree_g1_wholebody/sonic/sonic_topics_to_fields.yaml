@@ -1,0 +1,131 @@
+# SONIC MCAP Topics Configuration (modeled on unitree_g1/g1_mcap_topics.yaml)
+# Config-driven sub-field extraction of state / action topics
+#
+# Usage: Preprocess once, select fields at training time
+#
+# Field path syntax:
+#   "field"              - Simple attribute
+#   "field.nested"       - Nested attribute
+#   "field[*]"           - Iterate list, flatten
+#   "field[*].attr"      - Extract attr from each list item
+output_mode: separate
+
+# All lowdim state values in this list will have normalization stats calculated.
+# In output_mode=separate this also acts as the allow-list for proprio keys
+# written to each sample's lowdim.npz. For SONIC whole-body that is
+# all 43 /joint_states values (15 legs+waist, 7+7 arms, 7+7 hands).
+state_key_fields:
+  # Legs + waist (15)
+  - actual_joint_position__left_hip_pitch_joint
+  - actual_joint_position__left_hip_roll_joint
+  - actual_joint_position__left_hip_yaw_joint
+  - actual_joint_position__left_knee_joint
+  - actual_joint_position__left_ankle_pitch_joint
+  - actual_joint_position__left_ankle_roll_joint
+  - actual_joint_position__right_hip_pitch_joint
+  - actual_joint_position__right_hip_roll_joint
+  - actual_joint_position__right_hip_yaw_joint
+  - actual_joint_position__right_knee_joint
+  - actual_joint_position__right_ankle_pitch_joint
+  - actual_joint_position__right_ankle_roll_joint
+  - actual_joint_position__waist_yaw_joint
+  - actual_joint_position__waist_roll_joint
+  - actual_joint_position__waist_pitch_joint
+  # Left arm (7)
+  - actual_joint_position__left_shoulder_pitch_joint
+  - actual_joint_position__left_shoulder_roll_joint
+  - actual_joint_position__left_shoulder_yaw_joint
+  - actual_joint_position__left_elbow_joint
+  - actual_joint_position__left_wrist_roll_joint
+  - actual_joint_position__left_wrist_pitch_joint
+  - actual_joint_position__left_wrist_yaw_joint
+  # Left hand (7)
+  - actual_joint_position__left_hand_thumb_0_joint
+  - actual_joint_position__left_hand_thumb_1_joint
+  - actual_joint_position__left_hand_thumb_2_joint
+  - actual_joint_position__left_hand_middle_0_joint
+  - actual_joint_position__left_hand_middle_1_joint
+  - actual_joint_position__left_hand_index_0_joint
+  - actual_joint_position__left_hand_index_1_joint
+  # Right arm (7)
+  - actual_joint_position__right_shoulder_pitch_joint
+  - actual_joint_position__right_shoulder_roll_joint
+  - actual_joint_position__right_shoulder_yaw_joint
+  - actual_joint_position__right_elbow_joint
+  - actual_joint_position__right_wrist_roll_joint
+  - actual_joint_position__right_wrist_pitch_joint
+  - actual_joint_position__right_wrist_yaw_joint
+  # Right hand (7)
+  - actual_joint_position__right_hand_thumb_0_joint
+  - actual_joint_position__right_hand_thumb_1_joint
+  - actual_joint_position__right_hand_thumb_2_joint
+  - actual_joint_position__right_hand_middle_0_joint
+  - actual_joint_position__right_hand_middle_1_joint
+  - actual_joint_position__right_hand_index_0_joint
+  - actual_joint_position__right_hand_index_1_joint
+
+# Pivot source for temporal alignment (any field name from camera, state, or
+# action field maps). Raises an error if field name is not found.
+pivot_source_field: stereo_head_left
+
+# Maximum gap (seconds) in the pivot source timeline before logging a warning.
+gap_threshold_dt: 0.15
+
+# Maximum snap distance (seconds) for nearest-neighbor alignment.
+# Raises an error if any sample exceeds this threshold.
+snap_threshold_dt: 0.25
+
+# =============================================================================
+# ACTION TOPICS
+# =============================================================================
+# Body action = SMPL joint points (raw encoder input to SONIC at inference).
+# Hand action = Dex3 joint commands (SONIC does not produce hands).
+
+action_topics:
+  - /smpl_joint_points
+  - /reference_motion
+  - /joint_cmd_hand_left
+  - /joint_cmd_hand_right
+
+action_field_map:
+  /smpl_joint_points: action_smpl
+  /reference_motion: action_reference_motion
+  /joint_cmd_hand_left: action_joint_hand_left
+  /joint_cmd_hand_right: action_joint_hand_right
+
+# Map action field prefixes to their state-space equivalents. Used when
+# training needs to compare an action to the current proprioceptive value.
+# SMPL body actions have no state counterpart, so they are omitted.
+reference_field_prefixes:
+  action_joint_hand_left__: actual_joint_position__
+  action_joint_hand_right__: actual_joint_position__
+  action_: actual_
+  desired_: actual_
+
+# =============================================================================
+# STATE TOPICS
+# =============================================================================
+
+state_topics:
+  - /joint_states
+
+state_field_map:
+  /joint_states: actual_joint_position
+
+# =============================================================================
+# SUB-FIELD EXTRACTION
+# =============================================================================
+
+state_topic_subfield_extraction: {}
+
+# =============================================================================
+# CAMERA TOPICS
+# =============================================================================
+
+camera_topics:
+  - /head_camera/zed_node/left/image_rect_color/compressed
+  - /head_camera/zed_node/right/image_rect_color/compressed
+
+camera_topics_field_map:
+  /head_camera/zed_node/left/image_rect_color/compressed: stereo_head_left
+  /head_camera/zed_node/right/image_rect_color/compressed: stereo_head_right

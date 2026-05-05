@@ -1,0 +1,216 @@
+# 98-D action space for SONIC whole-body BC (matches what sonic.py consumes):
+#   72  SMPL joint positions     (24 joints × xyz, pelvis-local Z-up)          → /smpl_joint_points
+#    6  anchor orientation       (root 6-D continuous rotation)                → /reference_motion.root_pose.orientation
+#    6  wrist joint refs         (L/R × roll/pitch/yaw)                        → /reference_motion.joint_positions[wrist_indices]
+#   14  Dex3 hand joint positions (7 per hand)                                 → /joint_cmd_hand_{left,right}
+#
+# Note: the 14 `action_joint_hand_left/right__*` entries below MUST stay in
+# sync with the same block in `data/unitree_g1/g1_action_fields.yaml`. If you
+# rename or add a Dex3 joint, edit both files together (YAML !include can't
+# list-concat, so duplication is unavoidable until we lift the joint list to
+# a Python const).
+#
+# SMPL joint order matches the 20260417 MCAP /smpl_joint_points name array:
+#   pelvis, left_hip, right_hip, spine1, left_knee, right_knee, spine2,
+#   left_ankle, right_ankle, spine3, left_foot, right_foot, neck,
+#   left_collar, right_collar, head, left_shoulder, right_shoulder,
+#   left_elbow, right_elbow, left_wrist, right_wrist, left_hand, right_hand
+action_key_fields:
+  # SMPL body (24 joints × xyz = 72)
+  - action_smpl__pelvis_x
+  - action_smpl__pelvis_y
+  - action_smpl__pelvis_z
+  - action_smpl__left_hip_x
+  - action_smpl__left_hip_y
+  - action_smpl__left_hip_z
+  - action_smpl__right_hip_x
+  - action_smpl__right_hip_y
+  - action_smpl__right_hip_z
+  - action_smpl__spine1_x
+  - action_smpl__spine1_y
+  - action_smpl__spine1_z
+  - action_smpl__left_knee_x
+  - action_smpl__left_knee_y
+  - action_smpl__left_knee_z
+  - action_smpl__right_knee_x
+  - action_smpl__right_knee_y
+  - action_smpl__right_knee_z
+  - action_smpl__spine2_x
+  - action_smpl__spine2_y
+  - action_smpl__spine2_z
+  - action_smpl__left_ankle_x
+  - action_smpl__left_ankle_y
+  - action_smpl__left_ankle_z
+  - action_smpl__right_ankle_x
+  - action_smpl__right_ankle_y
+  - action_smpl__right_ankle_z
+  - action_smpl__spine3_x
+  - action_smpl__spine3_y
+  - action_smpl__spine3_z
+  - action_smpl__left_foot_x
+  - action_smpl__left_foot_y
+  - action_smpl__left_foot_z
+  - action_smpl__right_foot_x
+  - action_smpl__right_foot_y
+  - action_smpl__right_foot_z
+  - action_smpl__neck_x
+  - action_smpl__neck_y
+  - action_smpl__neck_z
+  - action_smpl__left_collar_x
+  - action_smpl__left_collar_y
+  - action_smpl__left_collar_z
+  - action_smpl__right_collar_x
+  - action_smpl__right_collar_y
+  - action_smpl__right_collar_z
+  - action_smpl__head_x
+  - action_smpl__head_y
+  - action_smpl__head_z
+  - action_smpl__left_shoulder_x
+  - action_smpl__left_shoulder_y
+  - action_smpl__left_shoulder_z
+  - action_smpl__right_shoulder_x
+  - action_smpl__right_shoulder_y
+  - action_smpl__right_shoulder_z
+  - action_smpl__left_elbow_x
+  - action_smpl__left_elbow_y
+  - action_smpl__left_elbow_z
+  - action_smpl__right_elbow_x
+  - action_smpl__right_elbow_y
+  - action_smpl__right_elbow_z
+  - action_smpl__left_wrist_x
+  - action_smpl__left_wrist_y
+  - action_smpl__left_wrist_z
+  - action_smpl__right_wrist_x
+  - action_smpl__right_wrist_y
+  - action_smpl__right_wrist_z
+  - action_smpl__left_hand_x
+  - action_smpl__left_hand_y
+  - action_smpl__left_hand_z
+  - action_smpl__right_hand_x
+  - action_smpl__right_hand_y
+  - action_smpl__right_hand_z
+  # Anchor orientation (6-D continuous rotation from /reference_motion.root_pose.orientation)
+  - action_reference_motion__root_rot_6d # 6
+  # Wrist joint references from /reference_motion.joint_positions (6)
+  - action_reference_motion__left_wrist_roll_joint
+  - action_reference_motion__left_wrist_pitch_joint
+  - action_reference_motion__left_wrist_yaw_joint
+  - action_reference_motion__right_wrist_roll_joint
+  - action_reference_motion__right_wrist_pitch_joint
+  - action_reference_motion__right_wrist_yaw_joint
+  # Left hand (7)
+  - action_joint_hand_left__left_hand_thumb_0_joint
+  - action_joint_hand_left__left_hand_thumb_1_joint
+  - action_joint_hand_left__left_hand_thumb_2_joint
+  - action_joint_hand_left__left_hand_middle_0_joint
+  - action_joint_hand_left__left_hand_middle_1_joint
+  - action_joint_hand_left__left_hand_index_0_joint
+  - action_joint_hand_left__left_hand_index_1_joint
+  # Right hand (7)
+  - action_joint_hand_right__right_hand_thumb_0_joint
+  - action_joint_hand_right__right_hand_thumb_1_joint
+  - action_joint_hand_right__right_hand_thumb_2_joint
+  - action_joint_hand_right__right_hand_middle_0_joint
+  - action_joint_hand_right__right_hand_middle_1_joint
+  - action_joint_hand_right__right_hand_index_0_joint
+  - action_joint_hand_right__right_hand_index_1_joint
+
+action_index_fields:
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  - 8
+  - 9
+  - 10
+  - 11
+  - 12
+  - 13
+  - 14
+  - 15
+  - 16
+  - 17
+  - 18
+  - 19
+  - 20
+  - 21
+  - 22
+  - 23
+  - 24
+  - 25
+  - 26
+  - 27
+  - 28
+  - 29
+  - 30
+  - 31
+  - 32
+  - 33
+  - 34
+  - 35
+  - 36
+  - 37
+  - 38
+  - 39
+  - 40
+  - 41
+  - 42
+  - 43
+  - 44
+  - 45
+  - 46
+  - 47
+  - 48
+  - 49
+  - 50
+  - 51
+  - 52
+  - 53
+  - 54
+  - 55
+  - 56
+  - 57
+  - 58
+  - 59
+  - 60
+  - 61
+  - 62
+  - 63
+  - 64
+  - 65
+  - 66
+  - 67
+  - 68
+  - 69
+  - 70
+  - 71
+  - 72
+  # root_rot_6d (dim 6) ends at 78
+  - 78
+  # 6 wrist scalars
+  - 79
+  - 80
+  - 81
+  - 82
+  - 83
+  - 84
+  # 14 Dex3 hand scalars (left 7, right 7)
+  - 85
+  - 86
+  - 87
+  - 88
+  - 89
+  - 90
+  - 91
+  - 92
+  - 93
+  - 94
+  - 95
+  - 96
+  - 97
+  - 98
+
+pose_groups: []

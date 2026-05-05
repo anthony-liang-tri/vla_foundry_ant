@@ -39,6 +39,9 @@ language_dict:
   place_cube_in_hand:
     original:
     - place the block in the person's hand
+  put_cap_in_laundry_basket:
+    original:
+    - pick up the cap and place it in the laundry basket, then close the lid of the basket
   stack_cubes_ordered:
     original:
     - stack a green block on the top of a blue block, and stack a red block on the top of the green block

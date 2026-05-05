@@ -1,0 +1,5 @@
+# Camera names for G1 data recorded with a head-mounted ZED Mini stereo + D405 wrist cameras.
+- stereo_head_left
+- stereo_head_right
+- left_wrist
+- right_wrist
