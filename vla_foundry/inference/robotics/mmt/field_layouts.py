@@ -6,17 +6,17 @@ Each entry defines:
   - zzk_source (optional): how to extract this field from a ZZK status dict
     at inference time.  Omitted for action fields (they come from the model).
 zzk_source types:
-  - eef_pose: bimanual pose assembled from the state matrix rows
-  - single_arm_pose: single arm [gripper, pose(6)] from the state matrix
+  - eef_pose: bimanual [gripper, pose(6)] x 2 — gripper from status scalar fields,
+              pose from state matrix rows
+  - single_arm_pose: single arm [gripper, pose(6)] — gripper from status scalar
+                     field selected by ``side``, pose from state matrix row
   - state_row: a single row of the state matrix
   - status_field: a top-level key in the ZZK status dict
   - status_field_slice: a slice of a top-level key in the ZZK status dict
 
 ZZK state format (from zzk_api_ctypes_client.cc):
   state[0][0:6]  = local_T_chassis (x, y, z, rx, ry, rz)
-  state[1][2]    = left_gripper_position
   state[2][0:6]  = chassis_T_left_arm_tip (x, y, z, rx, ry, rz)
-  state[3][2]    = right_gripper_position
   state[4][0:6]  = chassis_T_right_arm_tip (x, y, z, rx, ry, rz)
   state[5][0:6]  = chest_T_left_arm_tip (x, y, z, rx, ry, rz)
   state[6][0:6]  = chest_T_right_arm_tip (x, y, z, rx, ry, rz)
@@ -28,6 +28,8 @@ ZZK state format (from zzk_api_ctypes_client.cc):
   chassis_T_chest = chassis_T_chest pose [x, y, z, rx, ry, rz]
   wrench          = [left_fx, left_fy, left_fz, left_tx, left_ty, left_tz,
                      right_fx, right_fy, right_fz, right_tx, right_ty, right_tz]
+  left_gripper_position  = scalar (status field)
+  right_gripper_position = scalar (status field)
 """
 
 ZZK_STATE_ROWS = 11
@@ -62,9 +64,7 @@ _BASE_FIELD_LAYOUTS = {
         },
         "zzk_source": {
             "type": "eef_pose",
-            "left_gripper_row": 1,
             "left_pose_row": 2,
-            "right_gripper_row": 3,
             "right_pose_row": 4,
         },
     },
@@ -78,9 +78,7 @@ _BASE_FIELD_LAYOUTS = {
         },
         "zzk_source": {
             "type": "eef_pose",
-            "left_gripper_row": 1,
             "left_pose_row": 5,
-            "right_gripper_row": 3,
             "right_pose_row": 6,
         },
     },
@@ -94,9 +92,7 @@ _BASE_FIELD_LAYOUTS = {
         },
         "zzk_source": {
             "type": "eef_pose",
-            "left_gripper_row": 1,
             "left_pose_row": 7,
-            "right_gripper_row": 3,
             "right_pose_row": 8,
         },
     },
@@ -105,45 +101,45 @@ _BASE_FIELD_LAYOUTS = {
     "chassis_T_left_eef_pose": {
         "full_dim": 7,
         "groups": {"gripper": (0,), "pose": tuple(range(1, 7))},
-        "zzk_source": {"type": "single_arm_pose", "gripper_row": 1, "pose_row": 2},
+        "zzk_source": {"type": "single_arm_pose", "side": "left", "pose_row": 2},
     },
     "chassis_T_right_eef_pose": {
         "full_dim": 7,
         "groups": {"gripper": (0,), "pose": tuple(range(1, 7))},
-        "zzk_source": {"type": "single_arm_pose", "gripper_row": 3, "pose_row": 4},
+        "zzk_source": {"type": "single_arm_pose", "side": "right", "pose_row": 4},
     },
     # chest_T_eef_pose split
     "chest_T_left_eef_pose": {
         "full_dim": 7,
         "groups": {"gripper": (0,), "pose": tuple(range(1, 7))},
-        "zzk_source": {"type": "single_arm_pose", "gripper_row": 1, "pose_row": 5},
+        "zzk_source": {"type": "single_arm_pose", "side": "left", "pose_row": 5},
     },
     "chest_T_right_eef_pose": {
         "full_dim": 7,
         "groups": {"gripper": (0,), "pose": tuple(range(1, 7))},
-        "zzk_source": {"type": "single_arm_pose", "gripper_row": 3, "pose_row": 6},
+        "zzk_source": {"type": "single_arm_pose", "side": "right", "pose_row": 6},
     },
     # chassis_T_gripper_tip_pose split
     "chassis_T_left_gripper_tip_pose": {
         "full_dim": 7,
         "groups": {"gripper": (0,), "pose": tuple(range(1, 7))},
-        "zzk_source": {"type": "single_arm_pose", "gripper_row": 1, "pose_row": 7},
+        "zzk_source": {"type": "single_arm_pose", "side": "left", "pose_row": 7},
     },
     "chassis_T_right_gripper_tip_pose": {
         "full_dim": 7,
         "groups": {"gripper": (0,), "pose": tuple(range(1, 7))},
-        "zzk_source": {"type": "single_arm_pose", "gripper_row": 3, "pose_row": 8},
+        "zzk_source": {"type": "single_arm_pose", "side": "right", "pose_row": 8},
     },
     # chest_T_gripper_tip_pose split
     "chest_T_left_gripper_tip_pose": {
         "full_dim": 7,
         "groups": {"gripper": (0,), "pose": tuple(range(1, 7))},
-        "zzk_source": {"type": "single_arm_pose", "gripper_row": 1, "pose_row": 9},
+        "zzk_source": {"type": "single_arm_pose", "side": "left", "pose_row": 9},
     },
     "chest_T_right_gripper_tip_pose": {
         "full_dim": 7,
         "groups": {"gripper": (0,), "pose": tuple(range(1, 7))},
-        "zzk_source": {"type": "single_arm_pose", "gripper_row": 3, "pose_row": 10},
+        "zzk_source": {"type": "single_arm_pose", "side": "right", "pose_row": 10},
     },
     # wrench split
     "left_wrench": {
@@ -166,9 +162,7 @@ _BASE_FIELD_LAYOUTS = {
         },
         "zzk_source": {
             "type": "eef_pose",
-            "left_gripper_row": 1,
             "left_pose_row": 9,
-            "right_gripper_row": 3,
             "right_pose_row": 10,
         },
     },
@@ -225,42 +219,42 @@ _LEGACY_PER_ARM_DEFAULTS = {
     "chassis_T_left_eef_pose": {
         "full_dim": 7,
         "groups": {"gripper": (0,), "pose": tuple(range(1, 7))},
-        "zzk_source": {"type": "single_arm_pose", "gripper_row": 1, "pose_row": 2},
+        "zzk_source": {"type": "single_arm_pose", "side": "left", "pose_row": 2},
     },
     "chassis_T_right_eef_pose": {
         "full_dim": 7,
         "groups": {"gripper": (0,), "pose": tuple(range(1, 7))},
-        "zzk_source": {"type": "single_arm_pose", "gripper_row": 3, "pose_row": 4},
+        "zzk_source": {"type": "single_arm_pose", "side": "right", "pose_row": 4},
     },
     "chest_T_left_eef_pose": {
         "full_dim": 7,
         "groups": {"gripper": (0,), "pose": tuple(range(1, 7))},
-        "zzk_source": {"type": "single_arm_pose", "gripper_row": 1, "pose_row": 5},
+        "zzk_source": {"type": "single_arm_pose", "side": "left", "pose_row": 5},
     },
     "chest_T_right_eef_pose": {
         "full_dim": 7,
         "groups": {"gripper": (0,), "pose": tuple(range(1, 7))},
-        "zzk_source": {"type": "single_arm_pose", "gripper_row": 3, "pose_row": 6},
+        "zzk_source": {"type": "single_arm_pose", "side": "right", "pose_row": 6},
     },
     "chassis_T_left_gripper_tip_pose": {
         "full_dim": 7,
         "groups": {"gripper": (0,), "pose": tuple(range(1, 7))},
-        "zzk_source": {"type": "single_arm_pose", "gripper_row": 1, "pose_row": 7},
+        "zzk_source": {"type": "single_arm_pose", "side": "left", "pose_row": 7},
     },
     "chassis_T_right_gripper_tip_pose": {
         "full_dim": 7,
         "groups": {"gripper": (0,), "pose": tuple(range(1, 7))},
-        "zzk_source": {"type": "single_arm_pose", "gripper_row": 3, "pose_row": 8},
+        "zzk_source": {"type": "single_arm_pose", "side": "right", "pose_row": 8},
     },
     "chest_T_left_gripper_tip_pose": {
         "full_dim": 7,
         "groups": {"gripper": (0,), "pose": tuple(range(1, 7))},
-        "zzk_source": {"type": "single_arm_pose", "gripper_row": 1, "pose_row": 9},
+        "zzk_source": {"type": "single_arm_pose", "side": "left", "pose_row": 9},
     },
     "chest_T_right_gripper_tip_pose": {
         "full_dim": 7,
         "groups": {"gripper": (0,), "pose": tuple(range(1, 7))},
-        "zzk_source": {"type": "single_arm_pose", "gripper_row": 3, "pose_row": 10},
+        "zzk_source": {"type": "single_arm_pose", "side": "right", "pose_row": 10},
     },
     "left_wrench": {
         "full_dim": 6,

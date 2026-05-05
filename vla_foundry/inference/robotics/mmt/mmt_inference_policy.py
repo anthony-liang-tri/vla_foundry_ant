@@ -61,7 +61,6 @@ class ZzkPolicyInference:
         language_instruction: str = "You are a helpful robot assistant finishing tasks to help people's daily lives.",
         zzk_api_client_path: str | None = None,
         enable_compliance: bool = False,
-        robot_type: str | None = None,
     ):
         """Initialize the inference system.
 
@@ -76,7 +75,6 @@ class ZzkPolicyInference:
             TODO: Enable to change language_instruction every episode
             language_instruction: Task instruction for the robot
             zzk_api_client_path: Path to directory containing zzk_api_client.py and ctypes .so library
-            robot_type: Robot type ('tzkg' or 'tzkm') for robot-specific command formatting
         """
         self.checkpoint_directory = checkpoint_directory
         self.robot_hostname = robot_hostname
@@ -87,7 +85,6 @@ class ZzkPolicyInference:
         self.language_instruction = language_instruction
         self.zzk_api_client_path = zzk_api_client_path
         self.enable_compliance = enable_compliance
-        self.robot_type = robot_type
 
         # Load model configuration
         self.model_config_path = os.path.join(checkpoint_directory, "config.yaml")
@@ -152,7 +149,7 @@ class ZzkPolicyInference:
         self.num_past_timesteps = self.cfg.data.lowdim_past_timesteps
         self.num_future_timesteps = self.cfg.data.lowdim_future_timesteps
         self.total_timesteps = self.num_past_timesteps + 1 + self.num_future_timesteps
-        self.action_mapper = MmtActionMapper(self.lowdim_index_selection, self.runtime_layouts, self.robot_type)
+        self.action_mapper = MmtActionMapper(self.lowdim_index_selection, self.runtime_layouts)
 
         # Detect if action fields are position (pose) commands
         self.use_position_commands = any(is_position_action_field(f) for f in self.action_fields)
@@ -213,15 +210,18 @@ class ZzkPolicyInference:
 
     @staticmethod
     def _build_full_eef_pose(
+        status: dict,
         state: np.ndarray,
-        left_gripper_row: int,
         left_pose_row: int,
-        right_gripper_row: int,
         right_pose_row: int,
-    ) -> np.ndarray:
+    ) -> np.ndarray | None:
         # Pack left/right gripper scalars and 6D poses into the training-time full EEF layout.
-        left_gripper = state[left_gripper_row, 2]
-        right_gripper = state[right_gripper_row, 2]
+        left_gripper = status.get("left_gripper_position")
+        right_gripper = status.get("right_gripper_position")
+        if left_gripper is None or right_gripper is None:
+            return None
+        left_gripper = float(left_gripper)
+        right_gripper = float(right_gripper)
         left_pose = state[left_pose_row, 0:6]
         right_pose = state[right_pose_row, 0:6]
         return np.concatenate([[left_gripper], left_pose, [right_gripper], right_pose]).astype(np.float32)
@@ -298,17 +298,19 @@ class ZzkPolicyInference:
             if state is None:
                 return None
             return self._build_full_eef_pose(
+                status,
                 state,
-                source["left_gripper_row"],
                 source["left_pose_row"],
-                source["right_gripper_row"],
                 source["right_pose_row"],
             )
 
         if source["type"] == "single_arm_pose":
             if state is None:
                 return None
-            gripper = state[source["gripper_row"], 2]
+            gripper = status.get(f"{source['side']}_gripper_position")
+            if gripper is None:
+                return None
+            gripper = float(gripper)
             pose = state[source["pose_row"], 0:6]
             return np.concatenate([[gripper], pose]).astype(np.float32)
 
@@ -708,11 +710,10 @@ class ZzkPolicyInference:
 
         Returns:
             List of (position_action_dict, tcp, gripper_action) tuples.
-            Both dicts are merged and sent together via send_position_command;
-            the server interprets the gripper entry as a z-only delta for
-            prismatic IK. position_action_dict carries the arm pose and
-            gripper_action carries the gripper value at the robot-specific
-            index (self.action_mapper.gripper_command_index).
+            Both dicts are merged and sent together via send_position_command.
+            position_action_dict carries the arm pose and gripper_action carries
+            the gripper target as a scalar; the server routes it to the correct
+            joint axis using its kinematic model.
         """
         current_action_dict = self.action_buffer[self.num_past_timesteps]
 
@@ -840,8 +841,9 @@ class ZzkPolicyInference:
                 sent_targets: list[tuple[np.ndarray, int]] = []
                 for pos_cmd, tcp, gripper_cmd in commands:
                     # In position mode, gripper commands are sent as part of
-                    # the position payload. The server interprets the gripper
-                    # entry as a z-only delta for prismatic IK.
+                    # the position payload as a scalar target; the server
+                    # routes it to the correct joint axis using its kinematic
+                    # model.
                     combined_pos_cmd = {**pos_cmd, **gripper_cmd}
                     logging.info(f"Step {step} position_cmd: {combined_pos_cmd} tcp={tcp}")
                     self.zzk_client.send_position_command(combined_pos_cmd, tool_center_point=tcp)
@@ -914,15 +916,6 @@ def main():
         help="Path to directory containing zzk_api_client.py and ctypes .so library",
     )
 
-    # Robot type
-    parser.add_argument(
-        "--robot_type",
-        type=str,
-        default="tzkg",
-        choices=["tzkg", "tzkm"],
-        help="Robot type for robot-specific command formatting (e.g., gripper command field)",
-    )
-
     # Compliance
     parser.add_argument(
         "--enable_compliance", action="store_true", default=False, help="Enable compliance mode for arm actions"
@@ -959,7 +952,6 @@ def main():
         language_instruction=args.language_instruction,
         zzk_api_client_path=args.zzk_api_client_path,
         enable_compliance=args.enable_compliance,
-        robot_type=args.robot_type,
     )
 
     # Run episodes

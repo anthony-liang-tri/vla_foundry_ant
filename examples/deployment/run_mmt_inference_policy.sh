@@ -68,7 +68,6 @@ while [ $# -gt 0 ]; do
         --num_episodes)          NUM_EPISODES="$2";          shift 2 ;;
         --max_steps_per_episode) MAX_STEPS_PER_EPISODE="$2"; shift 2 ;;
         --zzk_api_client_path)   ZZK_API_CLIENT_PATH="$2";   shift 2 ;;
-        --robot_type)            ROBOT_TYPE="$2";            shift 2 ;;
         --enable_compliance)     ENABLE_COMPLIANCE=1;        shift 1 ;;
         --log_level)             LOG_LEVEL="$2";             shift 2 ;;
         *) echo "Unknown argument: $1"; exit 1 ;;
@@ -95,10 +94,6 @@ CMD="$CMD --log_level \"${LOG_LEVEL}\""
 
 if [ -n "$CHECKPOINT_NAME" ]; then
     CMD="$CMD --checkpoint_name \"${CHECKPOINT_NAME}\""
-fi
-
-if [ -n "${ROBOT_TYPE:-}" ]; then
-    CMD="$CMD --robot_type \"${ROBOT_TYPE}\""
 fi
 
 if [ "${ENABLE_COMPLIANCE:-0}" = "1" ]; then

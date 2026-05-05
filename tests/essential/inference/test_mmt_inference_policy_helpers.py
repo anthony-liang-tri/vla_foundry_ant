@@ -33,22 +33,38 @@ def test_restore_full_values_scatters_into_full_dim():
 
 def test_build_full_eef_pose_concatenates_left_and_right_state():
     state = np.zeros((11, 6), dtype=np.float32)
-    state[1, 2] = 0.1
     state[2, 0:6] = np.array([1, 2, 3, 4, 5, 6], dtype=np.float32)
-    state[3, 2] = 0.2
     state[4, 0:6] = np.array([7, 8, 9, 10, 11, 12], dtype=np.float32)
+    status = {
+        "left_gripper_position": 0.1,
+        "right_gripper_position": 0.2,
+    }
 
     full_pose = ZzkPolicyInference._build_full_eef_pose(
+        status,
         state,
-        left_gripper_row=1,
         left_pose_row=2,
-        right_gripper_row=3,
         right_pose_row=4,
     )
 
     np.testing.assert_array_equal(
         full_pose,
         np.array([0.1, 1, 2, 3, 4, 5, 6, 0.2, 7, 8, 9, 10, 11, 12], dtype=np.float32),
+    )
+
+
+def test_build_full_eef_pose_returns_none_without_scalar_gripper_fields():
+    state = np.zeros((11, 6), dtype=np.float32)
+    status = {"left_gripper_position": 0.1}
+
+    assert (
+        ZzkPolicyInference._build_full_eef_pose(
+            status,
+            state,
+            left_pose_row=2,
+            right_pose_row=4,
+        )
+        is None
     )
 
 
@@ -79,13 +95,13 @@ def test_action_mapper_generates_arm_commands():
     mapper.append_right_arm_action_command(right_arm, zzk_action, debug_parts)
 
     np.testing.assert_array_almost_equal(zzk_action["right_arm"], [1, 2, 3, 4, 5, 6])
-    np.testing.assert_array_almost_equal(zzk_action["right_gripper"], [0, 0, 0.5, 0, 0, 0])
+    np.testing.assert_allclose(zzk_action["right_gripper"], 0.5)
 
     left_arm = np.array([0.3, 7, 8, 9, 10, 11, 12], dtype=np.float32)
     mapper.append_left_arm_action_command(left_arm, zzk_action, debug_parts)
 
     np.testing.assert_array_almost_equal(zzk_action["left_arm"], [7, 8, 9, 10, 11, 12])
-    np.testing.assert_array_almost_equal(zzk_action["left_gripper"], [0, 0, 0.3, 0, 0, 0])
+    np.testing.assert_allclose(zzk_action["left_gripper"], 0.3)
 
 
 def test_action_mapper_generates_gripper_tip_arm_commands():
@@ -99,13 +115,13 @@ def test_action_mapper_generates_gripper_tip_arm_commands():
     mapper.append_right_arm_action_at_gripper_tip_command(right_arm, zzk_action, debug_parts)
 
     np.testing.assert_array_almost_equal(zzk_action["right_arm"], [1, 2, 3, 4, 5, 6])
-    np.testing.assert_array_almost_equal(zzk_action["right_gripper"], [0, 0, 0.5, 0, 0, 0])
+    np.testing.assert_allclose(zzk_action["right_gripper"], 0.5)
 
     left_arm = np.array([0.3, 7, 8, 9, 10, 11, 12], dtype=np.float32)
     mapper.append_left_arm_action_at_gripper_tip_command(left_arm, zzk_action, debug_parts)
 
     np.testing.assert_array_almost_equal(zzk_action["left_arm"], [7, 8, 9, 10, 11, 12])
-    np.testing.assert_array_almost_equal(zzk_action["left_gripper"], [0, 0, 0.3, 0, 0, 0])
+    np.testing.assert_allclose(zzk_action["left_gripper"], 0.3)
 
 
 def test_action_mapper_generates_base_head_and_lift_commands():

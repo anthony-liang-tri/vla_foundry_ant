@@ -106,14 +106,6 @@ def restore_full_values(values: np.ndarray, selection: list[int] | None, full_di
     return full_values
 
 
-# Gripper command format per robot type.
-# Index into [tx, ty, tz, rx, ry, rz] for the gripper part action.
-GRIPPER_COMMAND_INDEX = {
-    "tzkg": 2,  # translation.z
-    "tzkm": 3,  # rotation_rpy.x
-}
-
-
 def _get_position_cmd_config(field_name: str) -> tuple[str, int, str] | None:
     """Derive position command config from field_layouts or field name convention.
 
@@ -177,15 +169,9 @@ class MmtActionMapper:
         self,
         lowdim_index_selection: dict[str, list[int] | None],
         runtime_layouts: dict | None = None,
-        robot_type: str | None = None,
     ):
         self.lowdim_index_selection = lowdim_index_selection
         self.runtime_layouts = runtime_layouts or {}
-        if robot_type is None:
-            robot_type = "tzkg"
-        if robot_type not in GRIPPER_COMMAND_INDEX:
-            raise ValueError(f"Unknown robot_type '{robot_type}'. Supported: {list(GRIPPER_COMMAND_INDEX.keys())}")
-        self.gripper_command_index = GRIPPER_COMMAND_INDEX[robot_type]
         self.action_field_handlers = {
             "left_arm_action": self.append_left_arm_action_command,
             "right_arm_action": self.append_right_arm_action_command,
@@ -220,9 +206,7 @@ class MmtActionMapper:
         gripper = float(full_action[0])
         arm = full_action[1:]
         zzk_action[zzk_arm_key] = arm.tolist()
-        gripper_cmd = [0.0] * 6
-        gripper_cmd[self.gripper_command_index] = gripper
-        zzk_action[f"{side_name}_gripper"] = gripper_cmd
+        zzk_action[f"{side_name}_gripper"] = gripper
         debug_parts.append(f"{side_name}[{zzk_arm_key}](vx={arm[0]:.3f}, vy={arm[1]:.3f}, gripper={gripper:.3f})")
 
     def append_left_arm_action_command(
@@ -310,10 +294,10 @@ class MmtActionMapper:
         Returns (position_action, tcp, gripper_action) where:
           - position_action: arm pose payload for send_position_command.
           - tcp: tool center point string.
-          - gripper_action: gripper payload merged into position_action before
-            send_position_command; the server interprets this entry as a
-            z-only delta for prismatic IK. The gripper value is placed at
-            self.gripper_command_index (robot-specific).
+          - gripper_action: scalar gripper target keyed by ``{side}_gripper``,
+            merged into position_action before send_position_command. The
+            server routes the scalar to the correct joint axis using its
+            kinematic model.
         The 7-dim action is [gripper, x, y, z, rx, ry, rz].
         """
         config = _get_position_cmd_config(field_name)
@@ -327,7 +311,5 @@ class MmtActionMapper:
         position_action = {
             part_name: {"pose": pose, "reference_frame": reference_frame},
         }
-        gripper_cmd = [0.0] * 6
-        gripper_cmd[self.gripper_command_index] = gripper
-        gripper_action = {f"{side}_gripper": gripper_cmd}
+        gripper_action = {f"{side}_gripper": gripper}
         return position_action, tcp, gripper_action
