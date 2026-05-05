@@ -144,7 +144,7 @@ Convert ROS 2 MCAP recordings (e.g., from the Unitree G1 humanoid) into WebDatas
 ```bash
 ./examples/preprocessing/extended/preprocess_robotics_data_mcap_g1.sh \
     --source s3://your-bucket/mcap/stack_cubes_ordered/real/teleop/ \ # (1)!
-    --output s3://your-bucket/tarfile/v1/stack_cubes_ordered/real/teleop/ \ # (2)!
+    --output s3://your-bucket/tarfiles/v1/stack_cubes_ordered/real/teleop/ \ # (2)!
     --task-name "stack cubes ordered" \             # (3)!
     --max-episodes 5 \                              # (4)!
     --ray-cpus 32                                   # (5)!

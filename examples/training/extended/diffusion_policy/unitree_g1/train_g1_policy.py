@@ -92,7 +92,7 @@ _CAMERA_YAML_BY_CONFIG = {
 # Defaults
 # ---------------------------------------------------------------------------
 
-_S3_TARFILE = "s3://robotics-cam-data/platform/unitree_g1_dex3/tarfile"
+_S3_TARFILE = "s3://robotics-cam-data/platform/unitree_g1_dex3/tarfiles"
 DEFAULT_DATA_ROOT_V3 = f"{_S3_TARFILE}/v3.2"  # non-tactile
 DEFAULT_DATA_ROOT_V2 = f"{_S3_TARFILE}/v2"  # tactile (dex3 torque/pressure)
 CKPT_ROOT = "s3://robotics-cam-checkpoints/platform/unitree_g1_dex3/model_checkpoints"

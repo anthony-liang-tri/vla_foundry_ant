@@ -42,7 +42,7 @@ state_key_fields:
 pivot_source_field: stereo_head_left
 
 # Maximum gap (seconds) in the pivot source timeline before logging a warning.
-gap_threshold_dt: 0.15
+gap_threshold_dt: 0.25
 
 # Maximum snap distance (seconds) for nearest-neighbor alignment.
 # Raises an error if any sample exceeds this threshold.

@@ -18,7 +18,7 @@ Commands:
     uv run python webdataset_from_mcap_inspector.py s3://bucket/path/frames/sample.tar
 
 Examples:
-    uv run python webdataset_from_mcap_inspector.py s3://robotics-cam-data/.../tarfile/v3.2/task/real/teleop/ \
+    uv run python webdataset_from_mcap_inspector.py s3://robotics-cam-data/.../tarfiles/v3.2/task/real/teleop/ \
         --config vla_foundry/config_presets/data/unitree_g1/g1_mcap_topics.yaml
 """
 

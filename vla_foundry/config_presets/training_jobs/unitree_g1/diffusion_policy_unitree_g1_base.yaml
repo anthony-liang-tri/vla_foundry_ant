@@ -5,9 +5,9 @@ data:
   # v1 data (no tactile). For tactile, use diffusion_policy_unitree_g1_tactile_base.yaml (v2).
   # Overridden at launch time via --data.dataset_manifest / --data-root.
   dataset_manifest:
-    - s3://robotics-cam-data/platform/unitree_g1_dex3/tarfile/v3.2/move_block_on_plate/sim/teleop/shards/manifest.jsonl
+    - s3://robotics-cam-data/platform/unitree_g1_dex3/tarfiles/v3.2/move_block_on_plate/sim/teleop/shards/manifest.jsonl
   dataset_statistics:
-    - s3://robotics-cam-data/platform/unitree_g1_dex3/tarfile/v3.2/move_block_on_plate/sim/teleop/shards/stats.json
+    - s3://robotics-cam-data/platform/unitree_g1_dex3/tarfiles/v3.2/move_block_on_plate/sim/teleop/shards/stats.json
 
   processor: openai/clip-vit-base-patch32
   processor_kwargs:

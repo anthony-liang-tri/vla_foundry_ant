@@ -15,7 +15,7 @@ Usage:
 
     # Custom episode count and dataset path
     uv run --group visualization python examples/visualization/visualize_g1_data.py \
-        --dataset_path s3://robotics-cam-data/platform/unitree_g1_dex3/tarfile/v1/move_block_on_plate/real/teleop \
+        --dataset_path s3://robotics-cam-data/platform/unitree_g1_dex3/tarfiles/v1/move_block_on_plate/real/teleop \
         --num_episodes 5
 
     # Use shuffled shards instead of ordered episodes
@@ -497,7 +497,7 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Visualize Unitree G1 data with Rerun")
     p.add_argument(
         "--dataset_path",
-        default="s3://robotics-cam-data/platform/unitree_g1_dex3/tarfile/v1/move_block_on_plate/real/teleop",
+        default="s3://robotics-cam-data/platform/unitree_g1_dex3/tarfiles/v1/move_block_on_plate/real/teleop",
         help="S3 path to the dataset root (contains episodes/ and shards/)",
     )
     p.add_argument(

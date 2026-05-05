@@ -33,6 +33,6 @@ data:
   # v2 data (dex3 torque/pressure topics). For non-tactile, use diffusion_policy_unitree_g1_base.yaml (v1).
   # Overridden at launch time via --data.dataset_manifest / --data-root.
   dataset_manifest:
-    - s3://robotics-cam-data/platform/unitree_g1_dex3/tarfile/v2/stack_cubes_ordered/real/teleop/shards/manifest.jsonl
+    - s3://robotics-cam-data/platform/unitree_g1_dex3/tarfiles/v2/stack_cubes_ordered/real/teleop/shards/manifest.jsonl
   dataset_statistics:
-    - s3://robotics-cam-data/platform/unitree_g1_dex3/tarfile/v2/stack_cubes_ordered/real/teleop/shards/stats.json
+    - s3://robotics-cam-data/platform/unitree_g1_dex3/tarfiles/v2/stack_cubes_ordered/real/teleop/shards/stats.json
