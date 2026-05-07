@@ -234,6 +234,7 @@ def main(argv: list[str] | None = None) -> None:
 
     # Use dataloader to iterate through samples.
     cfg = draccus.parse(config_class=TrainExperimentParams)
+    cfg.resolve_derived_fields()
 
     # When --ordered is set, rewrite manifest paths to use episodes/ and disable shuffling.
     if ordered:

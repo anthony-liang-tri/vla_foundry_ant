@@ -23,6 +23,7 @@ from vla_foundry.params.train_experiment_params import TrainExperimentParams
 from vla_foundry.utils import get_experiment_name, set_random_seed
 
 cfg = draccus.parse(config_class=TrainExperimentParams)
+cfg.resolve_derived_fields()
 
 ### Force batch size to 1
 object.__setattr__(cfg.hparams, "per_gpu_batch_size", 1)

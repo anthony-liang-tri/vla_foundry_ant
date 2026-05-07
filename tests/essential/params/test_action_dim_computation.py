@@ -3,9 +3,9 @@ from unittest.mock import patch
 
 import draccus
 import pytest
-from draccus.utils import DecodingError
 
 from vla_foundry.params.data_params import RoboticsDataParams
+from vla_foundry.params.resolve import resolve_derived_fields
 from vla_foundry.params.train_experiment_params import TrainExperimentParams
 
 
@@ -45,6 +45,7 @@ def get_args_robotics_auto_action_dim():
     ]
     with patch.object(sys, "argv", ["test"] + test_args):
         args = draccus.parse(config_class=TrainExperimentParams)
+    resolve_derived_fields(args)
     return args
 
 
@@ -86,6 +87,7 @@ def get_args_robotics_manual_action_dim(action_dim: int):
     ]
     with patch.object(sys, "argv", ["test"] + test_args):
         args = draccus.parse(config_class=TrainExperimentParams)
+    resolve_derived_fields(args)
     return args
 
 
@@ -126,7 +128,7 @@ def test_action_dim_manual_incorrect():
     """Test that assertion error is raised when manually specified action_dim doesn't match computed."""
     incorrect_action_dim = 15  # Should be 20
 
-    with pytest.raises(DecodingError, match="Action dimension mismatch"):
+    with pytest.raises((AssertionError, RuntimeError), match="Action dimension mismatch"):
         get_args_robotics_manual_action_dim(incorrect_action_dim)
 
 
@@ -162,6 +164,7 @@ def test_action_dim_subset_fields():
 
     with patch.object(sys, "argv", ["test"] + test_args):
         args = draccus.parse(config_class=TrainExperimentParams)
+    resolve_derived_fields(args)
 
     # Expected: 3 (xyz) + 1 (gripper) = 4
     expected_action_dim = 4
@@ -197,6 +200,7 @@ def test_action_dim_empty_fields():
 
     with patch.object(sys, "argv", ["test"] + test_args):
         args = draccus.parse(config_class=TrainExperimentParams)
+    resolve_derived_fields(args)
 
     # Expected: 0 (no action fields)
     expected_action_dim = 0

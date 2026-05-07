@@ -128,6 +128,12 @@ class TrainExperimentParams(BaseParams):
         # if self.distributed.fsdp and not self.distributed.use_distributed:
         #     raise ValueError(f"--fsdp can only be specified in distributed mode.")
 
+    def resolve_derived_fields(self) -> None:
+        """Resolve dataset-derived config fields. This may read referenced dataset files."""
+        from vla_foundry.params.resolve import resolve_derived_fields
+
+        resolve_derived_fields(self)
+
 
 def load_params_from_yaml(params_class: type[BaseParams], path: str, localize_params: bool = False) -> BaseParams:
     """

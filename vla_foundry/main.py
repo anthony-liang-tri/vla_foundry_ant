@@ -61,6 +61,7 @@ def main():
     """
     # Parse config.
     cfg = draccus.parse(config_class=TrainExperimentParams)
+    cfg.resolve_derived_fields()
     if cfg.resolve_configs:
         # Resolve configs for debugging. Program stops here if the flag is received.
         if is_master(cfg):

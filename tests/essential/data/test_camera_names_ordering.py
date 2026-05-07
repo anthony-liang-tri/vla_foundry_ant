@@ -9,6 +9,7 @@ import pytest
 from vla_foundry.data.processor.robotics_processor import RoboticsProcessor
 from vla_foundry.file_utils import yaml_load
 from vla_foundry.params.data_params import RoboticsDataParams
+from vla_foundry.params.resolve import resolve_robotics_data_fields
 
 
 @pytest.fixture
@@ -79,6 +80,7 @@ def test_camera_names_discovered_from_preprocessing_config(
         proprioception_fields=["robot__actual__joint_position__right::panda"],
         action_fields=["robot__actual__poses__right::panda__xyz"],
     )
+    resolve_robotics_data_fields(data_params)
 
     # Verify camera and image configuration derived from preprocessing config
     assert data_params.camera_names == expected_camera_names

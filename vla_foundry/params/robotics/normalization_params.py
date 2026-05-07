@@ -1,7 +1,5 @@
-import os
 from dataclasses import dataclass, field
 
-from vla_foundry.file_utils import yaml_load
 from vla_foundry.params.base_params import BaseParams
 
 
@@ -130,53 +128,3 @@ class NormalizationParams(BaseParams):
             )
 
         object.__setattr__(self, "field_configs", field_configs)
-
-        dataset_statistics = cfg.data.dataset_statistics
-        requested_past_from_data_params = cfg.data.lowdim_past_timesteps
-        requested_future_from_data_params = cfg.data.lowdim_future_timesteps
-        requested_past = (
-            max(self.lowdim_past_timesteps, requested_past_from_data_params)
-            if self.lowdim_past_timesteps is not None and requested_past_from_data_params is not None
-            else requested_past_from_data_params or self.lowdim_past_timesteps
-        )
-        requested_future = (
-            max(self.lowdim_future_timesteps, requested_future_from_data_params)
-            if self.lowdim_future_timesteps is not None and requested_future_from_data_params is not None
-            else requested_future_from_data_params or self.lowdim_future_timesteps
-        )
-
-        if not dataset_statistics:
-            raise ValueError("Robotics normalization requires dataset_statistics.")
-
-        statistics_paths = [dataset_statistics] if isinstance(dataset_statistics, str) else list(dataset_statistics)
-
-        past_lowdim_candidates = set()
-        future_lowdim_candidates = set()
-        for statistics_path in statistics_paths:
-            path = os.path.dirname(statistics_path)
-            processing_config = yaml_load(os.path.join(path, "preprocessing_config.yaml"))
-            # Handle indexed format from collect_preprocessing_configs (e.g. {0: {...}, 1: {...}})
-            if processing_config and all(isinstance(k, int) for k in processing_config):
-                processing_config = processing_config[0]
-            past_lowdim_candidates.add(processing_config["past_lowdim_steps"])
-            future_lowdim_candidates.add(processing_config["future_lowdim_steps"])
-
-        available_past = min(past_lowdim_candidates)
-        available_future = min(future_lowdim_candidates)
-
-        if requested_past is not None and requested_past > available_past:
-            raise ValueError(
-                f"Requested lowdim_past_timesteps {requested_past} exceeds available past timesteps "
-                f"{available_past} from at least one data source."
-            )
-        if requested_future is not None and requested_future > available_future:
-            raise ValueError(
-                f"Requested lowdim_future_timesteps {requested_future} exceeds available future timesteps "
-                f"{available_future} from at least one data source."
-            )
-
-        # We set the lowdim_past_timesteps and lowdim_future_timesteps to the available past and future timesteps
-        # Or the ones present in the data params if provided. Not to the requested values.
-        # Requested sequence lengths are used for data loading, not normalization.
-        object.__setattr__(self, "lowdim_past_timesteps", self.lowdim_past_timesteps or available_past)
-        object.__setattr__(self, "lowdim_future_timesteps", self.lowdim_future_timesteps or available_future)

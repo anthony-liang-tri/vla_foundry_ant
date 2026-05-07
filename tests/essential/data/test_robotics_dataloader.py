@@ -15,6 +15,7 @@ from draccus.cfgparsing import load_config
 from vla_foundry.data.dataloader import get_wds_dataloader
 from vla_foundry.data.robotics.gradio_dataloader import RoboticsDataLoader
 from vla_foundry.params.data_params import RoboticsDataParams
+from vla_foundry.params.resolve import resolve_derived_fields
 
 
 @pytest.fixture(autouse=True)
@@ -61,6 +62,12 @@ def _prepare_normalization_config(config_dict):
                 "enabled": enabled,
             },
         )
+
+
+def _finalize_robotics_cfg(cfg):
+    cfg.data.init_shared_attributes(cfg)
+    resolve_derived_fields(cfg)
+    return cfg
 
 
 @pytest.fixture
@@ -122,8 +129,7 @@ def mock_config():
         cfg.hparams = hparams
         cfg.model = SimpleNamespace()
 
-        cfg.data.init_shared_attributes(cfg)
-        return cfg
+        return _finalize_robotics_cfg(cfg)
 
     return _create_config
 
@@ -579,9 +585,7 @@ def test_normalization(dataset_path, manifest_data, mock_config):
         cfg.hparams = hparams
 
         cfg.model = SimpleNamespace()
-        cfg.data.init_shared_attributes(cfg)
-
-        return cfg
+        return _finalize_robotics_cfg(cfg)
 
     num_samples_per_dataset = [sum(entry["num_sequences"] for entry in test_shards)]
 
@@ -736,7 +740,7 @@ def test_normalization_consistency(dataset_path, manifest_data, mock_config):
     cfg.hparams = hparams
 
     cfg.model = SimpleNamespace()
-    cfg.data.init_shared_attributes(cfg)
+    _finalize_robotics_cfg(cfg)
 
     # Create two separate dataloaders with same config
     num_samples_per_dataset = [sum(entry["num_sequences"] for entry in test_shards)]
@@ -799,6 +803,13 @@ def test_compare_dataloader_and_roboticsdataloader(dataset_path, manifest_data, 
     )
     _prepare_normalization_config(config_dict)
     data_cfg = RoboticsDataParams.from_dict(config_dict)
+    data_cfg_wrapper = SimpleNamespace(
+        distributed=SimpleNamespace(world_size=1, rank=0),
+        data=data_cfg,
+        hparams=SimpleNamespace(seed=config_dict["seed"], global_batch_size=1),
+        model=SimpleNamespace(),
+    )
+    _finalize_robotics_cfg(data_cfg_wrapper)
 
     cfg = mock_config(dataset_path, batch_size=1, processor_name="google/paligemma-3b-pt-224")
 

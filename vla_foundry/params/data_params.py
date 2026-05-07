@@ -1,9 +1,8 @@
 import logging
-import os
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 from vla_foundry.data.processor import get_processor
-from vla_foundry.file_utils import yaml_load
 from vla_foundry.params.base_data_params import DataParams
 from vla_foundry.params.robotics.augmentation_params import DataAugmentationParams
 from vla_foundry.params.robotics.normalization_params import FieldNormalizationParams, NormalizationParams
@@ -116,7 +115,9 @@ class RoboticsDataParams(DataParams):
     intrinsics_fields: list[str] = field(default_factory=list)
     extrinsics_fields: list[str] = field(default_factory=list)
     use_point_cloud: bool = field(default=False)
-    point_cloud_num_points: int = field(default=4096)  # Total number of points for FPS sampling
+    # Total number of points for FPS sampling. If left as None, resolve_robotics_data_fields
+    # fills it from the dataset-side preprocessing_config.yaml (when use_point_cloud=True).
+    point_cloud_num_points: int | None = field(default=None)
     normalization: NormalizationParams = field(default_factory=NormalizationParams)
     augmentation: DataAugmentationParams = field(default_factory=DataAugmentationParams)
 
@@ -125,15 +126,15 @@ class RoboticsDataParams(DataParams):
     action_dim: int = field(default=None)
     proprioception_dim: int | None = field(default=None)
 
+    # Set to True by vla_foundry.params.resolve.resolve_derived_fields. This is
+    # runtime state, not user config, so it is intentionally not a dataclass field.
+    _resolved: ClassVar[bool] = False
+
     def __post_init__(self):
         try:
             self._post_init_impl()
         except (TypeError, ValueError, KeyError) as e:
-            raise RuntimeError(
-                f"RoboticsDataParams initialization failed: {type(e).__name__}: {e}\n"
-                "Check that dataset_statistics paths are correct and all proprioception_fields "
-                "and action_fields are present in the stats file."
-            ) from e
+            raise RuntimeError(f"RoboticsDataParams initialization failed: {type(e).__name__}: {e}") from e
 
     def _post_init_impl(self):
         super().__post_init__()
@@ -147,48 +148,6 @@ class RoboticsDataParams(DataParams):
         if invalid_types:
             raise ValueError(f"Invalid language instruction types: {invalid_types}. Valid types are: {valid_types}")
 
-        # Get processing configs from manifest path
-        if any(
-            x is None or len(x) == 0
-            for x in [
-                self.camera_names,
-                self.image_indices,
-                self.image_names,
-            ]
-        ):
-            processing_configs = []
-            for manifest_path in self.dataset_manifest:
-                path = os.path.dirname(manifest_path)
-                processing_config = yaml_load(os.path.join(path, "preprocessing_config.yaml"))
-                # Handle indexed format from collect_preprocessing_configs (e.g. {0: {...}, 1: {...}})
-                if processing_config and all(isinstance(k, int) for k in processing_config):
-                    processing_config = processing_config[0]
-                processing_configs.append(processing_config)
-        else:
-            processing_configs = []
-
-        # If no camera names are provided, use the ones from the preprocessing configs but check that they are coherent
-        if self.camera_names is None or len(self.camera_names) == 0:
-            camera_names = processing_configs[0]["camera_names"]
-            for processing_config in processing_configs:
-                if processing_config["camera_names"] != camera_names:
-                    raise ValueError(
-                        f"Camera names mismatch between preprocessing configs: {processing_config['camera_names']} "
-                        f"and {camera_names}. Please provide camera names explicitly or use coherent data sources."
-                    )
-            object.__setattr__(self, "camera_names", camera_names)
-
-        # If no image indices are provided, use the ones from the preprocessing configs but check that they are coherent
-        if self.image_indices is None or len(self.image_indices) == 0:
-            image_indices = processing_configs[0]["image_indices"]
-            for processing_config in processing_configs:
-                if processing_config["image_indices"] != image_indices:
-                    raise ValueError(
-                        f"Image indices mismatch between preprocessing configs: {processing_config['image_indices']} "
-                        f"and {image_indices}. Please provide image indices explicitly or use coherent data sources."
-                    )
-            object.__setattr__(self, "image_indices", image_indices)
-
         # If no pose groups are provided, they must be explicitly configured
         # Pose groups are now required to be explicitly specified in configuration
         if not self.pose_groups:
@@ -198,13 +157,9 @@ class RoboticsDataParams(DataParams):
             )
 
         # Compute image_names from camera_names and image_indices
-        if self.image_names is None or len(self.image_names) == 0:
+        if (self.image_names is None or len(self.image_names) == 0) and self.camera_names and self.image_indices:
             image_names = [f"{cname}_t{idx}" for idx in self.image_indices for cname in self.camera_names]
             object.__setattr__(self, "image_names", image_names)
-
-        # Load point_cloud_num_points from preprocessing config if available
-        if self.use_point_cloud and processing_configs and "point_cloud_num_points" in processing_configs[0]:
-            object.__setattr__(self, "point_cloud_num_points", processing_configs[0]["point_cloud_num_points"])
 
         # For all used fields (proprioception and action), add default normalization parameters if not specified
         normalization_fields = self.normalization.field_configs
@@ -216,50 +171,6 @@ class RoboticsDataParams(DataParams):
 
         # Update normalization parameters with field-specific parameters
         object.__setattr__(self.normalization, "field_configs", normalization_fields)
-
-        # Compute action dimension by summing the dimension of all action fields (known from normalization parameters)
-        # Need to import here to avoid circular import
-        from vla_foundry.data.robotics.normalization import RoboticsNormalizer
-
-        if self.action_dim is None or self.proprioception_dim is None:
-            if not self.dataset_statistics:
-                raise ValueError("Robotics datasets require dataset_statistics to be provided.")
-
-            normalizer = RoboticsNormalizer(
-                normalization_params=self.normalization,
-                statistics_path=self.dataset_statistics,
-            )
-
-            action_dim = 0
-            for field_name in self.action_fields:
-                if field_name not in normalizer.stats:
-                    raise ValueError(f"Action field '{field_name}' missing from normalization statistics.")
-                action_dim += len(normalizer.stats[field_name]["mean"])
-            if self.action_dim is None:
-                object.__setattr__(self, "action_dim", action_dim)
-            else:
-                assert self.action_dim == action_dim, (
-                    f"Action dimension mismatch, \
-            the user-provided action dimension {self.action_dim} does not match \
-            the computed action dimension {action_dim}. Please provide the correct action dimension or \
-            set action_dim to None to automatically compute it from the action fields. \
-            This could also be a discrepancy between the action fields and the normalization parameters."
-                )
-
-            proprioception_dim = 0
-            for field_name in self.proprioception_fields:
-                if field_name not in normalizer.stats:
-                    raise ValueError(f"Proprioception field '{field_name}' missing from normalization statistics.")
-                proprioception_dim += len(normalizer.stats[field_name]["mean"])
-            if self.proprioception_dim is None:
-                object.__setattr__(self, "proprioception_dim", proprioception_dim)
-            else:
-                assert self.proprioception_dim == proprioception_dim, (
-                    f"Proprioception dimension mismatch, \
-            the user-provided proprioception dimension {self.proprioception_dim} does not match \
-            the computed proprioception dimension {proprioception_dim}. Please provide the correct proprioception \
-            dimension or set proprioception_dim to None to automatically compute it from the proprioception fields."
-                )
 
     def init_shared_attributes(self, cfg):
         super().init_shared_attributes(cfg)

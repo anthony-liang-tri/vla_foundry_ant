@@ -13,6 +13,7 @@ from torch.utils.data.distributed import DistributedSampler
 from vla_foundry.data.pipelines import create_wds_pipeline
 from vla_foundry.data.utils import SharedCheckpointCounter
 from vla_foundry.file_utils import load_dataset_manifest
+from vla_foundry.params.data_params import RoboticsDataParams
 
 
 def seed_worker(worker_id: int) -> None:
@@ -75,6 +76,21 @@ def get_wds_dataloader(
         DataInfo: A wrapper containing the `WebLoader` and helper objects.
     """
     shared_checkpoint_counter = SharedCheckpointCounter(checkpoint_num=checkpoint_num)
+
+    # Boundary guard: by the time we hit the dataloader, every required
+    # dataset-derived field must be populated. A config may already be
+    # materialized from a saved checkpoint without having called resolve() in
+    # this process, so check the fields themselves.
+    missing_robotics_fields = (
+        _missing_robotics_resolution_fields(cfg.data) if isinstance(cfg.data, RoboticsDataParams) else []
+    )
+    if missing_robotics_fields:
+        raise RuntimeError(
+            "RoboticsDataParams reached the dataloader with missing dataset-derived fields "
+            f"{', '.join(missing_robotics_fields)}. Call "
+            "cfg.resolve_derived_fields() after loading the config "
+            "(see vla_foundry/main.py for the canonical call site)."
+        )
 
     # Per-rank batch size (global batch is split evenly across ranks).
     if cfg.hparams.global_batch_size // cfg.distributed.world_size == 0:
@@ -142,6 +158,28 @@ def get_wds_dataloader(
         dataloader=dataloader, dataset_pipelines=dataset_pipelines, shared_checkpoint_counter=shared_checkpoint_counter
     )
     return dataloader
+
+
+def _missing_robotics_resolution_fields(data: RoboticsDataParams) -> list[str]:
+    missing = []
+    for field_name in ["camera_names", "image_indices", "image_names"]:
+        value = getattr(data, field_name)
+        if value is None or len(value) == 0:
+            missing.append(field_name)
+
+    for field_name in ["action_dim", "proprioception_dim", "lowdim_past_timesteps", "lowdim_future_timesteps"]:
+        if getattr(data, field_name) is None:
+            missing.append(field_name)
+
+    if data.normalization.enabled:
+        for field_name in ["lowdim_past_timesteps", "lowdim_future_timesteps"]:
+            if getattr(data.normalization, field_name) is None:
+                missing.append(f"normalization.{field_name}")
+
+    if data.use_point_cloud and data.point_cloud_num_points is None:
+        missing.append("point_cloud_num_points")
+
+    return missing
 
 
 def _shuffle_manifest_inplace(manifest, seed):
