@@ -5,10 +5,14 @@ See https://github.com/robosuite/robosuite for more details.
 
 import robosuite as suite
 import torch
-from robosuite.controllers.composite.composite_controller_factory import refactor_composite_controller_config
 from robosuite.utils.placement_samplers import UniformRandomSampler
 
 from vla_foundry.eval.runners.base_eval_runner import BaseEvalRunner
+
+try:
+    from robosuite.controllers.composite.composite_controller_factory import refactor_composite_controller_config
+except ModuleNotFoundError:
+    refactor_composite_controller_config = None
 
 SUPPORTED_TASKS = ["Lift"]
 
@@ -26,9 +30,16 @@ class RoboSuiteEvalRunner(BaseEvalRunner):
         self.render_onscreen = render_onscreen
         assert task_name in SUPPORTED_TASKS, f"Task {task_name} not supported."
 
-        # Load the desired controller
-        arm_controller_config = suite.load_part_controller_config(default_controller="OSC_POSE")
-        controller_config = refactor_composite_controller_config(arm_controller_config, robot_name, ["right"])
+        # Load the desired controller. robosuite 1.4.x exposes the older
+        # load_controller_config API instead of load_part_controller_config.
+        if hasattr(suite, "load_part_controller_config"):
+            arm_controller_config = suite.load_part_controller_config(default_controller="OSC_POSE")
+        else:
+            arm_controller_config = suite.load_controller_config(default_controller="OSC_POSE")
+        if refactor_composite_controller_config is None:
+            controller_config = arm_controller_config
+        else:
+            controller_config = refactor_composite_controller_config(arm_controller_config, robot_name, ["right"])
 
         # Create the environment instance.
         self.env = suite.make(
@@ -73,11 +84,10 @@ class RoboSuiteEvalRunner(BaseEvalRunner):
             images=self.past_images + curr_image, text="", padding=True, return_tensors="pt"
         )
 
-        if processed["pixel_values"] is not None and processed["pixel_values"].ndim == 4:
-            processed["pixel_values"] = processed["pixel_values"].unsqueeze(0)
-        assert processed["pixel_values"].shape[0] == 1 and processed["pixel_values"].shape[1] == len(
-            self.image_names
-        ) * (self.num_past_image_timesteps + 1), f"Unexpected pixel_values shape: {processed['pixel_values'].shape}"
+        assert processed["pixel_values"].ndim == 4, f"Unexpected pixel_values shape: {processed['pixel_values'].shape}"
+        assert processed["pixel_values"].shape[0] == len(self.image_names) * (self.num_past_image_timesteps + 1), (
+            f"Unexpected pixel_values shape: {processed['pixel_values'].shape}"
+        )
 
         num_timesteps = self.num_past_actions + self.num_future_actions + 1
 

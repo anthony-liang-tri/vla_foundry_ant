@@ -1,3 +1,4 @@
+import torch
 from diffusers import DDPMScheduler
 
 from vla_foundry.models.diffusion.noise_scheduler import NoiseScheduler
@@ -27,13 +28,41 @@ class NoiseSchedulerDDPMDiffusers(NoiseScheduler):
             **clip_params,
         )
 
-    def add_noise(self, x_start, noise, timesteps):
-        output = self.scheduler.add_noise(x_start, noise, timesteps)
+    def add_noise(self, x_start, noise, timesteps, mask=None):
+        normal_result = self.scheduler.add_noise(x_start, noise, timesteps)
+        if mask is not None:
+            mask_expanded = mask
+            while mask_expanded.ndim < x_start.ndim:
+                mask_expanded = mask_expanded.unsqueeze(-1)
+            mask_expanded = mask_expanded.to(dtype=x_start.dtype)
+            output = mask_expanded * normal_result + (1 - mask_expanded) * x_start
+        else:
+            output = normal_result
         if self.clamp_range is not None:
             output = output.clamp(self.clamp_range[0], self.clamp_range[1])
         return output
 
-    def step(self, model_output, timestep, sample):
+    def step(self, model_output, timestep, sample, step_size=1):
+        if int(step_size) > 1:
+            prev_t = int(timestep) - int(step_size)
+            alpha_prod_t = self.scheduler.alphas_cumprod[timestep].to(device=sample.device, dtype=sample.dtype)
+            if prev_t >= 0:
+                alpha_prod_t_prev = self.scheduler.alphas_cumprod[prev_t].to(
+                    device=sample.device,
+                    dtype=sample.dtype,
+                )
+            else:
+                alpha_prod_t_prev = torch.ones((), device=sample.device, dtype=sample.dtype)
+
+            pred_original_sample = (sample - torch.sqrt(1 - alpha_prod_t) * model_output) / torch.sqrt(alpha_prod_t)
+            output = (
+                torch.sqrt(alpha_prod_t_prev) * pred_original_sample
+                + torch.sqrt(1 - alpha_prod_t_prev) * model_output
+            )
+            if self.clamp_range is not None:
+                output = output.clamp(self.clamp_range[0], self.clamp_range[1])
+            return output
+
         output = self.scheduler.step(model_output, timestep, sample).prev_sample
         if self.clamp_range is not None:
             output = output.clamp(self.clamp_range[0], self.clamp_range[1])
@@ -74,6 +103,7 @@ class FlowMatchingScheduler(NoiseScheduler):
             mask_expanded = mask
             while mask_expanded.ndim < x_start.ndim:
                 mask_expanded = mask_expanded.unsqueeze(-1)
+            mask_expanded = mask_expanded.to(dtype=x_start.dtype)
 
             output = x_start + scale * (noise - x_start) * mask_expanded
         else:

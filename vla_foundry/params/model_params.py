@@ -281,6 +281,10 @@ class DiffusionPolicyParams(ModelParams):
     vision_language_backbone: VLMBackboneParams | CLIPBackboneParams | VLMFoundryBackboneParams | ViTBackboneParams = (
         field(default_factory=CLIPBackboneParams)
     )
+    # Backward compatibility for older diffusion-policy checkpoints that stored
+    # the CLIP encoder directly under `model.clip` before the backbone wrapper
+    # config was introduced.
+    clip: CLIPHFParams | None = field(default=None)
     transformer: TransformerParams | TransformerHFParams = field(default_factory=ModelParams)
     noise_scheduler: NoiseSchedulerParams = field(default_factory=NoiseSchedulerParams)
 
@@ -297,7 +301,7 @@ class DiffusionPolicyParams(ModelParams):
     def init_shared_attributes(self, cfg):
         super().init_shared_attributes(cfg)
         object.__setattr__(self, "action_dim", cfg.data.action_dim)
-        object.__setattr__(self, "proprioception_dim", cfg.data.proprioception_dim)
+        object.__setattr__(self, "proprioception_dim", cfg.data.proprioception_dim or 0)
 
 
 @register_model_params("dp3_encoder")

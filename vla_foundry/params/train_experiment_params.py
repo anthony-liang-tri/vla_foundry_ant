@@ -16,6 +16,43 @@ from vla_foundry.params.model_params import ModelParams
 
 
 @dataclass(frozen=True)
+class IntermediateEvalParams(BaseParams):
+    """Optional checkpoint-time robosuite eval launched from the training loop."""
+
+    enabled: bool = field(default=False)
+    every_n_checkpoints: int = field(default=1)
+    fail_training_on_error: bool = field(default=False)
+    timeout_seconds: int | None = field(default=None)
+
+    python: str = field(default="/home/aliangdw/rfm_rl/.venv/bin/python")
+    script_path: str = field(default="/home/aliangdw/rfm_rl/scripts/eval_multitask_dit.py")
+    rfm_rl_dir: str = field(default="/home/aliangdw/rfm_rl")
+    vla_foundry_dir: str = field(default="/home/aliangdw/vla_foundry_internal")
+    data_dir: str = field(default="/home/aliangdw/rfm_rl/data/robosuite")
+    eval_dir: str = field(default="/home/aliangdw/rfm_rl/outputs/vla_foundry_eval/intermediate")
+    cuda_visible_devices: str | None = field(default=None)
+    mujoco_gl: str = field(default="egl")
+    numba_cache_dir: str = field(default="/tmp/numba_cache")
+
+    mode: str = field(default="rollout")
+    tasks: list[str] = field(default_factory=lambda: ["lift", "can", "square"])
+    episodes: int = field(default=10)
+    seed: int = field(default=1000)
+    max_steps: int | None = field(default=None)
+    num_inference_steps: int | None = field(default=50)
+    vla_action_exec_len: int = field(default=4)
+    image_convention: str = field(default="opencv")
+    expected_image_convention: str = field(default="opencv")
+    flip_rollout_images: bool = field(default=False)
+    validate_obs_format: bool = field(default=True)
+    save_videos: bool = field(default=False)
+    video_episodes: int = field(default=0)
+    video_fps: int = field(default=20)
+    video_codec: str = field(default="libx264")
+    extra_args: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class TrainExperimentParams(BaseParams):
     """
     Top-level, immutable configuration for a training experiment.
@@ -59,6 +96,7 @@ class TrainExperimentParams(BaseParams):
     # --Validation
     total_val_samples: int = field(default=None)
     val_every_n_checkpoints: int = field(default=1)
+    intermediate_eval: IntermediateEvalParams = field(default_factory=IntermediateEvalParams)
 
     # --Params Subclasses
     data: DataParams = field(default_factory=DataParams)

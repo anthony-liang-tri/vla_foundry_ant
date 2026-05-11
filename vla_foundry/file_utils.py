@@ -423,6 +423,16 @@ def unwrap_state_dict(sd: dict) -> dict:
     return sd
 
 
+def migrate_legacy_state_dict(sd: dict, model) -> dict:
+    """Map checkpoint keys saved by older model layouts to current modules."""
+    if hasattr(model, "vision_language_backbone") and any(k.startswith("clip.") for k in sd):
+        return {
+            f"vision_language_backbone._model.{k.removeprefix('clip.')}" if k.startswith("clip.") else k: v
+            for k, v in sd.items()
+        }
+    return sd
+
+
 def remote_sync(local_dir, remote_dir):
     logging.info("Starting remote sync.")
     result = subprocess.run(
@@ -442,7 +452,7 @@ def load_model_checkpoint(model, resume_from_checkpoint):
 
     # resuming a train checkpoint w/ epoch and optimizer state
     start_checkpoint_num = checkpoint["checkpoint_num"]
-    sd = unwrap_state_dict(checkpoint["state_dict"])
+    sd = migrate_legacy_state_dict(unwrap_state_dict(checkpoint["state_dict"]), model)
     global_step = checkpoint["global_step"]
     shard_shuffle_seed_per_dataset = checkpoint.get("shard_shuffle_seed_per_dataset", None)
     if isinstance(model, FSDPModule):

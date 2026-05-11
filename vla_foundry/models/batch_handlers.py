@@ -252,11 +252,19 @@ class DiffusionPolicyBatchHandler(BatchHandler):
         self._move_to_device(batch, device)
         batch["noise"] = torch.randn_like(batch["actions"])
         self._num_action_head_repeats = getattr(cfg.model, "num_action_head_repeats", None)
+        self._use_flow_matching_scheduler = getattr(cfg.model, "use_flow_matching_scheduler", False) and not getattr(
+            cfg.model, "use_diffusers_scheduler", False
+        )
         return batch
+
+    def _target_direction(self, inputs):
+        if getattr(self, "_use_flow_matching_scheduler", False):
+            return inputs["noise"] - inputs["actions"]
+        return inputs["noise"]
 
     def prepare_inputs_and_targets(self, batch, device, cfg):
         inputs = self.prepare_inputs(batch, device, cfg)
-        targets = inputs["noise"] - inputs["actions"]
+        targets = self._target_direction(inputs)
         return inputs, targets, None
 
     # Keys whose batch dimension corresponds to the action head (tiled to [B*N]).
@@ -300,7 +308,7 @@ class DiffusionPolicyBatchHandler(BatchHandler):
             assert sliced_inputs is not None, (
                 "sliced_inputs is required to recompute targets with num_action_head_repeats"
             )
-            return sliced_inputs["noise"] - sliced_inputs["actions"]
+            return self._target_direction(sliced_inputs)
         return targets[start_idx:end_idx]
 
     def compute_loss(self, outputs, targets, loss_fn, cfg, mask=None):

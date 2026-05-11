@@ -58,8 +58,21 @@ def create_diffusion_policy(model_params: ModelParams, load_pretrained: bool = T
     from vla_foundry.models.diffusion import create_noise_scheduler
     from vla_foundry.models.registry import create_model
     from vla_foundry.models.vision_language_backbones import get_vision_language_backbone
+    from vla_foundry.params.model_params import CLIPBackboneParams
 
-    vision_language_backbone = get_vision_language_backbone(model_params.vision_language_backbone, load_pretrained)
+    vision_language_backbone_params = model_params.vision_language_backbone
+    legacy_clip_params = getattr(model_params, "clip", None)
+    if legacy_clip_params is not None and getattr(vision_language_backbone_params, "hf_pretrained", None) is None:
+        vision_language_backbone_params = CLIPBackboneParams(
+            hf_pretrained=legacy_clip_params.hf_pretrained,
+            freeze=legacy_clip_params.freeze,
+            freeze_text_encoder=legacy_clip_params.freeze_text_encoder,
+            freeze_image_encoder=legacy_clip_params.freeze_image_encoder,
+            resume_from_checkpoint=legacy_clip_params.resume_from_checkpoint,
+            resume_weights_only=legacy_clip_params.resume_weights_only,
+        )
+
+    vision_language_backbone = get_vision_language_backbone(vision_language_backbone_params, load_pretrained)
     transformer = create_model(model_params.transformer, load_pretrained)
     noise_scheduler = create_noise_scheduler(model_params)
     return DiffusionPolicy(model_params, vision_language_backbone, transformer, noise_scheduler)

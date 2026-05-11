@@ -31,6 +31,14 @@ from vla_foundry.file_utils import (
     remote_sync,
     save_checkpoint,
 )
+from vla_foundry.intermediate_eval import (
+    build_intermediate_eval_wandb_log,
+    clear_intermediate_eval_marker,
+    mark_intermediate_eval_complete,
+    run_intermediate_eval,
+    should_run_intermediate_eval,
+    wait_for_intermediate_eval_marker,
+)
 from vla_foundry.logger import setup_logging
 from vla_foundry.losses import get_loss_function
 from vla_foundry.models import create_model
@@ -370,6 +378,41 @@ def main():
 
         # Log checkpoint progress to DynamoDB
         db_logger.log_checkpoint(checkpoint_num, samples_seen)
+
+        # Optionally run task rollouts from the just-saved checkpoint and log results to this W&B run.
+        if should_run_intermediate_eval(cfg, checkpoint_num):
+            if is_master(cfg):
+                clear_intermediate_eval_marker(experiment_path, checkpoint_num)
+            if cfg.distributed.use_distributed:
+                torch.distributed.barrier()
+
+            if is_master(cfg):
+                try:
+                    eval_results = run_intermediate_eval(cfg, experiment_path, checkpoint_num, global_step)
+                    if cfg.wandb:
+                        import wandb
+
+                        wandb.log(
+                            build_intermediate_eval_wandb_log(
+                                eval_results,
+                                video_fps=cfg.intermediate_eval.video_fps,
+                            ),
+                            step=global_step,
+                        )
+                finally:
+                    mark_intermediate_eval_complete(experiment_path, checkpoint_num)
+            elif cfg.distributed.use_distributed:
+                timeout_seconds = cfg.intermediate_eval.timeout_seconds
+                if timeout_seconds is not None:
+                    timeout_seconds += 60
+                wait_for_intermediate_eval_marker(
+                    experiment_path,
+                    checkpoint_num,
+                    timeout_seconds=timeout_seconds,
+                )
+
+            if cfg.distributed.use_distributed:
+                torch.distributed.barrier()
 
         # Validate checkpoint.
         if do_validation and checkpoint_num % cfg.val_every_n_checkpoints == 0:

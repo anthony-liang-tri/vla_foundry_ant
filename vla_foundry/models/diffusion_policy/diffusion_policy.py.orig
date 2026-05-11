@@ -195,7 +195,6 @@ class DiffusionPolicy(BaseModel):
             attention_mask_images: Optional attention mask for camera images
             num_inference_steps: Number of denoising steps (defaults to scheduler.num_timesteps)
             past_mask: Optional mask indicating which actions are from past (1) vs future (0)
-            future_mask: Optional mask indicating which action slots should be denoised
             proprioception: Optional proprioception input
             guidance_target: Target actions for Pi-GDM guidance (previous chunk predictions)
             guidance_scale: Multiplier for β = guidance_scale * n (1.0 = recommended default)
@@ -229,23 +228,16 @@ class DiffusionPolicy(BaseModel):
             **kwargs,
         )
 
-        # Initialize only denoised slots with noise. Training uses future_mask to
-        # keep non-future action tokens clean, so generation should preserve the
-        # same slots instead of treating every non-past slot as diffusion noise.
-        preserve_mask = None
-        if future_mask is not None:
-            preserve_mask = ~future_mask.to(device=device, dtype=torch.bool)
-        elif past_mask is not None:
-            preserve_mask = past_mask.to(device=device, dtype=torch.bool)
-
-        if preserve_mask is not None:
-            preserve_mask_expanded = preserve_mask[:, :, None].to(actions.dtype)
-            original_preserved_actions = actions.clone() * preserve_mask_expanded
-            actions = actions * preserve_mask_expanded + torch.randn_like(actions) * (1 - preserve_mask_expanded)
+        # Initialize actions with noise (preserve past actions if past_mask provided)
+        if past_mask is not None:
+            original_past_actions = actions.clone() * past_mask[:, :, None].float()
+            # Keep past actions, add noise to future actions
+            actions = actions * past_mask[:, :, None].float() + torch.randn_like(actions) * (
+                1 - past_mask[:, :, None].float()
+            )
         else:
             # All actions are noise
             actions = torch.randn_like(actions)
-            original_preserved_actions = None
 
         # Precompute proprioception embedding
         proprio_embeddings = None
@@ -303,9 +295,10 @@ class DiffusionPolicy(BaseModel):
             # Denoise actions using scheduler step
             predicted_actions = self.scheduler.step(predicted_direction, step, actions, step_size=step_size)
 
-            # Preserve non-denoised slots if a mask provided them.
-            if preserve_mask is not None:
-                actions = original_preserved_actions + predicted_actions * (1 - preserve_mask_expanded)
+            # Preserve past actions if mask provided
+            if past_mask is not None:
+                past_mask_expanded = past_mask[:, :, None].to(actions.dtype)
+                actions = original_past_actions + predicted_actions * (1 - past_mask_expanded)
             else:
                 actions = predicted_actions
 

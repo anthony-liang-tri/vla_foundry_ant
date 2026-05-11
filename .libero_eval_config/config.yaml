@@ -1,0 +1,5 @@
+assets: /home/aliangdw/vla_foundry_internal/.venv/lib/python3.12/site-packages/libero_wrapper/_libero_install/libero/libero/./assets
+bddl_files: /home/aliangdw/vla_foundry_internal/.venv/lib/python3.12/site-packages/libero_wrapper/_libero_install/libero/libero/./bddl_files
+benchmark_root: /home/aliangdw/vla_foundry_internal/.venv/lib/python3.12/site-packages/libero_wrapper/_libero_install/libero/libero
+datasets: /home/aliangdw/vla_foundry_internal/.venv/lib/python3.12/site-packages/libero_wrapper/_libero_install/libero/libero/../datasets
+init_states: /home/aliangdw/vla_foundry_internal/.venv/lib/python3.12/site-packages/libero_wrapper/_libero_install/libero/libero/./init_files

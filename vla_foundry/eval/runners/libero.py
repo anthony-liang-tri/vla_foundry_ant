@@ -74,7 +74,7 @@ class LiberoRunner(BaseEvalRunner):
         return {
             "input_ids": processed["input_ids"].to("cuda"),
             "attention_mask": processed["attention_mask"].to("cuda"),
-            "pixel_values": processed["pixel_values"].unsqueeze(0).to("cuda"),
+            "pixel_values": processed["pixel_values"].to("cuda"),
             "actions": actions,
             "past_mask": self.past_mask,
         }
