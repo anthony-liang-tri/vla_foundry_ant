@@ -26,6 +26,7 @@ def parse_args():
     )
     parser.add_argument("--action_window", type=int, default=8, help="Number of actions to take per generation step")
     parser.add_argument("--image_names", type=str, nargs="+", default="")
+    parser.add_argument("--num_inference_steps", type=int, default=None, help="Number of denoising steps (default: scheduler.num_timesteps)")
     return parser.parse_args()
 
 
@@ -44,7 +45,7 @@ def run_eval(args):
         for _step_i in tqdm(range(args.num_steps)):
             obs_extracted = eval_runner.extract_from_obs(obs)
             model_input_tensors = {k: v for k, v in obs_extracted.items() if isinstance(v, torch.Tensor)}
-            actions = eval_runner.model.generate_actions(**model_input_tensors)
+            actions = eval_runner.model.generate_actions(**model_input_tensors, num_inference_steps=args.num_inference_steps)
 
             actions = eval_runner.denormalize_actions(actions)
 

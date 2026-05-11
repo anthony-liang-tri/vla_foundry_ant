@@ -56,8 +56,9 @@ class CLIPHF(BaseModel):
             vision_output = None
             image_embeds = None
         else:
-            # CLIP processor always returns [B*N, C, H, W] for multiple images
-            assert pixel_values.ndim == 4, f"Expected 4D pixel_values [B*N, C, H, W], got {pixel_values.ndim}D"
+            if pixel_values.ndim == 5:
+                # [B, N, C, H, W] -> [B*N, C, H, W]
+                pixel_values = pixel_values.view(-1, *pixel_values.shape[2:])
             vision_output = self.model.vision_model(pixel_values).pooler_output
             image_embeds = self.model.visual_projection(vision_output)
             # [B*N, D] -> [B, N, D]

@@ -103,6 +103,24 @@ def main():
         with fsspec.open(config_path, "r") as f:
             config_dict = yaml.safe_load(f)
 
+        # Try to detect actual fields from processing_metadata.json
+        detected_action_fields = None
+        detected_proprio_fields = None
+        try:
+            import json as _json
+            proc_meta_path = f"{args.dataset_path}/processing_metadata.json"
+            with fsspec.open(proc_meta_path, "r") as f:
+                proc_meta = _json.load(f)
+            if "features" in proc_meta:
+                detected_action_fields = proc_meta["features"].get("action_fields")
+                detected_proprio_fields = proc_meta["features"].get("proprioception_fields")
+                if detected_action_fields:
+                    print(f"📋 Detected action fields from metadata: {detected_action_fields}")
+                if detected_proprio_fields:
+                    print(f"📋 Detected proprioception fields from metadata: {detected_proprio_fields}")
+        except Exception as e:
+            print(f"⚠️ Could not load processing_metadata.json: {e}")
+
         # Override fields for the data explorer
         config_dict.update(
             {
@@ -112,9 +130,9 @@ def main():
                 "seq_len": 2048,
                 "dataset_statistics": [f"{args.dataset_path}/stats.json"],
                 "dataset_manifest": [f"{args.dataset_path}/manifest.jsonl"],
-                "normalization": {"enabled": True},
+                "normalization": {"enabled": False},
                 # The dataloader only loads used fields, so we need to add all fields that we want to visualize
-                "proprioception_fields": [
+                "proprioception_fields": detected_proprio_fields if detected_proprio_fields else [
                     "robot__actual__poses__left::panda__xyz",
                     "robot__actual__poses__right::panda__xyz",
                     "robot__actual__poses__left::panda__rot_6d",
@@ -136,7 +154,7 @@ def main():
                     "robot__desired__poses__left::panda__rot_6d_relative",
                     "robot__desired__poses__right::panda__rot_6d_relative",
                 ],
-                "action_fields": [
+                "action_fields": detected_action_fields if detected_action_fields else [
                     "robot__action__poses__left::panda__xyz",
                     "robot__action__poses__right::panda__xyz",
                     "robot__action__poses__left::panda__rot_6d",

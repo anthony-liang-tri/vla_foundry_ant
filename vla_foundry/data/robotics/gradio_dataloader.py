@@ -232,7 +232,7 @@ def extract_trajectories(
     left_xyz_key = "robot__actual__poses__left::panda__xyz"
     left_gripper_key = "robot__actual__grippers__left::panda_hand"
     left_6d_key = "robot__actual__poses__left::panda__rot_6d"
-    if left_xyz_key in lowdim:
+    if left_xyz_key in lowdim and lowdim[left_xyz_key] is not None and lowdim[left_6d_key] is not None:
         trajectories["left_arm_xyz"] = lowdim[left_xyz_key]
         trajectories["left_arm_gripper"] = lowdim[left_gripper_key]
         trajectories["left_arm_6d"] = lowdim[left_6d_key]
@@ -271,7 +271,7 @@ def extract_trajectories(
     right_xyz_key = "robot__actual__poses__right::panda__xyz"
     right_gripper_key = "robot__actual__grippers__right::panda_hand"
     right_6d_key = "robot__actual__poses__right::panda__rot_6d"
-    if right_xyz_key in lowdim:
+    if right_xyz_key in lowdim and lowdim[right_xyz_key] is not None and lowdim[right_6d_key] is not None:
         trajectories["right_arm_xyz"] = lowdim[right_xyz_key]
         trajectories["right_arm_gripper"] = lowdim[right_gripper_key]
         trajectories["right_arm_6d"] = lowdim[right_6d_key]
@@ -306,6 +306,19 @@ def extract_trajectories(
                     trajectories["right_arm_xyz_action"],
                     trajectories["right_arm_6d_action"],
                 )
+
+    # Fallback for flat state/action data (e.g., robosuite with generic "state" and "actions" fields)
+    if not trajectories:
+        # Try to use first 3 dims of state as xyz position
+        if "state" in lowdim and lowdim["state"] is not None:
+            state_data = lowdim["state"]
+            if hasattr(state_data, "shape") and len(state_data.shape) == 2 and state_data.shape[1] >= 3:
+                trajectories["left_gripper_xyz"] = state_data[:, :3]
+        # Try to use first 3 dims of actions as action xyz
+        if include_action and "actions" in lowdim and lowdim["actions"] is not None:
+            action_data = lowdim["actions"]
+            if hasattr(action_data, "shape") and len(action_data.shape) == 2 and action_data.shape[1] >= 3:
+                trajectories["left_gripper_xyz_action"] = action_data[:, :3]
 
     return trajectories
 

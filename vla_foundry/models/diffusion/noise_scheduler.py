@@ -9,10 +9,10 @@ class NoiseScheduler:
     def __init__(self, params: NoiseSchedulerParams):
         pass
 
-    def add_noise(self, x_start, noise, timesteps, mask=None):
+    def add_noise(self, x_start, noise, timesteps):
         raise NotImplementedError
 
-    def step(self, model_output, timestep, sample, step_size=1):
+    def step(self, model_output, timestep, sample):
         raise NotImplementedError
 
 
@@ -60,7 +60,6 @@ class NoiseSchedulerDDPM(nn.Module, NoiseScheduler):
             mask_expanded = mask
             while mask_expanded.ndim < x_start.ndim:
                 mask_expanded = mask_expanded.unsqueeze(-1)
-            mask_expanded = mask_expanded.to(dtype=x_start.dtype)
             # When mask=1: should behave exactly like no mask
             # When mask=0: should return original x_start (no noise)
             # Formula: mask * (normal_noisy_result) + (1 - mask) * x_start
@@ -78,34 +77,9 @@ class NoiseSchedulerDDPM(nn.Module, NoiseScheduler):
             output = output.clamp(self.clamp_range[0], self.clamp_range[1])
         return output
 
-    def step(self, model_output, timestep, sample, step_size=1):
+    def step(self, model_output, timestep, sample, step_size=None):
         """Reverse process single step"""
         t = timestep
-        step_size = int(step_size)
-
-        if step_size > 1:
-            # The ancestral DDPM posterior below is only valid for t -> t-1.
-            # Fast policy rollout strides over timesteps, so use deterministic
-            # DDIM for t -> t-step_size instead of applying a one-step posterior
-            # at a skipped timestep.
-            prev_t = int(t) - step_size
-            alpha_cumprod_t = self.alphas_cumprod[t].to(device=sample.device, dtype=sample.dtype)
-            if prev_t >= 0:
-                alpha_cumprod_prev = self.alphas_cumprod[prev_t].to(device=sample.device, dtype=sample.dtype)
-            else:
-                alpha_cumprod_prev = torch.ones((), device=sample.device, dtype=sample.dtype)
-
-            pred_original_sample = (sample - torch.sqrt(1 - alpha_cumprod_t) * model_output) / torch.sqrt(
-                alpha_cumprod_t
-            )
-            pred_prev_sample = (
-                torch.sqrt(alpha_cumprod_prev) * pred_original_sample
-                + torch.sqrt(1 - alpha_cumprod_prev) * model_output
-            )
-
-            if self.clamp_range is not None:
-                pred_prev_sample = pred_prev_sample.clamp(self.clamp_range[0], self.clamp_range[1])
-            return pred_prev_sample
 
         # Get coefficients
         alpha_t = self.alphas[t]  # scalar

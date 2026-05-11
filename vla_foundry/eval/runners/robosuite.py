@@ -5,16 +5,12 @@ See https://github.com/robosuite/robosuite for more details.
 
 import robosuite as suite
 import torch
+from robosuite.controllers import load_controller_config
 from robosuite.utils.placement_samplers import UniformRandomSampler
 
 from vla_foundry.eval.runners.base_eval_runner import BaseEvalRunner
 
-try:
-    from robosuite.controllers.composite.composite_controller_factory import refactor_composite_controller_config
-except ModuleNotFoundError:
-    refactor_composite_controller_config = None
-
-SUPPORTED_TASKS = ["Lift"]
+SUPPORTED_TASKS = ["Lift", "NutAssemblySquare", "PickPlaceCan"]
 
 
 class RoboSuiteEvalRunner(BaseEvalRunner):
@@ -23,23 +19,17 @@ class RoboSuiteEvalRunner(BaseEvalRunner):
         self.render_onscreen = False
         self.success = False
         if eval_params.image_names is None or not eval_params.image_names:
-            self.image_names = ["agentview_image"]
+            self.image_names = ["agentview_image", "robot0_eye_in_hand_image"]
+        else:
+            self.image_names = eval_params.image_names
         self.action_dim = 7
 
     def load_env(self, env_name, task_name, robot_name="UR5e", horizon=150, render_onscreen=False):
         self.render_onscreen = render_onscreen
         assert task_name in SUPPORTED_TASKS, f"Task {task_name} not supported."
 
-        # Load the desired controller. robosuite 1.4.x exposes the older
-        # load_controller_config API instead of load_part_controller_config.
-        if hasattr(suite, "load_part_controller_config"):
-            arm_controller_config = suite.load_part_controller_config(default_controller="OSC_POSE")
-        else:
-            arm_controller_config = suite.load_controller_config(default_controller="OSC_POSE")
-        if refactor_composite_controller_config is None:
-            controller_config = arm_controller_config
-        else:
-            controller_config = refactor_composite_controller_config(arm_controller_config, robot_name, ["right"])
+        # Load the desired controller
+        controller_config = load_controller_config(default_controller="OSC_POSE")
 
         # Create the environment instance.
         self.env = suite.make(
@@ -49,7 +39,7 @@ class RoboSuiteEvalRunner(BaseEvalRunner):
             has_renderer=render_onscreen,
             has_offscreen_renderer=True,
             use_camera_obs=True,
-            table_full_size=(0.5, 0.5, 0.05),
+            camera_names=["agentview", "robot0_eye_in_hand"],
             controller_configs=controller_config,
             horizon=horizon,
         )
@@ -76,18 +66,20 @@ class RoboSuiteEvalRunner(BaseEvalRunner):
             for _ in range(self.num_past_image_timesteps):
                 self.past_images.extend(curr_image)
 
-        assert self.past_images is None or len(self.past_images) == self.num_past_image_timesteps, (
-            f"Mismatch in past images length. {len(self.past_images)} vs. {self.num_past_image_timesteps}"
+        expected_past_len = len(self.image_names) * self.num_past_image_timesteps
+        assert self.past_images is None or len(self.past_images) == expected_past_len, (
+            f"Mismatch in past images length. {len(self.past_images)} vs. {expected_past_len}"
         )
 
         processed = self.processor.vlm_processor(
             images=self.past_images + curr_image, text="", padding=True, return_tensors="pt"
         )
 
-        assert processed["pixel_values"].ndim == 4, f"Unexpected pixel_values shape: {processed['pixel_values'].shape}"
-        assert processed["pixel_values"].shape[0] == len(self.image_names) * (self.num_past_image_timesteps + 1), (
-            f"Unexpected pixel_values shape: {processed['pixel_values'].shape}"
-        )
+        if processed["pixel_values"] is not None and processed["pixel_values"].ndim == 4:
+            processed["pixel_values"] = processed["pixel_values"].unsqueeze(0)
+        assert processed["pixel_values"].shape[0] == 1 and processed["pixel_values"].shape[1] == len(
+            self.image_names
+        ) * (self.num_past_image_timesteps + 1), f"Unexpected pixel_values shape: {processed['pixel_values'].shape}"
 
         num_timesteps = self.num_past_actions + self.num_future_actions + 1
 
@@ -116,7 +108,7 @@ class RoboSuiteEvalRunner(BaseEvalRunner):
         return self.obs["agentview_image"]
 
     def get_current_images(self):
-        return [self.obs["agentview_image"]]
+        return [self.obs[image_name] for image_name in self.image_names]
 
     def env_reset(self):
         self.env.reset()
