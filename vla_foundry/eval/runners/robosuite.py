@@ -44,19 +44,19 @@ class RoboSuiteEvalRunner(BaseEvalRunner):
             horizon=horizon,
         )
 
-        # Set the randomization for the cube location.
-        placement_initializer = UniformRandomSampler(
-            name="ObjectSampler",
-            mujoco_objects=self.env.cube,
-            x_range=[-0.2, 0.2],
-            y_range=[0.04, 0.2],
-            rotation=0.0,
-            ensure_object_boundary_in_range=False,
-            ensure_valid_placement=True,
-            reference_pos=self.env.table_offset,
-            z_offset=0.01,
-        )
-        self.env.placement_initializer = placement_initializer
+        if task_name == "Lift":
+            placement_initializer = UniformRandomSampler(
+                name="ObjectSampler",
+                mujoco_objects=self.env.cube,
+                x_range=[-0.2, 0.2],
+                y_range=[0.04, 0.2],
+                rotation=0.0,
+                ensure_object_boundary_in_range=False,
+                ensure_valid_placement=True,
+                reference_pos=self.env.table_offset,
+                z_offset=0.01,
+            )
+            self.env.placement_initializer = placement_initializer
 
     def extract_from_obs(self, obs):
         curr_image = [obs[image_name] for image_name in self.image_names]

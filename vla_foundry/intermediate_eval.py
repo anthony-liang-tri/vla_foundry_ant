@@ -56,8 +56,6 @@ def run_intermediate_eval(cfg, experiment_path: str, checkpoint_num: int, global
     cmd = [
         eval_cfg.python,
         eval_cfg.script_path,
-        "--policy-format",
-        "vla_foundry",
         "--output-dir",
         experiment_path,
         "--data-dir",
@@ -85,15 +83,12 @@ def run_intermediate_eval(cfg, experiment_path: str, checkpoint_num: int, global
     if eval_cfg.mode == "rollout":
         cmd.extend(
             [
-                "--vla-action-exec-len",
-                str(eval_cfg.vla_action_exec_len),
                 "--image-convention",
                 eval_cfg.image_convention,
                 "--expected-image-convention",
                 eval_cfg.expected_image_convention,
             ]
         )
-        cmd.append("--vla-flip-rollout-images" if eval_cfg.flip_rollout_images else "--no-vla-flip-rollout-images")
         if not eval_cfg.validate_obs_format:
             cmd.append("--no-validate-obs-format")
         if eval_cfg.save_videos:

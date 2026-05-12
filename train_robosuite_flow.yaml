@@ -92,7 +92,7 @@ hparams:
   wd: 1e-6
   seed: 42
 num_checkpoints: 10
-total_train_samples: 10000000
+total_train_samples: 6400000
 save_path: /home/aliangdw/rfm_rl/outputs/vla_foundry/robosuite_flow_dual_cam
 name: robosuite_flow_dual_cam
 wandb: true
@@ -127,3 +127,4 @@ intermediate_eval:
   video_episodes: 2
   video_fps: 20
   video_codec: libx264
+  extra_args: []
