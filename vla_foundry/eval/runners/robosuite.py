@@ -3,6 +3,7 @@ Need to first install the RoboSuite repo and set up the environment variables to
 See https://github.com/robosuite/robosuite for more details.
 """
 
+import numpy as np
 import robosuite as suite
 import torch
 from robosuite.controllers import load_controller_config
@@ -30,7 +31,7 @@ class RoboSuiteEvalRunner(BaseEvalRunner):
             self.image_names = eval_params.image_names
         self.action_dim = 7
 
-    def load_env(self, env_name, task_name, robot_name="UR5e", horizon=150, render_onscreen=False):
+    def load_env(self, env_name, task_name, robot_name="Panda", horizon=150, render_onscreen=False):
         self.render_onscreen = render_onscreen
         assert task_name in SUPPORTED_TASKS, f"Task {task_name} not supported."
         self.instruction = TASK_INSTRUCTIONS[task_name]
@@ -65,10 +66,12 @@ class RoboSuiteEvalRunner(BaseEvalRunner):
             )
             self.env.placement_initializer = placement_initializer
 
+    def _flip_images(self, images):
+        return [np.flip(img, axis=0).copy() for img in images]
+
     def extract_from_obs(self, obs):
-        curr_image = [obs[image_name] for image_name in self.image_names]
+        curr_image = self._flip_images([obs[image_name] for image_name in self.image_names])
         if self.past_images is None:
-            # At the start, just repeat the current image for the past image timesteps
             self.past_images = []
             for _ in range(self.num_past_image_timesteps):
                 self.past_images.extend(curr_image)
@@ -112,10 +115,10 @@ class RoboSuiteEvalRunner(BaseEvalRunner):
         return obs
 
     def get_image_for_video(self):
-        return self.obs["agentview_image"]
+        return np.flip(self.obs["agentview_image"], axis=0).copy()
 
     def get_current_images(self):
-        return [self.obs[image_name] for image_name in self.image_names]
+        return self._flip_images([self.obs[image_name] for image_name in self.image_names])
 
     def env_reset(self):
         self.env.reset()
