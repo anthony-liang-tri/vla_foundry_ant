@@ -12,6 +12,12 @@ from vla_foundry.eval.runners.base_eval_runner import BaseEvalRunner
 
 SUPPORTED_TASKS = ["Lift", "NutAssemblySquare", "PickPlaceCan"]
 
+TASK_INSTRUCTIONS = {
+    "Lift": "lift the red cube off the table",
+    "PickPlaceCan": "pick the coke can and place it in the bin",
+    "NutAssemblySquare": "pick up the square nut and place it on the square peg",
+}
+
 
 class RoboSuiteEvalRunner(BaseEvalRunner):
     def __init__(self, eval_params):
@@ -27,6 +33,7 @@ class RoboSuiteEvalRunner(BaseEvalRunner):
     def load_env(self, env_name, task_name, robot_name="UR5e", horizon=150, render_onscreen=False):
         self.render_onscreen = render_onscreen
         assert task_name in SUPPORTED_TASKS, f"Task {task_name} not supported."
+        self.instruction = TASK_INSTRUCTIONS[task_name]
 
         # Load the desired controller
         controller_config = load_controller_config(default_controller="OSC_POSE")
@@ -72,7 +79,7 @@ class RoboSuiteEvalRunner(BaseEvalRunner):
         )
 
         processed = self.processor.vlm_processor(
-            images=self.past_images + curr_image, text="", padding=True, return_tensors="pt"
+            images=self.past_images + curr_image, text=self.instruction, padding=True, return_tensors="pt"
         )
 
         if processed["pixel_values"] is not None and processed["pixel_values"].ndim == 4:
