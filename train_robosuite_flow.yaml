@@ -101,30 +101,17 @@ intermediate_eval:
   enabled: true
   every_n_checkpoints: 1
   fail_training_on_error: false
-  timeout_seconds: 1800
-  python: /home/aliangdw/rfm_rl/.venv/bin/python
-  script_path: /home/aliangdw/rfm_rl/scripts/eval_multitask_dit.py
-  rfm_rl_dir: /home/aliangdw/rfm_rl
-  vla_foundry_dir: /home/aliangdw/vla_foundry_internal
-  data_dir: /home/aliangdw/rfm_rl/data/robosuite
+  env: robosuite
   eval_dir: /home/aliangdw/rfm_rl/outputs/vla_foundry_eval/robosuite_intermediate
-  cuda_visible_devices: "0"
-  mujoco_gl: egl
-  mode: rollout
   tasks:
-    - lift
-    - can
-    - square
+    - Lift
+    - PickPlaceCan
+    - NutAssemblySquare
   episodes: 10
   seed: 1000
+  max_steps: 150
   num_inference_steps: 50
-  vla_action_exec_len: 4
-  image_convention: opencv
-  expected_image_convention: opencv
-  flip_rollout_images: false
-  validate_obs_format: true
+  action_window: 4
   save_videos: true
   video_episodes: 2
   video_fps: 20
-  video_codec: libx264
-  extra_args: []

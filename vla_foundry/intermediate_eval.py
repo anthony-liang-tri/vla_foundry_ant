@@ -1,14 +1,10 @@
 import json
 import logging
 import os
-import re
 import subprocess
 import time
 from pathlib import Path
 from typing import Any
-
-
-_WROTE_JSON_RE = re.compile(r"Wrote\s+(?P<path>.+_eval\.json)")
 
 
 def should_run_intermediate_eval(cfg, checkpoint_num: int) -> bool:
@@ -53,76 +49,44 @@ def run_intermediate_eval(cfg, experiment_path: str, checkpoint_num: int, global
     eval_dir = Path(eval_cfg.eval_dir) / Path(experiment_path).name
     eval_dir.mkdir(parents=True, exist_ok=True)
 
+    checkpoint_path = Path(experiment_path) / "checkpoints" / f"checkpoint_{checkpoint_num}.pt"
+    if not checkpoint_path.exists():
+        message = f"Checkpoint not found: {checkpoint_path}"
+        if eval_cfg.fail_training_on_error:
+            raise FileNotFoundError(message)
+        logging.error("[INTERMEDIATE_EVAL] %s", message)
+        return {"failed": True, "checkpoint_num": checkpoint_num, "global_step": global_step, "error": message}
+
+    result_json_path = eval_dir / f"{eval_name}_eval.json"
+
     cmd = [
-        eval_cfg.python,
-        eval_cfg.script_path,
-        "--output-dir",
-        experiment_path,
-        "--data-dir",
-        eval_cfg.data_dir,
-        "--eval-dir",
-        str(eval_dir),
-        "--checkpoint",
-        str(checkpoint_num),
-        "--mode",
-        eval_cfg.mode,
-        "--tasks",
-        *eval_cfg.tasks,
-        "--episodes",
-        str(eval_cfg.episodes),
-        "--seed",
-        str(eval_cfg.seed),
-        "--eval-name",
-        eval_name,
+        _get_python_executable(),
+        "-m", "vla_foundry.eval.run_intermediate_eval",
+        "--experiment-path", experiment_path,
+        "--checkpoint", str(checkpoint_num),
+        "--eval-dir", str(eval_dir),
+        "--eval-name", eval_name,
+        "--env", eval_cfg.env,
+        "--tasks", *eval_cfg.tasks,
+        "--episodes", str(eval_cfg.episodes),
+        "--max-steps", str(eval_cfg.max_steps or 150),
+        "--action-window", str(eval_cfg.action_window),
+        "--result-json", str(result_json_path),
     ]
 
-    if eval_cfg.max_steps is not None:
-        cmd.extend(["--max-steps", str(eval_cfg.max_steps)])
     if eval_cfg.num_inference_steps is not None:
         cmd.extend(["--num-inference-steps", str(eval_cfg.num_inference_steps)])
-    if eval_cfg.mode == "rollout":
-        cmd.extend(
-            [
-                "--image-convention",
-                eval_cfg.image_convention,
-                "--expected-image-convention",
-                eval_cfg.expected_image_convention,
-            ]
-        )
-        if not eval_cfg.validate_obs_format:
-            cmd.append("--no-validate-obs-format")
-        if eval_cfg.save_videos:
-            cmd.extend(
-                [
-                    "--save-videos",
-                    "--video-episodes",
-                    str(eval_cfg.video_episodes),
-                    "--video-fps",
-                    str(eval_cfg.video_fps),
-                    "--video-codec",
-                    eval_cfg.video_codec,
-                ]
-            )
-
-    cmd.extend(eval_cfg.extra_args)
+    if eval_cfg.save_videos:
+        cmd.extend(["--save-videos", "--video-episodes", str(eval_cfg.video_episodes), "--video-fps", str(eval_cfg.video_fps)])
 
     env = os.environ.copy()
-    if eval_cfg.cuda_visible_devices is not None:
-        env["CUDA_VISIBLE_DEVICES"] = eval_cfg.cuda_visible_devices
-    env["MUJOCO_GL"] = eval_cfg.mujoco_gl
+    env["MUJOCO_GL"] = "egl"
     env["TOKENIZERS_PARALLELISM"] = "false"
-    env["VLA_FOUNDRY_DIR"] = eval_cfg.vla_foundry_dir
-    env["NUMBA_CACHE_DIR"] = eval_cfg.numba_cache_dir
-    pythonpath_parts = [eval_cfg.vla_foundry_dir, eval_cfg.rfm_rl_dir]
-    if env.get("PYTHONPATH"):
-        pythonpath_parts.append(env["PYTHONPATH"])
-    env["PYTHONPATH"] = os.pathsep.join(pythonpath_parts)
 
     logging.info("[INTERMEDIATE_EVAL] checkpoint=%s step=%s cmd=%s", checkpoint_num, global_step, " ".join(cmd))
     try:
         proc = subprocess.run(
             cmd,
-            cwd=eval_cfg.rfm_rl_dir,
             env=env,
             capture_output=True,
             text=True,
@@ -133,12 +97,7 @@ def run_intermediate_eval(cfg, experiment_path: str, checkpoint_num: int, global
         if eval_cfg.fail_training_on_error:
             raise
         logging.exception("[INTERMEDIATE_EVAL] launch failed: %s", exc)
-        return {
-            "failed": True,
-            "checkpoint_num": checkpoint_num,
-            "global_step": global_step,
-            "error": str(exc),
-        }
+        return {"failed": True, "checkpoint_num": checkpoint_num, "global_step": global_step, "error": str(exc)}
 
     stdout_tail = "\n".join(proc.stdout.splitlines()[-40:])
     stderr_tail = "\n".join(proc.stderr.splitlines()[-40:])
@@ -152,35 +111,21 @@ def run_intermediate_eval(cfg, experiment_path: str, checkpoint_num: int, global
         if eval_cfg.fail_training_on_error:
             raise RuntimeError(f"{message}\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}")
         logging.error("[INTERMEDIATE_EVAL] %s", message)
-        return {
-            "failed": True,
-            "checkpoint_num": checkpoint_num,
-            "global_step": global_step,
-            "returncode": proc.returncode,
-        }
+        return {"failed": True, "checkpoint_num": checkpoint_num, "global_step": global_step, "returncode": proc.returncode}
 
-    result_path = _extract_result_path(proc.stdout)
-    if result_path is None:
-        candidates = sorted(eval_dir.glob(f"*{eval_name}*_eval.json"), key=lambda path: path.stat().st_mtime)
-        result_path = candidates[-1] if candidates else None
-    if result_path is None or not result_path.exists():
-        message = f"eval completed but no result JSON was found under {eval_dir}"
+    if not result_json_path.exists():
+        message = f"eval completed but no result JSON at {result_json_path}"
         if eval_cfg.fail_training_on_error:
             raise FileNotFoundError(message)
         logging.error("[INTERMEDIATE_EVAL] %s", message)
-        return {
-            "failed": True,
-            "checkpoint_num": checkpoint_num,
-            "global_step": global_step,
-            "error": message,
-        }
+        return {"failed": True, "checkpoint_num": checkpoint_num, "global_step": global_step, "error": message}
 
-    with result_path.open() as f:
+    with result_json_path.open() as f:
         results = json.load(f)
     results["checkpoint_num"] = checkpoint_num
     results["global_step"] = global_step
-    results["result_path"] = str(result_path)
-    logging.info("[INTERMEDIATE_EVAL] loaded results from %s", result_path)
+    results["result_path"] = str(result_json_path)
+    logging.info("[INTERMEDIATE_EVAL] loaded results from %s", result_json_path)
     return results
 
 
@@ -217,7 +162,7 @@ def build_intermediate_eval_wandb_log(results: dict[str, Any], video_fps: int = 
             logging.warning("[INTERMEDIATE_EVAL] video path does not exist: %s", path)
             continue
         task = episode.get("task", "unknown_task")
-        episode_name = episode.get("episode", path.stem)
+        episode_name = f"ep_{episode.get('episode', 0):03d}"
         log_dict[f"intermediate_eval/{mode}/{task}/{episode_name}/video"] = wandb.Video(
             str(path),
             fps=video_fps,
@@ -227,12 +172,9 @@ def build_intermediate_eval_wandb_log(results: dict[str, Any], video_fps: int = 
     return log_dict
 
 
-def _extract_result_path(stdout: str) -> Path | None:
-    for line in reversed(stdout.splitlines()):
-        match = _WROTE_JSON_RE.search(line)
-        if match:
-            return Path(match.group("path"))
-    return None
+def _get_python_executable() -> str:
+    import sys
+    return sys.executable
 
 
 def _add_scalar_metrics(flat: dict[str, float | int], prefix: str, metrics: dict[str, Any]) -> None:
