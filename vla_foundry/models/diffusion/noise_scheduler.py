@@ -57,7 +57,7 @@ class NoiseSchedulerDDPM(nn.Module, NoiseScheduler):
         if mask is not None:
             # Ensure mask can broadcast with x_start by expanding missing dimensions
             # mask should have first dimensions matching x_start, and we'll expand the rest
-            mask_expanded = mask
+            mask_expanded = mask.to(dtype=x_start.dtype)
             while mask_expanded.ndim < x_start.ndim:
                 mask_expanded = mask_expanded.unsqueeze(-1)
             # When mask=1: should behave exactly like no mask
