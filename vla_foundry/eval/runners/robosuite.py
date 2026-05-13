@@ -80,11 +80,27 @@ class RoboSuiteEvalRunner(BaseEvalRunner):
             flipped = np.flip(img, axis=0)
             pil = Image.fromarray(flipped, mode="RGB")
             pil = pil.resize(self.upscale_size, Image.Resampling.BICUBIC)
-            result.append(np.array(pil))
+            arr = np.array(pil)
+            # Center crop 256x256 -> 224x224 to match training augmentation pipeline
+            h, w = arr.shape[:2]
+            crop_h, crop_w = 224, 224
+            top = (h - crop_h) // 2
+            left = (w - crop_w) // 2
+            arr = arr[top : top + crop_h, left : left + crop_w]
+            result.append(arr)
         return result
 
     def extract_from_obs(self, obs):
         curr_image = self._flip_and_upscale([obs[image_name] for image_name in self.image_names])
+
+        if not hasattr(self, "_logged_shapes"):
+            self._logged_shapes = True
+            raw_obs_img = obs[self.image_names[0]]
+            print(f"[EVAL DEBUG] Raw obs image: shape={raw_obs_img.shape}, dtype={raw_obs_img.dtype}, "
+                  f"min={raw_obs_img.min()}, max={raw_obs_img.max()}")
+            print(f"[EVAL DEBUG] After flip+upscale+crop: shape={curr_image[0].shape}, "
+                  f"dtype={curr_image[0].dtype}, min={curr_image[0].min()}, max={curr_image[0].max()}")
+
         if self.past_images is None:
             self.past_images = []
             for _ in range(self.num_past_image_timesteps):
@@ -96,7 +112,11 @@ class RoboSuiteEvalRunner(BaseEvalRunner):
         )
 
         processed = self.processor.vlm_processor(
-            images=self.past_images + curr_image, text=self.instruction, padding=True, return_tensors="pt"
+            images=self.past_images + curr_image,
+            text=self.instruction,
+            padding=True,
+            return_tensors="pt",
+            **self.processor.processor_kwargs,
         )
 
         if processed["pixel_values"] is not None and processed["pixel_values"].ndim == 4:
@@ -104,6 +124,13 @@ class RoboSuiteEvalRunner(BaseEvalRunner):
         assert processed["pixel_values"].shape[0] == 1 and processed["pixel_values"].shape[1] == len(
             self.image_names
         ) * (self.num_past_image_timesteps + 1), f"Unexpected pixel_values shape: {processed['pixel_values'].shape}"
+
+        if not hasattr(self, "_logged_processed"):
+            self._logged_processed = True
+            pv = processed["pixel_values"]
+            print(f"[EVAL DEBUG] Processed pixel_values: shape={pv.shape}, dtype={pv.dtype}, "
+                  f"min={pv.min():.4f}, max={pv.max():.4f}")
+            print(f"[EVAL DEBUG] input_ids: shape={processed['input_ids'].shape}, dtype={processed['input_ids'].dtype}")
 
         num_timesteps = self.num_past_actions + self.num_future_actions + 1
 
@@ -132,7 +159,12 @@ class RoboSuiteEvalRunner(BaseEvalRunner):
         flipped = np.flip(self.obs["agentview_image"], axis=0)
         pil = Image.fromarray(flipped, mode="RGB")
         pil = pil.resize(self.upscale_size, Image.Resampling.BICUBIC)
-        return np.array(pil)
+        arr = np.array(pil)
+        h, w = arr.shape[:2]
+        crop_h, crop_w = 224, 224
+        top = (h - crop_h) // 2
+        left = (w - crop_w) // 2
+        return arr[top : top + crop_h, left : left + crop_w]
 
     def get_current_images(self):
         return self._flip_and_upscale([self.obs[image_name] for image_name in self.image_names])

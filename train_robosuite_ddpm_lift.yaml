@@ -7,12 +7,12 @@ model:
     freeze_image_encoder: false
   transformer:
     type: transformer
-    hidden_dim: 1024
-    n_heads: 16
-    n_layers: 24
+    hidden_dim: 512
+    n_heads: 8
+    n_layers: 12
     ffn_type: swiglu
     positional_embedding_type: rotary
-    is_causal: false
+    is_causal: true
     max_seq_len: 2048
     norm_type: default_layer_norm
     attn_name: torch_attn
@@ -40,9 +40,9 @@ data:
   action_dim: 7
   proprioception_dim: 0
   dataset_manifest:
-    - /home/aliangdw/vla_foundry_datasets/robosuite_pretrain/shards/manifest.jsonl
+    - /home/aliangdw/vla_foundry_datasets/robosuite_lift_10ep/shards/manifest.jsonl
   dataset_statistics:
-    - /home/aliangdw/vla_foundry_datasets/robosuite_pretrain/shards/stats.json
+    - /home/aliangdw/vla_foundry_datasets/robosuite_lift_10ep/shards/stats.json
   dataset_modality:
     - robotics
   dataset_weighting:
@@ -84,15 +84,15 @@ hparams:
   grad_clip_norm: 1.0
   lr: 5e-4
   lr_cooldown_end: 1e-5
-  per_gpu_batch_size: 32
-  global_batch_size: 64
+  per_gpu_batch_size: 64
+  global_batch_size: 128
   optimizer: adamw
   lr_scheduler: cosine
   warmup: '0.1'
   wd: 1e-6
   seed: 42
-num_checkpoints: 10
-total_train_samples: 6400000
+num_checkpoints: 20
+total_train_samples: 2400000
 save_path: /home/aliangdw/rfm_rl/outputs/vla_foundry/robosuite_ddpm_lift
 name: robosuite_ddpm_lift
 wandb: true
@@ -105,7 +105,7 @@ intermediate_eval:
   eval_dir: /home/aliangdw/rfm_rl/outputs/vla_foundry_eval/robosuite_intermediate
   tasks:
     - Lift
-  episodes: 10
+  episodes: 5
   seed: 1000
   max_steps: 150
   num_inference_steps: 50

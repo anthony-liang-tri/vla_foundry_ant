@@ -208,6 +208,8 @@ class RoboticsProcessor:
 
         return cropped_pm
 
+    _logged_train_debug = False
+
     def process_inputs(self, batch, image_names, max_text_seq_len=None):
         """Tokenizes the text and converts the image to pixel_values
         Args:
@@ -262,6 +264,16 @@ class RoboticsProcessor:
         # Run processor on entire batch — start from its output so all VLM-specific
         # keys (pixel_values, input_ids, attention_mask, image_grid_thw, etc.) are
         # automatically carried forward without explicit per-key copying.
+        if not RoboticsProcessor._logged_train_debug and batch_images is not None:
+            RoboticsProcessor._logged_train_debug = True
+            raw_img = batch_images[0][0]
+            if isinstance(raw_img, torch.Tensor):
+                print(f"[TRAIN DEBUG] Raw image (pre-processor): type=torch.Tensor, shape={raw_img.shape}, "
+                      f"dtype={raw_img.dtype}, min={raw_img.min()}, max={raw_img.max()}")
+            else:
+                print(f"[TRAIN DEBUG] Raw image (pre-processor): type={type(raw_img).__name__}, "
+                      f"shape={raw_img.shape}, dtype={raw_img.dtype}, min={raw_img.min()}, max={raw_img.max()}")
+
         processed_batch = self.vlm_processor(
             images=batch_images,
             text=batch_text,
@@ -271,6 +283,15 @@ class RoboticsProcessor:
             return_tensors="pt",
             **self.processor_kwargs,
         )
+
+        if not hasattr(self, "_logged_train_processed"):
+            self._logged_train_processed = True
+            if "pixel_values" in processed_batch and processed_batch["pixel_values"] is not None:
+                pv = processed_batch["pixel_values"]
+                print(f"[TRAIN DEBUG] Processed pixel_values: shape={pv.shape}, dtype={pv.dtype}, "
+                      f"min={pv.min():.4f}, max={pv.max():.4f}")
+                print(f"[TRAIN DEBUG] input_ids: shape={processed_batch['input_ids'].shape}, "
+                      f"dtype={processed_batch['input_ids'].dtype}")
 
         # Copy over non-VLM fields from the original batch (past_mask, future_mask,
         # metadata, language_instruction, intrinsics, extrinsics, etc.)
