@@ -82,6 +82,8 @@ libero = [
 robosuite = [
     "robosuite==1.4.0",
     "robomimic==0.2.0",
+    "mujoco>=2.3.0,<4.0.0",
+    "imageio[ffmpeg]>=2.37.0",
 ]
 
 # Add `--group visualization` to install visualization deps.

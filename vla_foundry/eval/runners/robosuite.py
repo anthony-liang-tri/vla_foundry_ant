@@ -6,6 +6,7 @@ See https://github.com/robosuite/robosuite for more details.
 import numpy as np
 import robosuite as suite
 import torch
+from PIL import Image
 from robosuite.controllers import load_controller_config
 from robosuite.utils.placement_samplers import UniformRandomSampler
 
@@ -39,6 +40,11 @@ class RoboSuiteEvalRunner(BaseEvalRunner):
         # Load the desired controller
         controller_config = load_controller_config(default_controller="OSC_POSE")
 
+        # Render at 84x84 to match training data (originally robomimic 84x84, upscaled to 256x256).
+        self.render_height = 84
+        self.render_width = 84
+        self.upscale_size = (256, 256)
+
         # Create the environment instance.
         self.env = suite.make(
             env_name=task_name,
@@ -48,6 +54,8 @@ class RoboSuiteEvalRunner(BaseEvalRunner):
             has_offscreen_renderer=True,
             use_camera_obs=True,
             camera_names=["agentview", "robot0_eye_in_hand"],
+            camera_heights=self.render_height,
+            camera_widths=self.render_width,
             controller_configs=controller_config,
             horizon=horizon,
         )
@@ -66,11 +74,17 @@ class RoboSuiteEvalRunner(BaseEvalRunner):
             )
             self.env.placement_initializer = placement_initializer
 
-    def _flip_images(self, images):
-        return [np.flip(img, axis=0).copy() for img in images]
+    def _flip_and_upscale(self, images):
+        result = []
+        for img in images:
+            flipped = np.flip(img, axis=0)
+            pil = Image.fromarray(flipped, mode="RGB")
+            pil = pil.resize(self.upscale_size, Image.Resampling.BICUBIC)
+            result.append(np.array(pil))
+        return result
 
     def extract_from_obs(self, obs):
-        curr_image = self._flip_images([obs[image_name] for image_name in self.image_names])
+        curr_image = self._flip_and_upscale([obs[image_name] for image_name in self.image_names])
         if self.past_images is None:
             self.past_images = []
             for _ in range(self.num_past_image_timesteps):
@@ -115,10 +129,13 @@ class RoboSuiteEvalRunner(BaseEvalRunner):
         return obs
 
     def get_image_for_video(self):
-        return np.flip(self.obs["agentview_image"], axis=0).copy()
+        flipped = np.flip(self.obs["agentview_image"], axis=0)
+        pil = Image.fromarray(flipped, mode="RGB")
+        pil = pil.resize(self.upscale_size, Image.Resampling.BICUBIC)
+        return np.array(pil)
 
     def get_current_images(self):
-        return self._flip_images([self.obs[image_name] for image_name in self.image_names])
+        return self._flip_and_upscale([self.obs[image_name] for image_name in self.image_names])
 
     def env_reset(self):
         self.env.reset()
