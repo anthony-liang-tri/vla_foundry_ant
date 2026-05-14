@@ -10,6 +10,7 @@ from PIL import Image
 from robosuite.controllers import load_controller_config
 from robosuite.utils.placement_samplers import UniformRandomSampler
 
+from vla_foundry.data.processor import apply_chat_template
 from vla_foundry.eval.runners.base_eval_runner import BaseEvalRunner
 
 SUPPORTED_TASKS = ["Lift", "NutAssemblySquare", "PickPlaceCan"]
@@ -111,9 +112,11 @@ class RoboSuiteEvalRunner(BaseEvalRunner):
             f"Mismatch in past images length. {len(self.past_images)} vs. {expected_past_len}"
         )
 
+        all_images = self.past_images + curr_image
+        text = apply_chat_template(self.processor.vlm_processor, len(all_images), self.instruction)
         processed = self.processor.vlm_processor(
-            images=self.past_images + curr_image,
-            text=self.instruction,
+            images=all_images,
+            text=text,
             padding=True,
             return_tensors="pt",
             **self.processor.processor_kwargs,

@@ -24,8 +24,9 @@ class PassthroughProcessor:
     def __call__(self, images, text, return_tensors="pt", padding=True, **kwargs):
         batch_size = len(text)
         if images is not None:
-            pixel_values = []
+            per_sample = []
             for sample_images in images:
+                sample_tensors = []
                 for img in sample_images:
                     if isinstance(img, torch.Tensor):
                         # Already a tensor from the new torchvision decoder — skip PIL conversion
@@ -36,7 +37,7 @@ class PassthroughProcessor:
                         t = img.float()
                         if t.ndim == 3 and t.shape[0] not in (1, 3, 4):
                             t = t.permute(2, 0, 1)  # HWC -> CHW
-                        pixel_values.append(t)
+                        sample_tensors.append(t)
                         continue
                     if not isinstance(img, Image.Image):
                         img = Image.fromarray(img)
@@ -45,8 +46,9 @@ class PassthroughProcessor:
                     t = torch.as_tensor(np.array(img), dtype=torch.float32)
                     if t.ndim == 3:
                         t = t.permute(2, 0, 1)  # HWC -> CHW
-                    pixel_values.append(t)
-            pixel_values = torch.stack(pixel_values)
+                    sample_tensors.append(t)
+                per_sample.append(torch.stack(sample_tensors))
+            pixel_values = torch.stack(per_sample)  # [B, N, C, H, W]
         else:
             pixel_values = torch.empty(0)
         return {
