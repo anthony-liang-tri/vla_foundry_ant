@@ -56,6 +56,15 @@ class DataInfo:
         for dataset_pipeline in self.dataset_pipelines:
             dataset_pipeline.save_configs(experiment_path)
 
+    def close(self) -> None:
+        """Release persistent DataLoader workers before this wrapper is discarded."""
+        iterator = getattr(self.dataloader, "_iterator", None)
+        shutdown_workers = getattr(iterator, "_shutdown_workers", None)
+        if shutdown_workers is not None:
+            shutdown_workers()
+        if hasattr(self.dataloader, "_iterator"):
+            self.dataloader._iterator = None
+
 
 def get_wds_dataloader(
     datastrings: Sequence[str],

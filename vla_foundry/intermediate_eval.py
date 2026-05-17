@@ -71,6 +71,7 @@ def run_intermediate_eval(cfg, experiment_path: str, checkpoint_num: int, global
         "--episodes", str(eval_cfg.episodes),
         "--max-steps", str(eval_cfg.max_steps or 150),
         "--action-window", str(eval_cfg.action_window),
+        "--seed", str(eval_cfg.seed),
         "--result-json", str(result_json_path),
     ]
 

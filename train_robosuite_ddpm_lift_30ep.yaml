@@ -40,9 +40,9 @@ data:
   action_dim: 7
   proprioception_dim: 0
   dataset_manifest:
-    - /home/anthonyliang/Documents/vla_foundry_ant/data/robosuite_lift_10ep/manifest.jsonl
+    - /home/anthonyliang/Documents/vla_foundry_ant/data/robosuite_lift_30ep/manifest.jsonl
   dataset_statistics:
-    - /home/anthonyliang/Documents/vla_foundry_ant/data/robosuite_lift_10ep/stats.json
+    - /home/anthonyliang/Documents/vla_foundry_ant/data/robosuite_lift_30ep/stats.json
   dataset_modality:
     - robotics
   dataset_weighting:
@@ -92,9 +92,9 @@ hparams:
   wd: 1e-6
   seed: 42
 num_checkpoints: 10
-total_train_samples: 120000
-save_path: /home/anthonyliang/Documents/vla_foundry_ant/outputs/robosuite_ddpm_lift
-name: robosuite_ddpm_lift
+total_train_samples: 360000
+save_path: /home/anthonyliang/Documents/vla_foundry_ant/outputs/robosuite_ddpm_lift_30ep
+name: robosuite_ddpm_lift_30ep
 wandb: true
 wandb_project_name: vla_foundry_robosuite
 intermediate_eval:
@@ -102,14 +102,14 @@ intermediate_eval:
   every_n_checkpoints: 1
   fail_training_on_error: false
   env: robosuite
-  eval_dir: /home/anthonyliang/Documents/vla_foundry_ant/outputs/robosuite_eval
+  eval_dir: /home/anthonyliang/Documents/vla_foundry_ant/outputs/robosuite_eval_30ep
   tasks:
     - Lift
   episodes: 5
   seed: 1000
   max_steps: 150
-  num_inference_steps: 50
-  action_window: 4
+  num_inference_steps: 100
+  action_window: 8
   save_videos: true
   video_episodes: 2
   video_fps: 20

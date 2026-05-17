@@ -3,17 +3,17 @@ model:
   vision_language_backbone:
     type: vit_backbone
     img_size: 96
-    hidden_dim: 64
-    inter_dim: 256
-    n_heads: 4
-    n_layers: 4
+    hidden_dim: 256
+    inter_dim: 1024
+    n_heads: 8
+    n_layers: 6
     patch_size: 8
   transformer:
     type: transformer
-    hidden_dim: 64
-    n_heads: 4
-    n_layers: 4
-    is_causal: True
+    hidden_dim: 256
+    n_heads: 8
+    n_layers: 8
+    is_causal: false
 
 data:
   <<: !include vla_foundry/config_presets/data/diffusion_policy.yaml
@@ -37,9 +37,17 @@ data:
   proprioception_fields:
     - observation.state
   num_workers: 4
+  normalization:
+    enabled: true
+    method: min_max
+    scope: global
+    centered_norm: true
 
 distributed:
   fsdp: True
+
+ema:
+  enabled: true
 
 hparams:
   <<: !include vla_foundry/config_presets/hparams/diffusion_policy.yaml
@@ -47,30 +55,32 @@ hparams:
   global_batch_size: 64
   optimizer: adamw
   lr_scheduler: cosine
-  warmup: '0.1'
+  warmup: '500'
+  lr: 1e-4
   wd: 1e-6
   seed: 42
 
-total_train_samples: 2000000
-num_checkpoints: 20
-save_path: /home/anthonyliang/Documents/vla_foundry_ant/outputs/pusht_diffusion_v2
-name: pusht_diffusion_v2
+total_train_samples: 72216064
+num_checkpoints: 60
+max_checkpoint_limit: 6
+save_path: /home/anthonyliang/Documents/vla_foundry_ant/outputs/pusht_diffusion_v6_budget_warmup500
+name: pusht_diffusion_v6_budget_warmup500
 wandb: true
 wandb_entity: tri
 wandb_project_name: vla_foundry_robosuite
 intermediate_eval:
   enabled: true
-  every_n_checkpoints: 2
+  every_n_checkpoints: 1
   fail_training_on_error: false
   env: pusht
-  eval_dir: /home/anthonyliang/Documents/vla_foundry_ant/outputs/pusht_eval_v2
+  eval_dir: /home/anthonyliang/Documents/vla_foundry_ant/outputs/pusht_eval_v6_budget_warmup500
   tasks:
     - PushT
-  episodes: 10
-  seed: 42
+  episodes: 20
+  seed: 1000
   max_steps: 300
   num_inference_steps: 10
   action_window: 8
   save_videos: true
-  video_episodes: 2
-  video_fps: 20
+  video_episodes: 3
+  video_fps: 10

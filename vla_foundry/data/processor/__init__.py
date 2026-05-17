@@ -37,6 +37,8 @@ class PassthroughProcessor:
                         t = img.float()
                         if t.ndim == 3 and t.shape[0] not in (1, 3, 4):
                             t = t.permute(2, 0, 1)  # HWC -> CHW
+                        if t.numel() > 0 and t.max() > 1.5:
+                            t = t / 255.0
                         sample_tensors.append(t)
                         continue
                     if not isinstance(img, Image.Image):
@@ -46,6 +48,8 @@ class PassthroughProcessor:
                     t = torch.as_tensor(np.array(img), dtype=torch.float32)
                     if t.ndim == 3:
                         t = t.permute(2, 0, 1)  # HWC -> CHW
+                    if t.numel() > 0 and t.max() > 1.5:
+                        t = t / 255.0
                     sample_tensors.append(t)
                 per_sample.append(torch.stack(sample_tensors))
             pixel_values = torch.stack(per_sample)  # [B, N, C, H, W]

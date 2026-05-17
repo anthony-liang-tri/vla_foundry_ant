@@ -4343,6 +4343,12 @@ preprocessing = [
     { name = "pyturbojpeg" },
     { name = "pyyaml" },
 ]
+robosuite = [
+    { name = "imageio", extra = ["ffmpeg"] },
+    { name = "mujoco" },
+    { name = "robomimic" },
+    { name = "robosuite" },
+]
 sagemaker = [
     { name = "sagemaker" },
 ]
@@ -4424,6 +4430,12 @@ preprocessing = [
     { name = "pyarrow", specifier = "==20.0.0" },
     { name = "pyturbojpeg", specifier = ">=1.8.2" },
     { name = "pyyaml", specifier = ">=6.0.1" },
+]
+robosuite = [
+    { name = "imageio", extras = ["ffmpeg"], specifier = ">=2.37.0" },
+    { name = "mujoco", specifier = ">=2.3.0,<4.0.0" },
+    { name = "robomimic", specifier = "==0.2.0" },
+    { name = "robosuite", specifier = "==1.4.0" },
 ]
 sagemaker = [{ name = "sagemaker", specifier = ">=2.251.0,<3.0.0" }]
 tutorials = [

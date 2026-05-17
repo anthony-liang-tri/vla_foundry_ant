@@ -341,17 +341,20 @@ def main():
         if cfg.distributed.use_distributed:
             torch.distributed.barrier()
 
-        success, global_step = train_one_checkpoint(
-            model,
-            dataloader,
-            loss,
-            checkpoint_num,
-            global_step,
-            optimizer,
-            scheduler,
-            cfg,
-            ema_model=ema_model,
-        )
+        try:
+            success, global_step = train_one_checkpoint(
+                model,
+                dataloader,
+                loss,
+                checkpoint_num,
+                global_step,
+                optimizer,
+                scheduler,
+                cfg,
+                ema_model=ema_model,
+            )
+        finally:
+            dataloader.close()
         if cfg.distributed.use_distributed:
             torch.distributed.barrier()
 

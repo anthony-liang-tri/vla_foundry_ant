@@ -10,14 +10,16 @@ import argparse
 import json
 import logging
 import os
+import random
 import sys
 
 import imageio
+import numpy as np
 import torch
 from tqdm import tqdm
 
 from vla_foundry.eval.runners import get_eval_runner
-from vla_foundry.file_utils import load_model_checkpoint
+from vla_foundry.file_utils import load_ema_checkpoint, load_model_checkpoint
 from vla_foundry.models import create_model
 from vla_foundry.params.train_experiment_params import load_experiment_params_from_yaml
 
@@ -34,6 +36,7 @@ def parse_args():
     parser.add_argument("--max-steps", type=int, default=150)
     parser.add_argument("--action-window", type=int, default=4)
     parser.add_argument("--num-inference-steps", type=int, default=None)
+    parser.add_argument("--seed", type=int, default=1000)
     parser.add_argument("--save-videos", action="store_true")
     parser.add_argument("--video-episodes", type=int, default=2)
     parser.add_argument("--video-fps", type=int, default=20)
@@ -44,6 +47,11 @@ def parse_args():
 def main():
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     args = parse_args()
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(args.seed)
 
     experiment_path = args.experiment_path
     checkpoint_path = os.path.join(experiment_path, "checkpoints", f"checkpoint_{args.checkpoint}.pt")
@@ -67,7 +75,15 @@ def main():
         os.path.join(experiment_path, "config.yaml"), localize_params=True
     )
     model = create_model(model_cfg.model, load_pretrained=False)
-    load_model_checkpoint(model, checkpoint_path)
+    if model_cfg.ema.enabled:
+        ema_checkpoint_path = os.path.join(experiment_path, "checkpoints", f"ema_{args.checkpoint}.pt")
+        if os.path.exists(ema_checkpoint_path):
+            load_ema_checkpoint(model, ema_checkpoint_path)
+        else:
+            logging.warning("EMA is enabled but %s does not exist; falling back to raw checkpoint.", ema_checkpoint_path)
+            load_model_checkpoint(model, checkpoint_path)
+    else:
+        load_model_checkpoint(model, checkpoint_path)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device).eval()
     eval_runner.model = model
@@ -90,7 +106,7 @@ def main():
                 video_path = os.path.join(video_dir, f"episode_{ep_idx:03d}.mp4")
                 video_writer = imageio.get_writer(video_path, fps=args.video_fps)
 
-            obs = eval_runner.env_reset()
+            obs = eval_runner.env_reset(seed=args.seed + ep_idx)
             success = False
             steps = 0
 
@@ -103,10 +119,11 @@ def main():
                 actions = eval_runner.denormalize_actions(actions)
 
                 for action_i in range(eval_runner.num_past_actions, eval_runner.num_past_actions + args.action_window):
+                    previous_images = eval_runner.get_current_images()
                     obs = eval_runner.env_step(actions[action_i])
                     obs = eval_runner.get_obs_tensor(obs)
                     eval_runner.update_action_buffer(actions[action_i])
-                    eval_runner.update_image_buffer(eval_runner.get_current_images())
+                    eval_runner.update_image_buffer(previous_images)
                     steps += 1
 
                     if video_writer is not None:
@@ -125,30 +142,47 @@ def main():
             if success:
                 task_successes += 1
 
+            max_coverage = eval_runner.get_max_coverage() if hasattr(eval_runner, 'get_max_coverage') else 0.0
+
             episode_entry = {
                 "task": task,
                 "episode": ep_idx,
                 "success": bool(success),
                 "steps": steps,
+                "max_coverage": float(max_coverage),
             }
             if video_path is not None:
                 episode_entry["video_path"] = video_path
             episodes.append(episode_entry)
 
+        task_coverages = [e["max_coverage"] for e in episodes if e["task"] == task]
         task_success_rate = task_successes / args.episodes
-        by_task[task] = {"success_rate": task_success_rate, "episodes": args.episodes, "successes": task_successes}
-        logging.info("[INTERMEDIATE_EVAL] task=%s success_rate=%.2f", task, task_success_rate)
+        task_mean_coverage = sum(task_coverages) / len(task_coverages) if task_coverages else 0.0
+        by_task[task] = {
+            "success_rate": task_success_rate,
+            "mean_max_coverage": task_mean_coverage,
+            "episodes": args.episodes,
+            "successes": task_successes,
+        }
+        logging.info("[INTERMEDIATE_EVAL] task=%s success_rate=%.2f mean_coverage=%.4f", task, task_success_rate, task_mean_coverage)
 
         eval_runner.env_close()
 
     total_successes = sum(t["successes"] for t in by_task.values())
     total_episodes = sum(t["episodes"] for t in by_task.values())
     overall_success_rate = total_successes / total_episodes if total_episodes > 0 else 0.0
+    all_coverages = [e["max_coverage"] for e in episodes]
+    overall_mean_coverage = sum(all_coverages) / len(all_coverages) if all_coverages else 0.0
 
     results = {
         "mode": "rollout",
         "by_task": by_task,
-        "overall": {"success_rate": overall_success_rate, "episodes": total_episodes, "successes": total_successes},
+        "overall": {
+            "success_rate": overall_success_rate,
+            "mean_max_coverage": overall_mean_coverage,
+            "episodes": total_episodes,
+            "successes": total_successes,
+        },
         "episodes": episodes,
     }
 

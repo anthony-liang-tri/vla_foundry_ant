@@ -12,4 +12,4 @@ export CUDA_VISIBLE_DEVICES=1
 torchrun --nproc_per_node=1 --master_port=29511 \
     vla_foundry/main.py \
     --config_path pusht_training_config.yaml \
-    2>&1 | tee outputs/pusht_diffusion_v2_train.log
+    2>&1 | tee outputs/pusht_diffusion_v6_budget_warmup500_train.log
