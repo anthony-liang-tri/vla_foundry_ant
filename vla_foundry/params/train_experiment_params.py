@@ -35,6 +35,8 @@ class IntermediateEvalParams(BaseParams):
     save_videos: bool = field(default=False)
     video_episodes: int = field(default=2)
     video_fps: int = field(default=20)
+    video_grid_rows: int | None = field(default=None)
+    video_grid_cols: int | None = field(default=None)
 
 
 @dataclass(frozen=True)

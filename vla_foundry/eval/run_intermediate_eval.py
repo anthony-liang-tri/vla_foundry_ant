@@ -16,6 +16,7 @@ import sys
 import imageio
 import numpy as np
 import torch
+from PIL import Image, ImageDraw
 from tqdm import tqdm
 
 from vla_foundry.eval.runners import get_eval_runner
@@ -40,8 +41,60 @@ def parse_args():
     parser.add_argument("--save-videos", action="store_true")
     parser.add_argument("--video-episodes", type=int, default=2)
     parser.add_argument("--video-fps", type=int, default=20)
+    parser.add_argument("--video-grid-rows", type=int, default=0)
+    parser.add_argument("--video-grid-cols", type=int, default=0)
     parser.add_argument("--result-json", type=str, required=True)
     return parser.parse_args()
+
+
+def _draw_label(frame: np.ndarray, text: str) -> np.ndarray:
+    image = Image.fromarray(frame)
+    draw = ImageDraw.Draw(image)
+    x, y = 8, 8
+    draw.text((x + 1, y + 1), text, fill=(0, 0, 0))
+    draw.text((x, y), text, fill=(255, 255, 255))
+    return np.asarray(image)
+
+
+def _write_video_grid(
+    rollout_videos: list[dict],
+    output_path: str,
+    rows: int,
+    cols: int,
+    fps: int,
+) -> None:
+    selected = rollout_videos[: rows * cols]
+    if not selected:
+        return
+
+    sample_frame = next((video["frames"][0] for video in selected if video["frames"]), None)
+    if sample_frame is None:
+        return
+
+    blank = np.zeros_like(sample_frame)
+    max_frames = max(len(video["frames"]) for video in selected)
+
+    writer = imageio.get_writer(output_path, fps=fps)
+    try:
+        for frame_idx in range(max_frames):
+            cells = []
+            for cell_idx in range(rows * cols):
+                if cell_idx < len(selected) and selected[cell_idx]["frames"]:
+                    video = selected[cell_idx]
+                    frames = video["frames"]
+                    frame = frames[min(frame_idx, len(frames) - 1)]
+                    label = f"ep {int(video['episode']):03d} success {int(video['success'])}"
+                    frame = _draw_label(frame, label)
+                else:
+                    frame = blank
+                cells.append(frame)
+
+            row_images = []
+            for row in range(rows):
+                row_images.append(np.concatenate(cells[row * cols : (row + 1) * cols], axis=1))
+            writer.append_data(np.concatenate(row_images, axis=0))
+    finally:
+        writer.close()
 
 
 def main():
@@ -80,7 +133,10 @@ def main():
         if os.path.exists(ema_checkpoint_path):
             load_ema_checkpoint(model, ema_checkpoint_path)
         else:
-            logging.warning("EMA is enabled but %s does not exist; falling back to raw checkpoint.", ema_checkpoint_path)
+            logging.warning(
+                "EMA is enabled but %s does not exist; falling back to raw checkpoint.",
+                ema_checkpoint_path,
+            )
             load_model_checkpoint(model, checkpoint_path)
     else:
         load_model_checkpoint(model, checkpoint_path)
@@ -90,17 +146,23 @@ def main():
 
     by_task: dict = {}
     episodes: list = []
+    videos: list = []
+    grid_rows = max(0, args.video_grid_rows)
+    grid_cols = max(0, args.video_grid_cols)
+    use_video_grid = args.save_videos and grid_rows > 0 and grid_cols > 0
 
     for task in args.tasks:
         task_successes = 0
         eval_runner.load_env(args.env, task, horizon=args.max_steps)
+        task_video_rollouts: list[dict] = []
 
         for ep_idx in tqdm(range(args.episodes), desc=f"[eval] {task}"):
             should_save_video = args.save_videos and ep_idx < args.video_episodes
             video_writer = None
             video_path = None
+            video_frames: list[np.ndarray] | None = [] if should_save_video and use_video_grid else None
 
-            if should_save_video:
+            if should_save_video and not use_video_grid:
                 video_dir = os.path.join(eval_dir, "videos", args.eval_name, task)
                 os.makedirs(video_dir, exist_ok=True)
                 video_path = os.path.join(video_dir, f"episode_{ep_idx:03d}.mp4")
@@ -128,6 +190,8 @@ def main():
 
                     if video_writer is not None:
                         video_writer.append_data(eval_runner.get_image_for_video())
+                    elif video_frames is not None:
+                        video_frames.append(eval_runner.get_image_for_video())
 
                     if eval_runner.check_success() or eval_runner.check_finished():
                         break
@@ -141,6 +205,15 @@ def main():
 
             if success:
                 task_successes += 1
+
+            if video_frames is not None:
+                task_video_rollouts.append(
+                    {
+                        "episode": ep_idx,
+                        "success": bool(success),
+                        "frames": video_frames,
+                    }
+                )
 
             max_coverage = eval_runner.get_max_coverage() if hasattr(eval_runner, 'get_max_coverage') else 0.0
 
@@ -164,7 +237,25 @@ def main():
             "episodes": args.episodes,
             "successes": task_successes,
         }
-        logging.info("[INTERMEDIATE_EVAL] task=%s success_rate=%.2f mean_coverage=%.4f", task, task_success_rate, task_mean_coverage)
+        logging.info(
+            "[INTERMEDIATE_EVAL] task=%s success_rate=%.2f mean_coverage=%.4f",
+            task,
+            task_success_rate,
+            task_mean_coverage,
+        )
+
+        if use_video_grid and task_video_rollouts:
+            video_dir = os.path.join(eval_dir, "videos", args.eval_name, task)
+            os.makedirs(video_dir, exist_ok=True)
+            grid_path = os.path.join(video_dir, f"grid_{grid_rows}x{grid_cols}.mp4")
+            _write_video_grid(task_video_rollouts, grid_path, grid_rows, grid_cols, args.video_fps)
+            videos.append(
+                {
+                    "task": task,
+                    "name": f"grid_{grid_rows}x{grid_cols}",
+                    "video_path": grid_path,
+                }
+            )
 
         eval_runner.env_close()
 
@@ -184,6 +275,7 @@ def main():
             "successes": total_successes,
         },
         "episodes": episodes,
+        "videos": videos,
     }
 
     with open(args.result_json, "w") as f:

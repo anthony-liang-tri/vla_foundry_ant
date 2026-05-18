@@ -78,7 +78,19 @@ def run_intermediate_eval(cfg, experiment_path: str, checkpoint_num: int, global
     if eval_cfg.num_inference_steps is not None:
         cmd.extend(["--num-inference-steps", str(eval_cfg.num_inference_steps)])
     if eval_cfg.save_videos:
-        cmd.extend(["--save-videos", "--video-episodes", str(eval_cfg.video_episodes), "--video-fps", str(eval_cfg.video_fps)])
+        cmd.extend(
+            [
+                "--save-videos",
+                "--video-episodes",
+                str(eval_cfg.video_episodes),
+                "--video-fps",
+                str(eval_cfg.video_fps),
+            ]
+        )
+        if eval_cfg.video_grid_rows is not None:
+            cmd.extend(["--video-grid-rows", str(eval_cfg.video_grid_rows)])
+        if eval_cfg.video_grid_cols is not None:
+            cmd.extend(["--video-grid-cols", str(eval_cfg.video_grid_cols)])
 
     env = os.environ.copy()
     env["MUJOCO_GL"] = "egl"
@@ -112,7 +124,12 @@ def run_intermediate_eval(cfg, experiment_path: str, checkpoint_num: int, global
         if eval_cfg.fail_training_on_error:
             raise RuntimeError(f"{message}\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}")
         logging.error("[INTERMEDIATE_EVAL] %s", message)
-        return {"failed": True, "checkpoint_num": checkpoint_num, "global_step": global_step, "returncode": proc.returncode}
+        return {
+            "failed": True,
+            "checkpoint_num": checkpoint_num,
+            "global_step": global_step,
+            "returncode": proc.returncode,
+        }
 
     if not result_json_path.exists():
         message = f"eval completed but no result JSON at {result_json_path}"
@@ -147,12 +164,29 @@ def flatten_intermediate_eval_metrics(results: dict[str, Any]) -> dict[str, floa
 def build_intermediate_eval_wandb_log(results: dict[str, Any], video_fps: int = 20) -> dict[str, Any]:
     log_dict = flatten_intermediate_eval_metrics(results)
     episodes = results.get("episodes", [])
+    videos = results.get("videos", [])
     mode = results.get("mode", "eval")
 
-    if not episodes:
+    if not episodes and not videos:
         return log_dict
 
     import wandb
+
+    for video in videos:
+        video_path = video.get("video_path")
+        if not video_path:
+            continue
+        path = Path(video_path)
+        if not path.exists():
+            logging.warning("[INTERMEDIATE_EVAL] video path does not exist: %s", path)
+            continue
+        task = video.get("task", "unknown_task")
+        video_name = video.get("name", "video")
+        log_dict[f"intermediate_eval/{mode}/{task}/{video_name}/video"] = wandb.Video(
+            str(path),
+            fps=video_fps,
+            format="mp4",
+        )
 
     for episode in episodes:
         video_path = episode.get("video_path")
