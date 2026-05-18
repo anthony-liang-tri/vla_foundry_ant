@@ -250,13 +250,38 @@ class DiffusionPolicyBatchHandler(BatchHandler):
 
     def prepare_inputs(self, batch, device, cfg):
         self._move_to_device(batch, device)
+        self._action_denoising_mask = getattr(cfg.model, "action_denoising_mask", "future")
+        if "future_mask" in batch:
+            if self._action_denoising_mask == "valid":
+                past_mask = batch.get("past_mask")
+                if past_mask is None:
+                    batch["future_mask"] = torch.ones_like(batch["future_mask"])
+                else:
+                    batch["future_mask"] = batch["future_mask"] | past_mask
+            elif self._action_denoising_mask == "all":
+                batch["future_mask"] = torch.ones_like(batch["future_mask"])
+            elif self._action_denoising_mask != "future":
+                raise ValueError(f"Unknown action_denoising_mask: {self._action_denoising_mask}")
         batch["noise"] = torch.randn_like(batch["actions"])
         self._num_action_head_repeats = getattr(cfg.model, "num_action_head_repeats", None)
+        self._use_flow_matching_scheduler = getattr(cfg.model, "use_flow_matching_scheduler", False) and not getattr(
+            cfg.model, "use_diffusers_scheduler", False
+        )
+        self._flow_matching_target = getattr(cfg.model, "flow_matching_target", "noise_minus_data")
+        self._flow_matching_sigma_min = getattr(cfg.model, "flow_matching_sigma_min", 0.0)
         return batch
+
+    def _target_direction(self, inputs):
+        if getattr(self, "_use_flow_matching_scheduler", False):
+            if getattr(self, "_flow_matching_target", "noise_minus_data") == "data_minus_noise":
+                sigma_min = getattr(self, "_flow_matching_sigma_min", 0.0)
+                return inputs["actions"] - (1 - sigma_min) * inputs["noise"]
+            return inputs["noise"] - inputs["actions"]
+        return inputs["noise"]
 
     def prepare_inputs_and_targets(self, batch, device, cfg):
         inputs = self.prepare_inputs(batch, device, cfg)
-        targets = inputs["noise"] - inputs["actions"]
+        targets = self._target_direction(inputs)
         return inputs, targets, None
 
     # Keys whose batch dimension corresponds to the action head (tiled to [B*N]).
@@ -300,7 +325,7 @@ class DiffusionPolicyBatchHandler(BatchHandler):
             assert sliced_inputs is not None, (
                 "sliced_inputs is required to recompute targets with num_action_head_repeats"
             )
-            return sliced_inputs["noise"] - sliced_inputs["actions"]
+            return self._target_direction(sliced_inputs)
         return targets[start_idx:end_idx]
 
     def compute_loss(self, outputs, targets, loss_fn, cfg, mask=None):

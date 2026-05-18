@@ -23,6 +23,7 @@ VLA Foundry is a framework for training Vision-Language-Action models. We suppor
 - [Contributing Guidelines](#contributing-guidelines)
 - [Quickstart](#quickstart)
     - [Running on SageMaker](#running-on-sagemaker)
+    - [Multi-Task DiT Robotics Tutorial](#multi-task-dit-robotics-tutorial)
 - [Troubleshooting FAQ](#troubleshooting-faq)
 - [Deployment Examples](#deployment-examples)
 - [Repo Structure and Implementation](#repo-structure-and-implementation)
@@ -80,6 +81,9 @@ See `./examples` for more examples. [llm_11m.sh](examples/training/llm_11m.sh) i
 For an LBM policy evaluation walkthrough, follow the [LBM deployment guide](examples/deployment/lbm_eval/README.md).
 
 For TRI-specific scripts and documentation, see [vla_foundry/tri](vla_foundry/tri).
+
+### Multi-Task DiT Robotics Tutorial
+The [Multi-Task DiT training guide](tutorials/train_eval_robosuite.md) shows how to convert robosuite and PushT datasets into VLA Foundry WebDataset shards, train diffusion-policy DiT configs, and run checkpoint-time rollout evals. The robosuite config uses CLIP image and text conditioning, proprioceptive state, language instructions, flow matching with beta timestep sampling, and rollout videos logged under `eval_rollouts/<task>/video_grid`.
 
 ### Running on SageMaker
 Create a `secrets.env` file in the project's root directory:

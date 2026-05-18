@@ -3,6 +3,7 @@ import re
 from typing import Any
 
 import numpy as np
+import pandas as pd
 import pyarrow.parquet as pq
 import ray
 
@@ -29,6 +30,35 @@ def detect_fps(info_path: str) -> float:
         fps = 30.0
         print(f"Warning: Could not detect FPS from info.json, using default FPS {fps}")
     return fps
+
+
+def read_parquet(path: str) -> pd.DataFrame:
+    if path.startswith("s3"):
+        with copy_to_temp_file(path) as temp_parquet:
+            return pq.read_table(temp_parquet).to_pandas()
+    return pq.read_table(path).to_pandas()
+
+
+def discover_parquet_files(root: str) -> list[str]:
+    parquet_files = []
+    for chunk in list_directory(root):
+        if not chunk.startswith("chunk-"):
+            continue
+        chunk_path = f"{root.rstrip('/')}/{chunk}"
+        for item in list_directory(chunk_path):
+            if item.endswith(".parquet"):
+                parquet_files.append(f"{chunk_path}/{item}")
+    return sorted(parquet_files)
+
+
+def task_list_contains(tasks: Any, task_filter: str | None) -> bool:
+    if task_filter is None:
+        return True
+    if isinstance(tasks, str):
+        return tasks == task_filter
+    if isinstance(tasks, np.ndarray):
+        tasks = tasks.tolist()
+    return task_filter in list(tasks)
 
 
 @ray.remote
@@ -99,18 +129,38 @@ def discover_image_columns(data_chunks: list[str], episode_file_pattern: str) ->
     return []
 
 
-def decode_video_frames(video_path: str) -> list[np.ndarray]:
+def decode_video_frames(
+    video_path: str,
+    start_frame: int | None = None,
+    num_frames: int | None = None,
+    fps: float = 30.0,
+) -> list[np.ndarray]:
     """Decode all frames from a video file, returning a list of (H, W, 3) RGB uint8 numpy arrays."""
     import av
 
     if video_path.startswith("s3"):
         with copy_to_temp_file(video_path) as local_path:
-            return decode_video_frames(local_path)
+            return decode_video_frames(local_path, start_frame=start_frame, num_frames=num_frames, fps=fps)
 
     frames = []
     with av.open(video_path) as container:
-        for frame in container.decode(video=0):
+        stream = container.streams.video[0]
+        if start_frame is not None:
+            if num_frames is None:
+                raise ValueError("num_frames must be set when start_frame is set")
+            start_seconds = start_frame / fps
+            container.seek(int(start_seconds / float(stream.time_base)), stream=stream, backward=True)
+
+        for frame in container.decode(stream):
+            if start_frame is not None:
+                frame_index = len(frames) if frame.time is None else round(float(frame.time) * fps)
+                if frame_index < start_frame:
+                    continue
             frames.append(frame.to_ndarray(format="rgb24"))
+            if num_frames is not None and len(frames) >= num_frames:
+                break
+    if num_frames is not None and len(frames) != num_frames:
+        raise RuntimeError(f"Expected {num_frames} frames from {video_path}, decoded {len(frames)}")
     return frames
 
 
@@ -170,55 +220,84 @@ class LeRobotConverter(BaseRoboticsConverter):
         self.has_videos = "videos" in source_dir_contents
 
         self.meta_episodes_path = resolve_path(cfg.source_episodes[0], "meta/episodes.jsonl")
+        self.compact_meta_episodes_path = resolve_path(cfg.source_episodes[0], "meta/episodes")
         self.info_path = resolve_path(cfg.source_episodes[0], "meta/info.json")
         self.tasks_path = resolve_path(cfg.source_episodes[0], "meta/tasks.jsonl")
         self.data_path = resolve_path(cfg.source_episodes[0], "data")
         self.videos_path = resolve_path(cfg.source_episodes[0], "videos")
+        self.is_compact_v3 = not file_exists(self.meta_episodes_path)
 
         self.fps = detect_fps(self.info_path)
 
-        self.data_chunks = self.discover_chunks([self.data_path])
-        if self.has_videos:
-            self.video_chunks = self.discover_chunks([self.videos_path])
+        if self.is_compact_v3:
+            self.data_files = discover_parquet_files(self.data_path)
+            self.entries_df = pd.concat(
+                [read_parquet(path) for path in discover_parquet_files(self.compact_meta_episodes_path)],
+                ignore_index=True,
+            )
+            self.entries_by_episode = {
+                int(row["episode_index"]): row for row in self.entries_df.to_dict("records")
+            }
+            self.image_columns, self.cameras, self.video_lookup = [], {}, {}
+            if self.has_videos:
+                self.cameras = {camera_name: camera_name for camera_name in list_directory(self.videos_path)}
+                if not cfg.camera_names:
+                    raise ValueError(
+                        "camera_names must be specified for video-based LeRobot datasets. "
+                        f"Available cameras from video directories: {list(self.cameras.keys())}"
+                    )
+                unknown = set(cfg.camera_names) - set(self.cameras)
+                if unknown:
+                    raise KeyError(f"Camera(s) {unknown} not found in discovered cameras {list(self.cameras.keys())}")
+            print(f"Loaded {len(self.entries_df)} compact LeRobot v3 episodes metadata")
         else:
-            self.video_chunks = []
+            self.data_chunks = self.discover_chunks([self.data_path])
+            if self.has_videos:
+                self.video_chunks = self.discover_chunks([self.videos_path])
+            else:
+                self.video_chunks = []
 
-        # Pre-build episode lookup. Maps from episode number to episode path.
-        self.episode_lookup = build_episode_lookup(self.data_chunks)
-        print(f"Built episode lookup with {len(self.episode_lookup)} episodes")
+            # Pre-build episode lookup. Maps from episode number to episode path.
+            self.episode_lookup = build_episode_lookup(self.data_chunks)
+            print(f"Built episode lookup with {len(self.episode_lookup)} episodes")
 
-        # Pre-build image columns, cameras, and video lookup.
-        self.image_columns, self.cameras, self.video_lookup = [], {}, {}
-        if not self.has_videos:
-            self.image_columns = discover_image_columns(self.data_chunks, "episode_{:06d}.parquet")
-            if not self.image_columns or len(self.image_columns) == 0:
-                raise ValueError("No image columns found in parquet files and none specified with --image_columns")
-        else:
-            # Discover cameras once and reuse it for all shards.
-            self.cameras = discover_cameras(self.video_chunks)
-            assert len(self.cameras) > 0, "No cameras found"
-            print(f"Discovered cameras: {list(self.cameras.keys())}")
+            # Pre-build image columns, cameras, and video lookup.
+            self.image_columns, self.cameras, self.video_lookup = [], {}, {}
+            if not self.has_videos:
+                self.image_columns = discover_image_columns(self.data_chunks, "episode_{:06d}.parquet")
+                if not self.image_columns or len(self.image_columns) == 0:
+                    raise ValueError("No image columns found in parquet files and none specified with --image_columns")
+            else:
+                # Discover cameras once and reuse it for all shards.
+                self.cameras = discover_cameras(self.video_chunks)
+                assert len(self.cameras) > 0, "No cameras found"
+                print(f"Discovered cameras: {list(self.cameras.keys())}")
 
-            if not cfg.camera_names:
-                raise ValueError(
-                    "camera_names must be specified for video-based LeRobot datasets. "
-                    f"Available cameras from video directories: {list(self.cameras.keys())}"
-                )
+                if not cfg.camera_names:
+                    raise ValueError(
+                        "camera_names must be specified for video-based LeRobot datasets. "
+                        f"Available cameras from video directories: {list(self.cameras.keys())}"
+                    )
 
-            unknown = set(cfg.camera_names) - set(self.cameras)
-            if unknown:
-                raise KeyError(f"Camera(s) {unknown} not found in discovered cameras {list(self.cameras.keys())}")
+                unknown = set(cfg.camera_names) - set(self.cameras)
+                if unknown:
+                    raise KeyError(f"Camera(s) {unknown} not found in discovered cameras {list(self.cameras.keys())}")
 
-            # Pre-build video lookup once and reuse it for all shards.
-            self.video_lookup = build_video_lookup(self.video_chunks, self.cameras)
-            print(f"Built video lookup with {len(self.video_lookup)} video files")
+                # Pre-build video lookup once and reuse it for all shards.
+                self.video_lookup = build_video_lookup(self.video_chunks, self.cameras)
+                print(f"Built video lookup with {len(self.video_lookup)} video files")
 
-        # Read episodes metadata
-        self.entries = jsonl_load(self.meta_episodes_path)
-        print(f"Loaded {len(self.entries)} episodes metadata")
+            # Read episodes metadata
+            self.entries = jsonl_load(self.meta_episodes_path)
+            print(f"Loaded {len(self.entries)} episodes metadata")
 
     def get_language_instructions(self, sample_metadata) -> dict[str, str]:
         episode_index = sample_metadata["episode_index"]
+        if self.is_compact_v3:
+            tasks = self.entries_by_episode[int(episode_index)]["tasks"]
+            if isinstance(tasks, np.ndarray):
+                tasks = tasks.tolist()
+            return {"original": list(tasks)[0]}
         return {"original": self.entries[episode_index]["tasks"][0]}
 
     def discover_chunks(self, source_paths: list[str]) -> list[str]:
@@ -233,6 +312,16 @@ class LeRobotConverter(BaseRoboticsConverter):
         return chunk_dirs
 
     def discover_episodes(self, source_paths: list[str], max_episodes_to_process: int = -1) -> list[str]:
+        if self.is_compact_v3:
+            episodes_df = self.entries_df
+            if self.cfg.task_filter is not None:
+                episodes_df = episodes_df[
+                    episodes_df["tasks"].apply(lambda tasks: task_list_contains(tasks, self.cfg.task_filter))
+                ]
+            if max_episodes_to_process > 0:
+                episodes_df = episodes_df.head(max_episodes_to_process)
+            return [f"compact_episode_{int(idx):06d}" for idx in episodes_df["episode_index"]]
+
         chunks = self.discover_chunks([os.path.join(source_paths[0], "data")])
         chunk_futures = [discover_episodes_chunk.remote(chunk) for chunk in chunks]
         chunk_results = ray.get(chunk_futures)
@@ -240,17 +329,51 @@ class LeRobotConverter(BaseRoboticsConverter):
         all_episodes = []
         for chunk_result in chunk_results:
             all_episodes.extend(chunk_result)
+        if self.cfg.task_filter is not None:
+            allowed_episode_indices = {
+                idx
+                for idx, entry in enumerate(self.entries)
+                if task_list_contains(entry["tasks"], self.cfg.task_filter)
+            }
+            all_episodes = [
+                path
+                for path in all_episodes
+                if int(re.search(r"episode_(\d+)\.parquet", path).group(1)) in allowed_episode_indices
+            ]
+        if max_episodes_to_process > 0:
+            all_episodes = all_episodes[:max_episodes_to_process]
         return all_episodes
 
     def get_episode_length(self, episode_data: Any) -> int:
         return len(episode_data)
 
     def load_episode_data(self, episode_path):
-        if episode_path.startswith("s3"):
-            with copy_to_temp_file(episode_path) as temp_parquet:
-                df = pq.read_table(temp_parquet).to_pandas()
-        else:
-            df = pq.read_table(episode_path).to_pandas()
+        if self.is_compact_v3:
+            match = re.search(r"compact_episode_(\d+)", episode_path)
+            if match is None:
+                raise ValueError(f"Could not parse compact episode index from {episode_path}")
+            episode_index = int(match.group(1))
+            episode_row = self.entries_by_episode[episode_index]
+            data_path = resolve_path(
+                self.data_path,
+                f"chunk-{int(episode_row['data/chunk_index']):03d}/"
+                f"file-{int(episode_row['data/file_index']):03d}.parquet",
+            )
+            df = read_parquet(data_path)
+            start = int(episode_row["dataset_from_index"])
+            end = int(episode_row["dataset_to_index"])
+            if "index" in df.columns:
+                df = df[(df["index"] >= start) & (df["index"] < end)].copy()
+            else:
+                df = df.iloc[start:end].copy()
+            if len(df) != int(episode_row["length"]):
+                raise ValueError(
+                    f"Compact episode {episode_index} expected {int(episode_row['length'])} rows, got {len(df)}"
+                )
+            df.attrs["compact_episode_row"] = episode_row
+            return df
+
+        df = read_parquet(episode_path)
         return df
 
     def extract_camera_data(self, episode_data: Any):
@@ -259,7 +382,24 @@ class LeRobotConverter(BaseRoboticsConverter):
         """
         camera_data = {}
 
-        if self.has_videos:
+        if self.is_compact_v3 and self.has_videos:
+            episode_row = episode_data.attrs["compact_episode_row"]
+            num_rows = len(episode_data)
+            for camera_name in self.cfg.camera_names:
+                chunk_index = int(episode_row[f"videos/{camera_name}/chunk_index"])
+                file_index = int(episode_row[f"videos/{camera_name}/file_index"])
+                video_path = resolve_path(
+                    self.videos_path,
+                    f"{camera_name}/chunk-{chunk_index:03d}/file-{file_index:03d}.mp4",
+                )
+                start_frame = round(float(episode_row[f"videos/{camera_name}/from_timestamp"]) * self.fps)
+                camera_data[camera_name] = decode_video_frames(
+                    video_path,
+                    start_frame=start_frame,
+                    num_frames=num_rows,
+                    fps=self.fps,
+                )
+        elif self.has_videos:
             episode_index = int(episode_data["episode_index"].iloc[0])
             num_rows = len(episode_data)
             for camera_name in self.cfg.camera_names:
@@ -300,8 +440,9 @@ class LeRobotConverter(BaseRoboticsConverter):
         """
         lowdim_cols = self.cfg.observation_keys + self.cfg.action_keys
         lowdim_data = {}
+        lowdim_key_remap = self.cfg.lowdim_key_remap or {}
         for col in lowdim_cols:
-            lowdim_data[col] = np.stack(episode_data[col].to_numpy())
+            lowdim_data[lowdim_key_remap.get(col, col)] = np.stack(episode_data[col].to_numpy())
         return lowdim_data
 
     def extract_intrinsics_extrinsics_data(self, episode_data: Any):

@@ -124,6 +124,8 @@ class SpartanPreprocessParams(PreprocessParams):
 class LeRobotPreprocessParams(PreprocessParams):
     observation_keys: list[str] = field(default=None)
     action_keys: list[str] = field(default=None)
+    task_filter: str | None = field(default=None)
+    lowdim_key_remap: dict[str, str] | None = field(default=None)
 
 
 @dataclass(frozen=True)
