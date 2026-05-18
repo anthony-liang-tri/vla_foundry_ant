@@ -3,6 +3,7 @@ set -e
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
 source .venv/bin/activate
+mkdir -p outputs
 
 # Robosuite evals and WebDataset workers can exceed the shell default of 1024.
 ulimit -n 1048576 || ulimit -n 65536 || true
@@ -22,8 +23,17 @@ then
         'imageio[ffmpeg]>=2.37.0'
 fi
 
+LEROBOT_SOURCE_ROOT="${LEROBOT_SOURCE_ROOT:-$HOME/.cache/huggingface/lerobot/TRI-ML/PretrainFinetune}"
+if [ ! -f "$LEROBOT_SOURCE_ROOT/data/chunk-000/file-000.parquet" ]; then
+    HF_HUB_SNAPSHOTS="$HOME/.cache/huggingface/lerobot/hub/datasets--TRI-ML--PretrainFinetune/snapshots"
+    if [ -d "$HF_HUB_SNAPSHOTS" ]; then
+        LEROBOT_SOURCE_ROOT="$(find "$HF_HUB_SNAPSHOTS" -mindepth 1 -maxdepth 1 -type d | sort | tail -n 1)"
+    fi
+fi
+
 if [ ! -f data/robosuite_can_full_horizon32/manifest.jsonl ]; then
     python scripts/materialize_lerobot_lift_wds.py \
+        --source-root "$LEROBOT_SOURCE_ROOT" \
         --task "pick the coke can and place it in the bin" \
         --output-dir data/robosuite_can_full_horizon32 \
         --past-lowdim-steps 1 \
