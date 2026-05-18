@@ -148,26 +148,20 @@ def run_intermediate_eval(cfg, experiment_path: str, checkpoint_num: int, global
 
 
 def flatten_intermediate_eval_metrics(results: dict[str, Any]) -> dict[str, float | int]:
-    prefix = f"intermediate_eval/{results.get('mode', 'eval')}"
-    flat: dict[str, float | int] = {
-        "intermediate_eval/checkpoint_num": int(results.get("checkpoint_num", -1)),
-        "intermediate_eval/global_step": int(results.get("global_step", -1)),
-        "intermediate_eval/failed": int(bool(results.get("failed", False))),
-    }
+    flat: dict[str, float | int] = {}
 
     for task, metrics in results.get("by_task", {}).items():
-        _add_scalar_metrics(flat, f"{prefix}/{task}", metrics)
-    _add_scalar_metrics(flat, f"{prefix}/overall", results.get("overall", {}))
+        success_rate = metrics.get("success_rate")
+        if isinstance(success_rate, (int, float)):
+            flat[f"eval_rollouts/{task}/success_rate"] = success_rate
     return flat
 
 
 def build_intermediate_eval_wandb_log(results: dict[str, Any], video_fps: int = 20) -> dict[str, Any]:
     log_dict = flatten_intermediate_eval_metrics(results)
-    episodes = results.get("episodes", [])
     videos = results.get("videos", [])
-    mode = results.get("mode", "eval")
 
-    if not episodes and not videos:
+    if not log_dict and not videos:
         return log_dict
 
     import wandb
@@ -181,23 +175,7 @@ def build_intermediate_eval_wandb_log(results: dict[str, Any], video_fps: int = 
             logging.warning("[INTERMEDIATE_EVAL] video path does not exist: %s", path)
             continue
         task = video.get("task", "unknown_task")
-        log_dict[f"intermediate_eval/{mode}/{task}/video"] = wandb.Video(
-            str(path),
-            fps=video_fps,
-            format="mp4",
-        )
-
-    for episode in episodes:
-        video_path = episode.get("video_path")
-        if not video_path:
-            continue
-        path = Path(video_path)
-        if not path.exists():
-            logging.warning("[INTERMEDIATE_EVAL] video path does not exist: %s", path)
-            continue
-        task = episode.get("task", "unknown_task")
-        episode_name = f"ep_{episode.get('episode', 0):03d}"
-        log_dict[f"intermediate_eval/{mode}/{task}/{episode_name}/video"] = wandb.Video(
+        log_dict[f"eval_rollouts/{task}/video"] = wandb.Video(
             str(path),
             fps=video_fps,
             format="mp4",
@@ -209,11 +187,3 @@ def build_intermediate_eval_wandb_log(results: dict[str, Any], video_fps: int = 
 def _get_python_executable() -> str:
     import sys
     return sys.executable
-
-
-def _add_scalar_metrics(flat: dict[str, float | int], prefix: str, metrics: dict[str, Any]) -> None:
-    for key, value in metrics.items():
-        if isinstance(value, bool):
-            flat[f"{prefix}/{key}"] = int(value)
-        elif isinstance(value, (int, float)):
-            flat[f"{prefix}/{key}"] = value

@@ -75,6 +75,7 @@ def _write_video_grid(
     max_frames = max(len(video["frames"]) for video in selected)
 
     writer = imageio.get_writer(output_path, fps=fps)
+    final_grid_frame = None
     try:
         for frame_idx in range(max_frames):
             cells = []
@@ -92,7 +93,11 @@ def _write_video_grid(
             row_images = []
             for row in range(rows):
                 row_images.append(np.concatenate(cells[row * cols : (row + 1) * cols], axis=1))
-            writer.append_data(np.concatenate(row_images, axis=0))
+            final_grid_frame = np.concatenate(row_images, axis=0)
+            writer.append_data(final_grid_frame)
+        if final_grid_frame is not None:
+            for _ in range(4):
+                writer.append_data(final_grid_frame)
     finally:
         writer.close()
 
