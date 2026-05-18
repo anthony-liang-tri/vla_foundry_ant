@@ -49,9 +49,9 @@ data:
   action_dim: 7
   proprioception_dim: 32
   dataset_manifest:
-    - /home/anthonyliang/Documents/vla_foundry_ant/data/robosuite_lift_full_horizon32/manifest.jsonl
+    - data/robosuite_lift_full_horizon32/manifest.jsonl
   dataset_statistics:
-    - /home/anthonyliang/Documents/vla_foundry_ant/data/robosuite_lift_full_horizon32/stats.json
+    - data/robosuite_lift_full_horizon32/stats.json
   dataset_modality:
     - robotics
   dataset_weighting:
@@ -115,7 +115,7 @@ hparams:
 total_train_samples: 6400000
 num_checkpoints: 60
 max_checkpoint_limit: 6
-save_path: /home/anthonyliang/Documents/vla_foundry_ant/outputs/robosuite_flow_lift_full_state_vision_ft_lerobot_style_100k
+save_path: outputs/robosuite_flow_lift_full_state_vision_ft_lerobot_style_100k
 name: robosuite_flow_lift_full_state_vision_ft_lerobot_style_100k
 wandb: true
 wandb_entity: tri
@@ -126,7 +126,7 @@ intermediate_eval:
   every_n_checkpoints: 1
   fail_training_on_error: false
   env: robosuite
-  eval_dir: /home/anthonyliang/Documents/vla_foundry_ant/outputs/robosuite_eval_flow_lift_full_state_vision_ft_lerobot_style_100k
+  eval_dir: outputs/robosuite_eval_flow_lift_full_state_vision_ft_lerobot_style_100k
   tasks:
     - Lift
   episodes: 10
