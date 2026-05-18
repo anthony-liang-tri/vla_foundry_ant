@@ -379,11 +379,21 @@ class DiffusionPolicy(BaseModel):
                     actions = predicted_actions
             return actions
 
-        # Iterative denoising loop
-        step_size = max(1, self.scheduler.num_timesteps // num_inference_steps)
-        for step in range(self.scheduler.num_timesteps - 1, 0, -step_size):
+        # Iterative denoising loop. Diffusers schedulers own their inference
+        # timestep spacing; the local DDPM scheduler uses the historical stride.
+        if hasattr(self.scheduler, "get_inference_timesteps"):
+            inference_timesteps = self.scheduler.get_inference_timesteps(num_inference_steps, device=device)
+            step_size = 1
+        else:
+            step_size = max(1, self.scheduler.num_timesteps // num_inference_steps)
+            inference_timesteps = list(range(self.scheduler.num_timesteps - 1, -1, -step_size))
+            if inference_timesteps[-1] != 0:
+                inference_timesteps.append(0)
+
+        for step in inference_timesteps:
+            step_int = int(step.item()) if isinstance(step, torch.Tensor) else int(step)
             # Create timesteps for current step
-            timesteps = torch.tensor([step] * batch_size, device=device)
+            timesteps = torch.full((batch_size,), step_int, device=device, dtype=torch.long)
             time_embeddings = self._time_embeddings(timesteps)
 
             # Encode current actions
@@ -412,7 +422,7 @@ class DiffusionPolicy(BaseModel):
             # Weight = min(β, raw_weight) with β = guidance_scale (fixed).
             # Fixed β gives step-count invariance (see generate_actions docstring).
             if use_guidance:
-                tau = step / self.scheduler.num_timesteps
+                tau = step_int / self.scheduler.num_timesteps
                 x0_hat = actions - tau * predicted_direction
                 residual = guidance_target - x0_hat
                 if guidance_mask is not None:

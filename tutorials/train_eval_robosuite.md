@@ -2,13 +2,16 @@
 
 This guide covers converting the robosuite and PushT datasets to VLA Foundry WebDataset shards, then training with checkpoint-time rollout evals.
 
-The robosuite example follows the same broad policy shape as [LeRobot's Multi-Task DiT policy](https://huggingface.co/docs/lerobot/en/multi_task_dit): a diffusion transformer predicts action chunks conditioned on image tokens, language instructions, and optional proprioceptive state. The provided robosuite config uses `openai/clip-vit-base-patch16` for both vision and text conditioning, fine-tunes the vision encoder, freezes the text encoder, and trains a 6-layer, 512-hidden-dim transformer head with rotary position embeddings.
+The robosuite example uses a diffusion transformer that predicts action chunks conditioned on image tokens, language instructions, and optional proprioceptive state. The provided robosuite configs use `openai/clip-vit-base-patch16` for both vision and text conditioning, fine-tune the vision encoder, freeze the text encoder, and train a 6-layer, 512-hidden-dim transformer head with rotary position embeddings.
 
-For robosuite, action generation uses the flow-matching path rather than DDPM sampling. Training samples a continuous time `tau`, interpolates between Gaussian noise and normalized actions, and predicts the velocity target `actions - noise`. The default robosuite config uses beta timestep sampling with `alpha=1.5`, `beta=1.0`, `s=0.999`, continuous time embeddings, `sigma_min=0.0`, and a valid-action denoising mask so both past and future valid low-dimensional slots are handled consistently. Evaluation then integrates the learned velocity field for `num_inference_steps` steps and executes `action_window` actions per policy chunk.
+For robosuite, `multitask_dit_robosuite.yaml` uses the flow-matching path. Training samples a continuous time `tau`, interpolates between Gaussian noise and normalized actions, and predicts the velocity target `actions - noise`. The default flow config uses beta timestep sampling with `alpha=1.5`, `beta=1.0`, `s=0.999`, continuous time embeddings, `sigma_min=0.0`, and a valid-action denoising mask so both past and future valid low-dimensional slots are handled consistently. Evaluation then integrates the learned velocity field for `num_inference_steps` steps and executes `action_window` actions per policy chunk.
+
+The `multitask_dit_robosuite_ddpm.yaml` variant uses the DDPM noise-prediction objective. It samples discrete diffusion timesteps uniformly during training, adds DDPM noise to normalized actions, predicts the epsilon noise target with MSE, and denoises from Gaussian noise at eval. Its scheduler settings follow the common LeRobot diffusion defaults: 100 train timesteps, a squared-cosine beta schedule, epsilon prediction, DDPM sample clipping to `[-1, 1]`, and 100 reverse denoising steps.
 
 The example configs live in:
 
 - `tutorials/configs/multitask_dit_robosuite.yaml`
+- `tutorials/configs/multitask_dit_robosuite_ddpm.yaml`
 - `tutorials/configs/pusht.yaml`
 
 Eval rollout metrics are logged to W&B as:
@@ -98,7 +101,15 @@ CUDA_VISIBLE_DEVICES=0 uv run torchrun --nproc_per_node=1 \
   --config_path tutorials/configs/multitask_dit_robosuite.yaml
 ```
 
-The config trains on all three task datasets with equal task weighting, proprioceptive state, language instructions, both `agentview` and wrist cameras, and min-max normalization for `state` and `actions`.
+Train the DDPM/noise-prediction variant:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 uv run torchrun --nproc_per_node=1 \
+  vla_foundry/main.py \
+  --config_path tutorials/configs/multitask_dit_robosuite_ddpm.yaml
+```
+
+Both robosuite configs train on all three task datasets with equal task weighting, proprioceptive state, language instructions, both `agentview` and wrist cameras, and min-max normalization for `state` and `actions`.
 
 ## PushT
 

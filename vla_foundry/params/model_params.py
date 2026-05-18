@@ -184,7 +184,11 @@ class NoiseSchedulerParams(ModelParams):
     num_timesteps: int = field(default=1000)
     beta_start: float = field(default=0.0001)
     beta_end: float = field(default=0.02)
-    clamp_range: tuple[float, float] = field(default=(-1.5, 1.5))
+    beta_schedule: str = field(default="linear")
+    prediction_type: Literal["epsilon", "sample"] = field(default="epsilon")
+    clamp_range: tuple[float, float] | None = field(default=(-1.5, 1.5))
+    clip_sample: bool | None = field(default=None)
+    clip_sample_range: float | None = field(default=None)
 
     def init_shared_attributes(self, cfg):
         super().init_shared_attributes(cfg)

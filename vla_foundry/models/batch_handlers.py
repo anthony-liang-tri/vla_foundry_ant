@@ -269,6 +269,7 @@ class DiffusionPolicyBatchHandler(BatchHandler):
         )
         self._flow_matching_target = getattr(cfg.model, "flow_matching_target", "noise_minus_data")
         self._flow_matching_sigma_min = getattr(cfg.model, "flow_matching_sigma_min", 0.0)
+        self._ddpm_prediction_type = getattr(cfg.model.noise_scheduler, "prediction_type", "epsilon")
         return batch
 
     def _target_direction(self, inputs):
@@ -277,6 +278,8 @@ class DiffusionPolicyBatchHandler(BatchHandler):
                 sigma_min = getattr(self, "_flow_matching_sigma_min", 0.0)
                 return inputs["actions"] - (1 - sigma_min) * inputs["noise"]
             return inputs["noise"] - inputs["actions"]
+        if getattr(self, "_ddpm_prediction_type", "epsilon") == "sample":
+            return inputs["actions"]
         return inputs["noise"]
 
     def prepare_inputs_and_targets(self, batch, device, cfg):

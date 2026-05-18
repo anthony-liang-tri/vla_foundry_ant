@@ -83,7 +83,7 @@ For an LBM policy evaluation walkthrough, follow the [LBM deployment guide](exam
 For TRI-specific scripts and documentation, see [vla_foundry/tri](vla_foundry/tri).
 
 ### Multi-Task DiT Robotics Tutorial
-The [Multi-Task DiT training guide](tutorials/train_eval_robosuite.md) shows how to convert robosuite and PushT datasets into VLA Foundry WebDataset shards, train diffusion-policy DiT configs, and run checkpoint-time rollout evals. The robosuite config uses CLIP image and text conditioning, proprioceptive state, language instructions, flow matching with beta timestep sampling, and rollout videos logged under `eval_rollouts/<task>/video_grid`.
+The [Multi-Task DiT training guide](tutorials/train_eval_robosuite.md) shows how to convert robosuite and PushT datasets into VLA Foundry WebDataset shards, train diffusion-policy DiT configs, and run checkpoint-time rollout evals. The robosuite configs use CLIP image and text conditioning, proprioceptive state, language instructions, and rollout videos logged under `eval_rollouts/<task>/video_grid`. The guide includes a flow-matching config with beta timestep sampling and a DDPM/noise-prediction config with 100 diffusion timesteps, a squared-cosine beta schedule, epsilon targets, and sample clipping to `[-1, 1]`.
 
 ### Running on SageMaker
 Create a `secrets.env` file in the project's root directory:
