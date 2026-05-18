@@ -150,6 +150,7 @@ def main():
     grid_rows = max(0, args.video_grid_rows)
     grid_cols = max(0, args.video_grid_cols)
     use_video_grid = args.save_videos and grid_rows > 0 and grid_cols > 0
+    tracks_coverage = args.env == "pusht"
 
     for task in args.tasks:
         task_successes = 0
@@ -215,44 +216,47 @@ def main():
                     }
                 )
 
-            max_coverage = eval_runner.get_max_coverage() if hasattr(eval_runner, 'get_max_coverage') else 0.0
-
             episode_entry = {
                 "task": task,
                 "episode": ep_idx,
                 "success": bool(success),
                 "steps": steps,
-                "max_coverage": float(max_coverage),
             }
+            if tracks_coverage:
+                max_coverage = eval_runner.get_max_coverage() if hasattr(eval_runner, "get_max_coverage") else 0.0
+                episode_entry["max_coverage"] = float(max_coverage)
             if video_path is not None:
                 episode_entry["video_path"] = video_path
             episodes.append(episode_entry)
 
-        task_coverages = [e["max_coverage"] for e in episodes if e["task"] == task]
         task_success_rate = task_successes / args.episodes
-        task_mean_coverage = sum(task_coverages) / len(task_coverages) if task_coverages else 0.0
         by_task[task] = {
             "success_rate": task_success_rate,
-            "mean_max_coverage": task_mean_coverage,
             "episodes": args.episodes,
             "successes": task_successes,
         }
-        logging.info(
-            "[INTERMEDIATE_EVAL] task=%s success_rate=%.2f mean_coverage=%.4f",
-            task,
-            task_success_rate,
-            task_mean_coverage,
-        )
+        if tracks_coverage:
+            task_coverages = [e["max_coverage"] for e in episodes if e["task"] == task]
+            task_mean_coverage = sum(task_coverages) / len(task_coverages) if task_coverages else 0.0
+            by_task[task]["mean_max_coverage"] = task_mean_coverage
+            logging.info(
+                "[INTERMEDIATE_EVAL] task=%s success_rate=%.2f mean_coverage=%.4f",
+                task,
+                task_success_rate,
+                task_mean_coverage,
+            )
+        else:
+            logging.info("[INTERMEDIATE_EVAL] task=%s success_rate=%.2f", task, task_success_rate)
 
         if use_video_grid and task_video_rollouts:
             video_dir = os.path.join(eval_dir, "videos", args.eval_name, task)
             os.makedirs(video_dir, exist_ok=True)
-            grid_path = os.path.join(video_dir, f"grid_{grid_rows}x{grid_cols}.mp4")
+            grid_path = os.path.join(video_dir, "rollouts.mp4")
             _write_video_grid(task_video_rollouts, grid_path, grid_rows, grid_cols, args.video_fps)
             videos.append(
                 {
                     "task": task,
-                    "name": f"grid_{grid_rows}x{grid_cols}",
+                    "name": "rollouts",
                     "video_path": grid_path,
                 }
             )
@@ -262,21 +266,21 @@ def main():
     total_successes = sum(t["successes"] for t in by_task.values())
     total_episodes = sum(t["episodes"] for t in by_task.values())
     overall_success_rate = total_successes / total_episodes if total_episodes > 0 else 0.0
-    all_coverages = [e["max_coverage"] for e in episodes]
-    overall_mean_coverage = sum(all_coverages) / len(all_coverages) if all_coverages else 0.0
 
     results = {
         "mode": "rollout",
         "by_task": by_task,
         "overall": {
             "success_rate": overall_success_rate,
-            "mean_max_coverage": overall_mean_coverage,
             "episodes": total_episodes,
             "successes": total_successes,
         },
         "episodes": episodes,
         "videos": videos,
     }
+    if tracks_coverage:
+        all_coverages = [e["max_coverage"] for e in episodes]
+        results["overall"]["mean_max_coverage"] = sum(all_coverages) / len(all_coverages) if all_coverages else 0.0
 
     with open(args.result_json, "w") as f:
         json.dump(results, f, indent=2)

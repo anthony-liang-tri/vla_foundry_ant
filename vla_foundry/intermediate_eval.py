@@ -181,8 +181,7 @@ def build_intermediate_eval_wandb_log(results: dict[str, Any], video_fps: int = 
             logging.warning("[INTERMEDIATE_EVAL] video path does not exist: %s", path)
             continue
         task = video.get("task", "unknown_task")
-        video_name = video.get("name", "video")
-        log_dict[f"intermediate_eval/{mode}/{task}/{video_name}/video"] = wandb.Video(
+        log_dict[f"intermediate_eval/{mode}/{task}/video"] = wandb.Video(
             str(path),
             fps=video_fps,
             format="mp4",
