@@ -36,6 +36,26 @@ class DiffusionPolicy(BaseModel):
         self.diffusion_step_conditioning = model_params.diffusion_step_conditioning
         self.input_noise_std = model_params.input_noise_std
         self.num_action_head_repeats = model_params.num_action_head_repeats
+        self.use_flow_matching_scheduler = (
+            model_params.use_flow_matching_scheduler and not model_params.use_diffusers_scheduler
+        )
+        self.action_denoising_mask = model_params.action_denoising_mask
+        self.flow_matching_target = model_params.flow_matching_target
+        self.flow_matching_timestep_sampling = model_params.flow_matching_timestep_sampling
+        self.flow_matching_time_embedding = model_params.flow_matching_time_embedding
+        self.flow_matching_sigma_min = model_params.flow_matching_sigma_min
+        self.flow_matching_beta_s = model_params.flow_matching_beta_s
+        self.flow_matching_beta_alpha = model_params.flow_matching_beta_alpha
+        self.flow_matching_beta_beta = model_params.flow_matching_beta_beta
+        if self.flow_matching_time_embedding == "continuous":
+            self.continuous_time_mlp = torch.nn.Sequential(
+                torch.nn.Linear(backbone_dim, 2 * backbone_dim),
+                torch.nn.GELU(),
+                torch.nn.Linear(2 * backbone_dim, backbone_dim),
+                torch.nn.GELU(),
+            )
+        else:
+            self.continuous_time_mlp = None
         self.initialize_weights()
 
     def initialize_weights(self):
@@ -48,6 +68,75 @@ class DiffusionPolicy(BaseModel):
         torch.nn.init.xavier_uniform_(self.output_layer.weight)
         if self.proprioception_encode is not None:
             torch.nn.init.xavier_uniform_(self.proprioception_encode.weight)
+
+    def _sample_timesteps(self, batch_size, device):
+        if not self.use_flow_matching_scheduler or self.flow_matching_timestep_sampling == "uniform_discrete":
+            timesteps = torch.randint(0, self.scheduler.num_timesteps, (batch_size,), device=device)
+            tau = timesteps.to(dtype=torch.float32) / self.scheduler.num_timesteps
+            return timesteps, tau
+
+        if self.flow_matching_timestep_sampling == "uniform":
+            tau = torch.rand(batch_size, device=device)
+        elif self.flow_matching_timestep_sampling == "beta":
+            beta_dist = torch.distributions.Beta(
+                torch.tensor(self.flow_matching_beta_alpha, device=device),
+                torch.tensor(self.flow_matching_beta_beta, device=device),
+            )
+            tau = self.flow_matching_beta_s * (1.0 - beta_dist.sample((batch_size,)))
+            tau = tau.clamp(0.0, 1.0)
+        else:
+            raise ValueError(f"Unknown flow_matching_timestep_sampling: {self.flow_matching_timestep_sampling}")
+
+        if self.flow_matching_time_embedding == "continuous":
+            return tau, tau
+
+        discrete_timesteps = (tau * (self.scheduler.num_timesteps - 1)).round().long()
+        return discrete_timesteps, tau
+
+    def _time_embeddings(self, timesteps):
+        if torch.is_floating_point(timesteps):
+            time_embeddings = self.sinusoidal_position_embeddings(timesteps)
+            if self.continuous_time_mlp is not None:
+                time_embeddings = self.continuous_time_mlp(time_embeddings)
+            return time_embeddings.unsqueeze(1)
+        return self.time_encoding(timesteps).unsqueeze(1)
+
+    def _effective_denoise_mask(self, actions, past_mask=None, future_mask=None):
+        if self.action_denoising_mask == "future":
+            return future_mask
+        if self.action_denoising_mask == "valid":
+            if past_mask is None and future_mask is None:
+                return None
+            if past_mask is None:
+                return future_mask
+            if future_mask is None:
+                return past_mask
+            return past_mask | future_mask
+        if self.action_denoising_mask == "all":
+            return torch.ones(actions.shape[:2], dtype=torch.bool, device=actions.device)
+        raise ValueError(f"Unknown action_denoising_mask: {self.action_denoising_mask}")
+
+    def _add_noise(self, actions, noise, time_condition, tau, denoise_mask):
+        if self.use_flow_matching_scheduler and self.flow_matching_target == "data_minus_noise":
+            tau = tau.to(device=actions.device, dtype=actions.dtype)
+            tau_expanded = tau.view([-1] + [1] * (actions.ndim - 1))
+            noisy_action = tau_expanded * actions + (
+                1 - (1 - self.flow_matching_sigma_min) * tau_expanded
+            ) * noise
+            if denoise_mask is not None:
+                mask = denoise_mask
+                while mask.ndim < actions.ndim:
+                    mask = mask.unsqueeze(-1)
+                noisy_action = torch.where(mask, noisy_action, actions)
+            return noisy_action
+
+        scheduler_timesteps = time_condition
+        if torch.is_floating_point(scheduler_timesteps):
+            scheduler_timesteps = tau.to(device=actions.device, dtype=actions.dtype) * self.scheduler.num_timesteps
+        noisy_action = self.scheduler.add_noise(actions, noise, scheduler_timesteps, mask=denoise_mask)
+        if denoise_mask is not None:
+            noisy_action = torch.where(denoise_mask.unsqueeze(-1), noisy_action, actions)
+        return noisy_action
 
     def _build_transformer_input(self, backbone_embeddings, time_embeddings, noisy_action, proprio_embeddings=None):
         """Build transformer input by combining conditioning, time, and action embeddings.
@@ -95,11 +184,11 @@ class DiffusionPolicy(BaseModel):
         **kwargs,
     ):
         # Sample random timesteps
-        timesteps = torch.randint(0, self.scheduler.num_timesteps, (actions.shape[0],)).to(actions.device)  # [bsz]
+        timesteps, tau = self._sample_timesteps(actions.shape[0], actions.device)
 
         # Sample action to denoise
-        noisy_action = self.scheduler.add_noise(actions, noise, timesteps, mask=future_mask)
-        noisy_action = torch.where(future_mask.unsqueeze(-1), noisy_action, actions)
+        denoise_mask = self._effective_denoise_mask(actions, past_mask=past_mask, future_mask=future_mask)
+        noisy_action = self._add_noise(actions, noise, timesteps, tau, denoise_mask)
         if self.input_noise_std > 0:
             noisy_action = noisy_action + torch.randn_like(noisy_action) * self.input_noise_std
         noisy_action = self.action_encode(noisy_action)
@@ -136,7 +225,7 @@ class DiffusionPolicy(BaseModel):
             backbone_embeddings = backbone_embeddings.repeat_interleave(num_repeats, dim=0)
 
         # Time embeddings (batch, 1, backbone_dim) — batch is [B*N] when repeating, else [B]
-        time_embeddings = self.time_encoding(timesteps).unsqueeze(1)
+        time_embeddings = self._time_embeddings(timesteps)
 
         # Proprioception embeddings (already tiled to [B*N] by the batch handler when num_repeats > 1)
         proprio_embeddings = None
@@ -229,14 +318,10 @@ class DiffusionPolicy(BaseModel):
             **kwargs,
         )
 
-        # Initialize only denoised slots with noise. Training uses future_mask to
-        # keep non-future action tokens clean, so generation should preserve the
-        # same slots instead of treating every non-past slot as diffusion noise.
-        preserve_mask = None
-        if future_mask is not None:
-            preserve_mask = ~future_mask.to(device=device, dtype=torch.bool)
-        elif past_mask is not None:
-            preserve_mask = past_mask.to(device=device, dtype=torch.bool)
+        # Initialize only denoised slots with noise. Training uses the same
+        # effective mask, so generation should preserve the same slots.
+        denoise_mask = self._effective_denoise_mask(actions, past_mask=past_mask, future_mask=future_mask)
+        preserve_mask = None if denoise_mask is None else ~denoise_mask.to(device=device, dtype=torch.bool)
 
         if preserve_mask is not None:
             preserve_mask_expanded = preserve_mask[:, :, None].to(actions.dtype)
@@ -252,12 +337,54 @@ class DiffusionPolicy(BaseModel):
         if self.proprioception_encode is not None and proprioception is not None:
             proprio_embeddings = self.proprioception_encode(proprioception)
 
+        if self.use_flow_matching_scheduler and self.flow_matching_target == "data_minus_noise":
+            if use_guidance:
+                raise ValueError("Pi-GDM guidance is not implemented for data_minus_noise flow matching.")
+            dt = 1.0 / num_inference_steps
+            for step_idx in range(num_inference_steps):
+                tau = step_idx / num_inference_steps
+                if self.flow_matching_time_embedding == "continuous":
+                    timesteps = torch.full((batch_size,), tau, device=device, dtype=actions.dtype)
+                else:
+                    discrete_t = round(tau * (self.scheduler.num_timesteps - 1))
+                    timesteps = torch.full((batch_size,), discrete_t, device=device, dtype=torch.long)
+                time_embeddings = self._time_embeddings(timesteps)
+
+                action_encoding = self.action_encode(actions)
+                transformer_input = self._build_transformer_input(
+                    backbone_embeddings=backbone_output.embeddings,
+                    time_embeddings=time_embeddings,
+                    noisy_action=action_encoding,
+                    proprio_embeddings=proprio_embeddings,
+                )
+                transformer_output = self.transformer(
+                    inputs_embeds=transformer_input,
+                    output_hidden_states=True,
+                    use_cache=False,
+                )
+                action_seq_len = actions.shape[1]
+                predicted_direction = self.output_layer(
+                    transformer_output.hidden_states[-1][:, -action_seq_len:, :]
+                )
+                predicted_actions = actions + predicted_direction * dt
+                clamp_range = getattr(self.scheduler, "clamp_range", None)
+                if clamp_range is not None:
+                    predicted_actions = predicted_actions.clamp(
+                        clamp_range[0],
+                        clamp_range[1],
+                    )
+                if preserve_mask is not None:
+                    actions = original_preserved_actions + predicted_actions * (1 - preserve_mask_expanded)
+                else:
+                    actions = predicted_actions
+            return actions
+
         # Iterative denoising loop
         step_size = max(1, self.scheduler.num_timesteps // num_inference_steps)
         for step in range(self.scheduler.num_timesteps - 1, 0, -step_size):
             # Create timesteps for current step
             timesteps = torch.tensor([step] * batch_size, device=device)
-            time_embeddings = self.time_encoding(timesteps).unsqueeze(1)
+            time_embeddings = self._time_embeddings(timesteps)
 
             # Encode current actions
             action_encoding = self.action_encode(actions)

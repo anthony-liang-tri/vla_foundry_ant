@@ -8,7 +8,6 @@ import robosuite as suite
 import torch
 from PIL import Image, ImageDraw
 from robosuite.controllers import load_controller_config
-from robosuite.utils.placement_samplers import UniformRandomSampler
 
 from vla_foundry.data.processor import apply_chat_template
 from vla_foundry.eval.runners.base_eval_runner import BaseEvalRunner
@@ -60,7 +59,7 @@ class RoboSuiteEvalRunner(BaseEvalRunner):
         self.env = suite.make(
             env_name=task_name,
             robots=robot_name,
-            initialization_noise=None,
+            initialization_noise="default",
             has_renderer=render_onscreen,
             has_offscreen_renderer=True,
             use_camera_obs=True,
@@ -70,20 +69,6 @@ class RoboSuiteEvalRunner(BaseEvalRunner):
             controller_configs=controller_config,
             horizon=horizon,
         )
-
-        if task_name == "Lift":
-            placement_initializer = UniformRandomSampler(
-                name="ObjectSampler",
-                mujoco_objects=self.env.cube,
-                x_range=[-0.2, 0.2],
-                y_range=[0.04, 0.2],
-                rotation=0.0,
-                ensure_object_boundary_in_range=False,
-                ensure_valid_placement=True,
-                reference_pos=self.env.table_offset,
-                z_offset=0.01,
-            )
-            self.env.placement_initializer = placement_initializer
 
     def _flip_and_upscale(self, images):
         result = []

@@ -1,0 +1,132 @@
+model:
+  type: diffusion_policy
+  vision_language_backbone:
+    type: clip_backbone
+    hf_pretrained: openai/clip-vit-base-patch32
+    freeze_text_encoder: true
+    freeze_image_encoder: false
+  transformer:
+    type: transformer
+    hidden_dim: 512
+    n_heads: 8
+    n_layers: 12
+    ffn_type: swiglu
+    positional_embedding_type: rotary
+    is_causal: false
+    max_seq_len: 2048
+    norm_type: default_layer_norm
+    attn_name: torch_attn
+  noise_scheduler:
+    num_timesteps: 1000
+    beta_start: 0.0001
+    beta_end: 0.02
+    clamp_range: [-1.5, 1.5]
+  use_flow_matching_scheduler: true
+
+data:
+  type: robotics
+  image_size: 224
+  processor: openai/clip-vit-base-patch32
+  processor_kwargs:
+    size:
+      height: 224
+      width: 224
+  img_num_tokens: 64
+  allow_multiple_epochs: true
+  seq_len: 2048
+  lowdim_past_timesteps: 1
+  lowdim_future_timesteps: 14
+  num_workers: 4
+  prefetch_factor: 2
+  action_dim: 7
+  proprioception_dim: 32
+  dataset_manifest:
+    - /home/anthonyliang/Documents/vla_foundry_ant/data/robosuite_can_full/manifest.jsonl
+  dataset_statistics:
+    - /home/anthonyliang/Documents/vla_foundry_ant/data/robosuite_can_full/stats.json
+  dataset_modality:
+    - robotics
+  dataset_weighting:
+    - 1.0
+  camera_names:
+    - agentview
+    - wrist
+  image_indices:
+    - -1
+    - 0
+  action_fields:
+    - actions
+  proprioception_fields:
+    - state
+  normalization:
+    enabled: true
+    method: min_max
+    scope: global
+    centered_norm: true
+    include_fields:
+      - state
+      - actions
+    field_configs:
+      state:
+        enabled: true
+        method: std
+        scope: global
+      actions:
+        enabled: true
+        method: min_max
+        scope: global
+  augmentation:
+    image:
+      crop:
+        enabled: true
+        shape: [224, 224]
+        mode: center
+  language_instruction_types:
+    - original
+
+distributed:
+  fsdp: true
+
+ema:
+  enabled: true
+
+hparams:
+  precision: amp_bf16
+  loss_function: mse
+  grad_clip_norm: 1.0
+  lr: 1e-4
+  lr_cooldown_end: 1e-5
+  per_gpu_batch_size: 64
+  global_batch_size: 64
+  optimizer: adamw
+  lr_scheduler: cosine
+  warmup: '500'
+  wd: 1e-6
+  seed: 42
+
+# 100k optimizer steps at global batch size 64.
+total_train_samples: 6400000
+num_checkpoints: 60
+max_checkpoint_limit: 6
+save_path: /home/anthonyliang/Documents/vla_foundry_ant/outputs/robosuite_flow_can_full_state_vision_ft_100k
+name: robosuite_flow_can_full_state_vision_ft_100k
+wandb: true
+wandb_entity: tri
+wandb_project_name: vla_foundry_robosuite
+
+intermediate_eval:
+  enabled: true
+  every_n_checkpoints: 1
+  fail_training_on_error: false
+  env: robosuite
+  eval_dir: /home/anthonyliang/Documents/vla_foundry_ant/outputs/robosuite_eval_flow_can_full_state_vision_ft_100k
+  tasks:
+    - PickPlaceCan
+  episodes: 10
+  seed: 1000
+  max_steps: 150
+  num_inference_steps: 10
+  action_window: 8
+  save_videos: true
+  video_episodes: 2
+  video_fps: 20

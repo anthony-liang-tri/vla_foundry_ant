@@ -293,6 +293,14 @@ class DiffusionPolicyParams(ModelParams):
     input_noise_std: float = field(default=0.0)
     diffusion_step_conditioning: Literal["add", "concat"] = field(default="concat")
     num_action_head_repeats: int = field(default=None)
+    action_denoising_mask: Literal["future", "valid", "all"] = field(default="future")
+    flow_matching_target: Literal["noise_minus_data", "data_minus_noise"] = field(default="noise_minus_data")
+    flow_matching_timestep_sampling: Literal["uniform_discrete", "uniform", "beta"] = field(default="uniform_discrete")
+    flow_matching_time_embedding: Literal["discrete", "continuous"] = field(default="discrete")
+    flow_matching_sigma_min: float = field(default=0.0)
+    flow_matching_beta_s: float = field(default=0.999)
+    flow_matching_beta_alpha: float = field(default=1.5)
+    flow_matching_beta_beta: float = field(default=1.0)
 
     # Shared attributes. Overwritten in init_shared_attributes.
     action_dim: int = field(default=None)
