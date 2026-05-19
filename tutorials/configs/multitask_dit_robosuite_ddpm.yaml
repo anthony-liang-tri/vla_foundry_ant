@@ -25,6 +25,12 @@ model:
     clamp_range: null
     clip_sample: true
     clip_sample_range: 1.0
+  dit_architecture: lerobot_adaln
+  dit_timestep_embed_dim: 256
+  dit_dropout: 0.1
+  dit_use_positional_encoding: false
+  dit_use_rope: true
+  dit_rope_base: 10000.0
   use_diffusers_scheduler: true
   use_flow_matching_scheduler: false
   action_denoising_mask: valid

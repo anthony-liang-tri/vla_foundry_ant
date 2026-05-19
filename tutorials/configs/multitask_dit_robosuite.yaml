@@ -21,6 +21,12 @@ model:
     beta_start: 0.0001
     beta_end: 0.02
     clamp_range: [-1.5, 1.5]
+  dit_architecture: lerobot_adaln
+  dit_timestep_embed_dim: 256
+  dit_dropout: 0.1
+  dit_use_positional_encoding: false
+  dit_use_rope: true
+  dit_rope_base: 10000.0
   use_flow_matching_scheduler: true
   action_denoising_mask: valid
   flow_matching_target: data_minus_noise

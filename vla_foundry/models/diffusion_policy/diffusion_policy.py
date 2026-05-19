@@ -1,12 +1,245 @@
+import math
+from contextlib import suppress
+
 import torch
+from torch import nn
 
 from vla_foundry.models.base_model import BaseModel
 from vla_foundry.models.diffusion.noise_scheduler import NoiseScheduler
 from vla_foundry.models.diffusion.unet import SinusoidalPositionEmbeddings
+from vla_foundry.models.fsdp_block import FSDPBlock
 from vla_foundry.models.transformer import Transformer
 from vla_foundry.models.transformer_hf import TransformerHF
 from vla_foundry.models.vision_language_backbones import BaseBackboneWrapper
 from vla_foundry.params.model_params import DiffusionPolicyParams
+
+
+def _modulate(x: torch.Tensor, shift: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
+    return x * (1 + scale) + shift
+
+
+class LeRobotSinusoidalPosEmb(nn.Module):
+    def __init__(self, dim: int):
+        super().__init__()
+        self.dim = dim
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        device = x.device
+        half_dim = self.dim // 2
+        emb = math.log(10000) / (half_dim - 1)
+        emb = torch.exp(torch.arange(half_dim, device=device) * -emb)
+        emb = x[:, None].to(dtype=emb.dtype) * emb[None, :]
+        return torch.cat((emb.sin(), emb.cos()), dim=-1)
+
+
+class LeRobotRotaryPositionalEmbedding(nn.Module):
+    def __init__(self, head_dim: int, max_seq_len: int, base: float = 10000.0):
+        super().__init__()
+        if head_dim % 2 != 0:
+            raise ValueError("head_dim must be even for rotary embeddings")
+        self.head_dim = head_dim
+        self.max_seq_len = max_seq_len
+        self.base = base
+        inv_freq = 1.0 / (base ** (torch.arange(0, head_dim, 2).float() / head_dim))
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self._precompute_cache(max_seq_len)
+
+    def _precompute_cache(self, seq_len: int):
+        t = torch.arange(seq_len, dtype=self.inv_freq.dtype)
+        freqs = torch.outer(t, self.inv_freq)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        self.register_buffer("_cos_cached", emb.cos()[None, None, :, :], persistent=False)
+        self.register_buffer("_sin_cached", emb.sin()[None, None, :, :], persistent=False)
+
+    @staticmethod
+    def _rotate_half(x: torch.Tensor) -> torch.Tensor:
+        x1 = x[..., : x.shape[-1] // 2]
+        x2 = x[..., x.shape[-1] // 2 :]
+        return torch.cat((-x2, x1), dim=-1)
+
+    def forward(self, q: torch.Tensor, k: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        seq_len = q.shape[2]
+        if seq_len > self.max_seq_len:
+            raise ValueError(f"Sequence length {seq_len} exceeds max_seq_len {self.max_seq_len}.")
+        cos = self._cos_cached[:, :, :seq_len, :].to(device=q.device, dtype=q.dtype)
+        sin = self._sin_cached[:, :, :seq_len, :].to(device=q.device, dtype=q.dtype)
+        return (q * cos) + (self._rotate_half(q) * sin), (k * cos) + (self._rotate_half(k) * sin)
+
+
+class LeRobotRoPEAttention(nn.Module):
+    def __init__(
+        self,
+        hidden_size: int,
+        num_heads: int,
+        dropout: float,
+        max_seq_len: int,
+        rope_base: float,
+    ):
+        super().__init__()
+        if hidden_size % num_heads != 0:
+            raise ValueError("hidden_size must be divisible by num_heads")
+        self.hidden_size = hidden_size
+        self.num_heads = num_heads
+        self.head_dim = hidden_size // num_heads
+        self.qkv_proj = nn.Linear(hidden_size, 3 * hidden_size, bias=True)
+        self.out_proj = nn.Linear(hidden_size, hidden_size, bias=True)
+        self.dropout_p = dropout
+        self.rope = LeRobotRotaryPositionalEmbedding(
+            head_dim=self.head_dim,
+            max_seq_len=max_seq_len,
+            base=rope_base,
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        batch_size, seq_len, _ = x.shape
+        qkv = self.qkv_proj(x)
+        qkv = qkv.reshape(batch_size, seq_len, 3, self.num_heads, self.head_dim)
+        qkv = qkv.permute(2, 0, 3, 1, 4)
+        q, k, v = qkv[0], qkv[1], qkv[2]
+        q, k = self.rope(q, k)
+        attn_out = torch.nn.functional.scaled_dot_product_attention(
+            q,
+            k,
+            v,
+            dropout_p=self.dropout_p if self.training else 0.0,
+        )
+        attn_out = attn_out.transpose(1, 2).reshape(batch_size, seq_len, self.hidden_size)
+        return self.out_proj(attn_out)
+
+
+class LeRobotDiTBlock(FSDPBlock):
+    def __init__(
+        self,
+        hidden_size: int,
+        num_heads: int,
+        conditioning_dim: int,
+        dropout: float,
+        use_rope: bool,
+        max_seq_len: int,
+        rope_base: float,
+    ):
+        super().__init__()
+        self.use_rope = use_rope
+        if use_rope:
+            self.attn = LeRobotRoPEAttention(
+                hidden_size=hidden_size,
+                num_heads=num_heads,
+                dropout=dropout,
+                max_seq_len=max_seq_len,
+                rope_base=rope_base,
+            )
+        else:
+            self.attn = nn.MultiheadAttention(
+                hidden_size,
+                num_heads=num_heads,
+                batch_first=True,
+                dropout=dropout,
+            )
+        self.norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
+        self.norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
+        self.mlp = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size * 4),
+            nn.GELU(approximate="tanh"),
+            nn.Linear(hidden_size * 4, hidden_size),
+        )
+        self.adaLN_modulation = nn.Sequential(
+            nn.SiLU(),
+            nn.Linear(conditioning_dim, 6 * hidden_size, bias=True),
+        )
+        nn.init.constant_(self.adaLN_modulation[-1].weight, 0)
+        nn.init.constant_(self.adaLN_modulation[-1].bias, 0)
+
+    def forward(self, x: torch.Tensor, conditioning: torch.Tensor) -> torch.Tensor:
+        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(
+            conditioning
+        ).chunk(6, dim=1)
+        attn_input = _modulate(self.norm1(x), shift_msa.unsqueeze(1), scale_msa.unsqueeze(1))
+        if self.use_rope:
+            attn_out = self.attn(attn_input)
+        else:
+            attn_out, _ = self.attn(attn_input, attn_input, attn_input)
+        x = x + gate_msa.unsqueeze(1) * attn_out
+        mlp_input = _modulate(self.norm2(x), shift_mlp.unsqueeze(1), scale_mlp.unsqueeze(1))
+        x = x + gate_mlp.unsqueeze(1) * self.mlp(mlp_input)
+        return x
+
+
+class LeRobotDiT(nn.Module):
+    def __init__(
+        self,
+        action_dim: int,
+        horizon: int,
+        conditioning_dim: int,
+        hidden_size: int,
+        num_layers: int,
+        num_heads: int,
+        dropout: float,
+        timestep_embed_dim: int,
+        use_rope: bool,
+        use_positional_encoding: bool,
+        rope_base: float,
+    ):
+        super().__init__()
+        self.action_dim = action_dim
+        self.horizon = horizon
+        self.hidden_size = hidden_size
+        self.grad_checkpointing = False
+        self.time_mlp = nn.Sequential(
+            LeRobotSinusoidalPosEmb(timestep_embed_dim),
+            nn.Linear(timestep_embed_dim, 2 * timestep_embed_dim),
+            nn.GELU(),
+            nn.Linear(2 * timestep_embed_dim, timestep_embed_dim),
+            nn.GELU(),
+        )
+        block_conditioning_dim = timestep_embed_dim + conditioning_dim
+        self.input_proj = nn.Linear(action_dim, hidden_size)
+        self.pos_embedding = (
+            nn.Parameter(torch.empty(1, horizon, hidden_size).normal_(std=0.02))
+            if use_positional_encoding
+            else None
+        )
+        self.blocks = nn.ModuleList(
+            [
+                LeRobotDiTBlock(
+                    hidden_size=hidden_size,
+                    num_heads=num_heads,
+                    conditioning_dim=block_conditioning_dim,
+                    dropout=dropout,
+                    use_rope=use_rope,
+                    max_seq_len=horizon,
+                    rope_base=rope_base,
+                )
+                for _ in range(num_layers)
+            ]
+        )
+        self.output_proj = nn.Linear(hidden_size, action_dim)
+
+    def set_grad_checkpointing(self, enable: bool = True):
+        self.grad_checkpointing = enable
+
+    def forward(
+        self,
+        actions: torch.Tensor,
+        timesteps: torch.Tensor,
+        conditioning_vec: torch.Tensor,
+    ) -> torch.Tensor:
+        seq_len = actions.shape[1]
+        timestep_features = self.time_mlp(timesteps)
+        conditioning = torch.cat([timestep_features, conditioning_vec], dim=-1)
+        hidden_seq = self.input_proj(actions)
+        if self.pos_embedding is not None:
+            hidden_seq = hidden_seq + self.pos_embedding[:, :seq_len, :]
+        for block in self.blocks:
+            if self.grad_checkpointing:
+                hidden_seq = torch.utils.checkpoint.checkpoint(
+                    block,
+                    hidden_seq,
+                    conditioning,
+                    use_reentrant=False,
+                )
+            else:
+                hidden_seq = block(hidden_seq, conditioning)
+        return self.output_proj(hidden_seq)
 
 
 class DiffusionPolicy(BaseModel):
@@ -14,7 +247,7 @@ class DiffusionPolicy(BaseModel):
         self,
         model_params: DiffusionPolicyParams,
         vision_language_backbone: BaseBackboneWrapper,
-        transformer: Transformer | TransformerHF,
+        transformer: Transformer | TransformerHF | None,
         noise_scheduler: NoiseScheduler,
     ):
         super().__init__(model_params)
@@ -22,16 +255,47 @@ class DiffusionPolicy(BaseModel):
         self.transformer = transformer
         self.scheduler = noise_scheduler
         self.proprioception_dim = model_params.proprioception_dim
+        self.dit_architecture = model_params.dit_architecture
 
         backbone_dim = vision_language_backbone.get_conditioning_embeddings_dim()
         self.time_encoding = torch.nn.Embedding(noise_scheduler.num_timesteps, backbone_dim)
         self.sinusoidal_position_embeddings = SinusoidalPositionEmbeddings(backbone_dim)
-        self.output_layer = torch.nn.Linear(transformer.hidden_dim, model_params.action_dim)
-        self.action_encode = torch.nn.Linear(model_params.action_dim, transformer.hidden_dim)
-        self.condition_encode = torch.nn.Linear(backbone_dim, transformer.hidden_dim)
-        self.proprioception_encode = (
-            torch.nn.Linear(self.proprioception_dim, transformer.hidden_dim) if self.proprioception_dim > 0 else None
-        )
+        if self.dit_architecture == "lerobot_adaln":
+            if model_params.action_horizon is None:
+                raise ValueError("model_params.action_horizon must be set for lerobot_adaln DiT.")
+            conditioning_dim = backbone_dim * model_params.conditioning_num_tokens
+            conditioning_dim += self.proprioception_dim * model_params.proprioception_steps
+            self.dit = LeRobotDiT(
+                action_dim=model_params.action_dim,
+                horizon=model_params.action_horizon,
+                conditioning_dim=conditioning_dim,
+                hidden_size=model_params.transformer.hidden_dim,
+                num_layers=model_params.transformer.n_layers,
+                num_heads=model_params.transformer.n_heads,
+                dropout=model_params.dit_dropout,
+                timestep_embed_dim=model_params.dit_timestep_embed_dim,
+                use_rope=model_params.dit_use_rope,
+                use_positional_encoding=model_params.dit_use_positional_encoding,
+                rope_base=model_params.dit_rope_base,
+            )
+            self.output_layer = None
+            self.action_encode = None
+            self.condition_encode = None
+            self.proprioception_encode = None
+        elif self.dit_architecture == "token_concat":
+            if transformer is None:
+                raise ValueError("token_concat DiT requires a transformer module.")
+            self.dit = None
+            self.output_layer = torch.nn.Linear(transformer.hidden_dim, model_params.action_dim)
+            self.action_encode = torch.nn.Linear(model_params.action_dim, transformer.hidden_dim)
+            self.condition_encode = torch.nn.Linear(backbone_dim, transformer.hidden_dim)
+            self.proprioception_encode = (
+                torch.nn.Linear(self.proprioception_dim, transformer.hidden_dim)
+                if self.proprioception_dim > 0
+                else None
+            )
+        else:
+            raise ValueError(f"Unknown dit_architecture: {self.dit_architecture}")
 
         self.diffusion_step_conditioning = model_params.diffusion_step_conditioning
         self.input_noise_std = model_params.input_noise_std
@@ -64,10 +328,37 @@ class DiffusionPolicy(BaseModel):
         with torch.no_grad():
             self.time_encoding.weight.copy_(self.sinusoidal_position_embeddings.forward(timesteps))
 
+        if self.output_layer is None:
+            return
+
         # Initialize output layer weights with Xavier initialization
         torch.nn.init.xavier_uniform_(self.output_layer.weight)
         if self.proprioception_encode is not None:
             torch.nn.init.xavier_uniform_(self.proprioception_encode.weight)
+
+    @torch.jit.ignore
+    def set_grad_checkpointing(self, enable=True):
+        if self.transformer is not None and hasattr(self.transformer, "set_grad_checkpointing"):
+            self.transformer.set_grad_checkpointing(enable)
+        if self.dit is not None:
+            self.dit.set_grad_checkpointing(enable)
+        if hasattr(self.vision_language_backbone, "set_grad_checkpointing"):
+            with suppress(NotImplementedError):
+                self.vision_language_backbone.set_grad_checkpointing(enable)
+
+    def get_fsdp_block_types(self):
+        backbone_model = getattr(self.vision_language_backbone, "_model", None)
+        if backbone_model is not None and hasattr(backbone_model, "get_fsdp_block_types"):
+            return backbone_model.get_fsdp_block_types()
+        return None
+
+    def _build_lerobot_conditioning(self, backbone_embeddings, proprioception=None):
+        conditioning_parts = [backbone_embeddings.flatten(start_dim=1)]
+        if self.proprioception_dim > 0:
+            if proprioception is None:
+                raise ValueError("lerobot_adaln DiT requires proprioception because proprioception_dim > 0.")
+            conditioning_parts.append(proprioception.flatten(start_dim=1))
+        return torch.cat(conditioning_parts, dim=-1)
 
     def _sample_timesteps(self, batch_size, device):
         if not self.use_flow_matching_scheduler or self.flow_matching_timestep_sampling == "uniform_discrete":
@@ -191,7 +482,6 @@ class DiffusionPolicy(BaseModel):
         noisy_action = self._add_noise(actions, noise, timesteps, tau, denoise_mask)
         if self.input_noise_std > 0:
             noisy_action = noisy_action + torch.randn_like(noisy_action) * self.input_noise_std
-        noisy_action = self.action_encode(noisy_action)
 
         # Get backbone embeddings (handles text+image concatenation)
         backbone_output = self.vision_language_backbone.get_action_conditioning(
@@ -223,6 +513,12 @@ class DiffusionPolicy(BaseModel):
                 )
             # Tile backbone embeddings to match the action batch size [B*N]
             backbone_embeddings = backbone_embeddings.repeat_interleave(num_repeats, dim=0)
+
+        if self.dit_architecture == "lerobot_adaln":
+            conditioning_vec = self._build_lerobot_conditioning(backbone_embeddings, proprioception)
+            return self.dit(noisy_action, timesteps, conditioning_vec)
+
+        noisy_action = self.action_encode(noisy_action)
 
         # Time embeddings (batch, 1, backbone_dim) — batch is [B*N] when repeating, else [B]
         time_embeddings = self._time_embeddings(timesteps)
@@ -337,6 +633,13 @@ class DiffusionPolicy(BaseModel):
         if self.proprioception_encode is not None and proprioception is not None:
             proprio_embeddings = self.proprioception_encode(proprioception)
 
+        lerobot_conditioning_vec = None
+        if self.dit_architecture == "lerobot_adaln":
+            lerobot_conditioning_vec = self._build_lerobot_conditioning(
+                backbone_output.embeddings,
+                proprioception,
+            )
+
         if self.use_flow_matching_scheduler and self.flow_matching_target == "data_minus_noise":
             if use_guidance:
                 raise ValueError("Pi-GDM guidance is not implemented for data_minus_noise flow matching.")
@@ -348,24 +651,27 @@ class DiffusionPolicy(BaseModel):
                 else:
                     discrete_t = round(tau * (self.scheduler.num_timesteps - 1))
                     timesteps = torch.full((batch_size,), discrete_t, device=device, dtype=torch.long)
-                time_embeddings = self._time_embeddings(timesteps)
+                if self.dit_architecture == "lerobot_adaln":
+                    predicted_direction = self.dit(actions, timesteps, lerobot_conditioning_vec)
+                else:
+                    time_embeddings = self._time_embeddings(timesteps)
 
-                action_encoding = self.action_encode(actions)
-                transformer_input = self._build_transformer_input(
-                    backbone_embeddings=backbone_output.embeddings,
-                    time_embeddings=time_embeddings,
-                    noisy_action=action_encoding,
-                    proprio_embeddings=proprio_embeddings,
-                )
-                transformer_output = self.transformer(
-                    inputs_embeds=transformer_input,
-                    output_hidden_states=True,
-                    use_cache=False,
-                )
-                action_seq_len = actions.shape[1]
-                predicted_direction = self.output_layer(
-                    transformer_output.hidden_states[-1][:, -action_seq_len:, :]
-                )
+                    action_encoding = self.action_encode(actions)
+                    transformer_input = self._build_transformer_input(
+                        backbone_embeddings=backbone_output.embeddings,
+                        time_embeddings=time_embeddings,
+                        noisy_action=action_encoding,
+                        proprio_embeddings=proprio_embeddings,
+                    )
+                    transformer_output = self.transformer(
+                        inputs_embeds=transformer_input,
+                        output_hidden_states=True,
+                        use_cache=False,
+                    )
+                    action_seq_len = actions.shape[1]
+                    predicted_direction = self.output_layer(
+                        transformer_output.hidden_states[-1][:, -action_seq_len:, :]
+                    )
                 predicted_actions = actions + predicted_direction * dt
                 clamp_range = getattr(self.scheduler, "clamp_range", None)
                 if clamp_range is not None:
@@ -394,29 +700,32 @@ class DiffusionPolicy(BaseModel):
             step_int = int(step.item()) if isinstance(step, torch.Tensor) else int(step)
             # Create timesteps for current step
             timesteps = torch.full((batch_size,), step_int, device=device, dtype=torch.long)
-            time_embeddings = self._time_embeddings(timesteps)
+            if self.dit_architecture == "lerobot_adaln":
+                predicted_direction = self.dit(actions, timesteps, lerobot_conditioning_vec)
+            else:
+                time_embeddings = self._time_embeddings(timesteps)
 
-            # Encode current actions
-            action_encoding = self.action_encode(actions)
+                # Encode current actions
+                action_encoding = self.action_encode(actions)
 
-            # Build transformer input using time conditioning strategy
-            transformer_input = self._build_transformer_input(
-                backbone_embeddings=backbone_output.embeddings,
-                time_embeddings=time_embeddings,
-                noisy_action=action_encoding,
-                proprio_embeddings=proprio_embeddings,
-            )
+                # Build transformer input using time conditioning strategy
+                transformer_input = self._build_transformer_input(
+                    backbone_embeddings=backbone_output.embeddings,
+                    time_embeddings=time_embeddings,
+                    noisy_action=action_encoding,
+                    proprio_embeddings=proprio_embeddings,
+                )
 
-            # Pass through transformer
-            transformer_output = self.transformer(
-                inputs_embeds=transformer_input,
-                output_hidden_states=True,
-                use_cache=False,
-            )
+                # Pass through transformer
+                transformer_output = self.transformer(
+                    inputs_embeds=transformer_input,
+                    output_hidden_states=True,
+                    use_cache=False,
+                )
 
-            # Extract predicted direction to denoise the action
-            action_seq_len = actions.shape[1]
-            predicted_direction = self.output_layer(transformer_output.hidden_states[-1][:, -action_seq_len:, :])
+                # Extract predicted direction to denoise the action
+                action_seq_len = actions.shape[1]
+                predicted_direction = self.output_layer(transformer_output.hidden_states[-1][:, -action_seq_len:, :])
 
             # Pi-GDM guidance (replace approximation, J ≈ I).
             # Weight = min(β, raw_weight) with β = guidance_scale (fixed).

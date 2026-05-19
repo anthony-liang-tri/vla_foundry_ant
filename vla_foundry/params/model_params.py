@@ -290,6 +290,12 @@ class DiffusionPolicyParams(ModelParams):
 
     use_diffusers_scheduler: bool = field(default=False)
     use_flow_matching_scheduler: bool = field(default=False)
+    dit_architecture: Literal["token_concat", "lerobot_adaln"] = field(default="token_concat")
+    dit_timestep_embed_dim: int = field(default=256)
+    dit_dropout: float = field(default=0.0)
+    dit_use_positional_encoding: bool = field(default=False)
+    dit_use_rope: bool = field(default=True)
+    dit_rope_base: float = field(default=10000.0)
     input_noise_std: float = field(default=0.0)
     diffusion_step_conditioning: Literal["add", "concat"] = field(default="concat")
     num_action_head_repeats: int = field(default=None)
@@ -305,11 +311,36 @@ class DiffusionPolicyParams(ModelParams):
     # Shared attributes. Overwritten in init_shared_attributes.
     action_dim: int = field(default=None)
     proprioception_dim: int = field(default=0)
+    action_horizon: int = field(default=None)
+    conditioning_num_tokens: int = field(default=None)
+    proprioception_steps: int = field(default=0)
 
     def init_shared_attributes(self, cfg):
         super().init_shared_attributes(cfg)
         object.__setattr__(self, "action_dim", cfg.data.action_dim)
         object.__setattr__(self, "proprioception_dim", cfg.data.proprioception_dim or 0)
+        object.__setattr__(
+            self,
+            "action_horizon",
+            cfg.data.lowdim_past_timesteps + 1 + cfg.data.lowdim_future_timesteps,
+        )
+        num_images = len(cfg.data.camera_names or []) * len(cfg.data.image_indices or [])
+        backbone_type = getattr(self.vision_language_backbone, "type", None)
+        if backbone_type == "clip_backbone":
+            disable_text = getattr(self.vision_language_backbone, "disable_text", False)
+            conditioning_num_tokens = num_images + (0 if disable_text else 1)
+        elif backbone_type == "vit_backbone":
+            patches_per_side = self.vision_language_backbone.img_size // self.vision_language_backbone.patch_size
+            conditioning_num_tokens = num_images * patches_per_side * patches_per_side
+        else:
+            # VLM backbones expose a single action-conditioning embedding.
+            conditioning_num_tokens = 1
+        object.__setattr__(self, "conditioning_num_tokens", conditioning_num_tokens)
+        object.__setattr__(
+            self,
+            "proprioception_steps",
+            (cfg.data.lowdim_past_timesteps + 1) if (cfg.data.proprioception_dim or 0) > 0 else 0,
+        )
 
 
 @register_model_params("dp3_encoder")
