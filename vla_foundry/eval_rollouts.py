@@ -164,6 +164,9 @@ def flatten_eval_rollouts_metrics(results: dict[str, Any]) -> dict[str, float | 
         success_rate = metrics.get("success_rate")
         if isinstance(success_rate, (int, float)):
             flat[f"eval_rollouts/{task}/success_rate"] = success_rate
+        mean_max_coverage = metrics.get("mean_max_coverage")
+        if isinstance(mean_max_coverage, (int, float)):
+            flat[f"eval_rollouts/{task}/mean_max_coverage"] = mean_max_coverage
     return flat
 
 
