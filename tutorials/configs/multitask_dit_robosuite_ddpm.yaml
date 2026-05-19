@@ -146,7 +146,7 @@ eval_rollouts:
     - NutAssemblySquare
   episodes: 10
   seed: 1000
-  max_steps: 150
+  max_steps: 300
   num_inference_steps: 100
   action_window: 24
   save_videos: true

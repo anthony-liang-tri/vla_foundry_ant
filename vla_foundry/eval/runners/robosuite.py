@@ -68,6 +68,7 @@ class RoboSuiteEvalRunner(BaseEvalRunner):
             camera_widths=self.render_width,
             controller_configs=controller_config,
             horizon=horizon,
+            ignore_done=True,
         )
 
     def _flip_and_upscale(self, images):
@@ -220,17 +221,22 @@ class RoboSuiteEvalRunner(BaseEvalRunner):
     def get_current_images(self):
         return self._flip_and_upscale([self.obs[image_name] for image_name in self.image_names])
 
+    def _check_success_bool(self):
+        success = self.env._check_success()
+        if isinstance(success, dict):
+            success = success.get("task", False)
+        return bool(success)
+
     def env_reset(self, seed=None):
         if seed is not None:
             np.random.seed(seed)
             torch.manual_seed(seed)
             if hasattr(self.env, "seed"):
                 self.env.seed(seed)
-        self.env.reset()
-        obs, reward, done, _ = self.env.step([0.0] * len(self.env.action_spec[0]))
+        obs = self.env.reset()
         self.obs = obs
-        self.success = reward > 0.5
-        self.done = done
+        self.success = self._check_success_bool()
+        self.done = False
         self.past_images = None
         self.past_actions = None
         self.past_states = None
@@ -240,9 +246,9 @@ class RoboSuiteEvalRunner(BaseEvalRunner):
     def env_step(self, action):
         if self._uses_state_proprioception():
             self._update_state_buffer(self._state_from_obs(self.obs))
-        obs, reward, done, _ = self.env.step(action)
+        obs, _reward, done, _ = self.env.step(action)
         self.obs = obs
-        self.success = reward > 0.5
+        self.success = self._check_success_bool()
         self.done = done
         if self.render_onscreen:
             self.env.render()
