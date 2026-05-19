@@ -43,6 +43,9 @@ def parse_args():
     parser.add_argument("--video-fps", type=int, default=20)
     parser.add_argument("--video-grid-rows", type=int, default=0)
     parser.add_argument("--video-grid-cols", type=int, default=0)
+    parser.add_argument("--robosuite-path", type=str, default=None)
+    parser.add_argument("--robosuite-env-args-dir", type=str, default=None)
+    parser.add_argument("--robosuite-env-args-paths", type=str, nargs="*", default=None)
     parser.add_argument("--result-json", type=str, required=True)
     return parser.parse_args()
 
@@ -127,11 +130,17 @@ def main():
     eval_dir = args.eval_dir
     os.makedirs(eval_dir, exist_ok=True)
 
+    if args.robosuite_path:
+        os.environ["VLAF_ROBOSUITE_EVAL_PATH"] = args.robosuite_path
+
     from types import SimpleNamespace
     eval_params = SimpleNamespace(
         image_names=None,
         model_path=experiment_path,
         env=args.env,
+        robosuite_path=args.robosuite_path,
+        robosuite_env_args_dir=args.robosuite_env_args_dir,
+        robosuite_env_args_paths=args.robosuite_env_args_paths or [],
     )
     eval_runner = get_eval_runner(eval_params)
 

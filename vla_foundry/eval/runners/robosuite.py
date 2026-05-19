@@ -1,12 +1,26 @@
-"""
-Need to first install the RoboSuite repo and set up the environment variables to run this.
-See https://github.com/robosuite/robosuite for more details.
-"""
+"""RoboSuite rollout runner."""
+
+# ruff: noqa: E402
+
+import collections
+import collections.abc
+import json
+import os
+import sys
 
 import numpy as np
-import robosuite as suite
 import torch
 from PIL import Image, ImageDraw
+
+_ROBOSUITE_EVAL_PATH = os.getenv("VLAF_ROBOSUITE_EVAL_PATH")
+if _ROBOSUITE_EVAL_PATH:
+    sys.path.insert(0, _ROBOSUITE_EVAL_PATH)
+
+for _collections_name in ("Iterable", "Mapping", "MutableMapping", "Sequence", "MutableSequence"):
+    if not hasattr(collections, _collections_name):
+        setattr(collections, _collections_name, getattr(collections.abc, _collections_name))
+
+import robosuite as suite
 from robosuite.controllers import load_controller_config
 
 from vla_foundry.data.processor import apply_chat_template
@@ -20,12 +34,22 @@ TASK_INSTRUCTIONS = {
     "NutAssemblySquare": "pick up the square nut and place it on the square peg",
 }
 
+TASK_ENV_ARGS_FILENAMES = {
+    "Lift": "lift_image.hdf5",
+    "PickPlaceCan": "can_image.hdf5",
+    "NutAssemblySquare": "square_image.hdf5",
+}
+
 
 class RoboSuiteEvalRunner(BaseEvalRunner):
     def __init__(self, eval_params):
         super().__init__(eval_params)
         self.render_onscreen = False
         self.success = False
+        self.robosuite_env_args_by_task = self._load_env_args_by_task(
+            getattr(eval_params, "robosuite_env_args_paths", None),
+            getattr(eval_params, "robosuite_env_args_dir", None),
+        )
         if eval_params.image_names is None or not eval_params.image_names:
             self.image_names = ["agentview_image", "robot0_eye_in_hand_image"]
         else:
@@ -42,20 +66,60 @@ class RoboSuiteEvalRunner(BaseEvalRunner):
             "robot0_joint_vel",
         ]
 
+    def _load_env_args_by_task(self, paths, env_args_dir=None):
+        paths = list(paths or [])
+        env_args_dir = env_args_dir or os.getenv("VLAF_ROBOSUITE_ENV_ARGS_DIR")
+        if env_args_dir:
+            for filename in TASK_ENV_ARGS_FILENAMES.values():
+                path = os.path.join(env_args_dir, filename)
+                if not os.path.exists(path):
+                    raise FileNotFoundError(f"RoboSuite env_args file not found: {path}")
+                paths.append(path)
+
+        env_paths = os.getenv("VLAF_ROBOSUITE_ENV_ARGS_PATHS")
+        if env_paths:
+            paths.extend([path for path in env_paths.split(os.pathsep) if path])
+
+        by_task = {}
+        for path in paths:
+            import h5py
+
+            with h5py.File(path, "r") as f:
+                raw_env_args = f["data"].attrs.get("env_args")
+            if raw_env_args is None:
+                raise KeyError(f"RoboSuite dataset file is missing data.attrs['env_args']: {path}")
+            if isinstance(raw_env_args, bytes):
+                raw_env_args = raw_env_args.decode("utf-8")
+            env_args = json.loads(raw_env_args)
+            env_name = env_args.get("env_name")
+            if not env_name:
+                raise ValueError(f"RoboSuite env_args in {path} does not include env_name")
+            by_task[env_name] = env_args
+        return by_task
+
     def load_env(self, env_name, task_name, robot_name="Panda", horizon=150, render_onscreen=False):
         self.render_onscreen = render_onscreen
         assert task_name in SUPPORTED_TASKS, f"Task {task_name} not supported."
         self.instruction = TASK_INSTRUCTIONS[task_name]
 
-        # Load the desired controller
-        controller_config = load_controller_config(default_controller="OSC_POSE")
-
         # Render at 84x84 to match training data (originally robomimic 84x84, upscaled to 256x256).
+        self.upscale_size = (256, 256)
+        dataset_env_args = self.robosuite_env_args_by_task.get(task_name)
+        if dataset_env_args is not None:
+            env_kwargs = dict(dataset_env_args.get("env_kwargs", {}))
+            self.render_height = int(env_kwargs.get("camera_heights", 84))
+            self.render_width = int(env_kwargs.get("camera_widths", 84))
+            env_kwargs["has_renderer"] = render_onscreen
+            env_kwargs["has_offscreen_renderer"] = True
+            env_kwargs["use_camera_obs"] = True
+            env_kwargs["horizon"] = horizon
+            env_kwargs["ignore_done"] = True
+            self.env = suite.make(env_name=dataset_env_args.get("env_name", task_name), **env_kwargs)
+            return
+
         self.render_height = 84
         self.render_width = 84
-        self.upscale_size = (256, 256)
-
-        # Create the environment instance.
+        controller_config = load_controller_config(default_controller="OSC_POSE")
         self.env = suite.make(
             env_name=task_name,
             robots=robot_name,

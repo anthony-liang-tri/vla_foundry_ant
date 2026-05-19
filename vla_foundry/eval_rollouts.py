@@ -77,6 +77,12 @@ def run_eval_rollouts(cfg, experiment_path: str, checkpoint_num: int, global_ste
 
     if eval_cfg.num_inference_steps is not None:
         cmd.extend(["--num-inference-steps", str(eval_cfg.num_inference_steps)])
+    if getattr(eval_cfg, "robosuite_path", None):
+        cmd.extend(["--robosuite-path", eval_cfg.robosuite_path])
+    if getattr(eval_cfg, "robosuite_env_args_dir", None):
+        cmd.extend(["--robosuite-env-args-dir", eval_cfg.robosuite_env_args_dir])
+    if getattr(eval_cfg, "robosuite_env_args_paths", None):
+        cmd.extend(["--robosuite-env-args-paths", *eval_cfg.robosuite_env_args_paths])
     if eval_cfg.save_videos:
         cmd.extend(
             [
@@ -95,6 +101,10 @@ def run_eval_rollouts(cfg, experiment_path: str, checkpoint_num: int, global_ste
     env = os.environ.copy()
     env["MUJOCO_GL"] = "egl"
     env["TOKENIZERS_PARALLELISM"] = "false"
+    if getattr(eval_cfg, "robosuite_path", None):
+        env["VLAF_ROBOSUITE_EVAL_PATH"] = eval_cfg.robosuite_path
+    if getattr(eval_cfg, "robosuite_env_args_dir", None):
+        env["VLAF_ROBOSUITE_ENV_ARGS_DIR"] = eval_cfg.robosuite_env_args_dir
 
     logging.info("[EVAL_ROLLOUTS] checkpoint=%s step=%s cmd=%s", checkpoint_num, global_step, " ".join(cmd))
     try:

@@ -37,6 +37,9 @@ class EvalRolloutsParams(BaseParams):
     video_fps: int = field(default=20)
     video_grid_rows: int | None = field(default=None)
     video_grid_cols: int | None = field(default=None)
+    robosuite_path: str | None = field(default=None)
+    robosuite_env_args_dir: str | None = field(default=None)
+    robosuite_env_args_paths: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
