@@ -100,7 +100,7 @@ data:
       crop:
         enabled: true
         shape: [224, 224]
-        mode: random
+        mode: center
   language_instruction_types:
     - original
 
