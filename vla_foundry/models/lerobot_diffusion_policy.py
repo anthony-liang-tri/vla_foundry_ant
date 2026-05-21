@@ -22,6 +22,7 @@ from diffusers.schedulers.scheduling_ddim import DDIMScheduler
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 from torch import Tensor, nn
 
+from vla_foundry.data.robotics.utils import merge_statistics
 from vla_foundry.models.base_model import BaseModel
 from vla_foundry.models.fsdp_block import FSDPBlock
 from vla_foundry.models.registry import register_model
@@ -43,15 +44,43 @@ _PUSHT_FALLBACK_STATS = {
 }
 
 
-def _load_lerobot_stats(stats_path: str | None) -> dict:
-    if stats_path and os.path.exists(stats_path):
-        with open(stats_path) as f:
-            return json.load(f)
+def _load_lerobot_stats(config: LeRobotDiffusionPolicyParams) -> dict:
+    stats_paths = list(config.stats_paths or [])
+    if not stats_paths and config.stats_path:
+        stats_paths = [config.stats_path]
+    stats = []
+    for stats_path in stats_paths:
+        if stats_path and os.path.exists(stats_path):
+            with open(stats_path) as f:
+                stats.append(json.load(f))
+    if len(stats) > 1:
+        return merge_statistics(stats)
+    if len(stats) == 1:
+        return stats[0]
     return _PUSHT_FALLBACK_STATS
 
 
 def _as_float_tensor(stats: dict, key: str, stat_name: str) -> torch.Tensor:
     return torch.as_tensor(stats[key][stat_name], dtype=torch.float32)
+
+
+def _as_image_stat_tensor(
+    stats: dict,
+    stats_key: str | None,
+    stat_name: str,
+    configured_value: list[float] | None,
+) -> torch.Tensor:
+    if configured_value is not None:
+        tensor = torch.as_tensor(configured_value, dtype=torch.float32)
+    elif stats_key is not None and stats_key in stats:
+        tensor = _as_float_tensor(stats, stats_key, stat_name)
+    else:
+        raise KeyError(
+            f"Missing image {stat_name}. Provide model.image_{stat_name} or a stats key containing image statistics."
+        )
+    if tensor.ndim == 1:
+        tensor = tensor.view(-1, 1, 1)
+    return tensor
 
 
 def _make_noise_scheduler(name: str, **kwargs) -> DDPMScheduler | DDIMScheduler:
@@ -562,13 +591,19 @@ class LeRobotDiffusionPolicy(BaseModel):
         if model_params.horizon % (2 ** len(model_params.down_dims)) != 0:
             raise ValueError("horizon must be divisible by the U-Net downsampling factor.")
 
-        stats = _load_lerobot_stats(model_params.stats_path)
-        self.register_buffer("image_mean", _as_float_tensor(stats, "observation.image", "mean"))
-        self.register_buffer("image_std", _as_float_tensor(stats, "observation.image", "std"))
-        self.register_buffer("state_min", _as_float_tensor(stats, "observation.state", "min"))
-        self.register_buffer("state_max", _as_float_tensor(stats, "observation.state", "max"))
-        self.register_buffer("action_min", _as_float_tensor(stats, "action", "min"))
-        self.register_buffer("action_max", _as_float_tensor(stats, "action", "max"))
+        stats = _load_lerobot_stats(model_params)
+        self.register_buffer(
+            "image_mean",
+            _as_image_stat_tensor(stats, model_params.image_stats_key, "mean", model_params.image_mean),
+        )
+        self.register_buffer(
+            "image_std",
+            _as_image_stat_tensor(stats, model_params.image_stats_key, "std", model_params.image_std),
+        )
+        self.register_buffer("state_min", _as_float_tensor(stats, model_params.state_stats_key, "min"))
+        self.register_buffer("state_max", _as_float_tensor(stats, model_params.state_stats_key, "max"))
+        self.register_buffer("action_min", _as_float_tensor(stats, model_params.action_stats_key, "min"))
+        self.register_buffer("action_max", _as_float_tensor(stats, model_params.action_stats_key, "max"))
 
         self.diffusion = LeRobotDiffusionModel(model_params)
 

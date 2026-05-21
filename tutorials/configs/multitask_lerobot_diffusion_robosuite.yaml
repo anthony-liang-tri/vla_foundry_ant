@@ -1,0 +1,130 @@
+model:
+  type: lerobot_diffusion_policy
+  horizon: 32
+  n_obs_steps: 2
+  n_action_steps: 24
+  crop_shape: [224, 224]
+  crop_is_random: false
+  objective: diffusion
+  noise_scheduler_type: DDPM
+  num_train_timesteps: 100
+  beta_schedule: squaredcos_cap_v2
+  prediction_type: epsilon
+  clip_sample: true
+  clip_sample_range: 1.0
+  stats_path: null
+  stats_paths:
+    - data/robosuite_lift_full_horizon32/shards/stats.json
+    - data/robosuite_can_full_horizon32/shards/stats.json
+    - data/robosuite_square_full_horizon32/shards/stats.json
+  image_stats_key: null
+  state_stats_key: state
+  action_stats_key: actions
+  image_mean: [0.8016360391577085, 0.7890529220998287, 0.7727656431992849]
+  image_std: [0.2597690335347617, 0.27373382687762693, 0.27242036917249435]
+
+data:
+  type: robotics
+  image_size: 224
+  processor: none
+  img_num_tokens: 64
+  allow_multiple_epochs: true
+  seq_len: 2048
+  lowdim_past_timesteps: 1
+  lowdim_future_timesteps: 30
+  num_workers: 4
+  prefetch_factor: 2
+  action_dim: 7
+  proprioception_dim: 32
+  dataset_manifest:
+    - data/robosuite_lift_full_horizon32/shards/manifest.jsonl
+    - data/robosuite_can_full_horizon32/shards/manifest.jsonl
+    - data/robosuite_square_full_horizon32/shards/manifest.jsonl
+  dataset_statistics:
+    - data/robosuite_lift_full_horizon32/shards/stats.json
+    - data/robosuite_can_full_horizon32/shards/stats.json
+    - data/robosuite_square_full_horizon32/shards/stats.json
+  dataset_modality:
+    - robotics
+    - robotics
+    - robotics
+  dataset_weighting:
+    - 1.0
+    - 1.0
+    - 1.0
+  camera_names:
+    - observation.images.agentview
+    - observation.images.wrist
+  image_indices:
+    - -1
+    - 0
+  action_fields:
+    - actions
+  proprioception_fields:
+    - state
+  normalization:
+    enabled: false
+  augmentation:
+    image:
+      crop:
+        enabled: true
+        shape: [224, 224]
+        mode: center
+  language_instruction_types:
+    - original
+
+distributed:
+  fsdp: false
+
+ema:
+  enabled: false
+
+hparams:
+  precision: fp32
+  loss_function: mse
+  grad_clip_norm: 10.0
+  lr: 1e-4
+  lr_cooldown_end: 0.0
+  force_min_lr: 0.0
+  per_gpu_batch_size: 64
+  global_batch_size: 64
+  optimizer: adam
+  lr_scheduler: cosine
+  warmup: "500"
+  wd: 1e-6
+  beta1: 0.95
+  beta2: 0.999
+  eps: 1e-8
+  seed: 42
+
+total_train_samples: 6400000
+num_checkpoints: 60
+max_checkpoint_limit: 6
+save_path: outputs/multitask_lerobot_diffusion_robosuite
+name: multitask_lerobot_diffusion_robosuite
+wandb: true
+wandb_entity: tri
+wandb_project_name: vla_foundry_robosuite
+db_logging: false
+log_every_n_steps: 200
+
+eval_rollouts:
+  enabled: true
+  every_n_checkpoints: 1
+  fail_training_on_error: false
+  env: robosuite
+  eval_dir: outputs/eval_rollouts/multitask_lerobot_diffusion_robosuite
+  tasks:
+    - Lift
+    - PickPlaceCan
+    - NutAssemblySquare
+  episodes: 10
+  seed: 1000
+  max_steps: 300
+  num_inference_steps: 100
+  action_window: 24
+  save_videos: true
+  video_episodes: 4
+  video_grid_rows: 2
+  video_grid_cols: 2
+  video_fps: 20

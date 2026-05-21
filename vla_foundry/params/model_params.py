@@ -387,6 +387,12 @@ class LeRobotDiffusionPolicyParams(ModelParams):
     timestep_sampling_beta: float = field(default=1.0)
 
     stats_path: str | None = field(default="tutorials/data/lerobot/pusht/meta/stats.json")
+    stats_paths: list[str] = field(default_factory=list)
+    image_stats_key: str | None = field(default="observation.image")
+    state_stats_key: str = field(default="observation.state")
+    action_stats_key: str = field(default="action")
+    image_mean: list[float] | None = field(default=None)
+    image_std: list[float] | None = field(default=None)
 
     action_dim: int = field(default=None)
     state_dim: int = field(default=None)
