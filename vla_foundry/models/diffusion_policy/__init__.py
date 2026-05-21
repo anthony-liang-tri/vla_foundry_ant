@@ -60,7 +60,9 @@ def create_diffusion_policy(model_params: ModelParams, load_pretrained: bool = T
     from vla_foundry.models.vision_language_backbones import get_vision_language_backbone
 
     vision_language_backbone = get_vision_language_backbone(model_params.vision_language_backbone, load_pretrained)
-    transformer = create_model(model_params.transformer, load_pretrained)
+    transformer = None
+    if getattr(model_params, "dit_architecture", "token_concat") == "token_concat":
+        transformer = create_model(model_params.transformer, load_pretrained)
     noise_scheduler = create_noise_scheduler(model_params)
     return DiffusionPolicy(model_params, vision_language_backbone, transformer, noise_scheduler)
 

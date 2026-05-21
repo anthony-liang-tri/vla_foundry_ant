@@ -28,8 +28,16 @@ def create_optimizer(hparams, model):
             betas=(hparams.beta1, hparams.beta2),
             eps=hparams.eps,
         )
+    elif hparams.optimizer == "adam":
+        optimizer = optim.Adam(
+            [param for param in model.parameters() if param.requires_grad],
+            lr=hparams.lr,
+            betas=(hparams.beta1, hparams.beta2),
+            eps=hparams.eps,
+            weight_decay=hparams.wd,
+        )
     else:
-        raise ValueError("Only adamw supported for now")
+        raise ValueError("Only adamw and adam supported for now")
 
     return optimizer
 

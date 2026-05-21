@@ -184,7 +184,11 @@ class NoiseSchedulerParams(ModelParams):
     num_timesteps: int = field(default=1000)
     beta_start: float = field(default=0.0001)
     beta_end: float = field(default=0.02)
-    clamp_range: tuple[float, float] = field(default=(-1.5, 1.5))
+    beta_schedule: str = field(default="linear")
+    prediction_type: Literal["epsilon", "sample"] = field(default="epsilon")
+    clamp_range: tuple[float, float] | None = field(default=(-1.5, 1.5))
+    clip_sample: bool | None = field(default=None)
+    clip_sample_range: float | None = field(default=None)
 
     def init_shared_attributes(self, cfg):
         super().init_shared_attributes(cfg)
@@ -286,18 +290,122 @@ class DiffusionPolicyParams(ModelParams):
 
     use_diffusers_scheduler: bool = field(default=False)
     use_flow_matching_scheduler: bool = field(default=False)
+    dit_architecture: Literal["token_concat", "lerobot_adaln"] = field(default="token_concat")
+    dit_timestep_embed_dim: int = field(default=256)
+    dit_dropout: float = field(default=0.0)
+    dit_use_positional_encoding: bool = field(default=False)
+    dit_use_rope: bool = field(default=True)
+    dit_rope_base: float = field(default=10000.0)
     input_noise_std: float = field(default=0.0)
     diffusion_step_conditioning: Literal["add", "concat"] = field(default="concat")
     num_action_head_repeats: int = field(default=None)
+    action_denoising_mask: Literal["future", "valid", "all"] = field(default="future")
+    flow_matching_target: Literal["noise_minus_data", "data_minus_noise"] = field(default="noise_minus_data")
+    flow_matching_timestep_sampling: Literal["uniform_discrete", "uniform", "beta"] = field(default="uniform_discrete")
+    flow_matching_time_embedding: Literal["discrete", "continuous"] = field(default="discrete")
+    flow_matching_sigma_min: float = field(default=0.0)
+    flow_matching_beta_s: float = field(default=0.999)
+    flow_matching_beta_alpha: float = field(default=1.5)
+    flow_matching_beta_beta: float = field(default=1.0)
 
     # Shared attributes. Overwritten in init_shared_attributes.
     action_dim: int = field(default=None)
     proprioception_dim: int = field(default=0)
+    action_horizon: int = field(default=None)
+    conditioning_num_tokens: int = field(default=None)
+    proprioception_steps: int = field(default=0)
 
     def init_shared_attributes(self, cfg):
         super().init_shared_attributes(cfg)
         object.__setattr__(self, "action_dim", cfg.data.action_dim)
-        object.__setattr__(self, "proprioception_dim", cfg.data.proprioception_dim)
+        object.__setattr__(self, "proprioception_dim", cfg.data.proprioception_dim or 0)
+        object.__setattr__(
+            self,
+            "action_horizon",
+            cfg.data.lowdim_past_timesteps + 1 + cfg.data.lowdim_future_timesteps,
+        )
+        num_images = len(cfg.data.camera_names or []) * len(cfg.data.image_indices or [])
+        backbone_type = getattr(self.vision_language_backbone, "type", None)
+        if backbone_type == "clip_backbone":
+            disable_text = getattr(self.vision_language_backbone, "disable_text", False)
+            conditioning_num_tokens = num_images + (0 if disable_text else 1)
+        elif backbone_type == "vit_backbone":
+            patches_per_side = self.vision_language_backbone.img_size // self.vision_language_backbone.patch_size
+            conditioning_num_tokens = num_images * patches_per_side * patches_per_side
+        else:
+            # VLM backbones expose a single action-conditioning embedding.
+            conditioning_num_tokens = 1
+        object.__setattr__(self, "conditioning_num_tokens", conditioning_num_tokens)
+        object.__setattr__(
+            self,
+            "proprioception_steps",
+            (cfg.data.lowdim_past_timesteps + 1) if (cfg.data.proprioception_dim or 0) > 0 else 0,
+        )
+
+
+@register_model_params("lerobot_diffusion_policy")
+@dataclass(frozen=True)
+class LeRobotDiffusionPolicyParams(ModelParams):
+    """LeRobot Diffusion Policy config used by lerobot/diffusion_pusht."""
+
+    n_obs_steps: int = field(default=2)
+    horizon: int = field(default=16)
+    n_action_steps: int = field(default=8)
+    drop_n_last_frames: int = field(default=7)
+
+    vision_backbone: str = field(default="resnet18")
+    crop_shape: list[int] | None = field(default_factory=lambda: [84, 84])
+    crop_is_random: bool = field(default=True)
+    pretrained_backbone_weights: str | None = field(default=None)
+    use_group_norm: bool = field(default=True)
+    spatial_softmax_num_keypoints: int = field(default=32)
+    use_separate_rgb_encoder_per_camera: bool = field(default=False)
+
+    down_dims: list[int] = field(default_factory=lambda: [512, 1024, 2048])
+    kernel_size: int = field(default=5)
+    n_groups: int = field(default=8)
+    diffusion_step_embed_dim: int = field(default=128)
+    use_film_scale_modulation: bool = field(default=True)
+
+    objective: Literal["diffusion", "flow_matching"] = field(default="diffusion")
+    noise_scheduler_type: Literal["DDPM", "DDIM"] = field(default="DDPM")
+    num_train_timesteps: int = field(default=100)
+    beta_schedule: str = field(default="squaredcos_cap_v2")
+    beta_start: float = field(default=0.0001)
+    beta_end: float = field(default=0.02)
+    prediction_type: Literal["epsilon", "sample"] = field(default="epsilon")
+    clip_sample: bool = field(default=True)
+    clip_sample_range: float = field(default=1.0)
+    num_inference_steps: int | None = field(default=None)
+    do_mask_loss_for_padding: bool = field(default=False)
+    sigma_min: float = field(default=0.0)
+    num_integration_steps: int = field(default=100)
+    integration_method: Literal["euler", "rk4"] = field(default="euler")
+    timestep_sampling_strategy: Literal["uniform", "beta"] = field(default="beta")
+    timestep_sampling_s: float = field(default=0.999)
+    timestep_sampling_alpha: float = field(default=1.5)
+    timestep_sampling_beta: float = field(default=1.0)
+
+    stats_path: str | None = field(default="tutorials/data/lerobot/pusht/meta/stats.json")
+    stats_paths: list[str] = field(default_factory=list)
+    image_stats_key: str | None = field(default="observation.image")
+    state_stats_key: str = field(default="observation.state")
+    action_stats_key: str = field(default="action")
+    image_mean: list[float] | None = field(default=None)
+    image_std: list[float] | None = field(default=None)
+
+    action_dim: int = field(default=None)
+    state_dim: int = field(default=None)
+    num_cameras: int = field(default=1)
+    image_shape: list[int] = field(default_factory=lambda: [3, 96, 96])
+
+    def init_shared_attributes(self, cfg):
+        super().init_shared_attributes(cfg)
+        object.__setattr__(self, "action_dim", cfg.data.action_dim)
+        object.__setattr__(self, "state_dim", cfg.data.proprioception_dim or 0)
+        object.__setattr__(self, "num_cameras", len(cfg.data.camera_names or []) or 1)
+        image_size = cfg.data.image_size or self.image_shape[-1]
+        object.__setattr__(self, "image_shape", [3, image_size, image_size])
 
 
 @register_model_params("dp3_encoder")

@@ -22,10 +22,17 @@ class PassthroughProcessor:
         self.image_size = image_size
 
     def __call__(self, images, text, return_tensors="pt", padding=True, **kwargs):
+        if isinstance(text, str):
+            text = [text]
         batch_size = len(text)
         if images is not None:
-            pixel_values = []
+            # In eval a single sample may be passed as a flat list of images,
+            # while the training pipeline passes a list of per-sample image lists.
+            if len(images) > 0 and self._is_single_image(images[0]):
+                images = [images]
+            per_sample = []
             for sample_images in images:
+                sample_tensors = []
                 for img in sample_images:
                     if isinstance(img, torch.Tensor):
                         # Already a tensor from the new torchvision decoder — skip PIL conversion
@@ -36,7 +43,9 @@ class PassthroughProcessor:
                         t = img.float()
                         if t.ndim == 3 and t.shape[0] not in (1, 3, 4):
                             t = t.permute(2, 0, 1)  # HWC -> CHW
-                        pixel_values.append(t)
+                        if t.numel() > 0 and t.max() > 1.5:
+                            t = t / 255.0
+                        sample_tensors.append(t)
                         continue
                     if not isinstance(img, Image.Image):
                         img = Image.fromarray(img)
@@ -45,8 +54,11 @@ class PassthroughProcessor:
                     t = torch.as_tensor(np.array(img), dtype=torch.float32)
                     if t.ndim == 3:
                         t = t.permute(2, 0, 1)  # HWC -> CHW
-                    pixel_values.append(t)
-            pixel_values = torch.stack(pixel_values)
+                    if t.numel() > 0 and t.max() > 1.5:
+                        t = t / 255.0
+                    sample_tensors.append(t)
+                per_sample.append(torch.stack(sample_tensors))
+            pixel_values = torch.stack(per_sample)  # [B, N, C, H, W]
         else:
             pixel_values = torch.empty(0)
         return {
@@ -54,6 +66,16 @@ class PassthroughProcessor:
             "attention_mask": torch.ones(batch_size, 1, dtype=torch.long),
             "pixel_values": pixel_values,
         }
+
+    @staticmethod
+    def _is_single_image(value):
+        if isinstance(value, Image.Image):
+            return True
+        if isinstance(value, torch.Tensor):
+            return value.ndim in (2, 3)
+        if isinstance(value, np.ndarray):
+            return value.ndim in (2, 3)
+        return False
 
 
 class DebugProcessor:

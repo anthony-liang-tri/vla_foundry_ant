@@ -21,5 +21,9 @@ def get_eval_runner(eval_params):
         from vla_foundry.eval.runners.robosuite import RoboSuiteEvalRunner
 
         return RoboSuiteEvalRunner(eval_params)
+    elif eval_params.env == "pusht":
+        from vla_foundry.eval.runners.pusht import PushTEvalRunner
+
+        return PushTEvalRunner(eval_params)
     else:
         raise ValueError(f"Invalid environment name: {eval_params.env}")

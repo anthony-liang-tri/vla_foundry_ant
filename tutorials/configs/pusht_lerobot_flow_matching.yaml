@@ -1,0 +1,92 @@
+model:
+  type: lerobot_diffusion_policy
+  objective: flow_matching
+  sigma_min: 0.0
+  num_integration_steps: 100
+  integration_method: euler
+  timestep_sampling_strategy: beta
+  timestep_sampling_s: 0.999
+  timestep_sampling_alpha: 1.5
+  timestep_sampling_beta: 1.0
+  stats_path: tutorials/data/lerobot/pusht/meta/stats.json
+
+data:
+  <<: !include ../../vla_foundry/config_presets/data/diffusion_policy.yaml
+  processor: none
+  image_size: 96
+  action_dim: 2
+  proprioception_dim: 2
+  dataset_manifest:
+    - tutorials/data/preprocessed/pusht_lerobot/shards/manifest.jsonl
+  dataset_statistics:
+    - tutorials/data/preprocessed/pusht_lerobot/shards/stats.json
+  dataset_modality:
+    - robotics
+  dataset_weighting:
+    - 1.0
+  camera_names:
+    - observation.image
+  image_indices:
+    - -1
+    - 0
+  action_fields:
+    - action
+  proprioception_fields:
+    - observation.state
+  num_workers: 4
+  normalization:
+    enabled: false
+
+distributed:
+  fsdp: false
+
+ema:
+  enabled: false
+
+hparams:
+  <<: !include ../../vla_foundry/config_presets/hparams/diffusion_policy.yaml
+  precision: fp32
+  per_gpu_batch_size: 64
+  global_batch_size: 64
+  optimizer: adam
+  lr_scheduler: cosine
+  warmup: "500"
+  lr: 1e-4
+  lr_cooldown_end: 0.0
+  force_min_lr: 0.0
+  wd: 1e-6
+  beta1: 0.95
+  beta2: 0.999
+  eps: 1e-8
+  grad_clip_norm: 10.0
+  seed: 100000
+
+total_train_samples: 12800000
+num_checkpoints: 8
+max_checkpoint_limit: 3
+save_path: outputs/pusht_lerobot_flow_matching
+name: pusht_lerobot_flow_matching
+wandb: true
+wandb_entity: tri
+wandb_project_name: vla_foundry_pusht
+db_logging: false
+log_every_n_steps: 200
+
+eval_rollouts:
+  enabled: true
+  every_n_checkpoints: 1
+  fail_training_on_error: false
+  env: pusht
+  eval_dir: outputs/eval_rollouts/pusht_lerobot_flow_matching
+  tasks:
+    - PushT
+  episodes: 50
+  seed: 1000
+  max_steps: 300
+  num_inference_steps: 100
+  action_window: 8
+  save_videos: true
+  video_episodes: 4
+  video_grid_rows: 2
+  video_grid_cols: 2
+  video_fps: 10

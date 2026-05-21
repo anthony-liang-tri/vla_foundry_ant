@@ -57,7 +57,7 @@ class NoiseSchedulerDDPM(nn.Module, NoiseScheduler):
         if mask is not None:
             # Ensure mask can broadcast with x_start by expanding missing dimensions
             # mask should have first dimensions matching x_start, and we'll expand the rest
-            mask_expanded = mask
+            mask_expanded = mask.to(dtype=x_start.dtype)
             while mask_expanded.ndim < x_start.ndim:
                 mask_expanded = mask_expanded.unsqueeze(-1)
             # When mask=1: should behave exactly like no mask
@@ -77,7 +77,7 @@ class NoiseSchedulerDDPM(nn.Module, NoiseScheduler):
             output = output.clamp(self.clamp_range[0], self.clamp_range[1])
         return output
 
-    def step(self, model_output, timestep, sample):
+    def step(self, model_output, timestep, sample, step_size=None):
         """Reverse process single step"""
         t = timestep
 

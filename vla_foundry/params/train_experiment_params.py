@@ -16,6 +16,33 @@ from vla_foundry.params.model_params import ModelParams
 
 
 @dataclass(frozen=True)
+class EvalRolloutsParams(BaseParams):
+    """Optional checkpoint-time rollout evaluation from the training loop."""
+
+    enabled: bool = field(default=False)
+    every_n_checkpoints: int = field(default=1)
+    fail_training_on_error: bool = field(default=False)
+    timeout_seconds: int | None = field(default=None)
+
+    env: str = field(default="robosuite")
+    eval_dir: str = field(default="outputs/eval_rollouts")
+    tasks: list[str] = field(default_factory=lambda: ["Lift", "PickPlaceCan", "NutAssemblySquare"])
+    episodes: int = field(default=10)
+    seed: int = field(default=1000)
+    max_steps: int | None = field(default=150)
+    num_inference_steps: int | None = field(default=50)
+    action_window: int = field(default=4)
+    save_videos: bool = field(default=False)
+    video_episodes: int = field(default=2)
+    video_fps: int = field(default=20)
+    video_grid_rows: int | None = field(default=None)
+    video_grid_cols: int | None = field(default=None)
+    robosuite_path: str | None = field(default=None)
+    robosuite_env_args_dir: str | None = field(default=None)
+    robosuite_env_args_paths: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class TrainExperimentParams(BaseParams):
     """
     Top-level, immutable configuration for a training experiment.
@@ -59,6 +86,7 @@ class TrainExperimentParams(BaseParams):
     # --Validation
     total_val_samples: int = field(default=None)
     val_every_n_checkpoints: int = field(default=1)
+    eval_rollouts: EvalRolloutsParams = field(default_factory=EvalRolloutsParams)
 
     # --Params Subclasses
     data: DataParams = field(default_factory=DataParams)

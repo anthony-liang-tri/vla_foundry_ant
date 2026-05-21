@@ -1,0 +1,156 @@
+model:
+  type: diffusion_policy
+  vision_language_backbone:
+    type: clip_backbone
+    hf_pretrained: openai/clip-vit-base-patch16
+    freeze_text_encoder: true
+    freeze_image_encoder: false
+  transformer:
+    type: transformer
+    hidden_dim: 512
+    n_heads: 8
+    n_layers: 6
+    ffn_type: swiglu
+    positional_embedding_type: rotary
+    is_causal: false
+    max_seq_len: 2048
+    norm_type: default_layer_norm
+    attn_name: torch_attn
+  noise_scheduler:
+    num_timesteps: 100
+    beta_start: 0.0001
+    beta_end: 0.02
+    beta_schedule: squaredcos_cap_v2
+    prediction_type: epsilon
+    clamp_range: null
+    clip_sample: true
+    clip_sample_range: 1.0
+  dit_architecture: lerobot_adaln
+  dit_timestep_embed_dim: 256
+  dit_dropout: 0.1
+  dit_use_positional_encoding: false
+  dit_use_rope: true
+  dit_rope_base: 10000.0
+  use_diffusers_scheduler: true
+  use_flow_matching_scheduler: false
+  action_denoising_mask: valid
+
+data:
+  type: robotics
+  image_size: 224
+  processor: openai/clip-vit-base-patch16
+  processor_kwargs:
+    size:
+      height: 224
+      width: 224
+  img_num_tokens: 64
+  allow_multiple_epochs: true
+  seq_len: 2048
+  lowdim_past_timesteps: 1
+  lowdim_future_timesteps: 30
+  num_workers: 4
+  prefetch_factor: 2
+  action_dim: 7
+  proprioception_dim: 32
+  dataset_manifest:
+    - data/robosuite_lift_full_horizon32/shards/manifest.jsonl
+    - data/robosuite_can_full_horizon32/shards/manifest.jsonl
+    - data/robosuite_square_full_horizon32/shards/manifest.jsonl
+  dataset_statistics:
+    - data/robosuite_lift_full_horizon32/shards/stats.json
+    - data/robosuite_can_full_horizon32/shards/stats.json
+    - data/robosuite_square_full_horizon32/shards/stats.json
+  dataset_modality:
+    - robotics
+    - robotics
+    - robotics
+  dataset_weighting:
+    - 1.0
+    - 1.0
+    - 1.0
+  camera_names:
+    - observation.images.agentview
+    - observation.images.wrist
+  image_indices:
+    - -1
+    - 0
+  action_fields:
+    - actions
+  proprioception_fields:
+    - state
+  normalization:
+    enabled: true
+    method: min_max
+    scope: global
+    centered_norm: true
+    include_fields:
+      - state
+      - actions
+    field_configs:
+      state:
+        enabled: true
+        method: min_max
+        scope: global
+      actions:
+        enabled: true
+        method: min_max
+        scope: global
+  augmentation:
+    image:
+      crop:
+        enabled: true
+        shape: [224, 224]
+        mode: center
+  language_instruction_types:
+    - original
+
+distributed:
+  fsdp: true
+
+ema:
+  enabled: true
+
+hparams:
+  precision: amp_bf16
+  loss_function: mse
+  grad_clip_norm: 1.0
+  lr: 2e-5
+  lr_cooldown_end: 2e-6
+  per_gpu_batch_size: 64
+  global_batch_size: 64
+  optimizer: adamw
+  lr_scheduler: cosine
+  warmup: "0"
+  wd: 0.0
+  seed: 42
+
+total_train_samples: 6400000
+num_checkpoints: 60
+max_checkpoint_limit: 6
+save_path: outputs/multitask_dit_robosuite_ddpm
+name: multitask_dit_robosuite_ddpm
+wandb: true
+wandb_entity: tri
+wandb_project_name: vla_foundry_robosuite
+db_logging: false
+
+eval_rollouts:
+  enabled: true
+  every_n_checkpoints: 1
+  fail_training_on_error: false
+  env: robosuite
+  eval_dir: outputs/eval_rollouts/robosuite_ddpm
+  tasks:
+    - Lift
+    - PickPlaceCan
+    - NutAssemblySquare
+  episodes: 10
+  seed: 1000
+  max_steps: 300
+  num_inference_steps: 100
+  action_window: 24
+  save_videos: true
+  video_episodes: 4
+  video_grid_rows: 2
+  video_grid_cols: 2
+  video_fps: 20

@@ -23,6 +23,14 @@ from vla_foundry.data.dataloader import get_datastring_input, get_wds_dataloader
 from vla_foundry.data.utils import load_data_chunks
 from vla_foundry.db_logger import ModelTrainingLogger
 from vla_foundry.distributed import get_model_precision, is_master, move_buffers_to_device, wrap_fsdp_ddp
+from vla_foundry.eval_rollouts import (
+    build_eval_rollouts_wandb_log,
+    clear_eval_rollouts_marker,
+    mark_eval_rollouts_complete,
+    run_eval_rollouts,
+    should_run_eval_rollouts,
+    wait_for_eval_rollouts_marker,
+)
 from vla_foundry.file_utils import (
     collect_preprocessing_configs,
     collect_processing_metadata,
@@ -344,6 +352,7 @@ def main():
             cfg,
             ema_model=ema_model,
         )
+        dataloader.close()
         if cfg.distributed.use_distributed:
             torch.distributed.barrier()
 
@@ -370,6 +379,39 @@ def main():
 
         # Log checkpoint progress to DynamoDB
         db_logger.log_checkpoint(checkpoint_num, samples_seen)
+
+        # Optionally run task rollouts from the just-saved checkpoint and log results to this W&B run.
+        if should_run_eval_rollouts(cfg, checkpoint_num):
+            if is_master(cfg):
+                clear_eval_rollouts_marker(experiment_path, checkpoint_num)
+            if cfg.distributed.use_distributed:
+                torch.distributed.barrier()
+
+            if is_master(cfg):
+                eval_results = run_eval_rollouts(cfg, experiment_path, checkpoint_num, global_step)
+                if cfg.wandb:
+                    import wandb
+
+                    wandb.log(
+                        build_eval_rollouts_wandb_log(
+                            eval_results,
+                            video_fps=cfg.eval_rollouts.video_fps,
+                        ),
+                        step=global_step,
+                    )
+                mark_eval_rollouts_complete(experiment_path, checkpoint_num)
+            elif cfg.distributed.use_distributed:
+                timeout_seconds = cfg.eval_rollouts.timeout_seconds
+                if timeout_seconds is not None:
+                    timeout_seconds += 60
+                wait_for_eval_rollouts_marker(
+                    experiment_path,
+                    checkpoint_num,
+                    timeout_seconds=timeout_seconds,
+                )
+
+            if cfg.distributed.use_distributed:
+                torch.distributed.barrier()
 
         # Validate checkpoint.
         if do_validation and checkpoint_num % cfg.val_every_n_checkpoints == 0:
