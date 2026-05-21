@@ -347,6 +347,41 @@ class DiffusionPolicyBatchHandler(BatchHandler):
         return loss_fn(input=predicted_direction, target=target_direction, mask=mask)
 
 
+@register_batch_handler("lerobot_diffusion_policy")
+class LeRobotDiffusionPolicyBatchHandler(BatchHandler):
+    """Batch handler for the LeRobot-compatible Diffusion Policy wrapper."""
+
+    def prepare_inputs(self, batch, device, cfg):
+        self._move_to_device(batch, device)
+        actions = batch["actions"]
+        batch_size = actions.shape[0]
+
+        # The training loop uses input_ids only to infer the batch dimension for
+        # gradient accumulation. The LeRobot policy itself is image/state-only.
+        model_inputs = {
+            "input_ids": batch.get(
+                "input_ids",
+                torch.zeros(batch_size, 1, dtype=torch.long, device=device),
+            ),
+            "pixel_values": batch["pixel_values"],
+            "actions": actions,
+            "proprioception": batch["proprioception"],
+            "action_is_pad": torch.zeros(actions.shape[:2], dtype=torch.bool, device=actions.device),
+        }
+        return model_inputs
+
+    def prepare_inputs_and_targets(self, batch, device, cfg):
+        model_inputs = self.prepare_inputs(batch, device, cfg)
+        dummy_targets = torch.zeros((model_inputs["actions"].shape[0],), dtype=torch.float32, device=device)
+        return model_inputs, dummy_targets, None
+
+    def compute_loss(self, outputs, targets, loss_fn, cfg, mask=None):
+        del targets, loss_fn, cfg, mask
+        if isinstance(outputs, dict) and "loss" in outputs:
+            return outputs["loss"]
+        return outputs
+
+
 @register_batch_handler("maniflow")
 class ManiFlowBatchHandler(BatchHandler):
     """Handles batch preparation for ManiFlow consistency flow models."""

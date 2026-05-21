@@ -343,6 +343,65 @@ class DiffusionPolicyParams(ModelParams):
         )
 
 
+@register_model_params("lerobot_diffusion_policy")
+@dataclass(frozen=True)
+class LeRobotDiffusionPolicyParams(ModelParams):
+    """LeRobot Diffusion Policy config used by lerobot/diffusion_pusht."""
+
+    n_obs_steps: int = field(default=2)
+    horizon: int = field(default=16)
+    n_action_steps: int = field(default=8)
+    drop_n_last_frames: int = field(default=7)
+
+    vision_backbone: str = field(default="resnet18")
+    crop_shape: list[int] | None = field(default_factory=lambda: [84, 84])
+    crop_is_random: bool = field(default=True)
+    pretrained_backbone_weights: str | None = field(default=None)
+    use_group_norm: bool = field(default=True)
+    spatial_softmax_num_keypoints: int = field(default=32)
+    use_separate_rgb_encoder_per_camera: bool = field(default=False)
+
+    down_dims: list[int] = field(default_factory=lambda: [512, 1024, 2048])
+    kernel_size: int = field(default=5)
+    n_groups: int = field(default=8)
+    diffusion_step_embed_dim: int = field(default=128)
+    use_film_scale_modulation: bool = field(default=True)
+
+    objective: Literal["diffusion", "flow_matching"] = field(default="diffusion")
+    noise_scheduler_type: Literal["DDPM", "DDIM"] = field(default="DDPM")
+    num_train_timesteps: int = field(default=100)
+    beta_schedule: str = field(default="squaredcos_cap_v2")
+    beta_start: float = field(default=0.0001)
+    beta_end: float = field(default=0.02)
+    prediction_type: Literal["epsilon", "sample"] = field(default="epsilon")
+    clip_sample: bool = field(default=True)
+    clip_sample_range: float = field(default=1.0)
+    num_inference_steps: int | None = field(default=None)
+    do_mask_loss_for_padding: bool = field(default=False)
+    sigma_min: float = field(default=0.0)
+    num_integration_steps: int = field(default=100)
+    integration_method: Literal["euler", "rk4"] = field(default="euler")
+    timestep_sampling_strategy: Literal["uniform", "beta"] = field(default="beta")
+    timestep_sampling_s: float = field(default=0.999)
+    timestep_sampling_alpha: float = field(default=1.5)
+    timestep_sampling_beta: float = field(default=1.0)
+
+    stats_path: str | None = field(default="tutorials/data/lerobot/pusht/meta/stats.json")
+
+    action_dim: int = field(default=None)
+    state_dim: int = field(default=None)
+    num_cameras: int = field(default=1)
+    image_shape: list[int] = field(default_factory=lambda: [3, 96, 96])
+
+    def init_shared_attributes(self, cfg):
+        super().init_shared_attributes(cfg)
+        object.__setattr__(self, "action_dim", cfg.data.action_dim)
+        object.__setattr__(self, "state_dim", cfg.data.proprioception_dim or 0)
+        object.__setattr__(self, "num_cameras", len(cfg.data.camera_names or []) or 1)
+        image_size = cfg.data.image_size or self.image_shape[-1]
+        object.__setattr__(self, "image_shape", [3, image_size, image_size])
+
+
 @register_model_params("dp3_encoder")
 @dataclass(frozen=True)
 class DP3EncoderParams(ModelParams):
