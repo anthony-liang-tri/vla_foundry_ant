@@ -22,8 +22,14 @@ class PassthroughProcessor:
         self.image_size = image_size
 
     def __call__(self, images, text, return_tensors="pt", padding=True, **kwargs):
+        if isinstance(text, str):
+            text = [text]
         batch_size = len(text)
         if images is not None:
+            # In eval a single sample may be passed as a flat list of images,
+            # while the training pipeline passes a list of per-sample image lists.
+            if len(images) > 0 and self._is_single_image(images[0]):
+                images = [images]
             per_sample = []
             for sample_images in images:
                 sample_tensors = []
@@ -60,6 +66,16 @@ class PassthroughProcessor:
             "attention_mask": torch.ones(batch_size, 1, dtype=torch.long),
             "pixel_values": pixel_values,
         }
+
+    @staticmethod
+    def _is_single_image(value):
+        if isinstance(value, Image.Image):
+            return True
+        if isinstance(value, torch.Tensor):
+            return value.ndim in (2, 3)
+        if isinstance(value, np.ndarray):
+            return value.ndim in (2, 3)
+        return False
 
 
 class DebugProcessor:

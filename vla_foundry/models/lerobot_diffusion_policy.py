@@ -624,9 +624,13 @@ class LeRobotDiffusionPolicy(BaseModel):
 
     def _reshape_images(self, pixel_values: Tensor) -> Tensor:
         if pixel_values.ndim == 6:
+            if pixel_values.shape[-1] in (1, 3, 4) and pixel_values.shape[3] not in (1, 3, 4):
+                pixel_values = pixel_values.permute(0, 1, 2, 5, 3, 4).contiguous()
             return pixel_values
         if pixel_values.ndim != 5:
             raise ValueError(f"Expected pixel_values as [B, N, C, H, W], got {tuple(pixel_values.shape)}")
+        if pixel_values.shape[-1] in (1, 3, 4) and pixel_values.shape[2] not in (1, 3, 4):
+            pixel_values = pixel_values.permute(0, 1, 4, 2, 3).contiguous()
         batch_size, num_images, channels, height, width = pixel_values.shape
         expected_images = self.model_params.n_obs_steps * self.model_params.num_cameras
         if num_images != expected_images:
